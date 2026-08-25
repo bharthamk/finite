@@ -1,21 +1,22 @@
-# Finite Plan production kernel
+# Finite
 
-This package is the browser-ready implementation of the Finite Plan control plane. Codex is the operator, WebMCP is the page-scoped socket, the deterministic kernel owns accepted truth, and the human surface is the only place that can create approval or confirmation identifiers.
+Finite is an agent-operated adaptive planning surface. Codex is the operator, WebMCP is the page-scoped socket, the deterministic kernel owns accepted truth, and the human receives the result and supplies the only consequential approval.
 
-It is intentionally not a finished product UI. The included page is a native-host diagnostic canary used to prove the protocol, transaction, authority, profile-lifecycle, persistence, and retry boundaries before presentation work begins.
+The product is not a travel planner or a generic budgeting dashboard. One finite-plan grammar compiles into materially different travel, renovation, and event surfaces while preserving the same arithmetic, revision, authority, persistence, and receipt laws.
 
 ## What is implemented
 
 - TypeScript finite-plan kernel with exact integer-money conservation.
-- Compiled and SHA-256-hashed travel, renovation, and event profiles.
+- Immutable, SHA-256-bound travel, renovation, and event profiles.
+- A validated adaptive-surface compiler with a closed safe component grammar, revision-bound intent, mandatory control laws, field bindings, and manifest hashes.
+- Three distinct projections: calendar travel timeline, renovation phase lane, and event run-of-show.
 - Typed entities, executable relationships, locks, legal moves, evidence materiality/freshness, and preference weights.
-- Compact semantic state selectors rather than one oversized state dump.
-- Proposed change events, deterministic option simulation/comparison, immutable staging, revision-bound approval, atomic apply, and receipts.
-- Staged human-confirmed append-only actual correction and preference interpretation.
-- Local accepted-state snapshots and reload-safe idempotency indexes rebuilt from persisted receipts.
+- Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
+- Human-only approval and confirmation creators, structurally excluded from WebMCP.
+- Accepted-state persistence with reload-safe receipt idempotency.
 - 18 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on profile switch.
-- Compatibility with both object input and Chrome 151's experimental serialized-JSON input.
-- Structural exclusion of `humanApprove`, `humanConfirmActualCorrection`, and `humanConfirmPreferenceChange` from WebMCP registration.
+- A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
+- A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
 
 ## Run
 
@@ -27,29 +28,35 @@ npm run build
 npm run dev
 ```
 
-The native Chrome canary currently requires `chrome://flags/#enable-webmcp-testing` to be enabled. Open the local URL printed by Vite. A passing host shows `Native WebMCP registered`, a secure and cross-origin-isolated context, and 21 registered tools.
+The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`; the optional diagnostic trace is available at `?lab=1`.
 
-The visible acceptance controls intentionally separate the paths:
+The deployed owner-private build is [Finite](https://finite-plan-kitchen.bharthamk.chatgpt.site). Sign in with ChatGPT to open it.
 
-1. the native agent path discovers tools, records a change, compares and stages an option, then proves a fabricated approval is refused;
-2. the human-authority control creates approval bound to the exact staged content and revision;
-3. the native agent applies that approval and persists a receipt;
-4. after reload, the native retry returns `IDEMPOTENT_REPLAY` without changing the accepted revision;
-5. the profile lifecycle replaces travel tools with renovation tools and restores them.
+## Product transaction
+
+1. Codex discovers the profile and compact semantic state.
+2. Codex records a change, explores legal moves, and composes deterministic options.
+3. The application validates and stages one exact option.
+4. The human sees the decision packet and approves that exact result.
+5. The application atomically applies the approved option and emits a receipt.
+6. Accepted truth and replay protection survive reload; volatile staging and authority do not.
 
 ## Architecture boundary
 
-There is no backend model and no application-owned agent. Natural-language interpretation, research, and orchestration belong to Codex. The application owns state, arithmetic, validation, transaction laws, persistence, and receipts. WebMCP exposes those capabilities; it does not supply reasoning or persistence.
+There is no backend model and no application-owned agent. Natural-language interpretation, research, and orchestration belong to Codex. The application owns state, arithmetic, validation, transaction laws, persistence, rendering, and receipts. WebMCP exposes those capabilities; it does not supply reasoning or persistence.
 
-Chrome-native self-invocation proves the browser protocol and page contract. It does not prove Codex Site Tools discovery, model tool selection, safety review, or fresh-session behavior. Those remain a separate acceptance gate until the Codex account/build exposes the page tools.
+Chrome-native self-invocation proves the browser protocol and page contract. It does not prove Codex Site Tools discovery, model tool selection, safety review, or fresh-session behavior. Those remain a separate acceptance gate until the Codex account/build exposes page tools.
 
 ## Source map
 
-- `src/profiles.ts` — profile definitions and compiler.
+- `src/profiles.ts` — profile and surface definitions plus compiler validation.
+- `src/surface.ts` — safe surface grammar, manifest compiler, bindings, and hashes.
 - `src/kernel.ts` — deterministic state machine and authority-gated transactions.
 - `src/persistence.ts` — accepted snapshot storage.
 - `src/runtime.ts` — active-profile lifecycle.
 - `src/webmcp.ts` — native host adapter and tool registry.
-- `src/main.ts` — diagnostic canary only.
-- `tests/` — profile, kernel, persistence, authority, and adapter contracts.
-
+- `src/main.ts` — adaptive product renderer and human authority surface.
+- `src/styles.css` — profile-aware responsive presentation.
+- `worker/index.ts` — deployment-only static asset pass-through.
+- `tests/` — profile, surface, kernel, persistence, authority, and adapter contracts.
+- `SURFACE_ACCEPTANCE_2026-08-26.md` — cross-profile, transaction, reload, responsive, and deployment receipt.
