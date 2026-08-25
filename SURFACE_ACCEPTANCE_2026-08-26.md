@@ -51,6 +51,7 @@ The first reload run exposed a profile-preference defect: accepted event truth r
 - Contract suite: 10/10 pass, zero fail.
 - Production build: pass with Vite 8.2.2.
 - Sites packaging: pass with `dist/server/index.js`, static client assets, and deployment metadata.
+- Clean local Worker start: pass with HTTP 200 and the required WebMCP security headers.
 
 ## Deployment
 

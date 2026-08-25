@@ -9,7 +9,7 @@ export default defineConfig({
       viteEnvironment: { name: "server" },
       config: {
         name: "finite-plan-kitchen",
-        compatibility_date: "2026-08-26",
+        compatibility_date: "2026-05-22",
         main: "./worker/index.ts",
         assets: {
           binding: "ASSETS",
