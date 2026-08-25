@@ -47,7 +47,10 @@ const objectiveLabel = (objective: string): string => ({
 
 const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values()]
   .filter((candidate) => candidate.baseRevision === runtime.kernel.revision)
-  .sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore);
+  .sort((a, b) => Number(b.valid) - Number(a.valid)
+    || (runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective))
+      - (runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective))
+    || b.preferenceScore - a.preferenceScore);
 
 const seedDecision = async (): Promise<void> => {
   const kernel = runtime.kernel;
@@ -92,7 +95,7 @@ const renderOptions = (): string => {
         <h3>${escapeHtml(objectiveLabel(candidate.objective))}</h3>
         <div class="option-card__number">${money(candidate.resultingBufferMinor)}</div>
         <p>left as ${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)}</p>
-        <ul>${candidate.selectedMoves.map((move) => `<li>${escapeHtml(move.tradeoff)}</li>`).join("")}</ul>
+        <ul>${candidate.selectedMoves.length ? candidate.selectedMoves.map((move) => `<li>${escapeHtml(move.tradeoff)}</li>`).join("") : "<li>No additional compromise required</li>"}</ul>
         <div class="option-card__delta"><span>Plan impact</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
           ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Choose this ${escapeHtml(runtime.kernel.profile.surface.nouns.option)}</button>`
@@ -166,7 +169,7 @@ const render = async (): Promise<void> => {
 };
 
 const chooseCandidate = async (candidateId: string): Promise<void> => {
-  const result = runtime.kernel.stageOption({ candidateId, expectedRevision: runtime.kernel.revision });
+  const result = await runtime.kernel.stageOption({ candidateId, expectedRevision: runtime.kernel.revision });
   announce(result.ok ? "Your chosen outcome is ready for exact approval." : `That outcome could not be staged: ${result.code}`);
   await render();
   document.querySelector("#approval_panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -178,7 +181,7 @@ const approveAndApply = async (): Promise<void> => {
   if (!candidate) return;
   busy = true;
   await render();
-  const approval = kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => String(warning.code)) });
+  const approval = await kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => String(warning.code)) });
   const approvalId = (approval.approval as { approvalId?: string } | undefined)?.approvalId;
   if (!approvalId) { busy = false; announce(`Approval was not recorded: ${approval.code}`); await render(); return; }
   const applied = await kernel.applyApprovedOption({ candidateId: candidate.candidateId, approvalId, expectedRevision: kernel.revision, idempotencyKey: `surface-${kernel.profile.profileId}-${kernel.revision}-${candidate.contentHash.slice(0, 12)}` });

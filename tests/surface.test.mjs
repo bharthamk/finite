@@ -50,11 +50,10 @@ test("staging forces comparison and approval zones into every surface", async ()
     const event = kernel.recordChangeEvent({ type: "fixture_change", title: "Surface decision", costDeltaMinor: 10_000, daysDelta: 0, minimumBufferMinor: 0, evidenceRefs: ["evidence_current"], expectedRevision: 1 });
     const simulation = await kernel.simulateReallocation({ eventId: event.event.eventId, moveIds: [], objective: "custom" });
     assert.equal(simulation.candidate.valid, true);
-    kernel.stageOption({ candidateId: simulation.candidate.candidateId, expectedRevision: 1 });
+    await kernel.stageOption({ candidateId: simulation.candidate.candidateId, expectedRevision: 1 });
     const manifest = await compileSurfaceManifest(profile, kernel);
     assert(manifest.zones.some((zone) => zone.component === "option_compare"));
     assert(manifest.zones.some((zone) => zone.component === "approval_panel" && zone.required));
     await assert.rejects(() => compileSurfaceManifest(profile, kernel, { planRevision: 1, decisionFocus: "Decision", emphasizedMeasures: [], requestedZones: [], collapsedZones: ["approval_panel"], rationale: "Hide it" }), SurfaceValidationError);
   }
 });
-

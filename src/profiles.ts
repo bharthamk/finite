@@ -24,18 +24,14 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       { relationshipId: "travel_days_balance", type: "equal", left: { entityId: "trip_days", field: "days" }, right: { entityId: "booked_segment_days", field: "days" }, code: "TRIP_DAYS_UNALLOCATED" },
     ],
     moves: {
-      shorten_netherlands: { savingsMinor: 32_000, daysDelta: -2, dimension: "netherlands_nights", tradeoff: "Two fewer Netherlands nights" },
-      increase_hostel_mix: { savingsMinor: 26_000, daysDelta: 0, dimension: "accommodation_mix", tradeoff: "Three additional hostel nights" },
-      reduce_meal_forecast: { savingsMinor: 18_000, daysDelta: 0, dimension: "meal_mix", tradeoff: "Four casual meals replace planned dining" },
-      cancel_flexible_tour: { savingsMinor: 24_000, daysDelta: 0, dimension: "flexible_tour", tradeoff: "One optional tour removed" },
-      release_rail_allowance: { savingsMinor: 15_000, daysDelta: 0, dimension: "rail_flexibility", tradeoff: "Less ticket-change flexibility" },
-      change_international_flights: { savingsMinor: 90_000, daysDelta: 0, dimension: "international_flights", tradeoff: "Changes locked flights" },
+      shorten_netherlands: { savingsMinor: 32_000, daysDelta: -2, dimension: "netherlands_nights", tradeoff: "Two fewer Netherlands nights", impacts: { experience: 45, schedule: 15 } },
+      increase_hostel_mix: { savingsMinor: 26_000, daysDelta: 0, dimension: "accommodation_mix", tradeoff: "Three additional hostel nights", impacts: { comfort: 55, experience: 10 } },
+      reduce_meal_forecast: { savingsMinor: 18_000, daysDelta: 0, dimension: "meal_mix", tradeoff: "Four casual meals replace planned dining", impacts: { comfort: 10, experience: 35 } },
+      cancel_flexible_tour: { savingsMinor: 24_000, daysDelta: 0, dimension: "flexible_tour", tradeoff: "One optional tour removed", impacts: { experience: 65 } },
+      release_rail_allowance: { savingsMinor: 15_000, daysDelta: 0, dimension: "rail_flexibility", tradeoff: "Less ticket-change flexibility", impacts: { comfort: 15, schedule: 40 } },
+      change_international_flights: { savingsMinor: 90_000, daysDelta: 0, dimension: "international_flights", tradeoff: "Changes locked flights", impacts: { comfort: 70, experience: 70, schedule: 80 } },
     },
-    optionTemplates: [
-      { objective: "preserve_comfort", moveIds: ["shorten_netherlands", "cancel_flexible_tour"] },
-      { objective: "balanced", moveIds: ["shorten_netherlands", "increase_hostel_mix"] },
-      { objective: "preserve_buffer", moveIds: ["shorten_netherlands", "increase_hostel_mix", "reduce_meal_forecast"] },
-    ],
+    searchPolicy: { objectives: ["preserve_comfort", "balanced", "preserve_buffer"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 50_000, maxAgeDaysBySourceClass: { supplier_quote: 7, actual_receipt: 3650, user_statement: 30 } },
     contextualCapabilities: ["travel_extend_stay", "travel_change_comfort", "travel_move_segment"],
     surface: {
@@ -79,17 +75,13 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       { relationshipId: "locked_completion", type: "lte", left: { entityId: "completion_day", field: "day" }, right: { entityId: "committed_completion_day", field: "day" }, code: "LOCKED_COMPLETION_DATE" },
     ],
     moves: {
-      local_tile_substitution: { savingsMinor: 45_000, daysDelta: -10, dimension: "finish_material", tradeoff: "Local tile replaces preferred imported tile" },
-      resequence_painting: { savingsMinor: 12_000, daysDelta: -4, dimension: "phase_sequence", tradeoff: "Painting moves before final cabinetry" },
-      weekend_labour: { savingsMinor: -20_000, daysDelta: -5, dimension: "labour_schedule", tradeoff: "One paid weekend shift" },
-      simplify_splashback: { savingsMinor: 38_000, daysDelta: -2, dimension: "splashback_scope", tradeoff: "Simpler splashback pattern" },
-      move_completion_date: { savingsMinor: 25_000, daysDelta: 14, dimension: "completion_date", tradeoff: "Changes locked completion date" },
+      local_tile_substitution: { savingsMinor: 45_000, daysDelta: -10, dimension: "finish_material", tradeoff: "Local tile replaces preferred imported tile", impacts: { experience: 55 } },
+      resequence_painting: { savingsMinor: 12_000, daysDelta: -4, dimension: "phase_sequence", tradeoff: "Painting moves before final cabinetry", impacts: { schedule: 15, experience: 10 } },
+      weekend_labour: { savingsMinor: -20_000, daysDelta: -5, dimension: "labour_schedule", tradeoff: "One paid weekend shift", impacts: { comfort: 30, buffer: 45 } },
+      simplify_splashback: { savingsMinor: 38_000, daysDelta: -2, dimension: "splashback_scope", tradeoff: "Simpler splashback pattern", impacts: { experience: 45 } },
+      move_completion_date: { savingsMinor: 25_000, daysDelta: 14, dimension: "completion_date", tradeoff: "Changes locked completion date", impacts: { schedule: 100 } },
     },
-    optionTemplates: [
-      { objective: "preserve_schedule", moveIds: ["local_tile_substitution", "weekend_labour"] },
-      { objective: "balanced", moveIds: ["local_tile_substitution", "resequence_painting"] },
-      { objective: "preserve_contingency", moveIds: ["local_tile_substitution", "resequence_painting", "simplify_splashback"] },
-    ],
+    searchPolicy: { objectives: ["preserve_schedule", "balanced", "preserve_contingency"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 50_000, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 30 } },
     contextualCapabilities: ["renovation_replace_material", "renovation_shift_phase", "renovation_update_quote"],
     surface: {
@@ -133,17 +125,13 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       { relationshipId: "venue_capacity", type: "lte", left: { entityId: "guest_headcount", field: "count" }, right: { entityId: "venue", field: "capacity" }, code: "VENUE_CAPACITY_EXCEEDED" },
     ],
     moves: {
-      simplify_service_level: { savingsMinor: 35_000, daysDelta: 0, dimension: "service_level", tradeoff: "Reduced roaming service" },
-      sponsor_av_package: { savingsMinor: 22_000, daysDelta: 0, dimension: "av_package", tradeoff: "Sponsor branding added to AV" },
-      menu_substitution: { savingsMinor: 28_000, daysDelta: 0, dimension: "menu", tradeoff: "Shared plates replace canapes" },
-      shorten_program: { savingsMinor: 18_000, daysDelta: 0, dimension: "run_of_show", tradeoff: "Program shortened by twenty minutes" },
-      exceed_venue_capacity: { savingsMinor: 10_000, daysDelta: 0, dimension: "venue_capacity", tradeoff: "Exceeds locked venue capacity" },
+      simplify_service_level: { savingsMinor: 35_000, daysDelta: 0, dimension: "service_level", tradeoff: "Reduced roaming service", impacts: { comfort: 20, experience: 55 } },
+      sponsor_av_package: { savingsMinor: 22_000, daysDelta: 0, dimension: "av_package", tradeoff: "Sponsor branding added to AV", impacts: { experience: 10 } },
+      menu_substitution: { savingsMinor: 28_000, daysDelta: 0, dimension: "menu", tradeoff: "Shared plates replace canapes", impacts: { comfort: 15, experience: 30 } },
+      shorten_program: { savingsMinor: 18_000, daysDelta: 0, dimension: "run_of_show", tradeoff: "Program shortened by twenty minutes", impacts: { experience: 40, schedule: 10 } },
+      exceed_venue_capacity: { savingsMinor: 10_000, daysDelta: 0, dimension: "venue_capacity", tradeoff: "Exceeds locked venue capacity", impacts: { comfort: 80, experience: 80 } },
     },
-    optionTemplates: [
-      { objective: "preserve_experience", moveIds: ["sponsor_av_package", "shorten_program", "menu_substitution"] },
-      { objective: "balanced", moveIds: ["simplify_service_level", "menu_substitution"] },
-      { objective: "preserve_buffer", moveIds: ["simplify_service_level", "sponsor_av_package", "menu_substitution"] },
-    ],
+    searchPolicy: { objectives: ["preserve_experience", "balanced", "preserve_buffer"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 30_000, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 14 } },
     contextualCapabilities: ["event_change_headcount", "event_replace_vendor", "event_move_run_item"],
     surface: {
@@ -178,6 +166,7 @@ const surfaceComponents = new Set([
   "finite_summary", "pressure_meter", "timeline_lane", "phase_lane", "run_of_show", "entity_table",
   "commitment_stack", "actual_forecast", "constraint_panel", "change_tray", "option_compare", "approval_panel",
 ]);
+const searchObjectives = new Set(["preserve_comfort", "preserve_experience", "preserve_buffer", "preserve_contingency", "preserve_schedule", "balanced"]);
 
 const unsafeSurfaceText = (value: string): boolean => /<\/?(?:script|style|iframe)|javascript:|data:text\/html|\{\{|\}\}/i.test(value);
 
@@ -209,9 +198,18 @@ export const compileProfile = async (input: ProfileDefinition): Promise<Compiled
       else if (!(endpoint.field in entity.values)) issues.push(`relationship ${relationship.relationshipId} references missing field ${endpoint.entityId}.${endpoint.field}`);
     }
   }
-  for (const template of profile.optionTemplates) {
-    for (const moveId of template.moveIds) if (!profile.moves[moveId]) issues.push(`option ${template.objective} references missing move ${moveId}`);
+  for (const [moveId, move] of Object.entries(profile.moves)) {
+    for (const [preference, impact] of Object.entries(move.impacts)) {
+      if (!(preference in profile.preferenceWeights)) issues.push(`move ${moveId} references unknown preference ${preference}`);
+      if (!Number.isInteger(impact) || impact < 0 || impact > 100) issues.push(`move ${moveId} impact ${preference} must be an integer from 0 to 100`);
+    }
   }
+  const legalMoveCount = Object.values(profile.moves).filter((move) => !profile.locks.includes(move.dimension)).length;
+  if (!profile.searchPolicy.objectives.length || new Set(profile.searchPolicy.objectives).size !== profile.searchPolicy.objectives.length) issues.push("search objectives must be non-empty and unique");
+  if (profile.searchPolicy.objectives.some((objective) => !searchObjectives.has(objective))) issues.push("search contains an unsupported objective");
+  if (!Number.isInteger(profile.searchPolicy.optionCount) || profile.searchPolicy.optionCount < 1 || profile.searchPolicy.optionCount > profile.searchPolicy.objectives.length) issues.push("search optionCount must fit the objective count");
+  if (!Number.isInteger(profile.searchPolicy.maxMovesPerOption) || profile.searchPolicy.maxMovesPerOption < 0 || profile.searchPolicy.maxMovesPerOption > legalMoveCount) issues.push("search maxMovesPerOption must fit the legal move count");
+  if (!Number.isInteger(profile.searchPolicy.maxCombinations) || profile.searchPolicy.maxCombinations < profile.searchPolicy.optionCount || profile.searchPolicy.maxCombinations > 256) issues.push("search maxCombinations must be between optionCount and 256");
   if (profile.contextualCapabilities.some((name) => !name.startsWith(`${profile.profileId}_`))) issues.push("contextual capability prefix must match profileId");
   if (profile.surface.version !== "surface-profile.v1") issues.push("unsupported surface profile version");
   const expectedTimeModel = ({ travel: "calendar", renovation: "phases", event: "run_of_show" } as const)[profile.profileId];

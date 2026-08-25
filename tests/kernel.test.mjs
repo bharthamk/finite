@@ -26,10 +26,10 @@ test("novel plan flow enforces consent, persists, reloads, and verifies export",
   const event = kernel.recordChangeEvent({ type: "intent_change", title: "Paris extension", costDeltaMinor: 76_000, daysDelta: 3, minimumBufferMinor: 50_000, evidenceRefs: ["evidence_current"], expectedRevision: 1 });
   const simulation = await kernel.simulateReallocation({ eventId: event.event.eventId, moveIds: ["cancel_flexible_tour", "reduce_meal_forecast", "release_rail_allowance"], objective: "novel" });
   assert.equal(simulation.candidate.valid, true);
-  const staged = kernel.stageOption({ candidateId: simulation.candidate.candidateId, expectedRevision: 1 });
+  const staged = await kernel.stageOption({ candidateId: simulation.candidate.candidateId, expectedRevision: 1 });
   const refused = await kernel.applyApprovedOption({ candidateId: staged.staged.candidateId, approvalId: "agent_fabricated", expectedRevision: 1, idempotencyKey: "production-option-0001" });
   assert.equal(refused.code, "CONSENT_MISSING_OR_MISMATCHED");
-  const approved = kernel.humanApprove({ candidateId: staged.staged.candidateId });
+  const approved = await kernel.humanApprove({ candidateId: staged.staged.candidateId });
   const applied = await kernel.applyApprovedOption({ candidateId: staged.staged.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "production-option-0001" });
   assert.equal(applied.code, "OPTION_APPLIED");
   assert.equal(kernel.revision, 2);

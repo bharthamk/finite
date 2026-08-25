@@ -137,11 +137,14 @@ export interface MoveDefinition {
   daysDelta: number;
   dimension: string;
   tradeoff: string;
+  impacts: Partial<Record<PreferenceKey, number>>;
 }
 
-export interface OptionTemplate {
-  objective: string;
-  moveIds: string[];
+export interface SearchPolicy {
+  objectives: string[];
+  optionCount: number;
+  maxMovesPerOption: number;
+  maxCombinations: number;
 }
 
 export interface EvidencePolicy {
@@ -172,7 +175,7 @@ export interface ProfileDefinition {
   entities: Record<string, EntityDefinition>;
   relationships: RelationshipDefinition[];
   moves: Record<string, MoveDefinition>;
-  optionTemplates: OptionTemplate[];
+  searchPolicy: SearchPolicy;
   evidencePolicy: EvidencePolicy;
   contextualCapabilities: string[];
   surface: SurfaceProfileDefinition;
@@ -227,11 +230,14 @@ export interface Candidate {
   candidateId: string;
   planId: string;
   profileId: ProfileId;
+  profileHash: string;
   baseRevision: number;
   eventId: string;
   objective: string;
+  source: "simulation" | "bounded_search";
   moveIds: string[];
   selectedMoves: Array<MoveDefinition & { moveId: string }>;
+  tradeoffImpact: Record<PreferenceKey, number>;
   grossCostDeltaMinor: number;
   savingsMinor: number;
   netForecastDeltaMinor: number;

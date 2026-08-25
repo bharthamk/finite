@@ -156,6 +156,7 @@ export class FinitePlanKernel {
       selectors: ["identity", "allocations", "actuals", "constraints", "entities", "preferences", "pending", "lineage"] satisfies StateSelector[],
       mutationClasses: ["read", "simulation", "staged_write", "human_confirmation", "consequential_write", "export"],
       contextualCapabilities: clone(this.profile.contextualCapabilities),
+      optionSearch: { strategy: "bounded_legal_move_enumeration", ...clone(this.profile.searchPolicy) },
       humanAuthorityActionsExposed: false,
       approvalLaw: "Only the human surface creates approval or confirmation identifiers bound to exact staged content and revision.",
       next: "Read only the selectors needed, then inspect legal moves before simulating.",
@@ -188,6 +189,15 @@ export class FinitePlanKernel {
 
   recordChangeEvent(input: ChangeEventInput): ToolResult {
     if (input.expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false, next: "Read identity state and retry against its revision." };
+    const invalidNumbers = [input.costDeltaMinor, input.daysDelta ?? 0, input.minimumBufferMinor].filter((value) => !Number.isInteger(value));
+    if (typeof input.type !== "string" || typeof input.title !== "string" || !input.type.trim() || !input.title.trim() || invalidNumbers.length || input.minimumBufferMinor < 0) return { ok: false, code: "INVALID_CHANGE_EVENT", acceptedStateChanged: false, next: "Supply a type, title, integer money/day deltas, and a non-negative minimum buffer." };
+    const malformedEntityChanges = (input.entityChanges ?? []).filter((change) => {
+      const hasDelta = change.delta !== undefined;
+      const hasValue = change.value !== undefined;
+      const amount = hasValue ? change.value : change.delta;
+      return hasDelta === hasValue || !Number.isInteger(amount);
+    });
+    if (malformedEntityChanges.length) return { ok: false, code: "INVALID_ENTITY_CHANGE", malformedEntityChanges, acceptedStateChanged: false, next: "Each entity change must contain exactly one integer delta or value." };
     const invalidEntityChanges = (input.entityChanges ?? []).filter((change) => !this.entities[change.entityId] || !(change.field in (this.entities[change.entityId]?.values ?? {})));
     if (invalidEntityChanges.length) return { ok: false, code: "UNKNOWN_ENTITY_DIMENSION", invalidEntityChanges, acceptedStateChanged: false };
     const event: ChangeEvent = {
@@ -256,17 +266,111 @@ export class FinitePlanKernel {
     });
   }
 
-  private preferenceScore(objective: string, moveCount: number, valid: boolean): number {
-    const weights = this.preferenceWeights;
-    const weight = ({
-      preserve_comfort: weights.comfort,
-      preserve_experience: weights.experience,
-      preserve_buffer: weights.buffer,
-      preserve_contingency: weights.buffer,
-      preserve_schedule: weights.schedule,
-      balanced: Math.round((weights.comfort + weights.experience + weights.buffer + weights.schedule) / 4),
-    } as Record<string, number>)[objective] ?? 50;
-    return weight - moveCount * 2 - (valid ? 0 : 10_000);
+  private preferenceScore(
+    objective: string,
+    impacts: Record<PreferenceKey, number>,
+    resultingBufferMinor: number,
+    resultingDaysDelta: number,
+    moveCount: number,
+    valid: boolean,
+  ): number {
+    const weightedImpact = (Object.keys(this.preferenceWeights) as PreferenceKey[])
+      .reduce((total, key) => total + impacts[key] * this.preferenceWeights[key], 0);
+    let penalty: number;
+    if (objective === "preserve_comfort") penalty = impacts.comfort * 10_000 + weightedImpact - Math.round(resultingBufferMinor / 10);
+    else if (objective === "preserve_experience") penalty = impacts.experience * 10_000 + weightedImpact - Math.round(resultingBufferMinor / 10);
+    else if (objective === "preserve_buffer" || objective === "preserve_contingency") penalty = -resultingBufferMinor + weightedImpact;
+    else if (objective === "preserve_schedule") penalty = resultingDaysDelta * 100_000 + weightedImpact;
+    else penalty = weightedImpact * 10 + moveCount * 100 - Math.round(resultingBufferMinor / 100);
+    penalty += moveCount * 100;
+    return (valid ? 0 : -1_000_000_000) - penalty;
+  }
+
+  private candidatePayload(candidate: Candidate): Omit<Candidate, "candidateId" | "contentHash"> {
+    const { candidateId: _candidateId, contentHash: _contentHash, ...payload } = candidate;
+    return payload;
+  }
+
+  private async finalizeCandidate(base: Omit<Candidate, "candidateId" | "contentHash">): Promise<Candidate> {
+    const contentHash = await sha256(base);
+    return { candidateId: `candidate_${contentHash.slice(0, 16)}`, ...base, contentHash };
+  }
+
+  private async createCandidate(event: ChangeEvent, moveIds: string[], objective: string, source: Candidate["source"]): Promise<Candidate> {
+    const selectedMoves = moveIds.map((moveId) => ({ moveId, ...clone(this.profile.moves[moveId]!) }));
+    const savingsMinor = sum(selectedMoves.map((move) => move.savingsMinor));
+    const netForecastDeltaMinor = event.costDeltaMinor - savingsMinor;
+    const resultingBufferMinor = this.accepted.bufferMinor - netForecastDeltaMinor;
+    const resultingDaysDelta = event.daysDelta + sum(selectedMoves.map((move) => move.daysDelta));
+    const resultingEntities = this.entitiesAfter(event.entityChanges);
+    const violations: ConstraintViolation[] = [];
+    if (resultingBufferMinor < event.minimumBufferMinor) violations.push({ code: "MINIMUM_BUFFER", requiredMinor: event.minimumBufferMinor, actualMinor: resultingBufferMinor });
+    if (this.profile.locks.includes("completion_date") && resultingDaysDelta > 0) violations.push({ code: "LOCKED_COMPLETION_DATE", daysLate: resultingDaysDelta });
+    violations.push(...this.relationshipViolations(resultingEntities));
+    const evidenceAssessments = this.evaluateEvidence(event.evidenceRefs, event.costDeltaMinor);
+    if (Math.abs(event.costDeltaMinor) >= this.profile.evidencePolicy.materialityMinor && event.evidenceRefs.length === 0) violations.push({ code: "MATERIAL_EVIDENCE_REQUIRED", materialityMinor: this.profile.evidencePolicy.materialityMinor, actualMinor: Math.abs(event.costDeltaMinor) });
+    violations.push(...evidenceAssessments.filter((assessment) => !assessment.valid).map((assessment) => ({ code: assessment.code, evidenceId: assessment.evidenceId, ageDays: assessment.ageDays, maxAgeDays: assessment.maxAgeDays })));
+    const tradeoffImpact: Record<PreferenceKey, number> = { comfort: 0, experience: 0, buffer: 0, schedule: 0 };
+    for (const move of selectedMoves) {
+      for (const key of Object.keys(tradeoffImpact) as PreferenceKey[]) tradeoffImpact[key] += move.impacts[key] ?? 0;
+    }
+    const valid = violations.length === 0;
+    return this.finalizeCandidate({
+      planId: this.profile.planId,
+      profileId: this.profile.profileId,
+      profileHash: this.profile.profileHash,
+      baseRevision: this.revision,
+      eventId: event.eventId,
+      objective,
+      source,
+      moveIds,
+      selectedMoves,
+      tradeoffImpact,
+      grossCostDeltaMinor: event.costDeltaMinor,
+      savingsMinor,
+      netForecastDeltaMinor,
+      resultingBufferMinor,
+      resultingDaysDelta,
+      resultingEntities,
+      violations,
+      evidenceAssessments,
+      warnings: evidenceAssessments.filter((assessment) => assessment.code === "STALE_EVIDENCE").map((assessment) => ({ code: assessment.code, evidenceId: assessment.evidenceId, ageDays: assessment.ageDays, maxAgeDays: assessment.maxAgeDays })),
+      valid,
+      preferenceScore: this.preferenceScore(objective, tradeoffImpact, resultingBufferMinor, resultingDaysDelta, moveIds.length, valid),
+    });
+  }
+
+  private enumerateMoveSets(moveIds: string[], maxMoves: number, maxCombinations: number): { moveSets: string[][]; truncated: boolean } {
+    const moveSets: string[][] = [];
+    let truncated = false;
+    const visit = (start: number, selected: string[]): void => {
+      if (moveSets.length >= maxCombinations) { truncated = true; return; }
+      moveSets.push([...selected]);
+      if (selected.length >= maxMoves) return;
+      for (let index = start; index < moveIds.length; index += 1) {
+        visit(index + 1, [...selected, moveIds[index]!]);
+        if (truncated) return;
+      }
+    };
+    visit(0, []);
+    return { moveSets, truncated };
+  }
+
+  private async canonicalCandidate(candidate: Candidate): Promise<Candidate | null> {
+    if (candidate.planId !== this.profile.planId || candidate.profileId !== this.profile.profileId || candidate.profileHash !== this.profile.profileHash || candidate.baseRevision !== this.revision) return null;
+    if (!(["simulation", "bounded_search"] as const).includes(candidate.source)) return null;
+    if (new Set(candidate.moveIds).size !== candidate.moveIds.length) return null;
+    if (candidate.source === "bounded_search" && (!this.profile.searchPolicy.objectives.includes(candidate.objective) || candidate.moveIds.length > this.profile.searchPolicy.maxMovesPerOption)) return null;
+    const event = this.events.find((item) => item.eventId === candidate.eventId && item.baseRevision === this.revision);
+    if (!event || candidate.moveIds.some((moveId) => !this.profile.moves[moveId] || this.profile.locks.includes(this.profile.moves[moveId]!.dimension))) return null;
+    return this.createCandidate(event, candidate.moveIds, candidate.objective, candidate.source);
+  }
+
+  private async candidateIntegrity(candidate: Candidate): Promise<{ valid: boolean; canonical: Candidate | null }> {
+    const canonical = await this.canonicalCandidate(candidate);
+    if (!canonical) return { valid: false, canonical: null };
+    const selfHash = await sha256(this.candidatePayload(candidate));
+    return { valid: selfHash === candidate.contentHash && canonical.contentHash === candidate.contentHash && canonical.candidateId === candidate.candidateId, canonical };
   }
 
   async simulateReallocation({ eventId, moveIds, objective = "custom" }: { eventId: string; moveIds: string[]; objective?: string }): Promise<ToolResult> {
@@ -281,41 +385,7 @@ export class FinitePlanKernel {
       const legalAlternatives = Object.entries(this.profile.moves).filter(([, move]) => !this.profile.locks.includes(move.dimension)).slice(0, 3).map(([moveId]) => moveId);
       return { ok: false, code: "LOCKED_MOVE", locked, legalAlternatives, acceptedStateChanged: false, next: "Choose only legal alternatives." };
     }
-    const selectedMoves = uniqueMoveIds.map((moveId) => ({ moveId, ...clone(this.profile.moves[moveId]!) }));
-    const savingsMinor = sum(selectedMoves.map((move) => move.savingsMinor));
-    const netForecastDeltaMinor = event.costDeltaMinor - savingsMinor;
-    const resultingBufferMinor = this.accepted.bufferMinor - netForecastDeltaMinor;
-    const resultingDaysDelta = event.daysDelta + sum(selectedMoves.map((move) => move.daysDelta));
-    const resultingEntities = this.entitiesAfter(event.entityChanges);
-    const violations: ConstraintViolation[] = [];
-    if (resultingBufferMinor < event.minimumBufferMinor) violations.push({ code: "MINIMUM_BUFFER", requiredMinor: event.minimumBufferMinor, actualMinor: resultingBufferMinor });
-    if (this.profile.locks.includes("completion_date") && resultingDaysDelta > 0) violations.push({ code: "LOCKED_COMPLETION_DATE", daysLate: resultingDaysDelta });
-    violations.push(...this.relationshipViolations(resultingEntities));
-    const evidenceAssessments = this.evaluateEvidence(event.evidenceRefs, event.costDeltaMinor);
-    violations.push(...evidenceAssessments.filter((assessment) => !assessment.valid).map((assessment) => ({ code: assessment.code, evidenceId: assessment.evidenceId, ageDays: assessment.ageDays, maxAgeDays: assessment.maxAgeDays })));
-    const valid = violations.length === 0;
-    const base = {
-      candidateId: makeId("candidate"),
-      planId: this.profile.planId,
-      profileId: this.profile.profileId,
-      baseRevision: this.revision,
-      eventId,
-      objective,
-      moveIds: uniqueMoveIds,
-      selectedMoves,
-      grossCostDeltaMinor: event.costDeltaMinor,
-      savingsMinor,
-      netForecastDeltaMinor,
-      resultingBufferMinor,
-      resultingDaysDelta,
-      resultingEntities,
-      violations,
-      evidenceAssessments,
-      warnings: evidenceAssessments.filter((assessment) => assessment.code === "STALE_EVIDENCE").map((assessment) => ({ code: assessment.code, evidenceId: assessment.evidenceId, ageDays: assessment.ageDays, maxAgeDays: assessment.maxAgeDays })),
-      valid,
-      preferenceScore: this.preferenceScore(objective, uniqueMoveIds.length, valid),
-    };
-    const candidate: Candidate = { ...base, contentHash: await sha256(base) };
+    const candidate = await this.createCandidate(event, uniqueMoveIds, objective, "simulation");
     this.candidates.set(candidate.candidateId, candidate);
     return { ok: true, code: candidate.valid ? "VALID_CANDIDATE" : "INVALID_CANDIDATE", candidate: clone(candidate), acceptedStateChanged: false };
   }
@@ -323,30 +393,69 @@ export class FinitePlanKernel {
   async compareOptions({ eventId, generate = true }: { eventId: string; generate?: boolean }): Promise<ToolResult> {
     const event = this.events.find((item) => item.eventId === eventId);
     if (!event) return { ok: false, code: "EVENT_NOT_FOUND", acceptedStateChanged: false };
-    if (generate) for (const template of this.profile.optionTemplates) await this.simulateReallocation({ eventId, ...template });
+    if (event.baseRevision !== this.revision) return { ok: false, code: "STALE_EVENT", eventRevision: event.baseRevision, currentRevision: this.revision, acceptedStateChanged: false };
+    let search: Record<string, unknown> | null = null;
+    if (generate) {
+      for (const [candidateId, candidate] of this.candidates) {
+        if (candidate.eventId === eventId && candidate.baseRevision === this.revision && candidate.source === "bounded_search") this.candidates.delete(candidateId);
+      }
+      const legalMoveIds = Object.entries(this.profile.moves)
+        .filter(([, move]) => !this.profile.locks.includes(move.dimension))
+        .map(([moveId]) => moveId)
+        .sort();
+      const { moveSets, truncated } = this.enumerateMoveSets(legalMoveIds, this.profile.searchPolicy.maxMovesPerOption, this.profile.searchPolicy.maxCombinations);
+      const chosenMoveSets = new Set<string>();
+      for (const objective of this.profile.searchPolicy.objectives) {
+        const ranked = await Promise.all(moveSets.map((moveIds) => this.createCandidate(event, moveIds, objective, "bounded_search")));
+        ranked.sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore || a.moveIds.join("|").localeCompare(b.moveIds.join("|")));
+        const selected = ranked.find((candidate) => candidate.valid && !chosenMoveSets.has(candidate.moveIds.join("|")))
+          ?? ranked.find((candidate) => !chosenMoveSets.has(candidate.moveIds.join("|")));
+        if (!selected) continue;
+        chosenMoveSets.add(selected.moveIds.join("|"));
+        this.candidates.set(selected.candidateId, selected);
+        if (chosenMoveSets.size >= this.profile.searchPolicy.optionCount) break;
+      }
+      search = {
+        strategy: "bounded_legal_move_enumeration",
+        legalMoveCount: legalMoveIds.length,
+        exploredCombinationCount: moveSets.length,
+        maxMovesPerOption: this.profile.searchPolicy.maxMovesPerOption,
+        maxCombinations: this.profile.searchPolicy.maxCombinations,
+        truncated,
+        objectives: clone(this.profile.searchPolicy.objectives),
+      };
+    }
     const candidates = [...this.candidates.values()]
       .filter((candidate) => candidate.eventId === eventId && candidate.baseRevision === this.revision)
-      .sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore);
-    const options = candidates.map((candidate) => ({ candidateId: candidate.candidateId, objective: candidate.objective, valid: candidate.valid, moveIds: candidate.moveIds, netForecastDeltaMinor: candidate.netForecastDeltaMinor, resultingBufferMinor: candidate.resultingBufferMinor, resultingDaysDelta: candidate.resultingDaysDelta, resultingEntities: candidate.resultingEntities, preferenceScore: candidate.preferenceScore, violations: candidate.violations, warnings: candidate.warnings }));
-    return { ok: true, code: candidates.some((candidate) => candidate.valid) ? "OPTIONS_AVAILABLE" : "NO_VALID_OPTION", options, comparable: candidates.every((candidate) => candidate.baseRevision === this.revision && candidate.eventId === eventId), acceptedStateChanged: false };
+      .sort((a, b) => Number(b.valid) - Number(a.valid)
+        || (this.profile.searchPolicy.objectives.indexOf(a.objective) < 0 ? Number.MAX_SAFE_INTEGER : this.profile.searchPolicy.objectives.indexOf(a.objective))
+          - (this.profile.searchPolicy.objectives.indexOf(b.objective) < 0 ? Number.MAX_SAFE_INTEGER : this.profile.searchPolicy.objectives.indexOf(b.objective))
+        || b.preferenceScore - a.preferenceScore);
+    const options = candidates.map((candidate) => ({ candidateId: candidate.candidateId, objective: candidate.objective, source: candidate.source, valid: candidate.valid, moveIds: candidate.moveIds, tradeoffImpact: candidate.tradeoffImpact, netForecastDeltaMinor: candidate.netForecastDeltaMinor, resultingBufferMinor: candidate.resultingBufferMinor, resultingDaysDelta: candidate.resultingDaysDelta, resultingEntities: candidate.resultingEntities, preferenceScore: candidate.preferenceScore, violations: candidate.violations, warnings: candidate.warnings }));
+    return { ok: true, code: candidates.some((candidate) => candidate.valid) ? "OPTIONS_AVAILABLE" : "NO_VALID_OPTION", options, search, comparable: candidates.every((candidate) => candidate.baseRevision === this.revision && candidate.eventId === eventId), acceptedStateChanged: false };
   }
 
-  stageOption({ candidateId, expectedRevision }: { candidateId: string; expectedRevision: number }): ToolResult {
+  async stageOption({ candidateId, expectedRevision }: { candidateId: string; expectedRevision: number }): Promise<ToolResult> {
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     const candidate = this.candidates.get(candidateId);
     if (!candidate) return { ok: false, code: "CANDIDATE_NOT_FOUND", acceptedStateChanged: false };
-    if (!candidate.valid) return { ok: false, code: "INVALID_CANDIDATE", violations: clone(candidate.violations), acceptedStateChanged: false };
-    this.stagedCandidate = clone(candidate);
+    const integrity = await this.candidateIntegrity(candidate);
+    if (!integrity.valid || !integrity.canonical) return { ok: false, code: "CANDIDATE_INTEGRITY_FAILED", acceptedStateChanged: false, next: "Regenerate options from the current event and revision." };
+    if (!integrity.canonical.valid) return { ok: false, code: "INVALID_CANDIDATE", violations: clone(integrity.canonical.violations), acceptedStateChanged: false };
+    this.stagedCandidate = clone(integrity.canonical);
     this.approval = null;
-    return { ok: true, code: "OPTION_STAGED", staged: clone(candidate), acceptedStateChanged: false, next: "Human may approve, reject, or provide feedback." };
+    return { ok: true, code: "OPTION_STAGED", staged: clone(integrity.canonical), acceptedStateChanged: false, next: "Human may approve, reject, or provide feedback." };
   }
 
-  humanApprove({ candidateId, warningsAcknowledged = [] }: { candidateId: string; warningsAcknowledged?: string[] }): ToolResult {
+  async humanApprove({ candidateId, warningsAcknowledged = [] }: { candidateId: string; warningsAcknowledged?: string[] }): Promise<ToolResult> {
     if (!this.stagedCandidate || this.stagedCandidate.candidateId !== candidateId) return { ok: false, code: "OPTION_NOT_STAGED", acceptedStateChanged: false };
-    const warningCodes = this.stagedCandidate.warnings.map((warning) => String(warning.code));
+    const integrity = await this.candidateIntegrity(this.stagedCandidate);
+    if (!integrity.valid || !integrity.canonical) return { ok: false, code: "STAGED_CANDIDATE_INTEGRITY_FAILED", acceptedStateChanged: false, next: "Return the option and regenerate from accepted truth." };
+    this.stagedCandidate = clone(integrity.canonical);
+    const warningCodes = integrity.canonical.warnings.map((warning) => String(warning.code));
     const missingWarnings = warningCodes.filter((code) => !warningsAcknowledged.includes(code));
     if (missingWarnings.length) return { ok: false, code: "WARNINGS_NOT_ACKNOWLEDGED", missingWarnings, acceptedStateChanged: false };
-    this.approval = { approvalId: makeId("approval"), candidateId, planId: this.profile.planId, revision: this.revision, contentHash: this.stagedCandidate.contentHash, warningsAcknowledged: clone(warningsAcknowledged), source: "human_action" };
+    this.approval = { approvalId: makeId("approval"), candidateId, planId: this.profile.planId, revision: this.revision, contentHash: integrity.canonical.contentHash, warningsAcknowledged: clone(warningsAcknowledged), source: "human_action" };
     return { ok: true, code: "HUMAN_APPROVAL_RECORDED", approval: clone(this.approval), acceptedStateChanged: false };
   }
 
@@ -360,16 +469,19 @@ export class FinitePlanKernel {
     }
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     if (!this.stagedCandidate || this.stagedCandidate.candidateId !== candidateId) return { ok: false, code: "OPTION_NOT_STAGED", acceptedStateChanged: false };
-    if (!this.approval || this.approval.approvalId !== approvalId || this.approval.contentHash !== this.stagedCandidate.contentHash || this.approval.revision !== this.revision) return { ok: false, code: "CONSENT_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const integrity = await this.candidateIntegrity(this.stagedCandidate);
+    if (!integrity.valid || !integrity.canonical) return { ok: false, code: "STAGED_CANDIDATE_INTEGRITY_FAILED", acceptedStateChanged: false, next: "Return the option and regenerate from accepted truth." };
+    const canonical = integrity.canonical;
+    if (!this.approval || this.approval.approvalId !== approvalId || this.approval.candidateId !== candidateId || this.approval.planId !== this.profile.planId || this.approval.source !== "human_action" || this.approval.contentHash !== canonical.contentHash || this.approval.revision !== this.revision) return { ok: false, code: "CONSENT_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
     const before = clone(this.accepted);
-    const after = { ...before, forecastMinor: before.forecastMinor + this.stagedCandidate.netForecastDeltaMinor, bufferMinor: before.bufferMinor - this.stagedCandidate.netForecastDeltaMinor };
+    const after = { ...before, forecastMinor: before.forecastMinor + canonical.netForecastDeltaMinor, bufferMinor: before.bufferMinor - canonical.netForecastDeltaMinor };
     if (sumAllocation(before) !== before.totalBudgetMinor || sumAllocation(after) !== after.totalBudgetMinor) return { ok: false, code: "FINITE_TOTAL_INVARIANT_FAILED", acceptedStateChanged: false };
     const fromRevision = this.revision;
     this.accepted = after;
     const beforeEntities = clone(this.entities);
-    this.entities = clone(this.stagedCandidate.resultingEntities);
+    this.entities = clone(canonical.resultingEntities);
     this.revision += 1;
-    const payload = { candidateId, approvalId, before, after: clone(after), beforeEntities, afterEntities: clone(this.entities), moveIds: clone(this.stagedCandidate.moveIds), contentHash: this.stagedCandidate.contentHash };
+    const payload = { candidateId, approvalId, before, after: clone(after), beforeEntities, afterEntities: clone(this.entities), moveIds: clone(canonical.moveIds), contentHash: canonical.contentHash };
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
