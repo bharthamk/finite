@@ -65,3 +65,8 @@ human authority.
 - TypeScript typecheck and production Vite build pass.
 - All tests assert accepted state remains unchanged during orientation and menu
   reads.
+- Deployment acceptance must inspect the packaged `dist/client/index.html`
+  after the final source change. The first version-24 archive was built before
+  the duplicate-registration correction and was rejected by hosted browser
+  acceptance; a fresh commit, exact rebuild, and replacement private version
+  are required before this slice is complete.
