@@ -203,7 +203,7 @@ test("an authenticated construction packet follows the consumer across browser s
     "travel",
     new PlanCatalogStore(firstStorage),
     [],
-    () => new Date("2026-08-26T20:00:00.000Z"),
+    () => new Date("2026-08-26T23:00:00.000Z"),
     undefined,
     remote,
   );

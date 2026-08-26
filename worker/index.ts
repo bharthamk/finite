@@ -12,6 +12,42 @@ interface WorkerEnvironment {
   DB: D1Database;
 }
 
+export const finiteRelease = {
+  build: "returned-draft-v44",
+  script: "/assets/index-ulbeUIsS.js",
+  stylesheet: "/assets/index-DGV2Wpk6.css",
+} as const;
+
+const assetRequest = (request: Request, pathname: string): Request => new Request(new URL(pathname, request.url), {
+  method: "GET",
+  headers: { accept: pathname.endsWith(".css") ? "text/css" : "text/javascript" },
+});
+
+export const serveFiniteReleaseShell = async (request: Request, assets: AssetsBinding): Promise<Response | null> => {
+  const url = new URL(request.url);
+  if (request.method !== "GET" || (url.pathname !== "/" && url.pathname !== "/index.html")) return null;
+  const current = await assets.fetch(request);
+  if (!current.ok || !current.headers.get("content-type")?.includes("text/html")) return current;
+  const [script, stylesheet] = await Promise.all([
+    assets.fetch(assetRequest(request, finiteRelease.script)),
+    assets.fetch(assetRequest(request, finiteRelease.stylesheet)),
+  ]);
+  if (!script.ok || !stylesheet.ok) return current;
+
+  let html = await current.text();
+  html = html.replace(/<meta name="finite-build" content="[^"]*"\s*\/>/, `<meta name="finite-build" content="${finiteRelease.build}" />`);
+  if (!html.includes('name="finite-build"')) html = html.replace("<title>", `<meta name="finite-build" content="${finiteRelease.build}" />\n    <title>`);
+  html = html
+    .replace(/\/assets\/index-[A-Za-z0-9_-]+\.js/g, finiteRelease.script)
+    .replace(/\/assets\/index-[A-Za-z0-9_-]+\.css/g, finiteRelease.stylesheet);
+  const headers = new Headers(current.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("x-finite-build", finiteRelease.build);
+  headers.delete("content-length");
+  headers.delete("etag");
+  return new Response(html, { status: current.status, statusText: current.statusText, headers });
+};
+
 export default {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
     const authResponse = await handleAuthRequest(request, environment.DB);
@@ -22,6 +58,8 @@ export default {
     if (constructionResponse) return constructionResponse;
     const apiResponse = await handleAcceptedTruthRequest(request, environment.DB);
     if (apiResponse) return apiResponse;
+    const releaseShell = await serveFiniteReleaseShell(request, environment.ASSETS);
+    if (releaseShell) return releaseShell;
     return environment.ASSETS.fetch(request);
   },
 };

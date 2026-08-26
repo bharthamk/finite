@@ -58,6 +58,6 @@ the Site asks the human what was wrong before Codex proceeds.
 - TypeScript typecheck passed.
 - Production build passed.
 - Drizzle migration integrity check passed for migrations 0006 and 0007.
-- 91 of 91 automated tests passed, including cross-surface return, legacy
+- 93 of 93 automated tests passed, including cross-surface return, legacy
   recovery, exact feedback, route arbitration, and resolution by a revised
-  draft.
+  draft, plus fail-safe Worker selection of the exact release shell.
