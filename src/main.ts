@@ -380,7 +380,7 @@ const pendingDraftMatchesArrival = (): boolean => {
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
   if (!draft || !orientation) return Boolean(draft);
   const source = draft.sourceArrival;
-  if (!source) return orientation.interpretationIsCurrent;
+  if (!source) return false;
   return orientation.interpretationIsCurrent
     && source.orderId === orientation.order.orderId
     && source.orderVersion === orientation.exactOrderVersion

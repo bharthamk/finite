@@ -63,7 +63,7 @@ const exactArrivalBinding = (orientation: ArrivalOrientation): { orderId: string
 });
 const constructionMatchesArrival = (construction: Record<string, unknown>, orientation: ArrivalOrientation): boolean => {
   const source = record(construction.sourceArrival);
-  if (!Object.keys(source).length) return orientation.interpretationIsCurrent;
+  if (!Object.keys(source).length) return false;
   return orientation.interpretationIsCurrent
     && String(source.orderId ?? "") === orientation.order.orderId
     && Number(source.orderVersion) === orientation.exactOrderVersion

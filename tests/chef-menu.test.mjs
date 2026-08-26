@@ -206,8 +206,8 @@ test("confirmed arrival resumes an existing construction packet instead of resta
   const created = await arrivals.create({ idempotencyKey: "resume-construction-0001", rawOutcome: "Plan an open Europe trip.", sourceSurface: "site" });
   const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
   const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "An open Europe trip.", complete: true });
-  await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
-  const assessed = await runtime.assessPlanIntake({ profileId: "travel", name: "Europe trip" });
+  const reviewed = await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const assessed = await runtime.assessPlanIntake({ profileId: "travel", name: "Europe trip", sourceArrival: { orderId: reviewed.order.orderId, orderVersion: reviewed.order.version, orderChecksum: reviewed.order.checksum } });
   assert.equal(assessed.code, "INTAKE_FACTS_MISSING");
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(entered.operatorPacket.nextAction.stage, "construction_intake_incomplete");
@@ -240,9 +240,26 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   const created = await arrivals.create({ idempotencyKey: "draft-review-route-0001", rawOutcome: "Plan a Europe trip.", sourceSurface: "site" });
   const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
   const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A Europe trip.", complete: true });
-  await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
-  const staged = await runtime.stagePlanDraft(runtime.getPlanBlueprint("travel").profile);
-  assert.equal(staged.code, "PLAN_DRAFT_STAGED");
+  const reviewed = await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const assessed = await runtime.assessPlanIntake({
+    sourceArrival: { orderId: reviewed.order.orderId, orderVersion: reviewed.order.version, orderChecksum: reviewed.order.checksum },
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_europe_review_test",
+    name: "Europe trip",
+    brief: "Build an adaptive Europe trip.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [],
+    locks: ["total_budget"],
+    preferenceLabels: ["protect_trip"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "A one-month working duration.", sourcePaths: ["known.duration"] } },
+      booked_segment_days: { days: { value: 0, basis: "No booked segments are recorded.", sourcePaths: ["known.bookings"] } },
+    },
+    stages: [{ stageId: "europe", label: "Europe", status: "planned" }],
+  });
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE");
   const host = new MemoryModelContext();
   await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
