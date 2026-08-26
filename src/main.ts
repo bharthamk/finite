@@ -7,6 +7,7 @@ import { FinitePlanWebMCPAdapter, type FiniteWebMCPReadiness } from "./webmcp.js
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
+import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
@@ -415,18 +416,18 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <p class="eyebrow">Human order / version ${order.version}</p>
             <h1 id="arrival_order_title">${escapeHtml(order.rawOutcome)}</h1>
           </div>
-          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p><small>Order proof ${escapeHtml(order.checksum.slice(0, 16))}…</small></aside>
+          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p><small>Saved as human order version ${order.version}</small></aside>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
-        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Question ${escapeHtml(question.questionId)} · staged against an exact order version</small></section>` : ""}
+        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer is saved as human input. Codex cannot fill it in for you.</small></section>` : ""}
         ${interpretation ? `<section class="arrival-interpretation">
           <div class="arrival-interpretation__head"><p class="eyebrow">Codex interpretation / not human fact</p><h2>${escapeHtml(interpretation.summary)}</h2><span>${interpretation.complete ? "Complete proposal" : "Work in progress"}</span></div>
           <div class="arrival-interpretation__grid">
-            <article><span>Plan family</span><strong>${escapeHtml(interpretation.inferredFamily ?? "Still being inferred")}</strong></article>
-            <article><span>Known</span><pre>${escapeHtml(JSON.stringify(interpretation.known, null, 2))}</pre></article>
-            <article><span>Inferred</span><pre>${escapeHtml(JSON.stringify(interpretation.inferred, null, 2))}</pre></article>
-            <article><span>Still missing</span><p>${interpretation.missing.length ? interpretation.missing.map((item) => escapeHtml(item)).join(" · ") : "Nothing currently blocking"}</p></article>
-            ${interpretation.contradictions.length ? `<article class="is-warning"><span>Contradictions</span><p>${interpretation.contradictions.map((item) => escapeHtml(item)).join(" · ")}</p></article>` : ""}
+            <article class="arrival-interpretation__family"><span>Working shape</span><strong>${escapeHtml(humanLabel(interpretation.inferredFamily ?? "Still being inferred"))}</strong><p>Codex selected this planning grammar. You can correct it before anything becomes accepted.</p></article>
+            <article><span>What I’m working from</span>${renderHumanValue(interpretation.known)}</article>
+            <article><span>What Codex currently thinks</span>${renderHumanValue(interpretation.inferred)}<p class="interpretation-note">These are working assumptions, not facts you supplied.</p></article>
+            <article><span>What I still need</span>${renderTextList(interpretation.missing, "Nothing currently blocking")}</article>
+            ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
           </div>
         </section>` : ""}
         ${renderPlanDraft()}
@@ -438,7 +439,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
           </form>
         </section>
-        ${inputTrail.length ? `<details class="arrival-history"><summary>Recent human-supplied updates</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(input.kind)} · ${escapeHtml(input.sourceSurface)}</span><p>${escapeHtml(JSON.stringify(input.payload))}</p></li>`).join("")}</ol></details>` : ""}
+        ${inputTrail.length ? `<details class="arrival-history"><summary>Recent details you supplied</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))} · ${escapeHtml(inputSurfaceLabel(input.sourceSurface))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol></details>` : ""}
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
