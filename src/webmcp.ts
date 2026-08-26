@@ -34,6 +34,38 @@ const proofInput = (value: unknown): unknown => {
 type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
+
+const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string; answerKind: string; fieldPaths: string[]; choices: string[]; reason: string } => {
+  const interpretation = orientation.order.interpretation;
+  const explicit = interpretation?.nextHumanBoundary;
+  if (explicit?.prompt) return {
+    prompt: explicit.prompt,
+    answerKind: explicit.answerKind,
+    fieldPaths: explicit.fieldPaths,
+    choices: explicit.choices,
+    reason: orientation.missing[0] ?? orientation.contradictions[0] ?? "The interpretation names a human judgment boundary.",
+  };
+  const saved = record(orientation.savedOperatorWork);
+  const savedBoundary = saved.nextHumanBoundary;
+  const savedBoundaryRecord = record(savedBoundary);
+  const promptValue = typeof saved.nextHumanQuestion === "string"
+    ? saved.nextHumanQuestion
+    : typeof savedBoundary === "string"
+      ? savedBoundary
+      : typeof savedBoundaryRecord.prompt === "string"
+        ? savedBoundaryRecord.prompt
+        : "";
+  const firstGap = orientation.missing[0] ?? orientation.contradictions[0] ?? "the next decision that only you can make";
+  const prompt = promptValue.trim()
+    ? /[?]$/.test(promptValue.trim()) ? promptValue.trim() : `Before I test routes, I need one detail from you: ${promptValue.trim()}.`
+    : `Before I test routes, I need one detail from you: ${firstGap.replace(/[.]+$/, "")}.`;
+  const requestedAnswerKind = typeof savedBoundaryRecord.answerKind === "string" ? savedBoundaryRecord.answerKind : "text";
+  const fieldPaths = Array.isArray(savedBoundaryRecord.fieldPaths) ? savedBoundaryRecord.fieldPaths.map(String) : ["interpretation.nextHumanBoundary"];
+  const choices = Array.isArray(savedBoundaryRecord.choices) ? savedBoundaryRecord.choices.map(String) : [];
+  const answerKind = arrivalAnswerKinds.has(requestedAnswerKind) && (!["choice", "multi_choice"].includes(requestedAnswerKind) || choices.length >= 2) ? requestedAnswerKind : "text";
+  return { prompt, answerKind, fieldPaths, choices, reason: firstGap };
+};
 
 const planNextAction = (brief: Record<string, unknown>): Record<string, unknown> => {
   const work = record(brief.work);
@@ -110,8 +142,33 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
     missingInputs: [{ argument: "clarification_answer", source: "human", reason: "Codex cannot answer a staged human question.", question: orientation.order.pendingClarification.prompt }],
     requiresHuman: true, exactQuestion: orientation.order.pendingClarification.prompt, targetId: orientation.order.orderId, authorityPresent: false,
   };
+  const interpretation = orientation.order.interpretation;
+  if (interpretation && orientation.interpretationIsCurrent && interpretation.complete) return {
+    actionVersion: "finite-next-action.v1", stage: "arrival_interpretation_ready", reason: "Codex's source-separated interpretation is current and ready for human review; it is not accepted plan truth.",
+    nextTool: null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [],
+    missingInputs: [{ argument: "interpretation_judgment", source: "human", reason: "Only the human can confirm whether Codex understood the desired outcome.", question: "Does this interpretation capture what you want, or what should I correct before building the plan?" }],
+    requiresHuman: true, exactQuestion: "Does this interpretation capture what you want, or what should I correct before building the plan?", targetId: orientation.order.orderId, authorityPresent: false,
+  };
+  if (interpretation && orientation.interpretationIsCurrent && (orientation.missing.length > 0 || orientation.contradictions.length > 0)) {
+    const boundary = arrivalHumanBoundary(orientation);
+    return {
+      actionVersion: "finite-next-action.v1", stage: "arrival_clarification_ready", reason: `The current interpretation identified a material human boundary: ${boundary.reason}`,
+      nextTool: "finite_stage_clarification",
+      knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, prompt: boundary.prompt, answerKind: boundary.answerKind, fieldPaths: boundary.fieldPaths, choices: boundary.choices },
+      derivedArgs: [{ argument: "prompt", source: interpretation.nextHumanBoundary ? "operator_interpretation" : "canonical_interpretation_gap", provenance: { interpretationBasedOnVersion: orientation.interpretationBasedOnVersion } }],
+      missingInputs: [{ argument: "clarification_answer", source: "human", reason: boundary.reason, question: boundary.prompt }],
+      requiresHuman: false, exactQuestion: null, humanQuestion: boundary.prompt, targetId: orientation.order.orderId, authorityPresent: false,
+    };
+  }
+  if (interpretation && orientation.interpretationIsCurrent) return {
+    actionVersion: "finite-next-action.v1", stage: "arrival_interpretation_incomplete", reason: "The saved interpretation is current but marked incomplete without a declared human gap. Codex must refine the operator work instead of pretending it is ready.",
+    nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
+  };
   return {
-    actionVersion: "finite-next-action.v1", stage: "arrival_review", reason: "The human order is current and ready for bounded interpretation.",
+    actionVersion: "finite-next-action.v1", stage: "arrival_review", reason: interpretation
+      ? `Human input advanced to version ${orientation.latestHumanInputVersion} after the saved interpretation. Rebuild it from canonical human state.`
+      : "The human order is current and ready for bounded interpretation.",
     nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
@@ -124,11 +181,36 @@ const newPlanNextAction = (): Record<string, unknown> => ({
   requiresHuman: true, exactQuestion: "What are we making happen? Tell me the outcome in ordinary language; we can work out the structure together.", targetId: null, authorityPresent: false,
 });
 
-const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string, unknown> => ({
+const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string, unknown> => {
+  const basis = orientation
+    ? { orderId: orientation.order.orderId, orderVersion: orientation.exactOrderVersion, orderChecksum: orientation.exactOrderChecksum, status: orientation.order.status, latestHumanInputVersion: orientation.latestHumanInputVersion, latestOperatorEventVersion: orientation.latestOperatorEventVersion, interpretationBasedOnVersion: orientation.interpretationBasedOnVersion }
+    : { orderId: null, status: "no_arrival" };
+  if (orientation?.order.status === "clarification_required" && orientation.order.pendingClarification) {
+    const question = orientation.order.pendingClarification;
+    return { menuVersion: "finite-chef-menu.v1", basis, items: [
+      { menuItemId: "arrival_answer_staged_question", rank: 1, kind: "human_decision", title: "Answer the one blocking question", offer: question.prompt, status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "answer" }, missingInputs: [{ argument: "payload.value", source: "human", reason: "The answer belongs to the human.", question: question.prompt }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
+      { menuItemId: "arrival_add_context_instead", rank: 2, kind: "human_decision", title: "Give me the surrounding context instead", offer: "Tell me what makes this hard to answer and I will reshape the question without treating that context as an answer.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "detail" }, missingInputs: [{ argument: "payload", source: "human", reason: "Only the human knows the relevant context." }], tradeoffs: ["May require a revised clarification"], evidence: { status: "not_required", refs: [] } },
+      { menuItemId: "arrival_change_outcome", rank: 3, kind: "human_decision", title: "Change the outcome or limit", offer: "Correct the order if the question exposed that the original outcome or finite limit is wrong.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "correction" }, missingInputs: [{ argument: "payload", source: "human", reason: "A correction must come from the human." }], tradeoffs: ["Existing operator work will be treated as stale"], evidence: { status: "not_required", refs: [] } },
+    ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
+  }
+  if (orientation?.order.interpretation && orientation.interpretationIsCurrent && !orientation.order.interpretation.complete && (orientation.missing.length > 0 || orientation.contradictions.length > 0)) {
+    const boundary = arrivalHumanBoundary(orientation);
+    return { menuVersion: "finite-chef-menu.v1", basis, items: [
+      { menuItemId: "arrival_resolve_first_boundary", rank: 1, kind: "operator_action", title: "Resolve the first planning boundary", offer: boundary.prompt, status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_clarification", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, prompt: boundary.prompt, answerKind: boundary.answerKind, fieldPaths: boundary.fieldPaths, choices: boundary.choices }, missingInputs: [{ argument: "clarification_answer", source: "human", reason: boundary.reason, question: boundary.prompt }], tradeoffs: ["Pauses only at the exact human boundary"], evidence: { status: "available", refs: [] } },
+      { menuItemId: "arrival_supply_remaining_gaps", rank: 2, kind: "human_decision", title: "Give me all the missing details together", offer: orientation.missing.length ? orientation.missing.join(" · ") : "Add the context that would resolve the current contradiction.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "detail" }, missingInputs: [{ argument: "payload", source: "human", reason: "These facts cannot be inferred safely." }], tradeoffs: ["More effort now, fewer pauses later"], evidence: { status: "not_required", refs: [] } },
+      { menuItemId: "arrival_revise_brief", rank: 3, kind: "human_decision", title: "Revise the outcome or finite limits", offer: "Correct the brief if the gaps reveal that the desired outcome, deadline, or limit should change.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "correction" }, missingInputs: [{ argument: "payload", source: "human", reason: "Only the human can revise the order." }], tradeoffs: ["The interpretation will be rebuilt from the new human state"], evidence: { status: "not_required", refs: [] } },
+    ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
+  }
+  if (orientation?.order.interpretation?.complete && orientation.interpretationIsCurrent) {
+    return { menuVersion: "finite-chef-menu.v1", basis, items: [
+      { menuItemId: "arrival_review_interpretation", rank: 1, kind: "human_decision", title: "Review what I understood", offer: orientation.order.interpretation.summary, status: "input_required", viability: "not_yet_tested", nextTool: null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [{ argument: "interpretation_judgment", source: "human", reason: "The interpretation is Codex work, not accepted truth." }], tradeoffs: [], evidence: { status: "available", refs: [] } },
+      { menuItemId: "arrival_correct_interpretation", rank: 2, kind: "human_decision", title: "Correct something I misunderstood", offer: "Give me the correction and I will invalidate the old interpretation before rebuilding it.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "correction" }, missingInputs: [{ argument: "payload", source: "human", reason: "The correction belongs to the human." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
+      { menuItemId: "arrival_add_constraint", rank: 3, kind: "human_decision", title: "Add one more constraint", offer: "Add a deadline, limit, commitment, or preference before plan construction begins.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "constraint" }, missingInputs: [{ argument: "payload", source: "human", reason: "New constraints must come from the human." }], tradeoffs: ["The interpretation will be rebuilt"], evidence: { status: "not_required", refs: [] } },
+    ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
+  }
+  return {
   menuVersion: "finite-chef-menu.v1",
-  basis: orientation
-    ? { orderId: orientation.order.orderId, orderVersion: orientation.exactOrderVersion, orderChecksum: orientation.exactOrderChecksum, status: orientation.order.status }
-    : { orderId: null, status: "no_arrival" },
+  basis,
   items: orientation ? [
     { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will read every saved detail and continue without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_checkpoint_arrival" : null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: [], evidence: { status: "available", refs: [] } },
     { menuItemId: "arrival_clarify_only_material_gaps", rank: 2, kind: "suggested_route", title: "Ask only what materially blocks the plan", offer: "I will return with the smallest decision or fact that only you can provide.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_clarification", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["May pause the kitchen for one human answer"], evidence: { status: "not_required", refs: [] } },
@@ -139,7 +221,8 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
     { menuItemId: "arrival_bring_evidence", rank: 3, kind: "suggested_route", title: "Bring the messy material", offer: "Give me links, receipts, notes, or constraints and I will organize them around the outcome.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "Evidence needs an outcome to organize around." }], tradeoffs: ["Evidence remains untrusted until admitted and checked"], evidence: { status: "required", refs: [] } },
   ],
   law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes.",
-});
+  };
+};
 
 const define = ({ name, title, description, inputSchema = objectSchema(), readOnly = false, untrusted = false, execute }: {
   name: string;
@@ -270,6 +353,13 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       requestedOrderId,
       matchedCurrentState: differences.length === 0,
       differences,
+      versionSemantics: orientation ? {
+        aggregateEventVersion: orientation.exactOrderVersion,
+        latestHumanInputVersion: orientation.latestHumanInputVersion,
+        latestOperatorEventVersion: orientation.latestOperatorEventVersion,
+        humanInputChangedSinceHandoff: input.expectedOrderVersion !== undefined && orientation.latestHumanInputVersion > Number(input.expectedOrderVersion),
+        operatorWorkAdvancedSinceHandoff: input.expectedOrderVersion !== undefined && (orientation.latestOperatorEventVersion ?? 0) > Number(input.expectedOrderVersion),
+      } : null,
       note: differences.length ? "The handoff was only a pointer. Canonical Site state has advanced; continue from the state returned here." : "The handoff receipt matches current Site state.",
     },
     arrival: arrivalState,
@@ -313,7 +403,10 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_open_arrival", title: "Orient to the waiting human order", description: "Open the current or named arrival with the full human order, delta since the operator checkpoint, unprocessed count, evidence, inference labels, missing facts, contradictions, saved operator work, exact version/checksum, and next safe route.", readOnly: true, inputSchema: objectSchema({ orderId: string, sinceVersion: { type: "integer", minimum: 0 } }), execute: (input) => arrival.open({ ...(input.orderId ? { orderId: String(input.orderId) } : {}), ...(input.sinceVersion !== undefined ? { sinceVersion: Number(input.sinceVersion) } : {}) }) }),
   define({ name: "finite_checkpoint_arrival", title: "Checkpoint processed human input", description: "Mark one exact arrival version as processed by Codex and move it into operator review. If the human changed the order, the write fails closed and returns the new orientation delta.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision }, ["orderId", "expectedVersion"]), execute: (input) => arrival.checkpoint({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion) }) }),
   define({ name: "finite_stage_clarification", title: "Stage one clarification for the human", description: "Stage one bounded question against an exact arrival version. It changes no accepted plan truth and cannot answer on the human's behalf.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, prompt: { type: "string", minLength: 1, maxLength: 1000 }, answerKind: { type: "string", enum: ["text", "number", "date", "choice", "multi_choice", "confirmation"] }, fieldPaths: { type: "array", maxItems: 20, items: string }, choices: { type: "array", maxItems: 20, items: string } }, ["orderId", "expectedVersion", "prompt", "answerKind"]), execute: (input) => arrival.stageClarification({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), prompt: String(input.prompt), answerKind: input.answerKind as never, fieldPaths: Array.isArray(input.fieldPaths) ? input.fieldPaths.map(String) : [], choices: Array.isArray(input.choices) ? input.choices.map(String) : [] }) }),
-  define({ name: "finite_stage_plan_interpretation", title: "Stage Codex's arrival interpretation", description: "Store a clearly labelled Codex interpretation against an exact human-order version, including known facts, inferences, gaps, contradictions, and resumable work. Complete interpretations become proposed plans awaiting human review, never accepted truth.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, inferredFamily: { type: ["string", "null"], maxLength: 100 }, summary: { type: "string", minLength: 1, maxLength: 4000 }, known: { type: "object" }, inferred: { type: "object" }, missing: { type: "array", maxItems: 50, items: string }, contradictions: { type: "array", maxItems: 50, items: string }, savedOperatorWork: { type: "object" }, complete: { type: "boolean" } }, ["orderId", "expectedVersion", "summary"]), execute: (input) => arrival.stageInterpretation({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), inferredFamily: input.inferredFamily === null || input.inferredFamily === undefined ? null : String(input.inferredFamily), summary: String(input.summary), known: input.known && typeof input.known === "object" && !Array.isArray(input.known) ? input.known as Record<string, unknown> : {}, inferred: input.inferred && typeof input.inferred === "object" && !Array.isArray(input.inferred) ? input.inferred as Record<string, unknown> : {}, missing: Array.isArray(input.missing) ? input.missing.map(String) : [], contradictions: Array.isArray(input.contradictions) ? input.contradictions.map(String) : [], savedOperatorWork: input.savedOperatorWork && typeof input.savedOperatorWork === "object" && !Array.isArray(input.savedOperatorWork) ? input.savedOperatorWork as Record<string, unknown> : {}, complete: input.complete === true }) }),
+  define({ name: "finite_stage_plan_interpretation", title: "Stage Codex's arrival interpretation", description: "Store a clearly labelled Codex interpretation against an exact human-order version, including known facts, inferences, gaps, contradictions, resumable work, and one exact next-human boundary when needed. Complete interpretations become proposed plans awaiting human review, never accepted truth.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, inferredFamily: { type: ["string", "null"], maxLength: 100 }, summary: { type: "string", minLength: 1, maxLength: 4000 }, known: { type: "object" }, inferred: { type: "object" }, missing: { type: "array", maxItems: 50, items: string }, contradictions: { type: "array", maxItems: 50, items: string }, savedOperatorWork: { type: "object" }, nextHumanBoundary: { type: ["object", "null"], properties: { prompt: { type: "string", minLength: 1, maxLength: 1000 }, answerKind: { type: "string", enum: ["text", "number", "date", "choice", "multi_choice", "confirmation"] }, fieldPaths: { type: "array", maxItems: 20, items: string }, choices: { type: "array", maxItems: 20, items: string } }, required: ["prompt", "answerKind"], additionalProperties: false }, complete: { type: "boolean" } }, ["orderId", "expectedVersion", "summary"]), execute: (input) => {
+    const boundary = input.nextHumanBoundary && typeof input.nextHumanBoundary === "object" && !Array.isArray(input.nextHumanBoundary) ? input.nextHumanBoundary as Record<string, unknown> : null;
+    return arrival.stageInterpretation({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), inferredFamily: input.inferredFamily === null || input.inferredFamily === undefined ? null : String(input.inferredFamily), summary: String(input.summary), known: input.known && typeof input.known === "object" && !Array.isArray(input.known) ? input.known as Record<string, unknown> : {}, inferred: input.inferred && typeof input.inferred === "object" && !Array.isArray(input.inferred) ? input.inferred as Record<string, unknown> : {}, missing: Array.isArray(input.missing) ? input.missing.map(String) : [], contradictions: Array.isArray(input.contradictions) ? input.contradictions.map(String) : [], savedOperatorWork: input.savedOperatorWork && typeof input.savedOperatorWork === "object" && !Array.isArray(input.savedOperatorWork) ? input.savedOperatorWork as Record<string, unknown> : {}, nextHumanBoundary: boundary ? { prompt: String(boundary.prompt), answerKind: String(boundary.answerKind) as never, fieldPaths: Array.isArray(boundary.fieldPaths) ? boundary.fieldPaths.map(String) : [], choices: Array.isArray(boundary.choices) ? boundary.choices.map(String) : [] } : null, complete: input.complete === true });
+  } }),
   define({ name: "finite_save_operator_session", title: "Save non-authoritative operator work", description: "Save a bounded, expiring cross-device work packet bound to the exact active plan/profile/revision. It cannot preserve human authority or change accepted truth.", inputSchema: objectSchema({ idempotencyKey, kind: { type: "string", enum: ["outcome_intake", "decision_work", "research_handoff"] }, payload: { type: "object" }, ttlSeconds: { type: "integer", minimum: 60, maximum: 604800 } }, ["idempotencyKey", "kind", "payload"]), execute: (input) => runtime.saveOperatorSession(input as never) }),
   define({ name: "finite_list_operator_sessions", title: "List resumable operator work", description: "List the authenticated user's unexpired non-authoritative packets and whether each still matches accepted truth.", readOnly: true, execute: () => runtime.listOperatorSessions() }),
   define({ name: "finite_resume_operator_session", title: "Resume non-authoritative operator work", description: "Return one exact packet only when its plan/profile/revision base remains current. Human authority is never restored.", readOnly: true, inputSchema: objectSchema({ sessionId: string }, ["sessionId"]), execute: (input) => runtime.resumeOperatorSession(input as never) }),

@@ -31,6 +31,9 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
 
   const opened = await arrivals.open({ orderId: created.order.orderId });
   assert.equal(opened.orientation.exactOrderVersion, 3);
+  assert.equal(opened.orientation.latestHumanInputVersion, 3);
+  assert.equal(opened.orientation.latestOperatorEventVersion, null);
+  assert.equal(opened.orientation.operatorEventCount, 0);
   assert.equal(opened.orientation.unprocessedHumanInputCount, 3);
   assert.equal(opened.orientation.order.rawOutcome, created.order.rawOutcome);
   assert.deepEqual(opened.orientation.evidenceReferences, [{ kind: "flight_receipt", ref: "receipt-1" }]);
@@ -41,6 +44,8 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
   const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: opened.orientation.exactOrderVersion });
   assert.equal(checkpoint.code, "ARRIVAL_CHECKPOINTED");
   assert.equal(checkpoint.orientation.unprocessedHumanInputCount, 0);
+  assert.equal(checkpoint.orientation.latestHumanInputVersion, 3);
+  assert.equal(checkpoint.orientation.latestOperatorEventVersion, 4);
   const staged = await arrivals.stageInterpretation({
     orderId: created.order.orderId,
     expectedVersion: checkpoint.order.version,
@@ -54,6 +59,9 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
     complete: true,
   });
   assert.equal(staged.order.status, "proposed_plan_ready");
+  assert.equal(staged.orientation.interpretationBasedOnVersion, 4);
+  assert.equal(staged.orientation.interpretationIsCurrent, true);
+  assert.equal(staged.orientation.latestHumanInputVersion, 3);
   assert.equal(staged.acceptedStateChanged, false);
 });
 

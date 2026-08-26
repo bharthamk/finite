@@ -23,6 +23,7 @@ export interface ArrivalClarification {
 }
 
 export interface ArrivalInterpretation {
+  basedOnVersion?: number;
   inferredFamily: string | null;
   summary: string;
   known: Record<string, unknown>;
@@ -30,6 +31,12 @@ export interface ArrivalInterpretation {
   missing: string[];
   contradictions: string[];
   savedOperatorWork: Record<string, unknown>;
+  nextHumanBoundary?: {
+    prompt: string;
+    answerKind: ArrivalClarification["answerKind"];
+    fieldPaths: string[];
+    choices: string[];
+  } | null;
   complete: boolean;
   stagedAt: string;
 }
@@ -65,7 +72,7 @@ export interface ArrivalEvent {
 }
 
 export interface ArrivalOrientation {
-  orientationVersion: "finite-arrival-orientation.v1";
+  orientationVersion: "finite-arrival-orientation.v2";
   order: ArrivalOrder;
   deltaSinceVersion: number;
   delta: ArrivalEvent[];
@@ -75,6 +82,11 @@ export interface ArrivalOrientation {
   missing: string[];
   contradictions: string[];
   savedOperatorWork: Record<string, unknown>;
+  latestHumanInputVersion: number;
+  latestOperatorEventVersion: number | null;
+  operatorEventCount: number;
+  interpretationBasedOnVersion: number | null;
+  interpretationIsCurrent: boolean;
   exactOrderVersion: number;
   exactOrderChecksum: string;
   next: string;
@@ -94,7 +106,7 @@ export interface ArrivalRepository {
   appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }): Promise<ArrivalResult>;
   checkpoint(input: { orderId: string; expectedVersion: number }): Promise<ArrivalResult>;
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }): Promise<ArrivalResult>;
-  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; savedOperatorWork?: Record<string, unknown>; complete?: boolean }): Promise<ArrivalResult>;
+  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
 }
 
 const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResult> => {
@@ -147,8 +159,15 @@ const orientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVersion?:
   const checkpoint = sinceVersion ?? order.lastOperatorCheckpoint;
   const delta = events.filter((event) => event.version > checkpoint);
   const unprocessedHumanInputCount = delta.filter((event) => humanEventTypes.has(event.eventType)).length;
+  const humanEvents = events.filter((event) => humanEventTypes.has(event.eventType));
+  const operatorEvents = events.filter((event) => event.actor === "codex");
+  const interpretationEvent = [...events].reverse().find((event) => event.eventType === "interpretation_staged");
+  const latestHumanInputVersion = humanEvents.at(-1)?.version ?? 0;
+  const interpretationBasedOnVersion = order.interpretation
+    ? order.interpretation.basedOnVersion ?? (interpretationEvent ? interpretationEvent.version - 1 : null)
+    : null;
   return {
-    orientationVersion: "finite-arrival-orientation.v1",
+    orientationVersion: "finite-arrival-orientation.v2",
     order: clone(order),
     deltaSinceVersion: checkpoint,
     delta: clone(delta),
@@ -158,6 +177,11 @@ const orientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVersion?:
     missing: clone(order.interpretation?.missing ?? []),
     contradictions: clone(order.interpretation?.contradictions ?? []),
     savedOperatorWork: clone(order.interpretation?.savedOperatorWork ?? {}),
+    latestHumanInputVersion,
+    latestOperatorEventVersion: operatorEvents.at(-1)?.version ?? null,
+    operatorEventCount: operatorEvents.length,
+    interpretationBasedOnVersion,
+    interpretationIsCurrent: interpretationBasedOnVersion !== null && latestHumanInputVersion <= interpretationBasedOnVersion,
     exactOrderVersion: order.version,
     exactOrderChecksum: order.checksum,
     next: nextInstruction(order, unprocessedHumanInputCount),
@@ -254,7 +278,24 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     const order = this.orders.get(input.orderId);
     if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
     const stagedAt = this.now().toISOString();
-    const interpretation: ArrivalInterpretation = { inferredFamily: input.inferredFamily ?? null, summary: input.summary, known: clone(input.known ?? {}), inferred: clone(input.inferred ?? {}), missing: clone(input.missing ?? []), contradictions: clone(input.contradictions ?? []), savedOperatorWork: clone(input.savedOperatorWork ?? {}), complete: input.complete === true, stagedAt };
+    const interpretation: ArrivalInterpretation = {
+      basedOnVersion: input.expectedVersion,
+      inferredFamily: input.inferredFamily ?? null,
+      summary: input.summary,
+      known: clone(input.known ?? {}),
+      inferred: clone(input.inferred ?? {}),
+      missing: clone(input.missing ?? []),
+      contradictions: clone(input.contradictions ?? []),
+      savedOperatorWork: clone(input.savedOperatorWork ?? {}),
+      nextHumanBoundary: input.nextHumanBoundary ? {
+        prompt: input.nextHumanBoundary.prompt,
+        answerKind: input.nextHumanBoundary.answerKind,
+        fieldPaths: clone(input.nextHumanBoundary.fieldPaths ?? []),
+        choices: clone(input.nextHumanBoundary.choices ?? []),
+      } : null,
+      complete: input.complete === true,
+      stagedAt,
+    };
     return this.replace(order, input.expectedVersion, { interpretation, pendingClarification: null, status: interpretation.complete ? "proposed_plan_ready" : "codex_reviewing", lastOperatorCheckpoint: input.expectedVersion }, { eventType: "interpretation_staged", actor: "codex", sourceSurface: "codex", payload: { interpretation } });
   }
 }

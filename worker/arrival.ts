@@ -151,8 +151,15 @@ const buildOrientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVers
   const checkpoint = sinceVersion ?? order.lastOperatorCheckpoint;
   const delta = events.filter((event) => event.version > checkpoint);
   const unprocessedHumanInputCount = delta.filter((event) => humanEventTypes.has(event.eventType)).length;
+  const humanEvents = events.filter((event) => humanEventTypes.has(event.eventType));
+  const operatorEvents = events.filter((event) => event.actor === "codex");
+  const interpretationEvent = [...events].reverse().find((event) => event.eventType === "interpretation_staged");
+  const latestHumanInputVersion = humanEvents.at(-1)?.version ?? 0;
+  const interpretationBasedOnVersion = order.interpretation
+    ? order.interpretation.basedOnVersion ?? (interpretationEvent ? interpretationEvent.version - 1 : null)
+    : null;
   return {
-    orientationVersion: "finite-arrival-orientation.v1",
+    orientationVersion: "finite-arrival-orientation.v2",
     order,
     deltaSinceVersion: checkpoint,
     delta,
@@ -162,6 +169,11 @@ const buildOrientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVers
     missing: order.interpretation?.missing ?? [],
     contradictions: order.interpretation?.contradictions ?? [],
     savedOperatorWork: order.interpretation?.savedOperatorWork ?? {},
+    latestHumanInputVersion,
+    latestOperatorEventVersion: operatorEvents.at(-1)?.version ?? null,
+    operatorEventCount: operatorEvents.length,
+    interpretationBasedOnVersion,
+    interpretationIsCurrent: interpretationBasedOnVersion !== null && latestHumanInputVersion <= interpretationBasedOnVersion,
     exactOrderVersion: order.version,
     exactOrderChecksum: order.checksum,
     next: nextInstruction(order, unprocessedHumanInputCount),
@@ -288,8 +300,17 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
   if (!summary || summary.length > 4_000) return errorResponse(422, "ARRIVAL_INTERPRETATION_INVALID", "A bounded Codex interpretation summary is required.");
   const inferredFamilyRaw = body.inferredFamily;
   const inferredFamily = inferredFamilyRaw === null || inferredFamilyRaw === undefined ? null : String(inferredFamilyRaw).slice(0, 100);
+  const boundaryRecord = asRecord(body.nextHumanBoundary);
+  const boundaryPrompt = String(boundaryRecord.prompt ?? "").trim();
+  const boundaryAnswerKind = String(boundaryRecord.answerKind ?? "text") as ArrivalClarification["answerKind"];
+  if (body.nextHumanBoundary !== null && body.nextHumanBoundary !== undefined) {
+    if (!boundaryPrompt || boundaryPrompt.length > 1_000) return errorResponse(422, "ARRIVAL_BOUNDARY_INVALID", "A bounded next-human-boundary prompt is required.");
+    if (!answerKinds.has(boundaryAnswerKind)) return errorResponse(422, "ARRIVAL_BOUNDARY_INVALID", "The next-human-boundary answer kind is invalid.");
+    if (["choice", "multi_choice"].includes(boundaryAnswerKind) && asStringArray(boundaryRecord.choices, 20).length < 2) return errorResponse(422, "ARRIVAL_BOUNDARY_INVALID", "Choice boundaries require at least two choices.");
+  }
   const stagedAt = new Date().toISOString();
   const interpretation: ArrivalInterpretation = {
+    basedOnVersion: expectedVersion,
     inferredFamily,
     summary,
     known: asRecord(body.known),
@@ -297,6 +318,12 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
     missing: asStringArray(body.missing),
     contradictions: asStringArray(body.contradictions),
     savedOperatorWork: asRecord(body.savedOperatorWork),
+    nextHumanBoundary: boundaryPrompt ? {
+      prompt: boundaryPrompt,
+      answerKind: boundaryAnswerKind,
+      fieldPaths: asStringArray(boundaryRecord.fieldPaths, 20),
+      choices: asStringArray(boundaryRecord.choices, 20),
+    } : null,
     complete: body.complete === true,
     stagedAt,
   };

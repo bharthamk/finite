@@ -80,6 +80,107 @@ test("a waiting human order wins route arbitration over an accepted plan", async
   assert.equal(entered.next.includes("finite_create_arrival_order"), false);
 });
 
+test("a saved incomplete interpretation advances to one operator-ready clarification instead of looping", async () => {
+  const { arrivals, host } = await setup("travel");
+  const created = await arrivals.create({ idempotencyKey: "arrival-lifecycle-0001", rawOutcome: "Plan a multi-stop Europe trip under A$10,000.", sourceSurface: "site" });
+  const checkpoint = await host.execute("finite_checkpoint_arrival", { orderId: created.order.orderId, expectedVersion: 1 });
+  const interpreted = await host.execute("finite_stage_plan_interpretation", {
+    orderId: created.order.orderId,
+    expectedVersion: checkpoint.order.version,
+    inferredFamily: "travel",
+    summary: "A multi-stop Europe trip with a hard A$10,000 ceiling.",
+    known: { maximumSpendMinor: 1_000_000, currencyCode: "AUD" },
+    inferred: { routeShape: "multi_stop" },
+    missing: ["Departure month and year", "Approximate return window"],
+    contradictions: [],
+    savedOperatorWork: { planningAxes: ["time", "cost", "commitments"] },
+    nextHumanBoundary: {
+      prompt: "When you say leaving around the 15th, which month and year do you mean, and roughly when do you need to be back?",
+      answerKind: "text",
+      fieldPaths: ["travel.departureWindow", "travel.returnWindow"],
+    },
+    complete: false,
+  });
+  assert.equal(interpreted.code, "ARRIVAL_INTERPRETATION_STAGED");
+  assert.equal(interpreted.order.version, 3);
+  assert.equal(interpreted.orientation.latestHumanInputVersion, 1);
+  assert.equal(interpreted.orientation.latestOperatorEventVersion, 3);
+  assert.equal(interpreted.orientation.operatorEventCount, 2);
+  assert.equal(interpreted.orientation.interpretationBasedOnVersion, 2);
+  assert.equal(interpreted.orientation.interpretationIsCurrent, true);
+
+  const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId, expectedOrderVersion: 1, expectedOrderChecksum: created.order.checksum });
+  const action = entered.operatorPacket.nextAction;
+  assert.equal(action.stage, "arrival_clarification_ready");
+  assert.equal(action.nextTool, "finite_stage_clarification");
+  assert.equal(action.requiresHuman, false);
+  assert.equal(action.exactQuestion, null);
+  assert.equal(action.knownArgs.expectedVersion, 3);
+  assert.equal(action.knownArgs.prompt, "When you say leaving around the 15th, which month and year do you mean, and roughly when do you need to be back?");
+  assert.equal(action.missingInputs[0].source, "human");
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_resolve_first_boundary");
+  assert.equal(entered.operatorPacket.chefMenu.items[0].knownArgs.prompt, action.knownArgs.prompt);
+  assert.equal(entered.handoffReceipt.versionSemantics.humanInputChangedSinceHandoff, false);
+  assert.equal(entered.handoffReceipt.versionSemantics.operatorWorkAdvancedSinceHandoff, true);
+
+  const stagedQuestion = await host.execute(action.nextTool, action.knownArgs);
+  assert.equal(stagedQuestion.code, "ARRIVAL_CLARIFICATION_STAGED");
+  const waiting = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(waiting.operatorPacket.nextAction.stage, "awaiting_human");
+  assert.equal(waiting.operatorPacket.nextAction.requiresHuman, true);
+  assert.equal(waiting.operatorPacket.nextAction.exactQuestion, action.knownArgs.prompt);
+  assert.equal(waiting.operatorPacket.chefMenu.items[0].menuItemId, "arrival_answer_staged_question");
+
+  const answered = await arrivals.appendInput({ orderId: created.order.orderId, expectedVersion: stagedQuestion.order.version, kind: "answer", payload: { questionId: stagedQuestion.order.pendingClarification.questionId, value: "September 2026; return in early November." }, sourceSurface: "site" });
+  const delta = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(delta.operatorPacket.nextAction.stage, "arrival_delta_ready");
+  assert.equal(delta.arrival.orientation.interpretationIsCurrent, false);
+  const processed = await host.execute("finite_checkpoint_arrival", { orderId: created.order.orderId, expectedVersion: answered.order.version });
+  const refreshed = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(processed.orientation.latestHumanInputVersion, 5);
+  assert.equal(refreshed.operatorPacket.nextAction.stage, "arrival_review");
+  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_stage_plan_interpretation");
+  assert.match(refreshed.operatorPacket.nextAction.reason, /Human input advanced/);
+});
+
+for (const inferredFamily of ["travel", "event", "renovation", "custom_relocation"]) {
+  test(`${inferredFamily} incomplete arrival uses the same source-safe clarification contract`, async () => {
+    const { arrivals, host } = await setup("event");
+    const created = await arrivals.create({ idempotencyKey: `family-arrival-${inferredFamily}`, rawOutcome: `Build a ${inferredFamily} plan.`, sourceSurface: "site" });
+    const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+    await arrivals.stageInterpretation({
+      orderId: created.order.orderId,
+      expectedVersion: checkpoint.order.version,
+      inferredFamily,
+      summary: `A bounded ${inferredFamily} interpretation.`,
+      missing: ["The first finite boundary"],
+      savedOperatorWork: {},
+      complete: false,
+    });
+    const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+    assert.equal(entered.operatorPacket.nextAction.stage, "arrival_clarification_ready");
+    assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_stage_clarification");
+    assert.equal(entered.operatorPacket.nextAction.knownArgs.answerKind, "text");
+    assert.match(entered.operatorPacket.nextAction.knownArgs.prompt, /first finite boundary/i);
+    assert.equal(entered.operatorPacket.chefMenu.items[0].viability, "not_yet_tested");
+    assert.equal(entered.operatorPacket.chefMenu.items[0].nextTool, "finite_stage_clarification");
+  });
+}
+
+test("a complete interpretation stops at human review instead of entering plan tools", async () => {
+  const { arrivals, host } = await setup("renovation");
+  const created = await arrivals.create({ idempotencyKey: "complete-interpretation-0001", rawOutcome: "Renovate the kitchen within the confirmed brief.", sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "renovation", summary: "A bounded kitchen renovation with all construction inputs present.", missing: [], contradictions: [], complete: true });
+  const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_interpretation_ready");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, null);
+  assert.equal(entered.operatorPacket.nextAction.requiresHuman, true);
+  assert.match(entered.operatorPacket.nextAction.exactQuestion, /capture what you want/i);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_review_interpretation");
+  assert.equal(entered.acceptedStateChanged, false);
+});
+
 test("a custom family plan receives a generic live menu rather than built-in story assumptions", async () => {
   const profiles = await compileBuiltInProfiles();
   const definition = getProfileDefinition("travel");
