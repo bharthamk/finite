@@ -119,6 +119,7 @@ test("WebMCP completion refreshes the consumer surface and returns synchronizati
   assert.equal(compared.surfaceSync.decisionStatus, "options_available");
 
   const candidate = compared.options.find((option) => option.valid);
+  await adapter.waitForRouteSettlement();
   const staged = await host.execute("finite_stage_option", JSON.stringify({ candidateId: candidate.candidateId, expectedRevision: 1 }));
   assert.equal(staged.code, "OPTION_STAGED");
   assert.equal(staged.surfaceSync.decisionStatus, "option_staged");

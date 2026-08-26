@@ -79,7 +79,8 @@ for (const [profileId, scenario] of Object.entries(scenarios)) {
     const store = new PlanSnapshotStore(storage);
     const runtime = new FinitePlanRuntime(profiles, store, profileId);
     const host = new MemoryModelContext();
-    await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).register();
+    const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+    await adapter.register();
     assert.equal((await host.execute("finite_open_toolset", { group: "planning" })).code, "TOOLSET_READY");
 
     const opened = await host.execute("finite_open_kitchen");
@@ -103,6 +104,7 @@ for (const [profileId, scenario] of Object.entries(scenarios)) {
     assert.equal(compared.code, "OPTIONS_AVAILABLE");
     const chosen = compared.options.find((option) => option.valid);
     assert(chosen);
+    await adapter.waitForRouteSettlement();
     const staged = await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
     assert.equal(staged.code, "OPTION_STAGED");
 
@@ -115,6 +117,7 @@ for (const [profileId, scenario] of Object.entries(scenarios)) {
     const authorized = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" });
     assert.equal(authorized.operatorPacket.nextAction.stage, "human_approved");
     assert.equal(authorized.operatorPacket.nextAction.nextTool, "finite_apply_approved_option");
+    await adapter.waitForRouteSettlement();
     const applied = await host.execute("finite_apply_approved_option", {
       candidateId: chosen.candidateId,
       approvalId: humanApproval.approval.approvalId,

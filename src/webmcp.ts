@@ -208,7 +208,7 @@ const toolsetGroups = {
   planning: ["finite_open_kitchen", "finite_get_plan_state", "finite_get_movable_set", "finite_get_group_decisions", "finite_get_external_actions", "finite_record_change_event", "finite_simulate_reallocation", "finite_compare_options", "finite_record_feedback", "finite_switch_plan", "finite_switch_profile", "finite_apply_approved_option", "finite_apply_confirmed_preference_change", "finite_apply_confirmed_actual_correction", "finite_apply_confirmed_plan_lifecycle", "finite_apply_confirmed_group_decision", "finite_apply_confirmed_external_action", "finite_activate_confirmed_plan"],
   decisions: ["finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option", "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction", "finite_stage_plan_lifecycle", "finite_apply_confirmed_plan_lifecycle", "finite_get_group_decisions", "finite_stage_group_decision", "finite_apply_confirmed_group_decision", "finite_get_external_actions", "finite_stage_external_action", "finite_apply_confirmed_external_action"],
   evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_assess_external_action", "finite_get_external_actions", "finite_stage_external_action", "finite_export_plan_receipt"],
-  continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff"],
+  continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff", "finite_get_effort_receipt"],
   plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile"],
 } as const;
 type ToolsetGroup = keyof typeof toolsetGroups;
@@ -217,6 +217,7 @@ const persistentToolNames = new Set(["finite_get_capabilities", "finite_enter_ki
 export const WEBMCP_OUTPUT_CHARACTER_BUDGET = 1_500;
 const WEBMCP_RESULT_CHUNK_BUDGET = 800;
 const WEBMCP_RESULT_VAULT_LIMIT = 24;
+const orientationToolNames = new Set(["finite_get_capabilities", "finite_enter_kitchen", "finite_open_toolset", "finite_read_result"]);
 const routeRefreshToolNames = new Set([
   "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation",
   "finite_record_change_event", "finite_compare_options", "finite_record_feedback", "finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option",
@@ -948,7 +949,25 @@ export class FinitePlanWebMCPAdapter {
   private entryTool: WebMCPToolDefinition | null = null;
   private activeToolset: ToolsetGroup = "arrival";
   private readonly effortStartedAt = Date.now();
-  private effort = { toolCalls: 0, humanBoundaryTurns: 0, staleWorkRefusals: 0, authorityRefusals: 0, acceptedMutations: 0, failedCalls: 0 };
+  private effort = {
+    toolCalls: 0,
+    callsToFirstUsefulAction: null as number | null,
+    humanBoundaryTurns: 0,
+    staleWorkRefusals: 0,
+    authorityRefusals: 0,
+    acceptedMutations: 0,
+    failedCalls: 0,
+    semanticManifestReads: 0,
+    semanticDetailSelections: 0,
+    cancellationOutcomes: 0,
+    routeChanges: 0,
+    registryRefreshes: 0,
+    routeRefreshFailures: 0,
+    maxAdvertisedTools: 0,
+  };
+  private readonly observedHumanBoundaries = new Set<string>();
+  private routeRefreshChain: Promise<void> = Promise.resolve();
+  private routeRefreshGeneration = 0;
   private boundedOutputs = false;
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
@@ -957,6 +976,42 @@ export class FinitePlanWebMCPAdapter {
   useBoundedOutputs(): this {
     this.boundedOutputs = true;
     return this;
+  }
+
+  private effortSnapshot(): Record<string, unknown> {
+    return {
+      ...this.effort,
+      currentAdvertisedTools: this.inventory().length,
+      elapsedMilliseconds: Math.max(0, Date.now() - this.effortStartedAt),
+      tokenMeasure: "host_owned_unavailable",
+    };
+  }
+
+  private scheduleRouteRefresh(result?: ToolResult): void {
+    const generation = ++this.routeRefreshGeneration;
+    this.routeRefreshChain = this.routeRefreshChain
+      .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+      .then(async () => {
+        if (generation !== this.routeRefreshGeneration) return;
+        const group = this.groupFromResult(result) ?? await this.inferredToolset();
+        if (generation !== this.routeRefreshGeneration) return;
+        await this.applyToolset(group);
+      })
+      .catch(() => { this.effort.routeRefreshFailures += 1; });
+  }
+
+  async waitForRouteSettlement(): Promise<void> {
+    await this.routeRefreshChain;
+  }
+
+  async getEffortReceipt(): Promise<ToolResult> {
+    await this.waitForRouteSettlement();
+    const receiptBase = {
+      receiptVersion: "finite-chef-effort.v1",
+      scope: "adapter_session",
+      metrics: this.effortSnapshot(),
+    };
+    return { ok: true, code: "CHEF_EFFORT_RECEIPT", ...receiptBase, receiptHash: await sha256(receiptBase), acceptedStateChanged: false };
   }
 
   private async storeFullResult(toolName: string, result: ToolResult): Promise<{ resultRef: string; fullHash: string; totalCharacters: number }> {
@@ -1042,7 +1097,7 @@ export class FinitePlanWebMCPAdapter {
         const inputHash = await sha256(proofInput(input));
         const result = await tool.execute(input, context);
         const cancelled = String(result.code).startsWith("TOOL_CANCELLED");
-        if (!cancelled && routeRefreshToolNames.has(tool.name)) await this.refreshRouteTools(result);
+        const refreshRouteAfterResponse = !cancelled && routeRefreshToolNames.has(tool.name);
         let routedResult: ToolResult = result;
         if (!cancelled && tool.annotations?.readOnlyHint !== true && tool.name !== "finite_open_toolset") {
           const entered = await enterKitchen(this.runtime, this.arrival, { entryIntent: "continue_current" }, context);
@@ -1065,9 +1120,18 @@ export class FinitePlanWebMCPAdapter {
         if (observed.acceptedStateChanged === true) this.effort.acceptedMutations += 1;
         if (String(observed.code).includes("STALE")) this.effort.staleWorkRefusals += 1;
         if (/AUTHORITY|APPROVAL|CONFIRMATION/.test(String(observed.code)) && observed.ok === false) this.effort.authorityRefusals += 1;
+        if (cancelled) this.effort.cancellationOutcomes += 1;
+        if (this.effort.callsToFirstUsefulAction === null && observed.ok !== false && !orientationToolNames.has(tool.name)) this.effort.callsToFirstUsefulAction = this.effort.toolCalls;
         const effortRoute = record(observed.operatorContinuation).nextAction ?? observed.nextAction ?? record(observed.operatorPacket).nextAction;
-        if (record(effortRoute).requiresHuman === true) this.effort.humanBoundaryTurns += 1;
-        observed = { ...observed, chefEffort: { ...this.effort, elapsedMilliseconds: Math.max(0, Date.now() - this.effortStartedAt), tokenMeasure: "host_owned_unavailable" } };
+        if (record(effortRoute).requiresHuman === true) {
+          const boundary = record(effortRoute);
+          const boundaryKey = JSON.stringify([boundary.stage ?? "", boundary.targetId ?? "", boundary.exactQuestion ?? "", boundary.nextTool ?? ""]);
+          if (!this.observedHumanBoundaries.has(boundaryKey)) {
+            this.observedHumanBoundaries.add(boundaryKey);
+            this.effort.humanBoundaryTurns += 1;
+          }
+        }
+        observed = { ...observed, chefEffort: this.effortSnapshot() };
         const after = {
           planId: this.runtime.kernel.profile.planId,
           profileId: this.runtime.kernel.profile.profileId,
@@ -1093,7 +1157,9 @@ export class FinitePlanWebMCPAdapter {
           availableGroups: toolsetGroupNames,
         } : undefined;
         const complete = { ...observed, ...(toolsetReceipt ? { webmcpToolset: toolsetReceipt } : {}), operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
-        return this.boundedResult(tool.name, complete);
+        const bounded = await this.boundedResult(tool.name, complete);
+        if (refreshRouteAfterResponse) this.scheduleRouteRefresh(result);
+        return bounded;
       },
     };
   }
@@ -1107,12 +1173,18 @@ export class FinitePlanWebMCPAdapter {
       readOnly: true,
       inputSchema: objectSchema({ resultRef: string, paths: { type: "array", minItems: 1, maxItems: 8, items: { type: "string", minLength: 1, maxLength: 500 } } }, ["resultRef"]),
       execute: async ({ resultRef, paths }) => {
+        this.effort.toolCalls += 1;
         const ref = String(resultRef);
         const stored = this.resultVault.get(ref);
-        if (!stored) return { ok: false, code: "RESULT_DETAIL_NOT_FOUND", acceptedStateChanged: false, next: "Re-run the originating read or re-open canonical state; result detail is intentionally ephemeral." };
+        if (!stored) {
+          this.effort.failedCalls += 1;
+          return { ok: false, code: "RESULT_DETAIL_NOT_FOUND", acceptedStateChanged: false, next: "Re-run the originating read or re-open canonical state; result detail is intentionally ephemeral." };
+        }
         const preferredPaths = ["/operatorPacket/nextAction", "/operatorContinuation/nextAction", "/nextAction", "/brief/work/route", "/plan/active"].filter((path) => readSemanticPath(stored.result, path).ok);
         const availablePaths = [...new Set([...preferredPaths, ...stored.paths])].slice(0, 12);
-        if (!Array.isArray(paths)) return {
+        if (!Array.isArray(paths)) {
+          this.effort.semanticManifestReads += 1;
+          return {
           ok: true,
           code: "RESULT_DETAIL_MANIFEST",
           resultRef: ref,
@@ -1123,23 +1195,36 @@ export class FinitePlanWebMCPAdapter {
           availablePaths,
           acceptedStateChanged: false,
           next: "Request only the exact JSON Pointer paths required for the current route.",
-        };
+          };
+        }
+        this.effort.semanticDetailSelections += 1;
         const requested = [...new Set(paths.map(String))];
         const values: Array<{ path: string; value: unknown }> = [];
         for (const path of requested) {
           const selected = readSemanticPath(stored.result, path);
-          if (!selected.ok) return { ok: false, code: "RESULT_DETAIL_PATH_NOT_FOUND", resultRef: ref, path, availablePaths: stored.paths.filter((candidate) => candidate.startsWith(`${path}/`) || path.startsWith(`${candidate}/`)).slice(0, 16), acceptedStateChanged: false, next: "Read the manifest and request an exact advertised JSON Pointer path." };
+          if (!selected.ok) {
+            this.effort.failedCalls += 1;
+            return { ok: false, code: "RESULT_DETAIL_PATH_NOT_FOUND", resultRef: ref, path, availablePaths: stored.paths.filter((candidate) => candidate.startsWith(`${path}/`) || path.startsWith(`${candidate}/`)).slice(0, 16), acceptedStateChanged: false, next: "Read the manifest and request an exact advertised JSON Pointer path." };
+          }
           values.push({ path, value: selected.value });
         }
         const selectionHash = await sha256(values);
         const response: ToolResult = { ok: true, code: "RESULT_DETAIL_SELECTED", resultRef: ref, toolName: stored.toolName, fullHash: stored.fullHash, paths: requested, values, selectionHash, acceptedStateChanged: false, next: "Continue from the originating nextAction; request another exact path only if still required." };
         if (JSON.stringify(response).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET) return response;
         const descendants = requested.flatMap((path) => stored.paths.filter((candidate) => candidate.startsWith(`${path}/`))).slice(0, 16);
+        this.effort.failedCalls += 1;
         return { ok: false, code: "RESULT_DETAIL_SELECTION_TOO_LARGE", resultRef: ref, fullHash: stored.fullHash, requested, narrowerPaths: descendants, acceptedStateChanged: false, next: "Request fewer or narrower advertised paths; Finite will not truncate a semantic value." };
       },
     });
+    const getEffortReceipt = define({
+      name: "finite_get_effort_receipt",
+      title: "Read the chef-effort receipt",
+      description: "Read a hash-verifiable measurement of this adapter session: discovery width, calls to first useful action, semantic reads, human boundaries, refusals, cancellations, route changes, failures, and accepted mutations.",
+      readOnly: true,
+      execute: () => this.getEffortReceipt(),
+    });
     this.coreTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival), openToolset].map((tool) => this.instrument(tool));
-    this.coreTools.push(readResult);
+    this.coreTools.push(readResult, getEffortReceipt);
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;
     const persistent = this.coreTools.filter((tool) => persistentToolNames.has(tool.name));
     for (const tool of persistent) {
@@ -1162,10 +1247,14 @@ export class FinitePlanWebMCPAdapter {
     const stage = String(nextAction.stage ?? briefRoute.stage ?? "");
     const nextTool = String(nextAction.nextTool ?? briefRoute.nextTool ?? "");
     const targetId = String(nextAction.targetId ?? briefRoute.targetId ?? "");
+    const arrivalOrientation = record(record(result?.arrival).orientation);
+    const order = record(arrivalOrientation.order ?? record(result?.orientation).order);
+    const arrivalStatus = String(order.status ?? "");
     if (nextTool === "finite_activate_confirmed_plan" || nextTool === "finite_stage_plan_draft" || nextTool === "finite_compile_intake_to_draft") return "plan_management";
     if (stage === "ready") return "planning";
     if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required" || stage === "draft_returned") return "construction";
     if (stage === "awaiting_human" && targetId.startsWith("plan_draft_")) return "plan_management";
+    if (arrivalStatus) return arrivalStatus === "interpretation_confirmed" ? "construction" : "arrival";
     if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved" || stage === "human_confirmed" || stage === "plan_inactive") return "decisions";
     if (stage === "menu_ready") {
       const intendedTools = Array.isArray(nextAction.intendedTools) ? nextAction.intendedTools.map(String) : [];
@@ -1173,10 +1262,6 @@ export class FinitePlanWebMCPAdapter {
     }
     if (stage === "change_recorded") return "planning";
     if (stage === "outcome_required" || stage.startsWith("arrival_")) return "arrival";
-    const order = record(record(result?.orientation).order);
-    const status = String(order.status ?? "");
-    if (status === "interpretation_confirmed") return "construction";
-    if (status) return "arrival";
     const code = String(result?.code ?? "");
     if (code === "PLAN_ACTIVATED" || code === "PLAN_AMENDMENT_ACTIVATED") return "planning";
     if (code.includes("PLAN_DRAFT") || code.includes("PLAN_AMENDMENT") || code.startsWith("PLAN_ACTIVATION")) return "plan_management";
@@ -1201,10 +1286,18 @@ export class FinitePlanWebMCPAdapter {
   }
 
   private async activateToolset(group: ToolsetGroup): Promise<ToolResult> {
+    this.routeRefreshGeneration += 1;
+    return this.applyToolset(group);
+  }
+
+  private async applyToolset(group: ToolsetGroup): Promise<ToolResult> {
     if (!toolsetGroupNames.includes(group)) return { ok: false, code: "TOOLSET_GROUP_INVALID", acceptedStateChanged: false };
+    const previousGroup = this.activeToolset;
     this.routeController?.abort("toolset changed");
     this.routeController = new AbortController();
     this.activeToolset = group;
+    this.effort.registryRefreshes += 1;
+    if (previousGroup !== group) this.effort.routeChanges += 1;
     const names = new Set<string>(toolsetGroups[group]);
     const authorityReady = (toolName: string): boolean => {
       if (toolName === "finite_apply_approved_option") return Boolean((this.runtime.kernel.approval && this.runtime.kernel.stagedCandidate) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "plan_option"));
@@ -1220,6 +1313,7 @@ export class FinitePlanWebMCPAdapter {
     this.advertisedCoreTools = [...this.coreTools.filter((tool) => persistentToolNames.has(tool.name)), ...routeTools];
     for (const tool of routeTools) await this.host.registerTool(tool, { signal: this.routeController.signal });
     await this.refreshContextualTools();
+    this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
     return { ok: true, code: "TOOLSET_READY", group, advertisedTools: this.inventory(), acceptedStateChanged: false, next: "Continue with the route tool named by Finite's nextAction, or open another bounded group if the work changes." };
   }
 

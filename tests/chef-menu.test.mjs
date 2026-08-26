@@ -20,8 +20,9 @@ const setup = async (profileId = "travel") => {
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), profileId);
   const arrivals = new MemoryArrivalRepository();
   const host = new MemoryModelContext();
-  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
-  return { runtime, arrivals, host };
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
+  await adapter.register();
+  return { runtime, arrivals, host, adapter };
 };
 
 test("empty arrival handoff starts a new outcome instead of routing into the seeded plan", async () => {
@@ -277,7 +278,8 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
   assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE");
   const host = new MemoryModelContext();
-  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
+  await adapter.register();
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(entered.operatorPacket.nextAction.stage, "awaiting_human");
   assert.equal(entered.operatorPacket.nextAction.missingInputs[0].argument, "plan_draft_judgment");
@@ -293,6 +295,7 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   assert.equal(reentered.operatorPacket.chefMenu.items[0].menuItemId, "construction_revise_returned_draft");
   assert.equal(reentered.plan.construction.status, "returned_for_revision");
   assert.equal("staleReason" in reentered.plan.construction, false);
+  await adapter.waitForRouteSettlement();
   const context = await host.execute("finite_get_returned_plan_draft", {});
   assert.equal(context.code, "RETURNED_PLAN_DRAFT_CONTEXT");
   assert.equal(context.returned.returnReview.message, "Make the route and open decisions primary; keep the budget subordinate.");
@@ -344,8 +347,9 @@ test("a custom family plan receives a generic live menu rather than built-in sto
 });
 
 test("generated candidates replace suggestions with a validated menu and preserve human choice", async () => {
-  const { runtime, host } = await setup("travel");
+  const { runtime, host, adapter } = await setup("travel");
   await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
+  await adapter.waitForRouteSettlement();
   const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 3, nightlyMinor: 22_000, minimumBufferMinor: 50_000 });
   const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
   assert.equal(compared.code, "OPTIONS_AVAILABLE");
@@ -361,6 +365,7 @@ test("generated candidates replace suggestions with a validated menu and preserv
   assert.equal(runtime.kernel.revision, 1);
 
   const chosen = menu.operatorPacket.chefMenu.items[0];
+  await adapter.waitForRouteSettlement();
   const staged = await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
   assert.equal(staged.code, "OPTION_STAGED");
   const approval = await runtime.kernel.humanApprove({ candidateId: chosen.candidateId, warningsAcknowledged: staged.staged.warnings.map((warning) => String(warning.code)) });
@@ -374,4 +379,5 @@ test("generated candidates replace suggestions with a validated menu and preserv
   assert.equal(authorized.operatorPacket.chefMenu.items.length, 1);
   assert.equal(authorized.operatorPacket.chefMenu.items[0].menuItemId, `approved_${chosen.candidateId}`);
   assert.equal(runtime.kernel.revision, 1);
+  await adapter.waitForRouteSettlement();
 });

@@ -282,6 +282,7 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
     idempotencyKey: "activate-webmcp-plan-0001",
   });
   assert.equal(activated.code, "PLAN_ACTIVATED");
+  await adapter.waitForRouteSettlement();
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("event_change_headcount"));
   assert(host.tools.size <= 20);

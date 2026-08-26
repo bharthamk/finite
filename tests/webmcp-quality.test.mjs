@@ -107,7 +107,8 @@ test("every response in a production change-to-commit route stays inside the out
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
   const host = new MemoryModelContext();
-  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs().register();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs();
+  await adapter.register();
   const responses = [];
   responses.push(await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" }));
   responses.push(await host.execute("finite_open_toolset", { group: "planning" }));
@@ -118,6 +119,7 @@ test("every response in a production change-to-commit route stays inside the out
   responses.push(compared);
   const chosen = compared.options.find((option) => option.valid);
   assert(chosen);
+  await adapter.waitForRouteSettlement();
   const staged = await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
   responses.push(staged);
   assert.equal(staged.code, "OPTION_STAGED");
@@ -125,6 +127,7 @@ test("every response in a production change-to-commit route stays inside the out
   const authorized = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" });
   responses.push(authorized);
   assert.equal(authorized.nextAction.nextTool, "finite_apply_approved_option");
+  await adapter.waitForRouteSettlement();
   const applied = await host.execute("finite_apply_approved_option", {
     candidateId: chosen.candidateId,
     approvalId: approval.approval.approvalId,
@@ -204,14 +207,17 @@ test("an interrupted accepted-truth commit rolls back locally and reports unknow
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel", undefined, [], () => new Date("2026-08-27T00:00:00.000Z"), repository);
   assert.equal((await runtime.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_INITIALIZED");
   const host = new MemoryModelContext();
-  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs().register();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs();
+  await adapter.register();
   await host.execute("finite_open_toolset", { group: "planning" });
   const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 2, nightlyMinor: 20_000, minimumBufferMinor: 50_000 });
   const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
   const chosen = compared.options.find((option) => option.valid);
+  await adapter.waitForRouteSettlement();
   await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
   const approved = await runtime.kernel.humanApprove({ candidateId: chosen.candidateId });
   await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" });
+  await adapter.waitForRouteSettlement();
   const controller = new AbortController();
   const pending = host.execute("finite_apply_approved_option", { candidateId: chosen.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "cancelled-accepted-commit-0001" }, { signal: controller.signal });
   await new Promise((resolve) => setTimeout(resolve, 0));

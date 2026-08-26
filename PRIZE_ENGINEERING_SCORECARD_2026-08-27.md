@@ -27,11 +27,13 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Human irrationality | Preference reversals, sunk-cost pressure, silence, disagreement and scope shocks remain explicit | 54-point failure audit and endurance suite | Closed locally |
 | External reality | Research/quote/hold/book/pay/verify remain distinct; planning never claims execution | Reality-execution suite | Closed locally |
 | Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally; host-signal live injection unavailable |
+| Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation host and route-arbitration suites | Closed locally |
+| Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | `finite_get_effort_receipt` | Closed locally; full-family live receipts open |
 | Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v53 entry, semantic manifest, exact selection and oversized-field refusal | Closed for current route; full-family journeys open |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 
-Current regression baseline: **126/126 tests pass** after the bounded-output, semantic-recovery, and cancellation tranches.
+Current regression baseline: **128/128 tests pass** after the bounded-output, semantic-recovery, cancellation, safe route-replacement, and operator-effort tranches.
 
 ## Measured baseline and correction
 
@@ -68,11 +70,10 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 ## Highest-impact open queue
 
 1. Run a fresh deployed Codex journey for each family from handoff through late shock, human authority, accepted commit, lost response, reload, and lifecycle conclusion.
-2. Add an operator-effort evaluator that records discovered tool count, calls to first useful action, semantic detail selections, human-boundary turns, stale refusals, cancellation outcomes, and accepted mutations for every journey.
-3. Adversarially test route-controller replacement during in-flight work, including pre-Chrome-153 behavior where unregistering may cancel execution.
-4. Exercise signed-out demo, owner account, delayed Site edits, stale handoff hashes, same-revision drift, and two-browser optimistic concurrency on the live build.
-5. Produce a sanitized reproducible source bundle and dependency/license inventory. Public release and license selection remain an explicit owner boundary because internal RUI material must not be exposed accidentally.
-6. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
+2. Record the new operator-effort receipt for every full-family journey and compare calls-to-action, boundary turns, semantic reads, refusals, cancellations, route changes, and accepted mutations.
+3. Exercise signed-out demo, owner account, delayed Site edits, stale handoff hashes, same-revision drift, and two-browser optimistic concurrency on the live build.
+4. Produce a sanitized reproducible source bundle and dependency/license inventory. Public release and license selection remain an explicit owner boundary because internal RUI material must not be exposed accidentally.
+5. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
 
 ## Sources governing this scorecard
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
+import { sha256 } from "../dist-test/src/crypto.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
@@ -12,8 +13,27 @@ class MemoryModelContext {
     this.tools.set(tool.name, tool);
     options.signal?.addEventListener("abort", () => this.tools.delete(tool.name), { once: true });
   }
-  async execute(name, input) {
-    return this.tools.get(name)?.execute(input) ?? { ok: false, code: "TOOL_NOT_FOUND" };
+  async execute(name, input, context = {}) {
+    return this.tools.get(name)?.execute(input, context) ?? { ok: false, code: "TOOL_NOT_FOUND" };
+  }
+}
+
+class LegacyCancellationHost {
+  tools = new Map();
+  registerTool(tool, options = {}) {
+    const registration = { tool, signal: options.signal };
+    this.tools.set(tool.name, registration);
+    options.signal?.addEventListener("abort", () => {
+      if (this.tools.get(tool.name) === registration) this.tools.delete(tool.name);
+    }, { once: true });
+  }
+  async execute(name, input, context = {}) {
+    const registration = this.tools.get(name);
+    if (!registration) return { ok: false, code: "TOOL_NOT_FOUND" };
+    const execution = Promise.resolve(registration.tool.execute(input, context));
+    if (!registration.signal) return execution;
+    const unregistered = new Promise((resolve) => registration.signal.addEventListener("abort", () => resolve({ ok: false, code: "LEGACY_REGISTRATION_ABORTED", acceptedStateChanged: false }), { once: true }));
+    return Promise.race([execution, unregistered]);
   }
 }
 
@@ -71,9 +91,57 @@ test("production adapter normalizes host input, excludes authority, and replaces
   assert.equal(extension.event.entityChanges.length, 2);
   const switched = await host.execute("finite_switch_profile", JSON.stringify({ profileId: "renovation", expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision }));
   assert.equal(switched.code, "PROFILE_SWITCHED");
+  await adapter.waitForRouteSettlement();
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("renovation_replace_material"));
   assert(host.tools.size <= 20);
+});
+
+test("route replacement waits until the triggering response survives legacy unregister cancellation", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new LegacyCancellationHost();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await adapter.register();
+  assert.equal((await host.execute("finite_open_toolset", { group: "planning" })).code, "TOOLSET_READY");
+  const switched = await host.execute("finite_switch_profile", { profileId: "renovation", expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
+  assert.equal(switched.code, "PROFILE_SWITCHED");
+  assert.notEqual(switched.code, "LEGACY_REGISTRATION_ABORTED");
+  await adapter.waitForRouteSettlement();
+  assert.equal([...host.tools.keys()].some((name) => name.startsWith("travel_")), false);
+  assert.equal(host.tools.has("renovation_replace_material"), true);
+});
+
+test("chef-effort receipt measures discovery, first action, semantic recovery, cancellation, and route changes", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs();
+  await adapter.register();
+  const entered = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" });
+  await adapter.waitForRouteSettlement();
+  assert.equal((await host.execute("finite_open_toolset", { group: "planning" })).code, "TOOLSET_READY");
+  assert.equal((await host.execute("travel_extend_stay", { destination: "Paris", nights: 1, nightlyMinor: 10_000, minimumBufferMinor: 0 })).code, "CHANGE_RECORDED");
+  await adapter.waitForRouteSettlement();
+  assert.equal((await host.execute("finite_read_result", { resultRef: entered.detail.resultRef })).code, "RESULT_DETAIL_MANIFEST");
+  assert.equal((await host.execute("finite_read_result", { resultRef: entered.detail.resultRef, paths: ["/operatorPacket/nextAction"] })).code, "RESULT_DETAIL_SELECTED");
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal((await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" }, { signal: controller.signal })).code, "TOOL_CANCELLED");
+  assert.equal((await host.execute("finite_open_toolset", { group: "continuity" })).code, "TOOLSET_READY");
+  assert.equal(host.tools.has("finite_get_effort_receipt"), true);
+  const receipt = await host.execute("finite_get_effort_receipt", {});
+  assert.equal(receipt.code, "CHEF_EFFORT_RECEIPT");
+  assert.equal(receipt.metrics.callsToFirstUsefulAction, 3);
+  assert.equal(receipt.metrics.semanticManifestReads, 1);
+  assert.equal(receipt.metrics.semanticDetailSelections, 1);
+  assert.equal(receipt.metrics.cancellationOutcomes, 1);
+  assert.equal(receipt.metrics.routeChanges >= 1, true);
+  assert.equal(receipt.metrics.registryRefreshes >= 4, true);
+  assert.equal(receipt.metrics.maxAdvertisedTools <= 20, true);
+  assert.equal(receipt.metrics.currentAdvertisedTools <= 20, true);
+  assert.equal(receipt.metrics.tokenMeasure, "host_owned_unavailable");
+  assert.equal(receipt.receiptHash, await sha256({ receiptVersion: receipt.receiptVersion, scope: receipt.scope, metrics: receipt.metrics }));
 });
 
 test("authority-only tools appear after human authority and remain for exact receipt replay", async () => {
