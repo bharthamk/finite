@@ -295,6 +295,23 @@ export interface PlanDraft {
   profile: CompiledProfile;
   evidenceRecords: EvidenceRecord[];
   contentHash: string;
+  amendment: PlanAmendmentBinding | null;
+}
+
+export interface PlanAmendmentDiff {
+  allocations: Array<{ field: keyof Allocation; before: number; after: number; delta: number }>;
+  locks: { added: string[]; removed: string[] };
+  preferenceWeights: Array<{ preference: PreferenceKey; before: number; after: number; delta: number }>;
+  entities: Array<{ entityId: string; field: string; before: number | null; after: number | null }>;
+  changedSections: string[];
+}
+
+export interface PlanAmendmentBinding {
+  supersedesPlanId: string;
+  supersedesProfileHash: string;
+  supersedesRevision: number;
+  diff: PlanAmendmentDiff;
+  diffHash: string;
 }
 
 export interface PlanActivationConfirmation {
@@ -316,11 +333,22 @@ export interface PlanActivationReceipt {
   draftId: string;
   confirmationId: string;
   replayChecksum: string;
+  activationKind?: "new_plan" | "amendment";
+  supersedesPlanId?: string;
+  supersedesProfileHash?: string;
+  diffHash?: string;
 }
 
 export interface PlanCatalogEntry {
   definition: ProfileDefinition;
   evidenceRecords: EvidenceRecord[];
+  lineage?: {
+    activationKind: "new_plan" | "amendment";
+    supersedesPlanId: string | null;
+    supersedesProfileHash: string | null;
+    diffHash: string | null;
+    activationReceiptId: string;
+  };
 }
 
 export interface PlanIntakeInput {

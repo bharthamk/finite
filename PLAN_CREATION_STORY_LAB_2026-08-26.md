@@ -23,10 +23,10 @@ the bounded plan-intake contract. Presentation quality was deliberately excluded
 | HC08 | Order a house move with phases and a fixed spend | Partial | Renovation can technically express phases, dates and contingency, but its fixed contextual operations are a semantic stretch. |
 | HC09 | Order a monthly household cashflow plan | Fail | No recurring-period family or time model exists; mapping it to travel, renovation or event would be dishonest. |
 | HC10 | Reload while reviewing an unconfirmed plan | Fail | Draft and human authority are deliberately volatile; the work packet is lost across reload. |
-| HC11 | Change the structure of an already activated plan | Partial | Codex can create a new `planId`, but there is no explicit supersedes/version lineage or amendment receipt. |
+| HC11 | Change the structure of an already activated plan | Pass | Codex derives a new immutable version from live accepted truth; the consumer confirms the exact semantic diff and both versions remain switchable. |
 | HC12 | Keep and switch among multiple confirmed plans | Pass | Catalog persistence, actual plan ids, evidence bundles and contextual-tool replacement survive reload. |
 
-Human result: **7 pass, 3 partial, 2 fail**.
+Human result after amendment follow-through: **8 pass, 2 partial, 2 fail**.
 
 ## Codex-operator stories
 
@@ -43,9 +43,9 @@ Human result: **7 pass, 3 partial, 2 fail**.
 | TC09 | Recover after the source plan/revision changes | Pass | Confirmation/activation refuses the stale draft with a restage path. |
 | TC10 | Retry an activation after uncertainty or reload | Pass | Persistent checksum-verified idempotency replays the exact receipt; mutation and key reuse fail. |
 | TC11 | Construct a use case outside all three semantic families | Fail | The compiler correctly refuses it, but the capability ceiling is a product blocker rather than a safety defect. |
-| TC12 | Amend an active plan without losing lineage | Fail | No first-class draft-from-active-version or supersession receipt exists. |
+| TC12 | Amend an active plan without losing lineage | Pass | The active plan produces a compiler-valid successor blueprint, deterministic diff, human-bound activation receipt, linear lineage, rollback, reload and replay. |
 
-Codex result: **10 pass, 0 partial, 2 fail**.
+Codex result after amendment follow-through: **11 pass, 0 partial, 1 fail**.
 
 ## What WebMCP is buying us
 
@@ -73,22 +73,19 @@ laws; Codex supplies interpretation and composition.
 3. **Draft volatility — product trade-off.** Losing an unconfirmed construction
    packet on reload protects the “only accepted truth persists” law but wastes
    operator and consumer work.
-4. **No plan version lineage — real blocker.** A new id works mechanically, but
-   Finite cannot yet say that plan B amends or supersedes plan A.
-5. **Evidence vocabulary is deliberately closed.** This avoids a pre-activation
+4. **Evidence vocabulary is deliberately closed.** This avoids a pre-activation
    evidence deadlock and arbitrary trust classes, but new domains may earn new
    standard classes later.
 
 ## Engineering ruling
 
 Do not add more seeded examples and do not start submission preparation. The
-next build should tackle one contract:
+immutable plan-version/amendment transaction is now landed and separately
+receipted in `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md`.
 
-1. an immutable plan-version/amendment transaction with explicit supersession,
-   human confirmation and a receipt.
-
-The typed partial-intake/missing-facts packet was earned and landed during this
-run, alongside a clean blueprint and human draft-return action.
+The next build should tackle the remaining operator-continuity failure: make an
+unfinished construction/intake packet resumable across reload without persisting
+human authority or confusing draft work with accepted plan truth.
 
 Generalizing semantic families should follow those experiments, not precede
 them. Arbitrary generated code, tools or UI remain out of bounds.

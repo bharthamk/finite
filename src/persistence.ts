@@ -75,9 +75,14 @@ export class PlanCatalogStore {
     }
   }
 
-  save(definition: ProfileDefinition, evidenceRecords: PlanCatalogEntry["evidenceRecords"]): void {
+  save(definition: ProfileDefinition, evidenceRecords: PlanCatalogEntry["evidenceRecords"], lineage?: PlanCatalogEntry["lineage"]): void {
     const entries = this.load().filter((entry) => entry.definition.planId !== definition.planId);
-    entries.push({ definition: clone(definition), evidenceRecords: clone(evidenceRecords) });
+    entries.push({ definition: clone(definition), evidenceRecords: clone(evidenceRecords), ...(lineage ? { lineage: clone(lineage) } : {}) });
+    this.storage.setItem(this.key, JSON.stringify(entries));
+  }
+
+  remove(planId: string): void {
+    const entries = this.load().filter((entry) => entry.definition.planId !== planId);
     this.storage.setItem(this.key, JSON.stringify(entries));
   }
 
@@ -96,6 +101,10 @@ export class PlanCatalogStore {
     const receipts = this.loadActivationReceipts().filter((existing) => existing.idempotencyKey !== receipt.idempotencyKey);
     receipts.push(clone(receipt));
     this.storage.setItem(this.receiptKey, JSON.stringify(receipts));
+  }
+
+  removeActivationReceipt(idempotencyKey: string): void {
+    this.storage.setItem(this.receiptKey, JSON.stringify(this.loadActivationReceipts().filter((receipt) => receipt.idempotencyKey !== idempotencyKey)));
   }
 }
 

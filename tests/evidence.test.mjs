@@ -116,7 +116,7 @@ test("WebMCP exposes bounded registration and keeps evidence reads marked untrus
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 28);
+  assert.equal(inventory.length, 30);
   assert(host.tools.has("finite_register_evidence"));
   assert.equal(host.tools.get("finite_read_evidence").annotations.untrustedContentHint, true);
   const registered = await host.execute("finite_register_evidence", JSON.stringify(researchedQuote));

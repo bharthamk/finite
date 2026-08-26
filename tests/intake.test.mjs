@@ -93,7 +93,7 @@ test("complete plan intake requires human authority, activates exact hashes, per
   assert.equal(runtime.switchPlan("plan_event_customer_summit").code, "PLAN_SWITCHED");
   assert.equal(runtime.kernel.profile.planId, "plan_event_customer_summit");
 
-  const catalogEntries = await compileCatalogEntries(catalogStore.load());
+  const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
   const restored = new FinitePlanRuntime(profiles, snapshotStore, "plan_event_customer_summit", catalogStore, catalogEntries);
   assert.equal(restored.kernel.profile.profileHash, staged.draft.profile.profileHash);
   assert.equal(restored.kernel.getState(["actuals"]).state.actuals.length, 2);
@@ -209,10 +209,12 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 28);
+  assert.equal(inventory.length, 30);
   assert(host.tools.has("finite_get_plan_blueprint"));
   assert(host.tools.has("finite_assess_plan_intake"));
+  assert(host.tools.has("finite_get_amendment_blueprint"));
   assert(host.tools.has("finite_stage_plan_draft"));
+  assert(host.tools.has("finite_stage_plan_amendment"));
   assert(host.tools.has("finite_activate_confirmed_plan"));
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
 
@@ -237,5 +239,12 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("event_change_headcount"));
-  assert.equal(host.tools.size, 28);
+  assert.equal(host.tools.size, 30);
+
+  const amendment = await host.execute("finite_get_amendment_blueprint", {});
+  amendment.profile.accepted.forecastMinor -= 5_000;
+  amendment.profile.accepted.bufferMinor += 5_000;
+  const amendmentStaged = await host.execute("finite_stage_plan_amendment", { profile: amendment.profile, supersedesPlanId: amendment.supersedesPlanId, expectedRevision: amendment.supersedesRevision });
+  assert.equal(amendmentStaged.code, "PLAN_AMENDMENT_STAGED");
+  assert.equal(amendmentStaged.draft.amendment.supersedesPlanId, "plan_event_webmcp");
 });

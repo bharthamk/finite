@@ -7,6 +7,8 @@ import type {
   EvidenceRecord,
   PlanActivationConfirmation,
   PlanActivationReceipt,
+  PlanAmendmentBinding,
+  PlanAmendmentDiff,
   PlanCatalogEntry,
   PlanDraft,
   PlanIntakeInput,
@@ -19,6 +21,7 @@ import type {
 export interface CompiledCatalogEntry {
   profile: CompiledProfile;
   evidenceRecords: EvidenceRecord[];
+  lineage?: PlanCatalogEntry["lineage"];
 }
 
 const profileDefinition = (profile: CompiledProfile): ProfileDefinition => {
@@ -47,7 +50,7 @@ export class FinitePlanRuntime {
     catalogEntries: CompiledCatalogEntry[] = [],
   ) {
     for (const profile of profiles.values()) this.plans.set(profile.planId, { profile, evidenceRecords: [] });
-    for (const entry of catalogEntries) this.plans.set(entry.profile.planId, { profile: entry.profile, evidenceRecords: clone(entry.evidenceRecords) });
+    for (const entry of catalogEntries) this.plans.set(entry.profile.planId, { profile: entry.profile, evidenceRecords: clone(entry.evidenceRecords), ...(entry.lineage ? { lineage: clone(entry.lineage) } : {}) });
     for (const receipt of catalogStore?.loadActivationReceipts() ?? []) this.activationReceipts.set(receipt.idempotencyKey, clone(receipt));
     const builtIn = profiles.get(initialPlanOrProfile as ProfileId);
     const entry = this.plans.get(initialPlanOrProfile) ?? (builtIn ? this.plans.get(builtIn.planId) : undefined);
@@ -60,12 +63,14 @@ export class FinitePlanRuntime {
       ok: true,
       code: "PLAN_CATALOG",
       activePlanId: this.kernel.profile.planId,
-      plans: [...this.plans.values()].map(({ profile }) => ({
+      plans: [...this.plans.values()].map(({ profile, lineage }) => ({
         planId: profile.planId,
         profileId: profile.profileId,
         name: profile.name,
         profileHash: profile.profileHash,
         active: profile.planId === this.kernel.profile.planId,
+        lineage: lineage ? clone(lineage) : { activationKind: "built_in", supersedesPlanId: null, supersedesProfileHash: null, diffHash: null, activationReceiptId: null },
+        supersededBy: [...this.plans.values()].find((entry) => entry.lineage?.supersedesPlanId === profile.planId)?.profile.planId ?? null,
       })),
       pendingDraft: this.pendingPlanDraft ? {
         draftId: this.pendingPlanDraft.draftId,
@@ -74,6 +79,7 @@ export class FinitePlanRuntime {
         contentHash: this.pendingPlanDraft.contentHash,
         humanConfirmed: this.planActivationConfirmation?.draftId === this.pendingPlanDraft.draftId,
         confirmationId: this.planActivationConfirmation?.draftId === this.pendingPlanDraft.draftId ? this.planActivationConfirmation.confirmationId : null,
+        amendment: this.pendingPlanDraft.amendment ? { supersedesPlanId: this.pendingPlanDraft.amendment.supersedesPlanId, supersedesRevision: this.pendingPlanDraft.amendment.supersedesRevision, diffHash: this.pendingPlanDraft.amendment.diffHash, diff: clone(this.pendingPlanDraft.amendment.diff) } : null,
       } : null,
       acceptedStateChanged: false,
     };
@@ -122,7 +128,7 @@ export class FinitePlanRuntime {
     const profileId = facts.profileId;
     if (!(profileId === "travel" || profileId === "renovation" || profileId === "event")) ask("profileId", "FAMILY_REQUIRED", "Is this best operated as travel/calendar, renovation/phases, or event/run-of-show?");
     if (!boundedText(facts.planId, 64) || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(facts.planId ?? "")) ask("planId", "PLAN_ID_REQUIRED", "Provide a new lowercase plan identifier.");
-    else if (this.plans.has(facts.planId!)) conflict("planId", "PLAN_ID_ALREADY_EXISTS", "Use a new plan id; amendments need a new version until supersession lineage is implemented.");
+    else if (this.plans.has(facts.planId!)) conflict("planId", "PLAN_ID_ALREADY_EXISTS", "Use a new plan id, or derive an immutable amendment blueprint from the active version.");
     if (!boundedText(facts.name, 120)) ask("name", "PLAN_NAME_REQUIRED", "What should the human call this plan?");
     if (!boundedText(facts.brief, 500)) ask("brief", "OUTCOME_BRIEF_REQUIRED", "What useful outcome is the human ordering, in one bounded sentence?");
 
@@ -178,7 +184,89 @@ export class FinitePlanRuntime {
     return result;
   }
 
-  async stagePlanDraft(input: unknown): Promise<ToolResult> {
+  private currentActualDefinitions(): ProfileDefinition["actuals"] {
+    const current = this.kernel.profile;
+    const actualState = this.kernel.getState(["actuals"]).state as { actuals?: Array<{ actualId: string; label: string; currentAmountMinor: number }> };
+    return (actualState.actuals ?? []).map((actual) => {
+      const correction = [...this.kernel.correctionEvents].reverse().find((event) => event.actualId === actual.actualId);
+      const original = current.actuals.find((item) => item.actualId === actual.actualId);
+      return { actualId: actual.actualId, label: actual.label, originalAmountMinor: actual.currentAmountMinor, evidenceRef: correction?.evidenceRef ?? original?.evidenceRef ?? "" };
+    });
+  }
+
+  getAmendmentBlueprint(): ToolResult {
+    const current = this.kernel.profile;
+    const successor = [...this.plans.values()].find((entry) => entry.lineage?.supersedesPlanId === current.planId);
+    if (successor) return { ok: false, code: "PLAN_VERSION_SUPERSEDED", planId: current.planId, supersededBy: successor.profile.planId, acceptedStateChanged: false, next: "Switch to the current successor before deriving another immutable version." };
+    const definition = profileDefinition(current);
+    const versionBase = current.planId.replace(/_v\d+$/, "");
+    let version = 2;
+    while (this.plans.has(`${versionBase}_v${version}`)) version += 1;
+    definition.planId = `${versionBase}_v${version}`;
+    definition.name = `${current.name.replace(/ · v\d+$/, "")} · v${version}`;
+    definition.accepted = clone(this.kernel.accepted);
+    definition.preferenceWeights = clone(this.kernel.preferenceWeights);
+    definition.entities = clone(this.kernel.entities);
+    definition.actuals = this.currentActualDefinitions();
+    return {
+      ok: true,
+      code: "PLAN_AMENDMENT_BLUEPRINT",
+      supersedesPlanId: current.planId,
+      supersedesProfileHash: current.profileHash,
+      supersedesRevision: this.kernel.revision,
+      profile: definition,
+      contract: {
+        immutablePriorVersion: true,
+        sameProfileFamilyRequired: true,
+        newPlanIdRequired: true,
+        materialDiffRequired: true,
+        authority: "The human confirms the exact compiled profile and semantic diff; Codex activates the bound supersession through the guarded activation tool.",
+      },
+      acceptedStateChanged: false,
+      next: "Change only the structure that must evolve, then stage this definition as an amendment of the exact active plan and revision.",
+    };
+  }
+
+  private async amendmentBinding(profile: CompiledProfile): Promise<PlanAmendmentBinding | ToolResult> {
+    const before = this.kernel.profile;
+    if (profile.profileId !== before.profileId) return { ok: false, code: "AMENDMENT_FAMILY_MISMATCH", acceptedStateChanged: false };
+    const allocationFields = ["totalBudgetMinor", "spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
+    const allocations = allocationFields.filter((field) => this.kernel.accepted[field] !== profile.accepted[field]).map((field) => ({ field, before: this.kernel.accepted[field], after: profile.accepted[field], delta: profile.accepted[field] - this.kernel.accepted[field] }));
+    const locks = { added: profile.locks.filter((lock) => !before.locks.includes(lock)), removed: before.locks.filter((lock) => !profile.locks.includes(lock)) };
+    const preferenceWeights = (Object.keys(profile.preferenceWeights) as Array<keyof typeof profile.preferenceWeights>)
+      .filter((preference) => this.kernel.preferenceWeights[preference] !== profile.preferenceWeights[preference])
+      .map((preference) => ({ preference, before: this.kernel.preferenceWeights[preference], after: profile.preferenceWeights[preference], delta: profile.preferenceWeights[preference] - this.kernel.preferenceWeights[preference] }));
+    const entities: PlanAmendmentDiff["entities"] = [];
+    const entityIds = new Set([...Object.keys(this.kernel.entities), ...Object.keys(profile.entities)]);
+    for (const entityId of entityIds) {
+      const fields = new Set([...Object.keys(this.kernel.entities[entityId]?.values ?? {}), ...Object.keys(profile.entities[entityId]?.values ?? {})]);
+      for (const field of fields) {
+        const prior = this.kernel.entities[entityId]?.values[field] ?? null;
+        const next = profile.entities[entityId]?.values[field] ?? null;
+        if (prior !== next) entities.push({ entityId, field, before: prior, after: next });
+      }
+    }
+    const changedSections: string[] = [];
+    if (allocations.length) changedSections.push("allocations");
+    if (locks.added.length || locks.removed.length) changedSections.push("locks");
+    if (preferenceWeights.length) changedSections.push("preferenceWeights");
+    if (entities.length || JSON.stringify(this.kernel.entities) !== JSON.stringify(profile.entities)) changedSections.push("entities");
+    for (const section of ["actuals", "preferenceLabels", "relationships", "moves", "searchPolicy", "evidencePolicy", "surface"] as const) {
+      const priorValue = section === "actuals" ? this.currentActualDefinitions() : before[section];
+      if (JSON.stringify(priorValue) !== JSON.stringify(profile[section])) changedSections.push(section);
+    }
+    if (!changedSections.length) return { ok: false, code: "AMENDMENT_NO_MATERIAL_CHANGE", acceptedStateChanged: false, next: "Change at least one accepted, constraint, entity, move, policy, or surface field beyond plan identity." };
+    const diff: PlanAmendmentDiff = { allocations, locks, preferenceWeights, entities, changedSections };
+    return {
+      supersedesPlanId: before.planId,
+      supersedesProfileHash: before.profileHash,
+      supersedesRevision: this.kernel.revision,
+      diff,
+      diffHash: await sha256(diff),
+    };
+  }
+
+  private async compileDraft(input: unknown, amendment: PlanAmendmentBinding | null): Promise<ToolResult> {
     let profile: CompiledProfile;
     try {
       profile = await compileProfile(input);
@@ -205,6 +293,7 @@ export class FinitePlanRuntime {
       baseRevision: this.kernel.revision,
       profileHash: profile.profileHash,
       evidenceBindings: evidenceRecords.map(({ evidenceId, contentHash, recordHash }) => ({ evidenceId, contentHash, recordHash })),
+      amendment: amendment ? { supersedesPlanId: amendment.supersedesPlanId, supersedesProfileHash: amendment.supersedesProfileHash, supersedesRevision: amendment.supersedesRevision, diffHash: amendment.diffHash } : null,
     };
     const contentHash = await sha256(bound);
     const draft: PlanDraft = {
@@ -214,12 +303,13 @@ export class FinitePlanRuntime {
       profile,
       evidenceRecords,
       contentHash,
+      amendment,
     };
     this.pendingPlanDraft = draft;
     this.planActivationConfirmation = null;
     return {
       ok: true,
-      code: "PLAN_DRAFT_STAGED",
+      code: amendment ? "PLAN_AMENDMENT_STAGED" : "PLAN_DRAFT_STAGED",
       draft: {
         draftId: draft.draftId,
         basePlanId: draft.basePlanId,
@@ -227,10 +317,28 @@ export class FinitePlanRuntime {
         profile: clone(draft.profile),
         evidenceBindings: draft.evidenceRecords.map(({ evidenceId, contentHash, recordHash }) => ({ evidenceId, contentHash, recordHash })),
         contentHash: draft.contentHash,
+        amendment: amendment ? clone(amendment) : null,
       },
       acceptedStateChanged: false,
-      next: "Show the exact compiled profile hash and content hash to the human for confirmation. WebMCP cannot create that confirmation.",
+      next: "Show the exact compiled profile hash, draft hash, and any amendment diff to the human for confirmation. WebMCP cannot create that confirmation.",
     };
+  }
+
+  async stagePlanDraft(input: unknown): Promise<ToolResult> {
+    return this.compileDraft(input, null);
+  }
+
+  async stagePlanAmendment({ profile: input, supersedesPlanId, expectedRevision }: { profile: unknown; supersedesPlanId: string; expectedRevision: number }): Promise<ToolResult> {
+    if (supersedesPlanId !== this.kernel.profile.planId || expectedRevision !== this.kernel.revision) return { ok: false, code: "AMENDMENT_BASE_STALE", activePlanId: this.kernel.profile.planId, activeRevision: this.kernel.revision, acceptedStateChanged: false };
+    const successor = [...this.plans.values()].find((entry) => entry.lineage?.supersedesPlanId === supersedesPlanId);
+    if (successor) return { ok: false, code: "PLAN_VERSION_SUPERSEDED", planId: supersedesPlanId, supersededBy: successor.profile.planId, acceptedStateChanged: false };
+    let profile: CompiledProfile;
+    try { profile = await compileProfile(input); }
+    catch (error) { return { ok: false, code: "PLAN_DRAFT_INVALID", issues: error instanceof ProfileValidationError ? error.issues : [error instanceof Error ? error.message : String(error)], acceptedStateChanged: false }; }
+    if (this.plans.has(profile.planId)) return { ok: false, code: "PLAN_ID_ALREADY_EXISTS", planId: profile.planId, acceptedStateChanged: false };
+    const amendment = await this.amendmentBinding(profile);
+    if ("ok" in amendment) return amendment;
+    return this.compileDraft(profileDefinition(profile), amendment);
   }
 
   humanConfirmPlanDraft({ draftId }: { draftId: string }): ToolResult {
@@ -278,15 +386,12 @@ export class FinitePlanRuntime {
     const confirmation = this.planActivationConfirmation;
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.draftId !== draftId || confirmation.contentHash !== draft.contentHash || confirmation.source !== "human_action") return { ok: false, code: "PLAN_ACTIVATION_CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
     if (this.plans.has(draft.profile.planId)) return { ok: false, code: "PLAN_ID_ALREADY_EXISTS", acceptedStateChanged: false };
+    if (!this.catalogStore) return { ok: false, code: "PLAN_ACTIVATION_STORAGE_UNAVAILABLE", acceptedStateChanged: false, next: "Activation requires durable catalog and receipt storage; accepted truth remains on the prior plan." };
     for (const evidence of draft.evidenceRecords) if (!await evidenceIntegrity(evidence)) return { ok: false, code: "PLAN_EVIDENCE_INTEGRITY_FAILED", evidenceId: evidence.evidenceId, acceptedStateChanged: false };
 
     const fromPlanId = this.kernel.profile.planId;
-    this.kernel.persist();
-    const entry = { profile: draft.profile, evidenceRecords: clone(draft.evidenceRecords) };
-    this.plans.set(draft.profile.planId, entry);
-    this.catalogStore?.save(profileDefinition(draft.profile), draft.evidenceRecords);
-    this.kernel = new FinitePlanKernel(draft.profile, this.store, draft.evidenceRecords);
-    this.kernel.persist();
+    const priorKernel = this.kernel;
+    const newKernel = new FinitePlanKernel(draft.profile, this.store, draft.evidenceRecords);
     const receiptBase = {
       idempotencyKey,
       fromPlanId,
@@ -295,14 +400,36 @@ export class FinitePlanRuntime {
       profileHash: draft.profile.profileHash,
       draftId,
       confirmationId,
+      activationKind: draft.amendment ? "amendment" as const : "new_plan" as const,
+      ...(draft.amendment ? { supersedesPlanId: draft.amendment.supersedesPlanId, supersedesProfileHash: draft.amendment.supersedesProfileHash, diffHash: draft.amendment.diffHash } : {}),
     };
     const replayChecksum = await sha256(receiptBase);
     const receipt: PlanActivationReceipt = { receiptId: `plan_activation_${replayChecksum.slice(0, 16)}`, ...receiptBase, replayChecksum };
+    const lineage: NonNullable<PlanCatalogEntry["lineage"]> = {
+      activationKind: receipt.activationKind!,
+      supersedesPlanId: draft.amendment?.supersedesPlanId ?? null,
+      supersedesProfileHash: draft.amendment?.supersedesProfileHash ?? null,
+      diffHash: draft.amendment?.diffHash ?? null,
+      activationReceiptId: receipt.receiptId,
+    };
+    try {
+      priorKernel.persist();
+      newKernel.persist();
+      this.catalogStore.save(profileDefinition(draft.profile), draft.evidenceRecords, lineage);
+      this.catalogStore.saveActivationReceipt(receipt);
+    } catch (error) {
+      try { this.store.clear(draft.profile.planId); } catch { /* best-effort rollback */ }
+      try { this.catalogStore.remove(draft.profile.planId); } catch { /* best-effort rollback */ }
+      try { this.catalogStore.removeActivationReceipt(idempotencyKey); } catch { /* best-effort rollback */ }
+      return { ok: false, code: "PLAN_ACTIVATION_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, activePlanId: priorKernel.profile.planId, next: "Accepted truth remains on the prior plan. Repair storage and retry the exact activation." };
+    }
+    const entry: CompiledCatalogEntry = { profile: draft.profile, evidenceRecords: clone(draft.evidenceRecords), lineage };
+    this.plans.set(draft.profile.planId, entry);
+    this.kernel = newKernel;
     this.activationReceipts.set(idempotencyKey, receipt);
-    this.catalogStore?.saveActivationReceipt(receipt);
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
-    return { ok: true, code: "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), acceptedStateChanged: true, next: "Rediscover contextual tools and operate the newly active plan." };
+    return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), acceptedStateChanged: true, next: "Rediscover contextual tools and operate the newly active immutable plan version." };
   }
 
   switchPlan(planId: string): ToolResult {
@@ -342,7 +469,7 @@ export class FinitePlanRuntime {
   }
 }
 
-export const compileCatalogEntries = async (entries: PlanCatalogEntry[]): Promise<CompiledCatalogEntry[]> => {
+export const compileCatalogEntries = async (entries: PlanCatalogEntry[], activationReceipts: PlanActivationReceipt[] = []): Promise<CompiledCatalogEntry[]> => {
   const compiled: CompiledCatalogEntry[] = [];
   for (const entry of entries) {
     try {
@@ -350,7 +477,18 @@ export const compileCatalogEntries = async (entries: PlanCatalogEntry[]): Promis
       const evidenceIds = new Set(entry.evidenceRecords.map((evidence) => evidence.evidenceId));
       if (profile.actuals.some((actual) => !evidenceIds.has(actual.evidenceRef))) continue;
       if (!(await Promise.all(entry.evidenceRecords.map(evidenceIntegrity))).every(Boolean)) continue;
-      compiled.push({ profile, evidenceRecords: clone(entry.evidenceRecords) });
+      const lineage = entry.lineage;
+      if (lineage && (!(lineage.activationKind === "new_plan" || lineage.activationKind === "amendment") || typeof lineage.activationReceiptId !== "string")) continue;
+      if (lineage?.activationKind === "amendment" && (!lineage.supersedesPlanId || !lineage.supersedesProfileHash || !lineage.diffHash)) continue;
+      if (lineage) {
+        const receipt = activationReceipts.find((candidate) => candidate.receiptId === lineage.activationReceiptId);
+        if (!receipt) continue;
+        const { receiptId, replayChecksum, ...receiptBase } = receipt;
+        if (await sha256(receiptBase) !== replayChecksum || receiptId !== `plan_activation_${replayChecksum.slice(0, 16)}`) continue;
+        if (receipt.toPlanId !== profile.planId || receipt.profileHash !== profile.profileHash || receipt.activationKind !== lineage.activationKind) continue;
+        if ((receipt.supersedesPlanId ?? null) !== lineage.supersedesPlanId || (receipt.supersedesProfileHash ?? null) !== lineage.supersedesProfileHash || (receipt.diffHash ?? null) !== lineage.diffHash) continue;
+      }
+      compiled.push({ profile, evidenceRecords: clone(entry.evidenceRecords), ...(lineage ? { lineage: clone(lineage) } : {}) });
     } catch {
       // Corrupt or obsolete local catalog entries are quarantined by omission.
     }
