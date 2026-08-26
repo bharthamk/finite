@@ -145,6 +145,29 @@ test("client hydration refuses a tampered durable envelope before consequential 
   assert.equal(runtime.kernel.acceptedTruth.status, "unavailable");
 });
 
+test("a revision-two browser cache loads the authoritative head before attempting initialization", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const durable = new MemoryAcceptedTruthRepository();
+  const storage = new MemoryStorage();
+  const first = makeRuntime(profiles, "travel", durable, storage);
+  await first.hydrateAcceptedTruth();
+  const command = await prepareApprovedOption(first, "Cached accepted route");
+  assert.equal((await first.kernel.applyApprovedOption({ ...command, idempotencyKey: "cached-accepted-0001" })).code, "OPTION_APPLIED");
+  assert.equal(first.kernel.revision, 2);
+
+  const loadOnlyRepository = {
+    load: (...args) => durable.load(...args),
+    initialize: async () => { throw new Error("existing accepted truth must load, not initialize"); },
+    commit: (...args) => durable.commit(...args),
+  };
+  const cachedReload = makeRuntime(profiles, "travel", loadOnlyRepository, storage);
+  assert.equal(cachedReload.kernel.revision, 2);
+  const hydrated = await cachedReload.hydrateAcceptedTruth();
+  assert.equal(hydrated.code, "ACCEPTED_TRUTH_CURRENT");
+  assert.equal(cachedReload.kernel.acceptedTruth.status, "ready");
+  assert.equal(cachedReload.kernel.revision, 2);
+});
+
 for (const profileId of ["travel", "renovation", "event"]) {
   test(`${profileId} cross-device handoff rebuilds exact work and consumes one expiring human authority challenge`, async () => {
     const profiles = await compileBuiltInProfiles();

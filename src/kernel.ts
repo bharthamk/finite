@@ -192,7 +192,10 @@ export class FinitePlanKernel {
       return { ok: false, code: "LOCAL_ACCEPTED_TRUTH_INTEGRITY_FAILED", issues: localIssues, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     }
     try {
-      const result = await this.acceptedRepository.initialize(this.snapshot(), activationReceipt);
+      const existing = await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash);
+      const result = existing
+        ? { ok: true as const, code: "ACCEPTED_TRUTH_CURRENT" as const, envelope: existing, receipt: null, requestHash: null, replay: true }
+        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt);
       const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
       const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
       if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
