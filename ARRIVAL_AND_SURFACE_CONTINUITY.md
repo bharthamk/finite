@@ -1,7 +1,7 @@
 # Arrival and interaction-surface continuity
 
 Status: governing product and engineering contract
-Updated: 2026-08-26
+Updated: 2026-08-27
 
 ## Product law
 
@@ -119,6 +119,28 @@ non-authoritative and resumable. Before it stages a clarification, draft, or
 change, Finite verifies that the order version is still current. If the human
 edited the order while Codex worked, the stale result fails closed with an
 order-version conflict and Codex re-orients from the latest packet.
+
+## Construction freshness law
+
+A compiled kitchen derived from an arrival order is valid only for the exact
+order id, version, and checksum that produced its typed intake. Its accepted
+source-plan revision guard is necessary but not sufficient: the accepted plan
+may remain unchanged while human intent advances.
+
+When newer human input exists:
+
+- arrival reconciliation outranks any construction-review route;
+- the prior construction packet is reported as `stale_arrival`;
+- the prior draft is removed from pending authority and cannot be confirmed;
+- activation tools are not advertised for that draft;
+- any direct activation attempt fails closed; and
+- the Site explains that the previous kitchen is stale while preserving its
+  proof for audit.
+
+Only after Codex reconciles the current order, the human reviews the replacement
+interpretation, and Codex compiles a newly bound packet may the Site offer exact
+draft confirmation again. An unbound legacy packet is never assumed to match an
+active arrival.
 
 ## Wrong-surface recovery law
 

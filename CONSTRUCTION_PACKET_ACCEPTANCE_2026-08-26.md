@@ -7,6 +7,11 @@ construction packet now preserves either the latest typed intake assessment or
 the exact staged new-plan/amendment draft. The packet is work, not accepted
 truth and not authority.
 
+> 2026-08-27 addendum: arrival-built packets now also bind the exact human-order
+> id, version, and checksum. Newer human input makes the prior packet
+> `stale_arrival`, removes its pending authority, and restores the arrival
+> reconcile route. See `ARRIVAL_BOUND_CONSTRUCTION_ACCEPTANCE_2026-08-27.md`.
+
 The browser automatically attempts safe restoration on startup. Codex can also
 inspect, resume, or explicitly discard the packet through WebMCP.
 
@@ -16,6 +21,8 @@ Every packet binds:
 
 - packet kind: `intake` or `draft`;
 - exact source plan id, profile hash, and accepted revision;
+- exact source arrival order id, version, and checksum when construction began
+  from reviewed arrival intake;
 - creation and seven-day expiry timestamps;
 - typed facts or compiled profile/draft/amendment payload;
 - required evidence records with their content and provenance hashes;
