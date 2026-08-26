@@ -26,12 +26,12 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Adaptability | One grammar produces materially different travel, renovation and event plans | Profile, surface and 12-journey endurance suites | Closed locally |
 | Human irrationality | Preference reversals, sunk-cost pressure, silence, disagreement and scope shocks remain explicit | 54-point failure audit and endurance suite | Closed locally |
 | External reality | Research/quote/hold/book/pay/verify remain distinct; planning never claims execution | Reality-execution suite | Closed locally |
-| Cancellation | Pre-cancelled work performs nothing; in-flight I/O aborts cleanly | Pre-cancel quality test | Partial |
-| Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | Prior v49 trial predates this tranche | Open |
+| Cancellation | Pre-cancelled work performs nothing; page-start and canonical entry forward the host signal; in-flight I/O aborts cleanly | Quality suite and static bootstrap contract | Partial |
+| Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v50 inline-Codex entry and verified detail-page receipt | Closed for orientation; full-family journeys open |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 
-Current regression baseline: **122/122 tests pass** after the first context-budget tranche.
+Current regression baseline: **123/123 tests pass** after the bounded-output and bootstrap-contract tranches.
 
 ## Measured baseline and correction
 
@@ -50,13 +50,15 @@ The entry response was approximately thirteen times the target. That caused clie
 
 Production now returns a compact service ticket and stores the complete deterministic result behind an ephemeral content-addressed reference. `finite_read_result` returns at most 800 characters of JSON payload per page plus verification metadata. `finite_open_kitchen` and `finite_get_chef_menu` remain implementation operations but are no longer permanently advertised; `finite_enter_kitchen` is the single orientation contract.
 
+The first deployed inline-Codex trial returned `finite_enter_kitchen` in 1,470 serialized characters, selected the exact returned-draft human boundary without a redundant state read, preserved travel plan revision 3, exposed no authority, and performed no accepted-state mutation. A deliberate `finite_read_result` call returned a 1,352-character verified page for the 23,011-character complete result. The follow-on v51 source closes the bootstrap metadata and cancellation-forwarding seam discovered by that trial.
+
 ## Judging-dimension score
 
 Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 8.5/10 | 10/10 | Fresh Codex proves bounded entry, selective detail, cancellation and route changes on the deployed Site |
+| WebMCP leverage | 9.0/10 | 10/10 | Complete deployed change routes across all three families and prove selective semantic detail plus route changes |
 | Execution | 8.0/10 | 9.5/10 | Live vNext deployment, adversarial browser runs, in-flight HTTP cancellation, sanitized release reproducibility |
 | Potential impact | 7.5/10 | 9/10 | Demonstrate the same operator law across three complete outcomes and show measurable human/model effort reduction |
 | Creativity and ambition | 9.0/10 | 10/10 | Make “software as the agent’s kitchen” undeniable through adaptive plan construction and real-world recovery, not narrative alone |

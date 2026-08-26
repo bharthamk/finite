@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
@@ -50,8 +51,19 @@ test("advertised WebMCP metadata stays inside current discovery budgets", async 
       assert(parameterName.length <= 30, `${name}.${path} exceeds the 30-character parameter-name budget`);
       assert(typeof property.description === "string" && property.description.length > 0, `${name}.${path} has no semantic description`);
       assert(property.description.length <= 150, `${name}.${path} exceeds the 150-character parameter-description budget`);
+      assert.equal(property.description.startsWith("Value for "), false, `${name}.${path} still has fallback metadata`);
     }
   }
+});
+
+test("the page-start proxy carries semantic metadata and forwards host cancellation", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  for (const parameter of ["entryIntent", "orderId", "expectedOrderVersion", "expectedOrderChecksum", "expectedPlanId", "expectedPlanRevision", "expectedProfileHash", "expectedSnapshotHash"]) {
+    assert.match(html, new RegExp(`${parameter}: \\{[^}]+description:`), `${parameter} has no bootstrap description`);
+  }
+  assert.match(html, /execute: async \(input = \{\}, context = \{\}\)/);
+  assert.match(html, /context\.signal\?\.aborted/);
+  assert.match(html, /window\.finiteEnterKitchen\(input, context\)/);
 });
 
 test("production WebMCP responses are bounded, content-addressed, and recoverable", async () => {

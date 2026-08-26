@@ -57,6 +57,70 @@ const parameterDescriptions: Record<string, string> = {
   perPersonMinor: "Per-person amount in the plan currency's minor unit.",
   costDeltaMinor: "Cost change in the plan currency's minor unit.",
   correctedAmountMinor: "Corrected actual amount in the plan currency's minor unit.",
+  actionId: "Stable identity for the real-world action being assessed or recorded.",
+  actualId: "Canonical actual-ledger entry to correct.",
+  actuals: "Known actual ledger entries for the plan draft.",
+  allocation: "Finite allocation whose components must conserve the total.",
+  answerKind: "Expected shape of the human answer.",
+  assumptions: "Explicit provisional assumptions that remain visible for review.",
+  blocking: "Whether this dependency prevents useful plan construction.",
+  brief: "Concise human-readable outcome the plan should protect.",
+  candidateId: "Constraint-validated candidate identity.",
+  challengeId: "Expiring human-handoff challenge identity.",
+  changes: "Typed preference changes proposed from human feedback.",
+  choices: "Bounded choices offered for a human question.",
+  constructionMode: "Exact compilation or a visibly provisional adaptive shell.",
+  cursor: "Zero-based character offset for the next bounded result page.",
+  daysDelta: "Change in plan duration or schedule days.",
+  dependencyId: "Stable identity for one unresolved planning dependency.",
+  destination: "Destination affected by the travel change.",
+  detail: "Additional source-grounded dependency detail.",
+  entityChanges: "Typed changes to canonical plan entities.",
+  entityEstimates: "Source-labelled provisional entity values for an adaptive shell.",
+  entityValues: "Known canonical entity values for the plan draft.",
+  eventId: "Active typed change-event identity.",
+  evidenceId: "Canonical admitted-evidence identity.",
+  feedbackId: "Human feedback event that grounds the preference proposal.",
+  fieldPaths: "Interpretation fields the human answer will resolve.",
+  generate: "Whether to generate bounded legal options when none are cached.",
+  humanAttested: "Whether a human directly attested this external status.",
+  inferredFamily: "Operator-selected planning family, never a human fact by itself.",
+  label: "Human-readable name of the external action.",
+  locks: "Plan commitments that legal moves must not change.",
+  maxChars: "Requested JSON payload size, capped by the result-page budget.",
+  moveIds: "Legal move identities to simulate together.",
+  moves: "Plan-specific legal recovery moves compiled into the draft.",
+  name: "Human-readable plan name.",
+  nights: "Number of nights added to the stay.",
+  objective: "Outcome shape used to score the simulated route.",
+  orderChecksum: "Exact arrival-order checksum bound to construction.",
+  orderVersion: "Exact arrival-order version bound to construction.",
+  participantId: "Stable identity for one person in a group decision.",
+  participantName: "Human-readable name of one decision participant.",
+  position: "This participant's stated position in their own terms.",
+  positions: "Named participant positions preserved without averaging.",
+  preferenceLabels: "Human-readable preference dimensions the plan will score.",
+  profile: "Complete compiled-profile candidate to validate and stage.",
+  prompt: "Exact bounded question shown on the human surface.",
+  protocol: "Human-selected method for resolving the group decision.",
+  question: "Decision the named group is resolving.",
+  reason: "Human- or evidence-grounded reason for the proposed change.",
+  receiptId: "Immutable accepted-state receipt identity.",
+  resolvedOutcome: "Group outcome selected through the stated protocol.",
+  resultRef: "Content-addressed reference from a prior compact tool response.",
+  searchPolicy: "Bounds and objectives for deterministic legal-move search.",
+  segment: "Travel segment affected by the change.",
+  sessionId: "Expiring durable operator-session identity.",
+  sinceVersion: "Return arrival events strictly after this version.",
+  sourceArrival: "Exact reviewed arrival order that grounds this construction.",
+  sourcePaths: "Canonical or human-input paths grounding the dependency.",
+  stages: "Plan-specific human-facing stages for the adaptive surface.",
+  status: "Typed lifecycle, dependency, or external-action status.",
+  supersedesPlanId: "Immutable prior plan version this amendment replaces.",
+  title: "Concise human-readable label for this change or dependency.",
+  ttlSeconds: "Bounded lifetime of the saved operator session.",
+  type: "Typed semantic class of the plan change.",
+  unresolvedConflicts: "Disagreements intentionally preserved after the group decision.",
 };
 
 const fallbackParameterDescription = (name: string): string => {
@@ -1032,9 +1096,9 @@ export class FinitePlanWebMCPAdapter {
     return this.inventory();
   }
 
-  async enterKitchen(input: unknown = {}): Promise<ToolResult> {
+  async enterKitchen(input: unknown = {}, context: { signal?: AbortSignal } = {}): Promise<ToolResult> {
     if (!this.entryTool) return { ok: false, code: "WEBMCP_INITIALIZING", acceptedStateChanged: false, next: "Wait for Finite initialization, then retry this same entry call." };
-    return this.entryTool.execute(input);
+    return this.entryTool.execute(input, context);
   }
 
   private groupFromResult(result?: ToolResult): ToolsetGroup | null {

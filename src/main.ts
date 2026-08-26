@@ -346,7 +346,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
 }, arrivalRepository, true).useBoundedOutputs() : null;
 if (adapter) {
   const inventory = await adapter.register();
-  window.finiteEnterKitchen = (input) => adapter.enterKitchen(input);
+  window.finiteEnterKitchen = (input, context) => adapter.enterKitchen(input, context);
   webmcpReadiness.state = "ready";
   webmcpReadiness.inventory = inventory;
 }

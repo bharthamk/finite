@@ -147,6 +147,7 @@ testing, not basic Site Tools availability.
 - `FULL_JOURNEY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — twelve arrival-to-conclusion journeys, late shocks, stale-work invalidation, impossible-request refusal, lifecycle closure, reload, and repair receipt.
 - `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — all 54 operational and human failure points, their closed/controlled disposition, regression proof, and remaining external research boundaries.
 - `PRIZE_ENGINEERING_SCORECARD_2026-08-27.md` — current challenge criteria translated into executable product gates, measured WebMCP context budgets, proof status, and the remaining competition-grade engineering queue.
+- `WEBMCP_OPERATOR_CONTEXT_ACCEPTANCE_2026-08-27.md` — bounded service-ticket orientation, content-addressed detail recovery, metadata and cancellation budgets, fresh inline-Codex receipt, and remaining live-journey boundary.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

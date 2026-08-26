@@ -9,7 +9,7 @@ declare global {
 
   interface Window {
     finiteWebMCPReadiness?: FiniteWebMCPReadiness;
-    finiteEnterKitchen?: (input?: unknown) => Promise<import("./types.js").ToolResult>;
+    finiteEnterKitchen?: (input?: unknown, context?: { signal?: AbortSignal }) => Promise<import("./types.js").ToolResult>;
     finitePlanCanary?: {
       runtime: FinitePlanRuntime;
       adapter: FinitePlanWebMCPAdapter | null;
