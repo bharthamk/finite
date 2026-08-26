@@ -399,8 +399,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       : planNextAction(plan);
   if (orientation?.order.status === "interpretation_confirmed") {
     const planRoute = record(record(plan.work).route);
-    const constructionResult = record(record(plan.work).construction);
-    const constructionPacket = record(constructionResult.packet);
+    const constructionPacket = record(record(plan.work).construction);
     if (planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed") nextAction = planNextAction(plan);
     else if (constructionPacket.kind === "intake" && String(constructionPacket.assessmentCode).startsWith("INTAKE_FACTS_COMPLETE")) nextAction = {
       actionVersion: "finite-next-action.v1", stage: "construction_intake_ready", reason: "The reviewed order has a complete checksum-bound construction packet ready for clean compilation.",
@@ -411,9 +410,29 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       nextTool: "finite_resume_construction_packet", knownArgs: {}, derivedArgs: [], missingInputs: [], requiresHuman: false, exactQuestion: null, targetId: constructionPacket.packetId, authorityPresent: false,
     };
   }
-  const chefMenu = orientation || entryIntent === "start_new"
+  let chefMenu = orientation || entryIntent === "start_new"
     ? arrivalChefMenu(orientation)
     : plan.chefMenu;
+  if (orientation?.order.status === "interpretation_confirmed" && nextAction.stage !== "arrival_construction_ready") {
+    const currentMenu = record(chefMenu);
+    const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
+    const waitingForHuman = nextAction.stage === "awaiting_human";
+    const primary = {
+      menuItemId: waitingForHuman ? "construction_review_draft" : nextAction.stage === "construction_intake_ready" ? "construction_compile_intake" : "construction_resume_intake",
+      rank: 1,
+      kind: waitingForHuman ? "human_decision" : "operator_action",
+      title: waitingForHuman ? "Review the compiled kitchen" : nextAction.stage === "construction_intake_ready" ? "Compile the clean adaptive draft" : "Resume the saved construction work",
+      offer: waitingForHuman ? "The exact non-authoritative draft is waiting on the Site for human review." : nextAction.stage === "construction_intake_ready" ? "I will compile the checksum-bound intake without copying example moves or stages." : "I will restore the exact missing paths and continue without restarting or asking you to repeat the brief.",
+      status: waitingForHuman ? "input_required" : "ready",
+      viability: "not_yet_tested",
+      nextTool: nextAction.nextTool ?? null,
+      knownArgs: nextAction.knownArgs ?? {},
+      missingInputs: waitingForHuman ? nextAction.missingInputs ?? [] : [],
+      tradeoffs: waitingForHuman ? [] : ["Working assumptions remain visibly provisional until human review"],
+      evidence: { status: "not_required", refs: [] },
+    };
+    chefMenu = { ...currentMenu, items: [primary, ...currentItems.slice(1)] };
+  }
   const constructionFocused = orientation?.order.status === "interpretation_confirmed";
   const focusedPlan = constructionFocused ? {
     role: "source_guard_only",

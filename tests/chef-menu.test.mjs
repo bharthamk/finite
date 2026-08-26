@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
-import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
+import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles, compileProfile, getProfileDefinition } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter } from "../dist-test/src/webmcp.js";
@@ -194,6 +194,42 @@ test("a complete interpretation stops at human review instead of entering plan t
   assert.equal("consumerOutcome" in construction.plan, false);
   assert.match(construction.plan.note, /not the human's newly reviewed order/i);
   assert.equal(construction.acceptedStateChanged, false);
+});
+
+test("confirmed arrival resumes an existing construction packet instead of restarting from the example blueprint", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const arrivals = new MemoryArrivalRepository();
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+  const created = await arrivals.create({ idempotencyKey: "resume-construction-0001", rawOutcome: "Plan an open Europe trip.", sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "An open Europe trip.", complete: true });
+  await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const assessed = await runtime.assessPlanIntake({ profileId: "travel", name: "Europe trip" });
+  assert.equal(assessed.code, "INTAKE_FACTS_MISSING");
+  const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(entered.operatorPacket.nextAction.stage, "construction_intake_incomplete");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_resume_construction_packet");
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_resume_intake");
+  assert.equal(entered.plan.construction.packetId, assessed.constructionPacket.packetId);
+  assert.equal("consumerOutcome" in entered.plan, false);
+});
+
+test("entering an already-active construction route does not invalidate the page tool registry", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "stable-construction-tools-0001", rawOutcome: "Plan a Europe trip.", sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A Europe trip.", complete: true });
+  await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+  const blueprintBefore = host.tools.get("finite_get_plan_blueprint");
+  await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(host.tools.get("finite_get_plan_blueprint"), blueprintBefore);
 });
 
 test("a custom family plan receives a generic live menu rather than built-in story assumptions", async () => {
