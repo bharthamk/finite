@@ -16,9 +16,10 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Independent candidate re-derivation at stage, human approval, and apply so mutated numbers, context, hashes, approvals, locked moves, stale events, and impossible plans fail closed.
 - One active change-order lifecycle: a replacement order explicitly supersedes and invalidates every volatile candidate, staged packet, and approval from the prior order.
 - Immediate WebMCP-to-surface synchronization after tool completion, with revision, active-event, and manifest proof returned to Codex; renderer failure is reported without rewriting the deterministic tool outcome.
+- Provenance-bound evidence registration for Codex research: SHA-256 content and record hashes, deterministic identifiers, content deduplication, forced untrusted classification, freshness/materiality assessment, candidate binding, integrity refusal, and accepted-lineage-only persistence.
 - Human-only approval and confirmation creators, structurally excluded from WebMCP.
 - Accepted-state persistence with reload-safe receipt idempotency.
-- 18 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on profile switch.
+- 19 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on profile switch.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
 
@@ -66,3 +67,4 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `SURFACE_ACCEPTANCE_2026-08-26.md` — cross-profile, transaction, reload, responsive, and deployment receipt.
 - `SEARCH_ACCEPTANCE_2026-08-26.md` — bounded enumeration, deterministic ranking, mutation/refusal, and three-profile transaction receipt.
 - `LIVE_ORDER_ACCEPTANCE_2026-08-26.md` — active-order isolation, lifecycle recovery state, WebMCP-to-surface synchronization, and fail-contained rendering receipt.
+- `EVIDENCE_ACCEPTANCE_2026-08-26.md` — researched-evidence admission, quarantine, hashing, deduplication, integrity, event binding, and accepted-lineage persistence receipt.

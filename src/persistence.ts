@@ -72,5 +72,6 @@ const isPlanSnapshot = (value: unknown): value is PlanSnapshot => {
     && Array.isArray(value.correctionEvents)
     && Array.isArray(value.preferenceEvents)
     && Array.isArray(value.feedback)
+    && (value.evidenceRecords === undefined || Array.isArray(value.evidenceRecords))
     && Array.isArray(value.receipts);
 };

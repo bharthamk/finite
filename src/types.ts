@@ -160,6 +160,23 @@ export interface EvidenceRecord {
   observedAt: string;
   trust: "untrusted_external" | "human_supplied" | "trusted_internal";
   content: string;
+  contentHash: string;
+  recordHash: string;
+  provenance: {
+    sourceType: "url" | "document" | "connector" | "human_statement";
+    locator: string;
+    capturedAt: string;
+    submittedBy: "codex_operator" | "human" | "system_fixture";
+  };
+}
+
+export interface EvidenceRegistrationInput {
+  source: string;
+  sourceClass: string;
+  observedAt: string;
+  sourceType: EvidenceRecord["provenance"]["sourceType"];
+  locator: string;
+  content: string;
 }
 
 export interface ProfileDefinition {
@@ -246,6 +263,7 @@ export interface Candidate {
   resultingEntities: Record<string, EntityDefinition>;
   violations: ConstraintViolation[];
   evidenceAssessments: EvidenceAssessment[];
+  evidenceBindings: Array<Pick<EvidenceRecord, "evidenceId" | "contentHash" | "recordHash">>;
   warnings: ConstraintViolation[];
   valid: boolean;
   preferenceScore: number;
@@ -330,6 +348,7 @@ export interface PlanSnapshot {
   correctionEvents: CorrectionEvent[];
   preferenceEvents: PreferenceEvent[];
   feedback: FeedbackEvent[];
+  evidenceRecords?: EvidenceRecord[];
   receipts: Receipt[];
 }
 
