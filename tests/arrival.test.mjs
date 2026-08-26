@@ -172,8 +172,8 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 12);
-  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
+  assert.equal(inventory.length, 11);
+  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation"]) assert(host.tools.has(name));
   assert.equal(host.tools.has("finite_review_arrival_interpretation"), false);
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");

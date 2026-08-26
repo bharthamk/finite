@@ -100,7 +100,7 @@ test("a saved incomplete interpretation advances to one operator-ready clarifica
   const { arrivals, host } = await setup("travel");
   const created = await arrivals.create({ idempotencyKey: "arrival-lifecycle-0001", rawOutcome: "Plan a multi-stop Europe trip under A$10,000.", sourceSurface: "site" });
   const checkpoint = await host.execute("finite_checkpoint_arrival", { orderId: created.order.orderId, expectedVersion: 1 });
-  const interpreted = await host.execute("finite_stage_plan_interpretation", {
+  const interpreted = await host.execute("finite_stage_interpretation", {
     orderId: created.order.orderId,
     expectedVersion: checkpoint.order.version,
     inferredFamily: "travel",
@@ -227,7 +227,7 @@ test("confirmed arrival resumes an existing construction packet instead of resta
   assert.equal(assessed.code, "INTAKE_FACTS_MISSING");
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(entered.operatorPacket.nextAction.stage, "construction_intake_incomplete");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_resume_construction_packet");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_resume_build_packet");
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_resume_intake");
   assert.equal(entered.plan.construction.packetId, assessed.constructionPacket.packetId);
   assert.equal("consumerOutcome" in entered.plan, false);
@@ -349,29 +349,29 @@ test("generated candidates replace suggestions with a validated menu and preserv
   const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 3, nightlyMinor: 22_000, minimumBufferMinor: 50_000 });
   const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
   assert.equal(compared.code, "OPTIONS_AVAILABLE");
-  const menu = await host.execute("finite_get_chef_menu", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
-  assert.equal(menu.code, "CHEF_MENU_READY");
-  assert.equal(menu.nextAction.stage, "menu_ready");
-  assert.equal(menu.nextAction.requiresHuman, true);
-  assert.equal(menu.chefMenu.items.length, 3);
-  assert.equal(menu.chefMenu.items.every((item) => item.kind === "validated_option"), true);
-  assert.equal(menu.chefMenu.items.every((item) => item.viability === "constraint_validated"), true);
-  assert.equal(menu.chefMenu.items.every((item) => item.nextTool === "finite_stage_option"), true);
+  const menu = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
+  assert.equal(menu.code, "KITCHEN_ENTERED");
+  assert.equal(menu.operatorPacket.nextAction.stage, "menu_ready");
+  assert.equal(menu.operatorPacket.nextAction.requiresHuman, true);
+  assert.equal(menu.operatorPacket.chefMenu.items.length, 3);
+  assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.kind === "validated_option"), true);
+  assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.viability === "constraint_validated"), true);
+  assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.nextTool === "finite_stage_option"), true);
   assert.equal(runtime.kernel.stagedCandidate, null);
   assert.equal(runtime.kernel.revision, 1);
 
-  const chosen = menu.chefMenu.items[0];
+  const chosen = menu.operatorPacket.chefMenu.items[0];
   const staged = await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
   assert.equal(staged.code, "OPTION_STAGED");
   const approval = await runtime.kernel.humanApprove({ candidateId: chosen.candidateId, warningsAcknowledged: staged.staged.warnings.map((warning) => String(warning.code)) });
   assert.equal(approval.code, "HUMAN_APPROVAL_RECORDED");
-  const authorized = await host.execute("finite_get_chef_menu", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
-  assert.equal(authorized.nextAction.stage, "human_approved");
-  assert.equal(authorized.nextAction.nextTool, "finite_apply_approved_option");
-  assert.equal(authorized.nextAction.requiresHuman, false);
-  assert.equal(authorized.nextAction.knownArgs.candidateId, chosen.candidateId);
-  assert.equal(authorized.nextAction.knownArgs.approvalId, approval.approval.approvalId);
-  assert.equal(authorized.chefMenu.items.length, 1);
-  assert.equal(authorized.chefMenu.items[0].menuItemId, `approved_${chosen.candidateId}`);
+  const authorized = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
+  assert.equal(authorized.operatorPacket.nextAction.stage, "human_approved");
+  assert.equal(authorized.operatorPacket.nextAction.nextTool, "finite_apply_approved_option");
+  assert.equal(authorized.operatorPacket.nextAction.requiresHuman, false);
+  assert.equal(authorized.operatorPacket.nextAction.knownArgs.candidateId, chosen.candidateId);
+  assert.equal(authorized.operatorPacket.nextAction.knownArgs.approvalId, approval.approval.approvalId);
+  assert.equal(authorized.operatorPacket.chefMenu.items.length, 1);
+  assert.equal(authorized.operatorPacket.chefMenu.items[0].menuItemId, `approved_${chosen.candidateId}`);
   assert.equal(runtime.kernel.revision, 1);
 });

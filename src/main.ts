@@ -231,7 +231,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             </li>
             <li>
               <div class="build-log__index"><span>Build 01</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes 42 stable and three contextual tools against the page the human sees. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
+            <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes a route-sized kitchen against the page the human sees, with bounded content-addressed results instead of the full catalog or plan dumped into context. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
               <span class="build-status">Working</span>
             </li>
           </ol>
@@ -343,7 +343,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
   };
-}, arrivalRepository, true) : null;
+}, arrivalRepository, true).useBoundedOutputs() : null;
 if (adapter) {
   const inventory = await adapter.register();
   window.finiteEnterKitchen = (input) => adapter.enterKitchen(input);

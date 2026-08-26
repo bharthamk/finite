@@ -54,7 +54,7 @@ test("production adapter normalizes host input, excludes authority, and replaces
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 12);
+  assert.equal(inventory.length, 11);
   assert.equal(inventory.every((name) => name.startsWith("finite_")), true);
   assert.equal(inventory.includes("travel_extend_stay"), false);
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);

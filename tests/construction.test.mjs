@@ -146,11 +146,11 @@ test("storage failure refuses staged durability and WebMCP exposes continuity wi
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 12);
+  assert.equal(inventory.length, 11);
   assert.equal((await host.execute("finite_open_toolset", { group: "construction" })).code, "TOOLSET_READY");
   assert(host.tools.has("finite_get_construction_packet"));
-  assert(host.tools.has("finite_resume_construction_packet"));
-  assert(host.tools.has("finite_discard_construction_packet"));
+  assert(host.tools.has("finite_resume_build_packet"));
+  assert(host.tools.has("finite_discard_build_packet"));
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
   assert.equal(host.tools.get("finite_assess_plan_intake").annotations.readOnlyHint, false);
 
@@ -163,8 +163,8 @@ test("storage failure refuses staged durability and WebMCP exposes continuity wi
   assert.equal(runtime.planActivationConfirmation, null);
   const inspected = await host.execute("finite_get_construction_packet", {});
   assert.equal(inspected.packet.packetId, assessed.constructionPacket.packetId);
-  assert.equal((await host.execute("finite_resume_construction_packet", {})).code, "CONSTRUCTION_INTAKE_RESUMED");
-  assert.equal((await host.execute("finite_discard_construction_packet", { packetId: inspected.packet.packetId })).code, "CONSTRUCTION_PACKET_DISCARDED");
+  assert.equal((await host.execute("finite_resume_build_packet", {})).code, "CONSTRUCTION_INTAKE_RESUMED");
+  assert.equal((await host.execute("finite_discard_build_packet", { packetId: inspected.packet.packetId })).code, "CONSTRUCTION_PACKET_DISCARDED");
 });
 
 test("an authenticated construction packet follows the consumer across browser surfaces without carrying authority", async () => {

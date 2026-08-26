@@ -257,7 +257,7 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 12);
+  assert.equal(inventory.length, 11);
   assert.equal((await host.execute("finite_open_toolset", { group: "plan_management" })).code, "TOOLSET_READY");
   assert(host.tools.has("finite_get_plan_blueprint"));
   assert(host.tools.has("finite_assess_plan_intake"));

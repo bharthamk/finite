@@ -592,7 +592,7 @@ export interface WebMCPToolDefinition {
     readOnlyHint?: boolean;
     untrustedContentHint?: boolean;
   };
-  execute: (input?: unknown) => Promise<ToolResult>;
+  execute: (input?: unknown, context?: { signal?: AbortSignal }) => Promise<ToolResult>;
 }
 
 export interface WebMCPToolActivity {
