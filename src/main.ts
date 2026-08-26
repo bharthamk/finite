@@ -375,6 +375,17 @@ const objectiveLabel = (objective: string): string => ({
 }[objective] ?? objective.replaceAll("_", " "));
 
 const currentArrival = (): ArrivalOrder | null => arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
+const pendingDraftMatchesArrival = (): boolean => {
+  const draft = runtime.pendingPlanDraft;
+  const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
+  if (!draft || !orientation) return Boolean(draft);
+  const source = draft.sourceArrival;
+  if (!source) return orientation.interpretationIsCurrent;
+  return orientation.interpretationIsCurrent
+    && source.orderId === orientation.order.orderId
+    && source.orderVersion === orientation.exactOrderVersion
+    && source.orderChecksum === orientation.exactOrderChecksum;
+};
 
 const currentCodexHandoff = () => createCodexHandoff({
   siteOrigin: location.origin,
@@ -810,6 +821,11 @@ const renderReceipt = (receipt: Receipt): string => {
 const renderPlanDraft = (): string => {
   const draft = runtime.pendingPlanDraft;
   if (!draft) return "";
+  const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
+  if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Kitchen update queued">
+    <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous kitchen is no longer confirmable.</h2></div>
+    <div class="approval-copy"><p>Order v${orientation.exactOrderVersion} has newer human input. Codex must reconcile that exact version and compile a replacement before you can confirm anything.</p><div><span>Current order</span><strong>v${orientation.exactOrderVersion}</strong></div><div><span>Prior draft</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}… · stale</strong></div></div>
+  </section>`;
   const confirmation = runtime.planActivationConfirmation;
   const confirmed = confirmation?.draftId === draft.draftId;
   const amendment = draft.amendment;
@@ -939,6 +955,11 @@ const switchProfile = async (profileId: ProfileId): Promise<void> => {
 };
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {
+  if (!pendingDraftMatchesArrival()) {
+    announce("That draft is stale because the human order changed. Codex must compile a replacement from the latest version.");
+    await render();
+    return;
+  }
   const result = runtime.humanConfirmPlanDraft({ draftId });
   announce(result.ok ? "Exact plan draft confirmed. Codex may now activate it through the guarded WebMCP tool." : `The plan draft was not confirmed: ${result.code}`);
   await render();

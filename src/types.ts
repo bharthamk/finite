@@ -319,6 +319,13 @@ export interface PlanDraft {
   evidenceRecords: EvidenceRecord[];
   contentHash: string;
   amendment: PlanAmendmentBinding | null;
+  sourceArrival: ArrivalSourceBinding | null;
+}
+
+export interface ArrivalSourceBinding {
+  orderId: string;
+  orderVersion: number;
+  orderChecksum: string;
 }
 
 export interface PlanAmendmentDiff {
@@ -363,6 +370,7 @@ export type PlanConstructionPacket = PlanConstructionPacketBase & ({
     profile: ProfileDefinition;
     evidenceRecords: EvidenceRecord[];
     amendment: PlanAmendmentBinding | null;
+    sourceArrival: ArrivalSourceBinding | null;
   };
 });
 
@@ -404,6 +412,7 @@ export interface PlanCatalogEntry {
 }
 
 export interface PlanIntakeInput {
+  sourceArrival?: ArrivalSourceBinding;
   constructionMode?: "exact" | "adaptive_shell";
   profileId?: ProfileId;
   planId?: string;

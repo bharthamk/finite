@@ -6,6 +6,7 @@ import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
 import type {
   CompiledProfile,
+  ArrivalSourceBinding,
   EvidenceRecord,
   PlanActivationConfirmation,
   PlanActivationReceipt,
@@ -144,6 +145,7 @@ export class FinitePlanRuntime {
       status: expired ? "expired" : baseCurrent ? "resumable" : "stale",
       checksum: packet.checksum,
       humanAuthorityPersisted: false,
+      sourceArrival: packet.kind === "intake" ? clone(packet.payload.facts.sourceArrival ?? null) : clone(packet.payload.sourceArrival),
       ...(packet.kind === "intake"
         ? { assessmentCode: packet.payload.assessmentCode }
         : { draftId: packet.payload.draftId, planId: packet.payload.profile.planId, amendment: packet.payload.amendment ? { supersedesPlanId: packet.payload.amendment.supersedesPlanId, diffHash: packet.payload.amendment.diffHash } : null }),
@@ -218,11 +220,12 @@ export class FinitePlanRuntime {
       profileHash: profile.profileHash,
       evidenceBindings: packet.payload.evidenceRecords.map(({ evidenceId, contentHash, recordHash }) => ({ evidenceId, contentHash, recordHash })),
       amendment: amendment ? { supersedesPlanId: amendment.supersedesPlanId, supersedesProfileHash: amendment.supersedesProfileHash, supersedesRevision: amendment.supersedesRevision, diffHash: amendment.diffHash } : null,
+      ...(Object.prototype.hasOwnProperty.call(packet.payload, "sourceArrival") ? { sourceArrival: clone(packet.payload.sourceArrival ?? null) } : {}),
     };
     const contentHash = await sha256(bound);
     if (contentHash !== packet.payload.contentHash || packet.payload.draftId !== `plan_draft_${contentHash.slice(0, 16)}`) return { ok: false, code: "CONSTRUCTION_DRAFT_BINDING_MISMATCH", acceptedStateChanged: false };
     for (const evidence of packet.payload.evidenceRecords) this.kernel.evidence.set(evidence.evidenceId, clone(evidence));
-    this.pendingPlanDraft = { draftId: packet.payload.draftId, basePlanId: packet.basePlanId, baseRevision: packet.baseRevision, profile, evidenceRecords: clone(packet.payload.evidenceRecords), contentHash, amendment };
+    this.pendingPlanDraft = { draftId: packet.payload.draftId, basePlanId: packet.basePlanId, baseRevision: packet.baseRevision, profile, evidenceRecords: clone(packet.payload.evidenceRecords), contentHash, amendment, sourceArrival: clone(packet.payload.sourceArrival ?? null) };
     this.planActivationConfirmation = null;
     return { ok: true, code: "CONSTRUCTION_DRAFT_RESUMED", packet: this.constructionPacketSummary(packet), draft: { draftId: packet.payload.draftId, profileHash: profile.profileHash, contentHash, amendment: clone(amendment) }, humanConfirmationRestored: false, acceptedStateChanged: false, next: "Show the exact restored hashes and diff to the human again; prior confirmation was never persisted." };
   }
@@ -351,6 +354,7 @@ export class FinitePlanRuntime {
         contentHash: this.pendingPlanDraft.contentHash,
         humanConfirmed: this.planActivationConfirmation?.draftId === this.pendingPlanDraft.draftId,
         confirmationId: this.planActivationConfirmation?.draftId === this.pendingPlanDraft.draftId ? this.planActivationConfirmation.confirmationId : null,
+        sourceArrival: clone(this.pendingPlanDraft.sourceArrival),
         amendment: this.pendingPlanDraft.amendment ? { supersedesPlanId: this.pendingPlanDraft.amendment.supersedesPlanId, supersedesRevision: this.pendingPlanDraft.amendment.supersedesRevision, diffHash: this.pendingPlanDraft.amendment.diffHash, diff: clone(this.pendingPlanDraft.amendment.diff) } : null,
       } : null,
       acceptedStateChanged: false,
@@ -405,6 +409,14 @@ export class FinitePlanRuntime {
     const conflict = (path: string, code: string, prompt: string): void => { conflicts.push({ path, code, prompt }); };
     const boundedText = (value: unknown, max: number): boolean => typeof value === "string" && Boolean(value.trim()) && value.length <= max;
     const adaptiveShell = facts.constructionMode === "adaptive_shell";
+    if (facts.sourceArrival) {
+      if (!boundedText(facts.sourceArrival.orderId, 200)
+        || !Number.isSafeInteger(facts.sourceArrival.orderVersion)
+        || facts.sourceArrival.orderVersion < 1
+        || !/^[a-f0-9]{64}$/.test(facts.sourceArrival.orderChecksum)) {
+        conflict("sourceArrival", "ARRIVAL_BINDING_INVALID", "Bind arrival-built construction to one exact order id, positive version, and SHA-256 checksum.");
+      }
+    }
     if (facts.constructionMode !== undefined && facts.constructionMode !== "exact" && !adaptiveShell) conflict("constructionMode", "CONSTRUCTION_MODE_INVALID", "Use exact or adaptive_shell construction mode.");
     const dependencyIds = new Set<string>();
     for (let index = 0; index < (facts.dependencies ?? []).length; index += 1) {
@@ -586,7 +598,7 @@ export class FinitePlanRuntime {
         assumptions: clone((assessment.constructionAssumptions ?? []) as NonNullable<ProfileDefinition["surface"]["assumptions"]>),
       },
     };
-    const staged = await this.compileDraft(profile, null);
+    const staged = await this.compileDraft(profile, null, facts.sourceArrival ?? null);
     return staged.ok ? {
       ...staged,
       code: "PLAN_DRAFT_STAGED_FROM_INTAKE",
@@ -677,7 +689,7 @@ export class FinitePlanRuntime {
     };
   }
 
-  private async compileDraft(input: unknown, amendment: PlanAmendmentBinding | null): Promise<ToolResult> {
+  private async compileDraft(input: unknown, amendment: PlanAmendmentBinding | null, sourceArrival: ArrivalSourceBinding | null = null): Promise<ToolResult> {
     let profile: CompiledProfile;
     try {
       profile = await compileProfile(input);
@@ -705,6 +717,7 @@ export class FinitePlanRuntime {
       profileHash: profile.profileHash,
       evidenceBindings: evidenceRecords.map(({ evidenceId, contentHash, recordHash }) => ({ evidenceId, contentHash, recordHash })),
       amendment: amendment ? { supersedesPlanId: amendment.supersedesPlanId, supersedesProfileHash: amendment.supersedesProfileHash, supersedesRevision: amendment.supersedesRevision, diffHash: amendment.diffHash } : null,
+      sourceArrival: clone(sourceArrival),
     };
     const contentHash = await sha256(bound);
     const draft: PlanDraft = {
@@ -715,6 +728,7 @@ export class FinitePlanRuntime {
       evidenceRecords,
       contentHash,
       amendment,
+      sourceArrival: clone(sourceArrival),
     };
     this.pendingPlanDraft = draft;
     this.planActivationConfirmation = null;
@@ -726,6 +740,7 @@ export class FinitePlanRuntime {
         profile: profileDefinition(draft.profile),
         evidenceRecords: clone(draft.evidenceRecords),
         amendment: clone(draft.amendment),
+        sourceArrival: clone(draft.sourceArrival),
       });
     } catch (error) {
       this.pendingPlanDraft = null;

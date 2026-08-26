@@ -253,6 +253,32 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_review_draft");
 });
 
+test("new human input invalidates an older kitchen draft and restores the arrival reconcile route", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "draft-arrival-stale-0001", rawOutcome: "Plan a Europe trip.", sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A Europe trip.", complete: true });
+  const reviewed = await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const staged = await runtime.stagePlanDraft(runtime.getPlanBlueprint("travel").profile);
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  assert.equal(confirmed.code, "HUMAN_PLAN_ACTIVATION_CONFIRMED");
+  const updated = await arrivals.appendInput({ orderId: reviewed.order.orderId, expectedVersion: reviewed.order.version, kind: "preference", payload: { text: "Mix five-star stays with party hostels." }, sourceSurface: "site" });
+  assert.equal(updated.order.version, reviewed.order.version + 1);
+
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+  const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_delta_ready");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
+  assert.equal(entered.operatorPacket.nextAction.authorityPresent, false);
+  assert.equal(entered.plan.construction.status, "stale_arrival");
+  assert.equal(entered.plan.pendingDraft, null);
+  assert.equal(host.tools.has("finite_activate_confirmed_plan"), false);
+});
+
 test("a custom family plan receives a generic live menu rather than built-in story assumptions", async () => {
   const profiles = await compileBuiltInProfiles();
   const definition = getProfileDefinition("travel");

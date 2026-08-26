@@ -56,6 +56,19 @@ const proofInput = (value: unknown): unknown => {
 type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const exactArrivalBinding = (orientation: ArrivalOrientation): { orderId: string; orderVersion: number; orderChecksum: string } => ({
+  orderId: orientation.order.orderId,
+  orderVersion: orientation.exactOrderVersion,
+  orderChecksum: orientation.exactOrderChecksum,
+});
+const constructionMatchesArrival = (construction: Record<string, unknown>, orientation: ArrivalOrientation): boolean => {
+  const source = record(construction.sourceArrival);
+  if (!Object.keys(source).length) return orientation.interpretationIsCurrent;
+  return orientation.interpretationIsCurrent
+    && String(source.orderId ?? "") === orientation.order.orderId
+    && Number(source.orderVersion) === orientation.exactOrderVersion
+    && String(source.orderChecksum ?? "") === orientation.exactOrderChecksum;
+};
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
 const toolsetGroups = {
@@ -400,10 +413,11 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     : entryIntent === "start_new"
       ? newPlanNextAction()
       : planNextAction(plan);
-  if (orientation?.order.status === "interpretation_confirmed") {
+  const constructionPacket = record(record(plan.work).construction);
+  const constructionCurrent = orientation ? constructionMatchesArrival(constructionPacket, orientation) : true;
+  if (orientation?.order.status === "interpretation_confirmed" && orientation.interpretationIsCurrent) {
     const planRoute = record(record(plan.work).route);
-    const constructionPacket = record(record(plan.work).construction);
-    if (planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed") nextAction = planNextAction(plan);
+    if ((planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed") && constructionCurrent) nextAction = planNextAction(plan);
     else if (constructionPacket.kind === "intake" && String(constructionPacket.assessmentCode).startsWith("INTAKE_FACTS_COMPLETE")) nextAction = {
       actionVersion: "finite-next-action.v1", stage: "construction_intake_ready", reason: "The reviewed order has a complete checksum-bound construction packet ready for clean compilation.",
       nextTool: "finite_compile_intake_to_draft", knownArgs: { packetId: constructionPacket.packetId, expectedChecksum: constructionPacket.checksum }, derivedArgs: [], missingInputs: [], requiresHuman: false, exactQuestion: null, targetId: constructionPacket.packetId, authorityPresent: false,
@@ -416,7 +430,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   let chefMenu = orientation || entryIntent === "start_new"
     ? arrivalChefMenu(orientation)
     : plan.chefMenu;
-  if (orientation?.order.status === "interpretation_confirmed" && nextAction.stage !== "arrival_construction_ready") {
+  if (orientation?.order.status === "interpretation_confirmed" && orientation.interpretationIsCurrent && constructionCurrent && nextAction.stage !== "arrival_construction_ready") {
     const currentMenu = record(chefMenu);
     const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
     const waitingForHuman = nextAction.stage === "awaiting_human";
@@ -436,15 +450,18 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     };
     chefMenu = { ...currentMenu, items: [primary, ...currentItems.slice(1)] };
   }
-  const constructionFocused = orientation?.order.status === "interpretation_confirmed";
+  const constructionFocused = Boolean(orientation);
+  const focusedConstruction = constructionCurrent
+    ? constructionPacket
+    : { ...constructionPacket, status: "stale_arrival", staleReason: "The human order advanced after this packet was compiled.", currentArrival: exactArrivalBinding(orientation!), sourceArrival: constructionPacket.sourceArrival ?? null };
   const focusedPlan = constructionFocused ? {
     role: "source_guard_only",
     note: "This accepted plan is the persistence and concurrency base for construction. It is not the human's newly reviewed order and its consumer outcome, menu, moves, and sample surface are intentionally omitted.",
     active: plan.active,
     authority: plan.authority,
     persistence: plan.persistence,
-    construction: record(record(plan.work).construction),
-    pendingDraft: record(plan.catalog).pendingDraft ?? null,
+    construction: focusedConstruction,
+    pendingDraft: constructionCurrent ? record(plan.catalog).pendingDraft ?? null : null,
   } : plan;
   const next = nextAction.exactQuestion
     ? String(nextAction.exactQuestion)
@@ -533,7 +550,18 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_resume_human_handoff", title: "Resume an exact human handoff", description: "Resume one unexpired, unconsumed human-created authority challenge only after the exact candidate has been independently rebuilt and staged on this device.", inputSchema: objectSchema({ challengeId: string }, ["challengeId"]), execute: (input) => runtime.kernel.resumeHumanAuthorityChallenge(input as never) }),
   define({ name: "finite_list_plans", title: "List compiled finite plans", description: "Read the active plan, available built-in and human-confirmed plans, and any staged activation awaiting the human.", readOnly: true, execute: () => runtime.listPlans() }),
   define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid travel, renovation, or event-family profile plus its fixed fields, conservation law, evidence prerequisites, semantic requirements, bounds, and authority path.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
-  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } } }), execute: (input) => runtime.assessPlanIntake(input) }),
+  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Arrival construction is bound automatically to the exact current reviewed order. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input) => {
+    const opened = await arrival.open();
+    if (opened.ok && opened.orientation) {
+      const orientation = opened.orientation;
+      if (orientation.order.status !== "interpretation_confirmed" || !orientation.interpretationIsCurrent) return { ok: false, code: "ARRIVAL_NOT_READY_FOR_CONSTRUCTION", currentArrival: exactArrivalBinding(orientation), acceptedStateChanged: false, next: "Reconcile the latest human input and obtain review of the replacement interpretation before compiling another draft." };
+      const supplied = record(input.sourceArrival);
+      const current = exactArrivalBinding(orientation);
+      if (Object.keys(supplied).length && (String(supplied.orderId) !== current.orderId || Number(supplied.orderVersion) !== current.orderVersion || String(supplied.orderChecksum) !== current.orderChecksum)) return { ok: false, code: "ARRIVAL_CONSTRUCTION_GUARD_MISMATCH", suppliedArrival: supplied, currentArrival: current, acceptedStateChanged: false, next: "Re-enter the kitchen and rebuild from the canonical reviewed order." };
+      return runtime.assessPlanIntake({ ...input, sourceArrival: current });
+    }
+    return runtime.assessPlanIntake(input);
+  } }),
   define({ name: "finite_compile_intake_to_draft", title: "Compile the verified intake into a clean draft", description: "Compile one exact resumable intake packet into a family-safe, non-authoritative plan draft without carrying example-specific moves or stages across. Working assumptions and dependencies remain visible for human review.", inputSchema: objectSchema({ packetId: string, expectedChecksum: { type: "string", minLength: 64, maxLength: 64 } }, ["packetId", "expectedChecksum"]), execute: (input) => runtime.compileIntakeToDraft({ packetId: String(input.packetId), expectedChecksum: String(input.expectedChecksum) }) }),
   define({ name: "finite_get_construction_packet", title: "Inspect resumable construction work", description: "Read checksum, expiry, source-plan guard, work kind, and safe status for the one durable non-authoritative intake or draft packet without exposing human authority.", readOnly: true, execute: () => runtime.getConstructionPacket() }),
   define({ name: "finite_resume_construction_packet", title: "Resume verified construction work", description: "Restore only a checksum-valid, unexpired packet bound to the exact active plan/profile/revision. Human confirmation is never restored.", execute: () => runtime.resumeConstructionPacket() }),
@@ -558,7 +586,21 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_export_plan_receipt", title: "Export accepted lineage", description: "Export the persisted snapshot and one receipt with a deterministic checksum.", readOnly: true, inputSchema: objectSchema({ receiptId: string }, ["receiptId"]), execute: (input) => runtime.kernel.exportReceipt(input as never) }),
   define({ name: "finite_stage_plan_draft", title: "Compile a bounded plan draft", description: "Validate and freeze a complete profile definition for exact human confirmation. Staging cannot activate or alter accepted plan truth.", inputSchema: objectSchema({ profile: { type: "object" } }, ["profile"]), execute: ({ profile }) => runtime.stagePlanDraft(profile) }),
   define({ name: "finite_stage_plan_amendment", title: "Stage an immutable plan amendment", description: "Compile a new plan version against the exact active plan/revision, require a material semantic diff, and freeze its supersession lineage for human confirmation.", inputSchema: objectSchema({ profile: { type: "object" }, supersedesPlanId: string, expectedRevision: revision }, ["profile", "supersedesPlanId", "expectedRevision"]), execute: (input) => runtime.stagePlanAmendment(input as never) }),
-  define({ name: "finite_activate_confirmed_plan", title: "Activate a human-confirmed plan", description: "Activate only the exact compiled new-plan or amendment draft confirmed by a human, bound to the active plan, revision, evidence, and semantic diff.", inputSchema: objectSchema({ draftId: string, confirmationId: string, expectedPlanId: string, expectedRevision: revision, idempotencyKey }, ["draftId", "confirmationId", "expectedPlanId", "expectedRevision", "idempotencyKey"]), execute: async (input) => { const result = await runtime.activateConfirmedPlanDraft(input as never); if (result.ok && ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED"].includes(result.code)) await onProfileChanged(); return result; } }),
+  define({ name: "finite_activate_confirmed_plan", title: "Activate a human-confirmed plan", description: "Activate only the exact compiled new-plan or amendment draft confirmed by a human, bound to the active plan, revision, evidence, semantic diff, and any source arrival version.", inputSchema: objectSchema({ draftId: string, confirmationId: string, expectedPlanId: string, expectedRevision: revision, idempotencyKey }, ["draftId", "confirmationId", "expectedPlanId", "expectedRevision", "idempotencyKey"]), execute: async (input) => {
+    const draft = runtime.pendingPlanDraft;
+    const opened = await arrival.open();
+    if (draft && opened.ok && opened.orientation) {
+      const orientation = opened.orientation;
+      const source = draft.sourceArrival;
+      const stale = source
+        ? source.orderId !== orientation.order.orderId || source.orderVersion !== orientation.exactOrderVersion || source.orderChecksum !== orientation.exactOrderChecksum || !orientation.interpretationIsCurrent
+        : !orientation.interpretationIsCurrent;
+      if (stale) return { ok: false, code: "PLAN_DRAFT_ARRIVAL_STALE", draftId: draft.draftId, sourceArrival: source, currentArrival: exactArrivalBinding(orientation), acceptedStateChanged: false, next: "Reconcile the latest human input and compile a replacement draft. The prior confirmation is unusable." };
+    }
+    const result = await runtime.activateConfirmedPlanDraft(input as never);
+    if (result.ok && ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED"].includes(result.code)) await onProfileChanged();
+    return result;
+  } }),
   define({ name: "finite_switch_plan", title: "Switch to a compiled plan", description: "Verify durable accepted truth and switch to an exact planId already in the compiled catalog.", inputSchema: objectSchema({ planId: string }, ["planId"]), execute: async ({ planId }) => { const result = await runtime.switchPlanPersisted(String(planId)); if (result.ok) await onProfileChanged(); return result; } }),
   define({ name: "finite_switch_profile", title: "Switch active finite plan", description: "Switch travel, renovation, or event, persist current truth, invalidate page staging, and replace contextual tools.", inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: async ({ profileId }) => { const result = runtime.switchProfile(profileId as ProfileId); if (result.ok) await onProfileChanged(); return result; } }),
 ];
