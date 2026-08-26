@@ -57,6 +57,7 @@ This is an engineering acceptance run, not a claim that Finite booked travel, hi
 - Production Vite/Worker build: pass.
 - Drizzle migration validation: pass.
 - Static release shell: exact client hashes selected behind `full-journey-v46` and `no-store`; the source HTML carries the same marker so static-first hosting cannot report an older build.
+- Live owner-private proof: Sites version 46, commit `1c5035e4c8b78116cc501996b0e81370de2ded90`, authenticated build marker `full-journey-v46`, exact JS/CSS hashes, 78px main start, and no horizontal overflow at 1280px. The existing returned-draft state and accepted plan were not mutated during visual acceptance.
 - Key executable proof: `tests/full-journey-endurance.test.mjs`.
 
 ## Remaining boundary
