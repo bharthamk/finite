@@ -56,7 +56,7 @@ This is an engineering acceptance run, not a claim that Finite booked travel, hi
 - TypeScript: pass.
 - Production Vite/Worker build: pass.
 - Drizzle migration validation: pass.
-- Static release shell: exact client hashes selected behind `full-journey-v45` and `no-store`.
+- Static release shell: exact client hashes selected behind `full-journey-v46` and `no-store`; the source HTML carries the same marker so static-first hosting cannot report an older build.
 - Key executable proof: `tests/full-journey-endurance.test.mjs`.
 
 ## Remaining boundary

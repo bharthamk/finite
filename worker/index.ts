@@ -13,7 +13,7 @@ interface WorkerEnvironment {
 }
 
 export const finiteRelease = {
-  build: "full-journey-v45",
+  build: "full-journey-v46",
   script: "/assets/index-1aJ-MMFh.js",
   stylesheet: "/assets/index-DB9QVcV0.css",
 } as const;

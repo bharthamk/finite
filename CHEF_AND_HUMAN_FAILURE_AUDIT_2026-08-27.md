@@ -15,7 +15,7 @@ This register is written from the operator's side of the kitchen. “Chef burden
 | 7 | Plan activates but originating arrival remains open | Terminal `plan_activated` arrival event | Reconcile closure after transport failure; add an outbox if API boundaries separate |
 | 8 | Activation succeeds but response is lost | Idempotent activation receipt replay | Retry only with the identical key and independently close the arrival |
 | 9 | Two Codex/browser operators write the same revision | Optimistic concurrency and rollback | Re-enter, explain the winner, rebuild rather than merge authority |
-| 10 | Browser cache is newer than local code but older than API | Exact no-store release shell and asset hashes | Automate release-manifest generation instead of hand-maintained hashes |
+| 10 | Browser cache or static-first HTML reports an older build than its loaded assets | Exact no-store release shell, matching source marker, and asset hashes | Automate release-manifest generation instead of hand-maintained hashes |
 | 11 | A returned draft is mistaken for a discarded draft | Durable returned-review packet and separate Start over | Codex must materially address the feedback, not just reword the same draft |
 | 12 | Construction packet expires mid-task | Seven-day expiry and explicit status | Preserve source facts in human-readable form; recompile without pretending authority survived |
 | 13 | Typed intake silently inherits example details | Clean family compiler and intake-only moves/stages | Audit names, amounts, places, and stages for template leakage before review |
