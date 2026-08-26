@@ -57,9 +57,13 @@ const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string
         ? savedBoundaryRecord.prompt
         : "";
   const firstGap = orientation.missing[0] ?? orientation.contradictions[0] ?? "the next decision that only you can make";
-  const prompt = promptValue.trim()
-    ? /[?]$/.test(promptValue.trim()) ? promptValue.trim() : `Before I test routes, I need one detail from you: ${promptValue.trim()}.`
-    : `Before I test routes, I need one detail from you: ${firstGap.replace(/[.]+$/, "")}.`;
+  const cleanPromptValue = promptValue.trim().replace(/[.]+$/, "");
+  const cleanGap = firstGap.trim().replace(/[.]+$/, "");
+  const prompt = cleanPromptValue
+    ? /[?]$/.test(promptValue.trim())
+      ? promptValue.trim()
+      : `Could you ${cleanPromptValue.charAt(0).toLowerCase()}${cleanPromptValue.slice(1)}?`
+    : `What should I use for ${cleanGap.charAt(0).toLowerCase()}${cleanGap.slice(1)}?`;
   const requestedAnswerKind = typeof savedBoundaryRecord.answerKind === "string" ? savedBoundaryRecord.answerKind : "text";
   const fieldPaths = Array.isArray(savedBoundaryRecord.fieldPaths) ? savedBoundaryRecord.fieldPaths.map(String) : ["interpretation.nextHumanBoundary"];
   const choices = Array.isArray(savedBoundaryRecord.choices) ? savedBoundaryRecord.choices.map(String) : [];
