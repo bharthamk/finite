@@ -3,6 +3,7 @@ import type { ArrivalOrder } from "./arrival.js";
 export interface CodexHandoffContext {
   siteOrigin: string;
   inline: boolean;
+  entryIntent?: "start_new" | "continue_current" | "resume_handoff";
   order: Pick<ArrivalOrder, "orderId" | "version" | "status" | "lastOperatorCheckpoint" | "checksum"> | null;
   plan: { planId: string; profileId: string; revision: number };
 }
@@ -16,11 +17,12 @@ export interface CodexHandoff {
   copiedPayload: {
     siteOrigin: string;
     entryTool: "finite_enter_kitchen";
+    entryIntent: "start_new" | "continue_current" | "resume_handoff";
     orderId: string | null;
     expectedOrderVersion: number | null;
     expectedOrderChecksum: string | null;
-    expectedPlanId: string;
-    expectedPlanRevision: number;
+    expectedPlanId: string | null;
+    expectedPlanRevision: number | null;
   };
 }
 
@@ -34,24 +36,28 @@ const buttonLabel = (): string => "Hand off to Codex";
 export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff => {
   const siteOrigin = cleanOrigin(context.siteOrigin);
   const order = context.order;
+  const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
   const toolInput = {
+    entryIntent,
     ...(order ? {
       orderId: order.orderId,
       expectedOrderVersion: order.version,
       expectedOrderChecksum: order.checksum,
     } : {}),
-    expectedPlanId: context.plan.planId,
-    expectedPlanRevision: context.plan.revision,
+    ...(entryIntent === "start_new" ? {} : {
+      expectedPlanId: context.plan.planId,
+      expectedPlanRevision: context.plan.revision,
+    }),
   };
   const prompt = [
-    "Take over this Finite plan as the Codex operator.",
+    entryIntent === "start_new" ? "Start a new Finite plan as the Codex operator." : "Take over this Finite plan as the Codex operator.",
     "",
     `You are the chef. Finite at ${siteOrigin} is your kitchen. The human is the consumer: bring them in for preferences, decisions, and approval, not application operation.`,
     "",
-    "Open the Finite Site in Codex's built-in browser. Discover its page tools, then make this your first call:",
+    "Open the Finite Site in Codex's built-in browser. Discover its page tools. If finite_enter_kitchen is not visible but finite_webmcp_status is, call the status tool, wait for WEBMCP_READY, refresh discovery, then make this your first kitchen call:",
     `finite_enter_kitchen(${JSON.stringify(toolInput)})`,
     "",
-    "Treat the response as the canonical recipe book, current order rail, and work queue. Read any arrival delta before acting. If the handoff receipt is older than the live state, continue from the newer canonical state returned by Finite.",
+    "Treat the response as the canonical recipe book, current order rail, and work queue. Read its one authoritative nextAction and chefMenu before acting. Offer the menu in human language; never describe a suggested route as constraint-validated. If the handoff receipt is older than the live state, continue from the newer canonical state returned by Finite.",
     "",
     "Do not reconstruct the plan from this prompt, ask the human to explain the application, or infer missing facts or human authority. Work through Finite and return to the human only when their judgment, preference, or approval is genuinely needed.",
     "",
@@ -69,11 +75,12 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     copiedPayload: {
       siteOrigin,
       entryTool: "finite_enter_kitchen",
+      entryIntent,
       orderId: order?.orderId ?? null,
       expectedOrderVersion: order?.version ?? null,
       expectedOrderChecksum: order?.checksum ?? null,
-      expectedPlanId: context.plan.planId,
-      expectedPlanRevision: context.plan.revision,
+      expectedPlanId: entryIntent === "start_new" ? null : context.plan.planId,
+      expectedPlanRevision: entryIntent === "start_new" ? null : context.plan.revision,
     },
   };
 };

@@ -1,5 +1,6 @@
 import { clone, makeId, sha256 } from "./crypto.js";
 import { AcceptedTruthRepositoryError, type AcceptedTruthRepository, type OperatorSession } from "./accepted-truth.js";
+import { buildChefMenu, type KitchenRoute } from "./chef-menu.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
@@ -249,7 +250,7 @@ export class FinitePlanRuntime {
     const construction = await this.getConstructionPacket();
     const activeEvent = this.kernel.events.find((event) => event.eventId === this.kernel.activeEventId) ?? null;
 
-    let route: Record<string, unknown>;
+    let route: KitchenRoute;
     if (this.pendingPlanDraft) {
       route = this.planActivationConfirmation
         ? { stage: "human_confirmed", nextTool: "finite_activate_confirmed_plan", targetId: this.pendingPlanDraft.draftId, authorityPresent: true }
@@ -307,6 +308,7 @@ export class FinitePlanRuntime {
         activeEvent: activeEvent ? clone(activeEvent) : null,
         construction: construction.ok ? clone(construction.packet) : { status: "none", code: construction.code },
       },
+      chefMenu: buildChefMenu(this.kernel, route),
       catalog: {
         activePlanId: catalog.activePlanId,
         plans: clone(catalog.plans),

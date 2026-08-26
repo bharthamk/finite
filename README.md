@@ -17,7 +17,8 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Typed entities, executable relationships, locks, legal moves, evidence materiality/freshness, and preference weights.
 - Compiled bounded option search that enumerates legal move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
 - Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
-- One-call operator orientation: `finite_open_kitchen` returns exact accepted truth, the family-specific human outcome, legal/blocked move space, pending work, authority state, catalog context, and the next safe route behind a SHA-256 brief hash.
+- One-call operator orientation: `finite_enter_kitchen` arbitrates arrival-versus-plan work and returns exact accepted truth, one authoritative `nextAction`, known and missing inputs, authority state, and a state-grounded chef menu without asking the human to explain the application.
+- A deterministic chef-menu contract distinguishes untested suggestions, research routes, constraint-validated options, and human-authority decisions. Codex may recommend and serve the menu; Finite alone decides when an option is proven viable, and the human alone chooses or authorizes it.
 - Content-addressed operation proofs on every stable and contextual WebMCP result, including canonical input/result hashes and exact plan/profile/revision context before and after execution.
 - Independent candidate re-derivation at stage, human approval, and apply so mutated numbers, context, hashes, approvals, locked moves, stale events, and impossible plans fail closed.
 - One active change-order lifecycle: a replacement order explicitly supersedes and invalidates every volatile candidate, staged packet, and approval from the prior order.
@@ -38,7 +39,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- 43 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; `finite_enter_kitchen` is the deterministic first call from a copied handoff, and all human authority creators remain absent.
+- 44 stable kitchen tools plus three profile-contextual tools, dynamically replaced on plan switch, with one content-free page-start readiness tool preventing an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations; there is no backend model or application-owned agent.
 

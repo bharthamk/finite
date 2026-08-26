@@ -97,7 +97,7 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 46);
+  assert.equal(inventory.length, 47);
   for (const name of ["finite_enter_kitchen", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
@@ -131,7 +131,9 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.equal(reentered.code, "KITCHEN_ENTERED_WITH_CURRENT_STATE");
   assert.equal(reentered.handoffReceipt.matchedCurrentState, false);
   assert.equal(reentered.arrival.orientation.exactOrderVersion, 2);
-  assert.match(reentered.next, /Process 2 human-supplied updates/);
+  assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_delta_ready");
+  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_checkpoint_arrival");
+  assert.match(reentered.operatorPacket.nextAction.reason, /2 human-supplied arrival update/);
 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
   assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");

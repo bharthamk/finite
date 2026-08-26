@@ -189,9 +189,16 @@ one reload, and one injected persistence failure where relevant.
 - Tool discovery changes when the active plan changes.
 - Every result carries an operation proof: input hash, before/after context,
   result code, state-change claim, and content hash.
-- A single `finite_open_kitchen` read gives Codex enough verified context to
-  choose the next call without reconstructing state through many speculative
-  reads.
+- A single `finite_enter_kitchen` read arbitrates arrival-versus-plan priority
+  and returns exactly one `nextAction`, with known arguments, derived arguments,
+  missing inputs, allowed sources, the precise human question when needed, and
+  no contradictory secondary route.
+- `finite_get_chef_menu` returns at most three current dishes and distinguishes
+  untested suggestions, research routes, constraint-validated options, blocked
+  routes, and human-authority decisions. Menu selection never creates approval.
+- A content-free page-start status tool registers before the full application
+  hydrates so Codex sees initializing, ready, signed-out, or failed rather than
+  mistaking a transient empty registry for a tool-free page.
 
 ### 5.2 Application command gateway
 

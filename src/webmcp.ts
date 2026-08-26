@@ -1,5 +1,5 @@
 import { sha256 } from "./crypto.js";
-import { HttpArrivalRepository, type ArrivalInputKind, type ArrivalRepository } from "./arrival.js";
+import { HttpArrivalRepository, type ArrivalInputKind, type ArrivalOrientation, type ArrivalRepository } from "./arrival.js";
 import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
 
@@ -31,6 +31,116 @@ const proofInput = (value: unknown): unknown => {
   catch { return value; }
 };
 
+type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
+
+const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const planNextAction = (brief: Record<string, unknown>): Record<string, unknown> => {
+  const work = record(brief.work);
+  const route = record(work.route);
+  const chefMenu = record(brief.chefMenu);
+  const items = Array.isArray(chefMenu.items) ? chefMenu.items.map(record) : [];
+  const stage = String(route.stage ?? "unknown");
+  const targetId = route.targetId ?? null;
+  const authorityPresent = route.authorityPresent === true;
+
+  if (stage === "ready" && items.length) {
+    return {
+      actionVersion: "finite-next-action.v1",
+      stage: "menu_ready",
+      reason: "The accepted plan is ready for work, and Finite has prepared bounded routes from current state. The human chooses the dish; Codex operates the route.",
+      nextTool: null,
+      intendedTools: items.map((item) => item.nextTool).filter(Boolean),
+      knownArgs: { menuItemIds: items.map((item) => item.menuItemId) },
+      derivedArgs: [],
+      missingInputs: [{ argument: "menu_choice", source: "human", reason: "The route changes time, cost, experience, or certainty.", question: "Which route would you like me to take, or should I recommend one?" }],
+      requiresHuman: true,
+      exactQuestion: "I have a short menu based on the live plan. Would you like me to recommend a route, research live inputs first, or work to a limit you choose?",
+      targetId,
+      authorityPresent,
+    };
+  }
+  if (stage === "change_recorded") {
+    return {
+      actionVersion: "finite-next-action.v1", stage, reason: "A typed change is recorded but no constraint-validated options exist yet.",
+      nextTool: "finite_compare_options", knownArgs: { eventId: targetId, generate: true }, derivedArgs: [], missingInputs: [], requiresHuman: false, exactQuestion: null, targetId, authorityPresent,
+    };
+  }
+  if (stage === "options_available") {
+    return {
+      actionVersion: "finite-next-action.v1", stage: "menu_ready", reason: "Constraint-validated options are ready to be served to the human.",
+      nextTool: null, intendedTools: ["finite_stage_option"], knownArgs: { menuItemIds: items.map((item) => item.menuItemId) }, derivedArgs: [],
+      missingInputs: [{ argument: "candidate_choice", source: "human", reason: "Codex may recommend, but the human chooses the outcome to stage.", question: "Which validated outcome should I prepare for exact approval?" }],
+      requiresHuman: true, exactQuestion: "I have compared the viable outcomes. Which one should I prepare for approval?", targetId, authorityPresent,
+    };
+  }
+  if (stage === "awaiting_human") {
+    const item = items[0] ?? {};
+    const missingInputs = Array.isArray(item.missingInputs) ? item.missingInputs : [{ argument: String(route.humanAction ?? "human_action"), source: "human", reason: "Finite requires an explicit human action." }];
+    return {
+      actionVersion: "finite-next-action.v1", stage, reason: "Prepared work is waiting at the human-authority boundary.", nextTool: null,
+      knownArgs: targetId ? { targetId } : {}, derivedArgs: [], missingInputs, requiresHuman: true,
+      exactQuestion: record(missingInputs[0]).question ?? "Review the prepared outcome and choose whether to approve, return, or change it.", targetId, authorityPresent: false,
+    };
+  }
+  if (stage === "human_approved" && items[0]) {
+    const item = items[0]!;
+    return {
+      actionVersion: "finite-next-action.v1", stage, reason: "The staged candidate carries matching human authority and is ready for one exact idempotent apply.",
+      nextTool: item.nextTool ?? "finite_apply_approved_option", knownArgs: item.knownArgs ?? {}, derivedArgs: [],
+      missingInputs: Array.isArray(item.missingInputs) ? item.missingInputs : [], requiresHuman: false, exactQuestion: null, targetId, authorityPresent: true,
+    };
+  }
+  return {
+    actionVersion: "finite-next-action.v1", stage, reason: `Finite selected the ${stage} route from canonical state.`,
+    nextTool: route.nextTool ?? null, knownArgs: targetId ? { targetId } : {}, derivedArgs: [], missingInputs: [],
+    requiresHuman: !route.nextTool, exactQuestion: route.humanAction ? `Please complete: ${String(route.humanAction).replaceAll("_", " ")}.` : null, targetId, authorityPresent,
+  };
+};
+
+const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unknown> => {
+  if (orientation.unprocessedHumanInputCount > 0) return {
+    actionVersion: "finite-next-action.v1", stage: "arrival_delta_ready", reason: `${orientation.unprocessedHumanInputCount} human-supplied arrival update(s) have not been checkpointed by Codex.`,
+    nextTool: "finite_checkpoint_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
+  };
+  if (orientation.order.status === "clarification_required" && orientation.order.pendingClarification) return {
+    actionVersion: "finite-next-action.v1", stage: "awaiting_human", reason: "A bounded clarification is already staged on the Site.",
+    nextTool: null, knownArgs: { orderId: orientation.order.orderId, questionId: orientation.order.pendingClarification.questionId }, derivedArgs: [],
+    missingInputs: [{ argument: "clarification_answer", source: "human", reason: "Codex cannot answer a staged human question.", question: orientation.order.pendingClarification.prompt }],
+    requiresHuman: true, exactQuestion: orientation.order.pendingClarification.prompt, targetId: orientation.order.orderId, authorityPresent: false,
+  };
+  return {
+    actionVersion: "finite-next-action.v1", stage: "arrival_review", reason: "The human order is current and ready for bounded interpretation.",
+    nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
+  };
+};
+
+const newPlanNextAction = (): Record<string, unknown> => ({
+  actionVersion: "finite-next-action.v1", stage: "outcome_required", reason: "This handoff began from the empty arrival surface and no human order is waiting.",
+  nextTool: "finite_create_arrival_order", knownArgs: {}, derivedArgs: [],
+  missingInputs: [{ argument: "rawOutcome", source: "human", reason: "The human's desired outcome begins the plan and must not be invented by Codex.", question: "What are we making happen?" }],
+  requiresHuman: true, exactQuestion: "What are we making happen? Tell me the outcome in ordinary language; we can work out the structure together.", targetId: null, authorityPresent: false,
+});
+
+const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string, unknown> => ({
+  menuVersion: "finite-chef-menu.v1",
+  basis: orientation
+    ? { orderId: orientation.order.orderId, orderVersion: orientation.exactOrderVersion, orderChecksum: orientation.exactOrderChecksum, status: orientation.order.status }
+    : { orderId: null, status: "no_arrival" },
+  items: orientation ? [
+    { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will read every saved detail and continue without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_checkpoint_arrival" : null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: [], evidence: { status: "available", refs: [] } },
+    { menuItemId: "arrival_clarify_only_material_gaps", rank: 2, kind: "suggested_route", title: "Ask only what materially blocks the plan", offer: "I will return with the smallest decision or fact that only you can provide.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_clarification", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["May pause the kitchen for one human answer"], evidence: { status: "not_required", refs: [] } },
+    { menuItemId: "arrival_prepare_interpretation", rank: 3, kind: "suggested_route", title: "Prepare the plan for review", offer: "I will separate known facts, inferences, gaps, and contradictions before anything becomes accepted truth.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["A complete interpretation still requires human review"], evidence: { status: "not_required", refs: [] } },
+  ] : [
+    { menuItemId: "arrival_tell_outcome", rank: 1, kind: "human_decision", title: "Tell me the outcome", offer: "Describe what you want in one sentence and I will build the kitchen around it.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "The outcome belongs to the human.", question: "What are we making happen?" }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
+    { menuItemId: "arrival_talk_it_through", rank: 2, kind: "human_decision", title: "Talk it through with me", offer: "Start messy. I will preserve your words, identify the finite edges, and ask only useful questions.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "Conversation still begins with human intent.", question: "What is changing, and what outcome would feel successful?" }], tradeoffs: ["Takes a little longer than a complete brief"], evidence: { status: "not_required", refs: [] } },
+    { menuItemId: "arrival_bring_evidence", rank: 3, kind: "suggested_route", title: "Bring the messy material", offer: "Give me links, receipts, notes, or constraints and I will organize them around the outcome.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "Evidence needs an outcome to organize around." }], tradeoffs: ["Evidence remains untrusted until admitted and checked"], evidence: { status: "required", refs: [] } },
+  ],
+  law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes.",
+});
+
 const define = ({ name, title, description, inputSchema = objectSchema(), readOnly = false, untrusted = false, execute }: {
   name: string;
   title: string;
@@ -56,11 +166,37 @@ const define = ({ name, title, description, inputSchema = objectSchema(), readOn
   },
 });
 
+export type FiniteWebMCPReadiness = {
+  state: "initializing" | "ready" | "signed_out" | "failed";
+  inventory?: string[];
+  detail?: string;
+};
+
+export const registerFiniteWebMCPStatus = async (host: ModelContextHost, read: () => FiniteWebMCPReadiness): Promise<void> => {
+  await host.registerTool(define({
+    name: "finite_webmcp_status",
+    title: "Check whether the Finite kitchen is ready",
+    description: "A minimal page-start bootstrap tool. Use it only when finite_enter_kitchen is not yet visible; it exposes no plan state, credentials, or human authority.",
+    readOnly: true,
+    execute: () => {
+      const readiness = read();
+      if (readiness.state === "ready") return { ok: true, code: "WEBMCP_READY", inventory: readiness.inventory ?? [], acceptedStateChanged: false, next: "Refresh the page-tool registry and call finite_enter_kitchen exactly as supplied by the handoff." };
+      if (readiness.state === "signed_out") return { ok: false, code: "AUTHENTICATED_USER_REQUIRED", acceptedStateChanged: false, next: "Open the Site and complete its official sign-in boundary; do not request or transmit credentials through WebMCP." };
+      if (readiness.state === "failed") return { ok: false, code: "WEBMCP_INITIALIZATION_FAILED", detail: readiness.detail ?? "Finite did not finish initializing.", acceptedStateChanged: false, next: "Reload the Site. Do not infer plan state from a partial registry." };
+      return { ok: true, code: "WEBMCP_INITIALIZING", retryAfterMs: 100, acceptedStateChanged: false, next: "Wait briefly, refresh the page-tool registry, then call finite_enter_kitchen. Do not infer that the kitchen has no tools." };
+    },
+  }));
+};
+
 const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, input: Record<string, unknown>): Promise<ToolResult> => {
   const kitchen = await runtime.openKitchen();
   if (!kitchen.ok) return kitchen;
 
   const requestedOrderId = input.orderId ? String(input.orderId) : null;
+  const suppliedIntent = input.entryIntent;
+  const entryIntent: EntryIntent = suppliedIntent === "start_new" || suppliedIntent === "continue_current" || suppliedIntent === "resume_handoff"
+    ? suppliedIntent
+    : requestedOrderId ? "resume_handoff" : input.expectedPlanId ? "continue_current" : "start_new";
   const opened = await arrival.open(requestedOrderId ? { orderId: requestedOrderId } : {});
   if (!opened.ok && opened.code !== "ARRIVAL_NOT_FOUND") {
     return {
@@ -84,7 +220,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     };
   }
 
-  const orientation = opened.ok ? opened.orientation : null;
+  const orientation: ArrivalOrientation | null = opened.ok && opened.orientation ? opened.orientation : null;
   const active = (kitchen.brief as Record<string, unknown> | undefined)?.active as Record<string, unknown> | undefined;
   const differences: Array<Record<string, unknown>> = [];
   if (orientation && input.expectedOrderVersion !== undefined && Number(input.expectedOrderVersion) !== orientation.exactOrderVersion) {
@@ -103,9 +239,20 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   const arrivalState = orientation
     ? { status: "active", orientation }
     : { status: "none", code: "ARRIVAL_NOT_FOUND" };
-  const next = orientation
-    ? orientation.next
-    : "No active human arrival is waiting. Ask for the outcome in ordinary language, then use finite_create_arrival_order to preserve it before interpreting or planning.";
+  const plan = record(kitchen.brief);
+  const nextAction = orientation
+    ? arrivalNextAction(orientation)
+    : entryIntent === "start_new"
+      ? newPlanNextAction()
+      : planNextAction(plan);
+  const chefMenu = orientation || entryIntent === "start_new"
+    ? arrivalChefMenu(orientation)
+    : plan.chefMenu;
+  const next = nextAction.exactQuestion
+    ? String(nextAction.exactQuestion)
+    : nextAction.nextTool
+      ? `Use ${String(nextAction.nextTool)} with the supplied knownArgs.`
+      : "Read nextAction and chefMenu; do not invent a route.";
   return {
     ok: true,
     code: differences.length ? "KITCHEN_ENTERED_WITH_CURRENT_STATE" : "KITCHEN_ENTERED",
@@ -118,6 +265,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       humanAuthorityExposedThroughWebMCP: false,
       law: "Finite supplies canonical state and legal operations. Codex operates. The human supplies intent, judgment, preference, and exact authority.",
     },
+    entryIntent,
     handoffReceipt: {
       requestedOrderId,
       matchedCurrentState: differences.length === 0,
@@ -125,16 +273,41 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       note: differences.length ? "The handoff was only a pointer. Canonical Site state has advanced; continue from the state returned here." : "The handoff receipt matches current Site state.",
     },
     arrival: arrivalState,
-    plan: kitchen.brief,
+    plan,
+    operatorPacket: {
+      packetVersion: "finite-operator-packet.v1",
+      nextAction,
+      chefMenu,
+      currency: { code: "AUD", minorUnit: 100 },
+      law: "Offer the menu in human language. Never describe a suggested route as viable unless its viability is constraint_validated. Never treat a menu choice as approval authority.",
+    },
     acceptedStateChanged: false,
     next,
+  };
+};
+
+const getChefMenu = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, input: Record<string, unknown>): Promise<ToolResult> => {
+  const entered = await enterKitchen(runtime, arrival, input);
+  if (!entered.ok) return entered;
+  const packet = record(entered.operatorPacket);
+  return {
+    ok: true,
+    code: "CHEF_MENU_READY",
+    entryIntent: entered.entryIntent,
+    handoffReceipt: entered.handoffReceipt,
+    nextAction: packet.nextAction,
+    chefMenu: packet.chefMenu,
+    currency: packet.currency,
+    acceptedStateChanged: false,
+    next: String(entered.next ?? "Read nextAction and chefMenu; do not invent a route."),
   };
 };
 
 const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: () => runtime.openKitchen() }),
-  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, changed-state receipt, operator contract, and next safe route in one read-only packet. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision }), execute: (input) => enterKitchen(runtime, arrival, input) }),
+  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision }), execute: (input) => enterKitchen(runtime, arrival, input) }),
+  define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions, with exact known and missing inputs.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision }), execute: (input) => getChefMenu(runtime, arrival, input) }),
   define({ name: "finite_create_arrival_order", title: "Capture a human order", description: "Persist the human's requested outcome exactly as supplied from Codex. This creates append-only non-authoritative intake, not a plan, interpretation, or human approval.", inputSchema: objectSchema({ idempotencyKey, rawOutcome: { type: "string", minLength: 1, maxLength: 4000 }, structured: { type: "object" }, attachments: { type: "array", maxItems: 20 } }, ["idempotencyKey", "rawOutcome"]), execute: (input) => arrival.create({ idempotencyKey: String(input.idempotencyKey), rawOutcome: String(input.rawOutcome), structured: input.structured && typeof input.structured === "object" && !Array.isArray(input.structured) ? input.structured as Record<string, unknown> : {}, attachments: Array.isArray(input.attachments) ? input.attachments : [], sourceSurface: "codex" }) }),
   define({ name: "finite_append_arrival_input", title: "Append human-supplied arrival detail", description: "Append one human-supplied detail, constraint, preference, commitment, answer, evidence reference, or correction against an exact order version. This records provenance and never converts Codex inference into human fact.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, kind: { type: "string", enum: ["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"] }, payload: { type: "object" } }, ["orderId", "expectedVersion", "kind", "payload"]), execute: (input) => arrival.appendInput({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), kind: input.kind as ArrivalInputKind, payload: input.payload as Record<string, unknown>, sourceSurface: "codex" }) }),
   define({ name: "finite_open_arrival", title: "Orient to the waiting human order", description: "Open the current or named arrival with the full human order, delta since the operator checkpoint, unprocessed count, evidence, inference labels, missing facts, contradictions, saved operator work, exact version/checksum, and next safe route.", readOnly: true, inputSchema: objectSchema({ orderId: string, sinceVersion: { type: "integer", minimum: 0 } }), execute: (input) => arrival.open({ ...(input.orderId ? { orderId: String(input.orderId) } : {}), ...(input.sinceVersion !== undefined ? { sinceVersion: Number(input.sinceVersion) } : {}) }) }),

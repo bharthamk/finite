@@ -27,6 +27,25 @@
     <div id="app" aria-busy="true"></div>
     <div id="announcer" class="sr-only" aria-live="polite"></div>
     <noscript>Finite needs JavaScript to calculate and validate the live plan.</noscript>
+    <script>
+      if (document.modelContext) {
+        window.finiteWebMCPReadiness = { state: "initializing" };
+        document.modelContext.registerTool({
+          name: "finite_webmcp_status",
+          title: "Check whether the Finite kitchen is ready",
+          description: "A minimal page-start bootstrap tool that exposes no plan state, credentials, or human authority.",
+          inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+          annotations: { readOnlyHint: true },
+          execute: async () => {
+            const readiness = window.finiteWebMCPReadiness || { state: "initializing" };
+            if (readiness.state === "ready") return { ok: true, code: "WEBMCP_READY", inventory: readiness.inventory || [], acceptedStateChanged: false, next: "Refresh the page-tool registry and call finite_enter_kitchen exactly as supplied by the handoff." };
+            if (readiness.state === "signed_out") return { ok: false, code: "AUTHENTICATED_USER_REQUIRED", acceptedStateChanged: false, next: "Complete the Site's official sign-in boundary; do not request or transmit credentials through WebMCP." };
+            if (readiness.state === "failed") return { ok: false, code: "WEBMCP_INITIALIZATION_FAILED", detail: readiness.detail || "Finite did not finish initializing.", acceptedStateChanged: false, next: "Reload the Site. Do not infer plan state from a partial registry." };
+            return { ok: true, code: "WEBMCP_INITIALIZING", retryAfterMs: 100, acceptedStateChanged: false, next: "Wait briefly, refresh the page-tool registry, then call finite_enter_kitchen. Do not infer that the kitchen has no tools." };
+          },
+        });
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

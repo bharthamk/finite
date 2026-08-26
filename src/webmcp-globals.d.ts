@@ -1,6 +1,6 @@
 import type { ModelContextHost } from "./types.js";
 import type { FinitePlanRuntime } from "./runtime.js";
-import type { FinitePlanWebMCPAdapter } from "./webmcp.js";
+import type { FinitePlanWebMCPAdapter, FiniteWebMCPReadiness } from "./webmcp.js";
 
 declare global {
   interface Document {
@@ -8,6 +8,7 @@ declare global {
   }
 
   interface Window {
+    finiteWebMCPReadiness?: FiniteWebMCPReadiness;
     finitePlanCanary?: {
       runtime: FinitePlanRuntime;
       adapter: FinitePlanWebMCPAdapter | null;

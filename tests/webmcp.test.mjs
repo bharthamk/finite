@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
-import { FinitePlanWebMCPAdapter, humanOnlyActions } from "../dist-test/src/webmcp.js";
+import { FinitePlanWebMCPAdapter, humanOnlyActions, registerFiniteWebMCPStatus } from "../dist-test/src/webmcp.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -16,14 +16,29 @@ class MemoryModelContext {
   }
 }
 
+test("page-start status prevents an empty registry without exposing kitchen state", async () => {
+  const host = new MemoryModelContext();
+  const readiness = { state: "initializing" };
+  await registerFiniteWebMCPStatus(host, () => readiness);
+  assert.deepEqual([...host.tools.keys()], ["finite_webmcp_status"]);
+  const initializing = await host.execute("finite_webmcp_status", {});
+  assert.equal(initializing.code, "WEBMCP_INITIALIZING");
+  assert.equal("plan" in initializing, false);
+  readiness.state = "ready";
+  readiness.inventory = ["finite_enter_kitchen", "finite_get_chef_menu"];
+  const ready = await host.execute("finite_webmcp_status", {});
+  assert.equal(ready.code, "WEBMCP_READY");
+  assert.deepEqual(ready.inventory, readiness.inventory);
+});
+
 test("production adapter normalizes host input, excludes authority, and replaces contextual tools", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 46);
-  assert.equal(inventory.filter((name) => name.startsWith("finite_")).length, 43);
+  assert.equal(inventory.length, 47);
+  assert.equal(inventory.filter((name) => name.startsWith("finite_")).length, 44);
   assert(inventory.includes("travel_extend_stay"));
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
   assert.equal((await host.execute("finite_get_capabilities", {})).ok, true);
@@ -36,5 +51,5 @@ test("production adapter normalizes host input, excludes authority, and replaces
   assert.equal(switched.code, "PROFILE_SWITCHED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("renovation_replace_material"));
-  assert.equal(host.tools.size, 46);
+  assert.equal(host.tools.size, 47);
 });

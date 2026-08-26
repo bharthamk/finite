@@ -3,7 +3,7 @@ import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "./persistenc
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
-import { FinitePlanWebMCPAdapter } from "./webmcp.js";
+import { FinitePlanWebMCPAdapter, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
@@ -12,6 +12,8 @@ const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
 const surfaceRoot = root;
+const webmcpReadiness: FiniteWebMCPReadiness = window.finiteWebMCPReadiness ?? { state: "initializing" };
+window.finiteWebMCPReadiness = webmcpReadiness;
 
 interface FiniteAuthSession {
   kind: "account" | "demo";
@@ -240,7 +242,11 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     manifestHash: manifest.manifestHash,
   };
 }, arrivalRepository) : null;
-if (adapter) await adapter.register();
+if (adapter) {
+  const inventory = await adapter.register();
+  webmcpReadiness.state = "ready";
+  webmcpReadiness.inventory = inventory;
+}
 
 let busy = false;
 let message = "";
@@ -276,6 +282,11 @@ const currentCodexHandoff = () => createCodexHandoff({
   siteOrigin: location.origin,
   inline: Boolean(modelContext),
   order: currentArrival(),
+  entryIntent: currentArrival()
+    ? "resume_handoff"
+    : new URLSearchParams(location.search).has("kitchen") || new URLSearchParams(location.search).has("lab")
+      ? "continue_current"
+      : "start_new",
   plan: {
     planId: runtime.kernel.profile.planId,
     profileId: runtime.kernel.profile.profileId,
@@ -831,5 +842,14 @@ window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } 
 };
 
 const authStatus = await loadAuthStatus();
-if (authStatus.session) await startKitchen(authStatus.session);
-else renderAuthGate(authStatus.signInPath);
+if (authStatus.session) {
+  try { await startKitchen(authStatus.session); }
+  catch (error) {
+    webmcpReadiness.state = "failed";
+    webmcpReadiness.detail = error instanceof Error ? error.message : String(error);
+    throw error;
+  }
+} else {
+  webmcpReadiness.state = "signed_out";
+  renderAuthGate(authStatus.signInPath);
+}

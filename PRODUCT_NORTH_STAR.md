@@ -53,6 +53,14 @@ Finite performs the truth and safety work:
 WebMCP is the page-scoped operating connection between the two. There is no
 application-owned reasoning model behind the product.
 
+Finite also hands Codex a menu rather than a pile of controls. The menu is
+compiled from the current plan, arrival, legal move space, evidence state, and
+authority boundary. It may contain suggested routes, research routes, or
+constraint-validated options, but those classes never blur: a suggestion is
+not called viable, a validated option is not called approved, and a human menu
+choice is not treated as consequential authority. Codex recommends and serves;
+the human chooses the dish; Finite proves what can safely be cooked.
+
 ### Interaction surfaces
 
 Finite has two primary surfaces and one hybrid: the standalone Site, the Codex
