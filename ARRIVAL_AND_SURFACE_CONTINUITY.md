@@ -157,6 +157,17 @@ It must:
 5. offer the smallest exact handoff; and
 6. resume from the same state when the other surface appears.
 
+Prepared construction follows the authenticated consumer, not the browser that
+created it. The current non-authoritative intake or compiled draft is stored once
+per tenant in D1 and cached locally only for rendering and one-time migration.
+Every surface rechecks the packet checksum, expiry, accepted-plan base, and exact
+arrival binding before restoration. Human confirmation is never included.
+
+Discard is also cross-surface state. The server retains a tombstone for the
+discarded packet so a delayed browser cannot re-upload an older local copy. A
+genuinely revised packet created after that boundary may replace the tombstone;
+the rejected packet may not.
+
 Examples:
 
 - The human enters a full trip on the standalone Site while Codex is absent.

@@ -27,7 +27,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Bounded staged plan intake: Codex can submit a complete travel, renovation, or event operating profile; the compiler closes its schema, finite-total arithmetic, actual ledger, entities, relationships, moves, search policy, evidence policy, surface grammar, and implemented contextual-tool contract before the draft exists.
 - A clean compiler-valid blueprint plus typed partial-intake assessment: Codex can discover the family contract, translate an incomplete human brief into bounded facts, receive exact missing/conflicting paths, and let code derive one residual allocation without adding an application-owned language model.
 - An adaptive-shell compiler that can start useful planning from exact finite limits plus source-labelled working assumptions and typed operator-research, human-coordination, external-evidence, and human-decision dependencies without inventing complete costs, dates, moves, or a seeded vertical plan.
-- Durable non-authoritative construction packets: incomplete intake or an exact staged draft survives reload behind checksum, seven-day expiry, evidence integrity, source-plan/revision guards, and—when built from arrival—an exact order id/version/checksum; resuming never restores human confirmation.
+- Authenticated cross-surface construction packets: incomplete intake or an exact staged draft survives reload and follows the signed-in consumer between the Site and Codex behind checksum, seven-day expiry, evidence integrity, source-plan/revision guards, and—when built from arrival—an exact order id/version/checksum; resuming never restores human confirmation. Server tombstones prevent a stale browser from resurrecting discarded work.
 - Arrival-first invalidation: newer human input outranks draft review, marks older construction `stale_arrival`, removes its pending authority and activation tool, and forces Codex to reconcile and compile from the current order before anything can be confirmed.
 - Exact plan activation authority: a draft remains inert until the human confirms its profile and draft hashes outside WebMCP; Codex can then activate only that bound packet with plan/revision guards and persistent idempotency proof.
 - Immutable linear plan amendments: Codex derives a successor from live accepted truth, stages a deterministic semantic diff, and activates only the exact human-confirmed supersession while both versions remain independently switchable and replayable.
@@ -76,12 +76,15 @@ accepted truth; the human confirms its semantic diff, and the prior version stay
 available rather than being silently overwritten.
 
 Construction work has a separate persistence law. The latest typed intake or
-compiled draft is saved as an expiring, checksum-bound packet so Codex can safely
-resume after reload. The consumer's confirmation is never part of that packet and
-must be recreated on the restored exact hashes. Arrival-built construction also
-binds the exact human-order id, version, and checksum. If the order advances,
-arrival reconciliation takes priority and the old draft cannot be reviewed or
-activated.
+compiled draft is saved in the authenticated tenant as an expiring,
+checksum-bound packet so Codex can safely resume after reload or on another
+browser surface. Browser storage is only a cache and one-time migration source.
+The consumer's confirmation is never part of that packet and must be recreated
+on the restored exact hashes. Arrival-built construction also binds the exact
+human-order id, version, and checksum. If the order advances, arrival
+reconciliation takes priority and the old draft cannot be reviewed or activated.
+An explicit discard leaves a server tombstone so an older browser cache cannot
+restore the rejected packet.
 
 ## Architecture boundary
 
@@ -103,6 +106,7 @@ testing, not basic Site Tools availability.
 - `src/arrival.ts` — arrival-order contract, orientation packet, HTTP client, and in-memory delayed-surface acceptance adapter.
 - `worker/accepted-truth.ts` — same-origin D1 API, optimistic-concurrency commit, deterministic replay, and transactional revision/event/receipt/evidence persistence.
 - `worker/arrival.ts` — same-origin D1 arrival API with append-only human input, labelled Codex interpretation, operator checkpoints, and fail-closed order-version guards.
+- `src/construction-packet.ts` and `worker/construction-packet.ts` — authenticated cross-surface construction repository, server integrity and source guards, authority exclusion, and discard tombstones.
 - `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
 - `src/persistence.ts` — accepted snapshot, plan catalog, evidence bundle, and activation-receipt storage.
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
@@ -124,6 +128,7 @@ testing, not basic Site Tools availability.
 - `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md` — live-state successor derivation, semantic diff, human authority, atomic rollback, immutable switching, lineage integrity, and replay receipt.
 - `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.
 - `ARRIVAL_BOUND_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — exact arrival-source binding, delayed-input invalidation, stale activation refusal, live v24→v26 journey, and deployment proof.
+- `CROSS_SURFACE_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — live v27 Codex-to-Site draft continuity, authenticated D1 packet law, authority exclusion, stale-browser tombstones, and deployment proof.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

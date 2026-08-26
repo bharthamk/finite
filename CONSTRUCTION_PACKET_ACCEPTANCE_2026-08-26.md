@@ -2,10 +2,16 @@
 
 ## Outcome
 
-Finite no longer loses unfinished plan construction on reload. One device-local
-construction packet now preserves either the latest typed intake assessment or
+Finite no longer loses unfinished plan construction on reload. This first
+acceptance established one device-local construction packet preserving either
+the latest typed intake assessment or
 the exact staged new-plan/amendment draft. The packet is work, not accepted
 truth and not authority.
+
+This device-local persistence class was superseded on 2026-08-27 by the
+authenticated cross-surface contract in
+`CROSS_SURFACE_CONSTRUCTION_ACCEPTANCE_2026-08-27.md`. The packet and authority
+laws below remain; D1 is now authoritative and browser storage is only a cache.
 
 > 2026-08-27 addendum: arrival-built packets now also bind the exact human-order
 > id, version, and checksum. Newer human input makes the prior packet
