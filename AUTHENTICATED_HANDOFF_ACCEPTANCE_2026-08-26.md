@@ -51,7 +51,7 @@ the same atomic batch as the revision and receipt.
 
 ## Executable travel, renovation, and event proof
 
-For each semantic family, the 51-test suite runs this actual two-device journey:
+For each semantic family, the 52-test suite runs this actual two-device journey:
 
 1. device A hydrates accepted truth;
 2. deterministic code records a family change, searches, stages, and the human
@@ -93,13 +93,41 @@ real Worker:
   `legacy_scope_adopted = 1`, one copied user-A head, no user-B head, and one
   user-A-only operator session.
 
-## Live owner-private gate
+## Live owner-private receipt
 
-Pending in the implementation commit. The deployment receipt must prove the
-existing owner adopts all three live revision-2 family heads, completes the
-three cross-device-style handoff journeys against hosted D1, and leaves exactly
-three challenge consumptions. Access must remain custom owner-only with one
-allowed owner, no groups, and no external visitors.
+The hosted gate passed against the signed-in production Site on 2026-08-26.
+
+- The first authenticated load created one hashed tenant account with
+  `legacy_scope_adopted = 1` and copied all three legacy revision-2 heads. Raw
+  user id and email are absent from D1.
+- A revision-2 browser cache initially exposed a real hydration defect: the
+  client attempted revision-1-only initialization before authoritative load.
+  `a981004b81aad7326eef602a43bef57f5452a5fb` repairs this by loading first and
+  initializing only an absent head; the regression raises the suite to 52/52.
+- One explicit `?lab=1` human click ran isolated device-A/device-B runtimes
+  through the real HTTP repository. Travel, renovation, and event each advanced
+  revision 2 → 3 and emitted receipts `receipt_9aebf6433e375ef4`,
+  `receipt_73cc10b709b33ae0`, and `receipt_c6709683feeb8a46`.
+- D1 contains exactly three base-revision-2 `decision_work` sessions, three
+  five-minute challenges, and three matching consumption records. Each session
+  restored the candidate with `authorityRestored: false`; authority resumed only
+  through its exact challenge; each post-commit session returned
+  `OPERATOR_SESSION_BASE_STALE`; consumed challenge reads returned HTTP 409 with
+  `AUTHORITY_CHALLENGE_CONSUMED`.
+- The live user namespace now has three revision-3 heads with distinct snapshot
+  hashes. The legacy revision-2 lineage remains intact for migration audit.
+- Production access remains `custom`: one owner, no groups, and zero external
+  visitors. The Site registers 36 stable plus three contextual WebMCP tools.
+- The final exact source is commit
+  `7c45848fa904ff4a924f08a6d5acf32b6eab5318`, Sites version 16, deployment
+  `appgdep_6a8ec00332908191a2065b4d6b41b1ab`, at
+  `https://finite-plan-kitchen.bharthamk.chatgpt.site`.
+
+The first acceptance-only version correctly committed travel but used the
+post-commit kernel to assert challenge consumption after staged work had been
+cleared, so the harness saw `OPTION_NOT_STAGED`. The final harness verifies the
+consumption at the repository boundary; no backend rollback or data repair was
+needed.
 
 ## Boundary and next risk
 

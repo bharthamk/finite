@@ -347,7 +347,7 @@ transition or none of it.
 
 ### Phase 3 — durable operator sessions without durable authority
 
-Status: implemented and locally accepted on 2026-08-26; hosted D1 receipt pending.
+Status: complete on 2026-08-26; local isolation and owner-private hosted D1 receipts pass.
 
 Deliverables:
 
@@ -367,6 +367,14 @@ operator packets bind exact plan/profile/revision work, while an independently
 rebuilt candidate may resume one five-minute human-created challenge. Challenge
 consumption shares the accepted D1 batch, and receipt-first replay preserves
 lost-response recovery after that once-only consumption.
+
+Hosted receipt: the authenticated owner adopted all three live revision-2 heads;
+isolated device-A/device-B runtimes advanced travel, renovation, and event to
+revision 3; D1 holds three stale-base decision sessions, three exact challenges,
+three atomic consumption rows, and three new receipts. Session transport restored
+no authority, consumed challenges returned 409, and production remained one-owner
+custom access. Exact source commit
+`7c45848fa904ff4a924f08a6d5acf32b6eab5318`, Sites version 16.
 
 ### Phase 4 — semantic-family grammar expansion
 
