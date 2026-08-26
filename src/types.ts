@@ -314,6 +314,35 @@ export interface PlanAmendmentBinding {
   diffHash: string;
 }
 
+interface PlanConstructionPacketBase {
+  packetVersion: "finite-plan-construction.v1";
+  packetId: string;
+  basePlanId: string;
+  baseProfileHash: string;
+  baseRevision: number;
+  createdAt: string;
+  expiresAt: string;
+  checksum: string;
+}
+
+export type PlanConstructionPacket = PlanConstructionPacketBase & ({
+  kind: "intake";
+  payload: {
+    facts: PlanIntakeInput;
+    assessmentCode: string;
+    evidenceRecords: EvidenceRecord[];
+  };
+} | {
+  kind: "draft";
+  payload: {
+    draftId: string;
+    contentHash: string;
+    profile: ProfileDefinition;
+    evidenceRecords: EvidenceRecord[];
+    amendment: PlanAmendmentBinding | null;
+  };
+});
+
 export interface PlanActivationConfirmation {
   confirmationId: string;
   draftId: string;

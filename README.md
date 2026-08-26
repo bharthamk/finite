@@ -19,12 +19,13 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Provenance-bound evidence registration for Codex research: SHA-256 content and record hashes, deterministic identifiers, content deduplication, forced untrusted classification, freshness/materiality assessment, candidate binding, integrity refusal, and accepted-lineage-only persistence.
 - Bounded staged plan intake: Codex can submit a complete travel, renovation, or event operating profile; the compiler closes its schema, finite-total arithmetic, actual ledger, entities, relationships, moves, search policy, evidence policy, surface grammar, and implemented contextual-tool contract before the draft exists.
 - A clean compiler-valid blueprint plus typed partial-intake assessment: Codex can discover the family contract, translate an incomplete human brief into bounded facts, receive exact missing/conflicting paths, and let code derive one residual allocation without adding an application-owned language model.
+- Durable non-authoritative construction packets: incomplete intake or an exact staged draft survives reload behind checksum, seven-day expiry, evidence integrity, and source-plan/revision guards; resuming never restores human confirmation.
 - Exact plan activation authority: a draft remains inert until the human confirms its profile and draft hashes outside WebMCP; Codex can then activate only that bound packet with plan/revision guards and persistent idempotency proof.
 - Immutable linear plan amendments: Codex derives a successor from live accepted truth, stages a deterministic semantic diff, and activates only the exact human-confirmed supersession while both versions remain independently switchable and replayable.
 - A persistent multi-plan catalog keyed by actual `planId`, including compiled custom plans, bound actual evidence, legacy snapshot fallback, switching, contextual-tool replacement, and reload-safe activation receipts.
 - Human-only approval and confirmation creators, structurally excluded from WebMCP.
 - Accepted-state persistence with reload-safe receipt idempotency.
-- 27 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
+- 30 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
 
@@ -58,6 +59,11 @@ with WebMCP. Later structural change derives a new immutable version from curren
 accepted truth; the human confirms its semantic diff, and the prior version stays
 available rather than being silently overwritten.
 
+Construction work has a separate persistence law. The latest typed intake or
+compiled draft is saved as an expiring, checksum-bound packet so Codex can safely
+resume after reload. The consumer's confirmation is never part of that packet and
+must be recreated on the restored exact hashes.
+
 ## Architecture boundary
 
 There is no backend model and no application-owned agent. Natural-language interpretation, research, and orchestration belong to Codex. The application owns state, arithmetic, validation, transaction laws, persistence, rendering, and receipts. WebMCP exposes those capabilities; it does not supply reasoning or persistence.
@@ -83,3 +89,4 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `PLAN_INTAKE_ACCEPTANCE_2026-08-26.md` — complete profile compilation, human-confirmed activation, multi-plan persistence/switching, WebMCP authority separation, and refusal receipt.
 - `PLAN_CREATION_STORY_LAB_2026-08-26.md` — 12 human and 12 Codex creation stories, results, WebMCP superpowers, friction, blockers, and next engineering ruling.
 - `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md` — live-state successor derivation, semantic diff, human authority, atomic rollback, immutable switching, lineage integrity, and replay receipt.
+- `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.

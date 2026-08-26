@@ -19,6 +19,7 @@ const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" |
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries);
+await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);

@@ -22,11 +22,11 @@ the bounded plan-intake contract. Presentation quality was deliberately excluded
 | HC07 | Order a wedding rather than a product launch | Partial | The event family can express headcount, capacity and run-of-show, but contextual tool names remain `event_*`; the semantic family is visible. |
 | HC08 | Order a house move with phases and a fixed spend | Partial | Renovation can technically express phases, dates and contingency, but its fixed contextual operations are a semantic stretch. |
 | HC09 | Order a monthly household cashflow plan | Fail | No recurring-period family or time model exists; mapping it to travel, renovation or event would be dishonest. |
-| HC10 | Reload while reviewing an unconfirmed plan | Fail | Draft and human authority are deliberately volatile; the work packet is lost across reload. |
+| HC10 | Reload while reviewing an unconfirmed plan | Pass | The exact draft resumes from an expiring checksum-bound construction packet; human confirmation deliberately does not and must be recreated. |
 | HC11 | Change the structure of an already activated plan | Pass | Codex derives a new immutable version from live accepted truth; the consumer confirms the exact semantic diff and both versions remain switchable. |
 | HC12 | Keep and switch among multiple confirmed plans | Pass | Catalog persistence, actual plan ids, evidence bundles and contextual-tool replacement survive reload. |
 
-Human result after amendment follow-through: **8 pass, 2 partial, 2 fail**.
+Human result after amendment and construction-continuity follow-through: **9 pass, 2 partial, 1 fail**.
 
 ## Codex-operator stories
 
@@ -67,13 +67,10 @@ laws; Codex supplies interpretation and composition.
    but the compiler still admits only travel, renovation and event families with
    fixed contextual tool sets and three time models. This is safer than arbitrary
    generated tools, but it is not yet a general adaptive-plan grammar.
-2. **Partial intake is now structured but volatile.** Codex can assess incomplete
-   facts and exact clarification paths, but the packet is not a durable shared
-   work object across reload.
-3. **Draft volatility — product trade-off.** Losing an unconfirmed construction
-   packet on reload protects the “only accepted truth persists” law but wastes
-   operator and consumer work.
-4. **Evidence vocabulary is deliberately closed.** This avoids a pre-activation
+2. **Construction continuity is now closed without persisting authority.** One
+   typed intake or staged draft packet survives reload behind checksum, expiry,
+   evidence, and source-plan guards; confirmation never survives.
+3. **Evidence vocabulary is deliberately closed.** This avoids a pre-activation
    evidence deadlock and arbitrary trust classes, but new domains may earn new
    standard classes later.
 
@@ -83,9 +80,12 @@ Do not add more seeded examples and do not start submission preparation. The
 immutable plan-version/amendment transaction is now landed and separately
 receipted in `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md`.
 
-The next build should tackle the remaining operator-continuity failure: make an
-unfinished construction/intake packet resumable across reload without persisting
-human authority or confusing draft work with accepted plan truth.
+The operator-continuity failure is now landed and separately receipted in
+`CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md`.
+
+The next experiment should challenge the semantic-family ceiling with recurring
+period and milestone/project stories before deciding whether to add a fourth
+family or generalize the compiler grammar.
 
 Generalizing semantic families should follow those experiments, not precede
 them. Arbitrary generated code, tools or UI remain out of bounds.

@@ -173,7 +173,7 @@ test("typed partial intake returns exact missing paths, conflicts, and one safe 
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
   const acceptedBefore = structuredClone(runtime.kernel.accepted);
-  const incomplete = runtime.assessPlanIntake({ profileId: "event", name: "Summit" });
+  const incomplete = await runtime.assessPlanIntake({ profileId: "event", name: "Summit" });
   assert.equal(incomplete.code, "INTAKE_FACTS_MISSING");
   assert(incomplete.missing.some((issue) => issue.path === "allocation.totalBudgetMinor"));
   assert(incomplete.missing.some((issue) => issue.path === "entityValues.guest_headcount.count"));
@@ -190,14 +190,14 @@ test("typed partial intake returns exact missing paths, conflicts, and one safe 
     entityValues: { guest_headcount: { count: 180 }, venue: { capacity: 200 } },
     stages: [{ label: "Arrival", marker: "08:30" }, { label: "Sessions", marker: "09:30" }],
   };
-  const complete = runtime.assessPlanIntake(base);
+  const complete = await runtime.assessPlanIntake(base);
   assert.equal(complete.code, "INTAKE_FACTS_COMPLETE");
   assert.equal(complete.derivedFacts["allocation.bufferMinor"], 60_000);
   assert.equal(complete.normalizedFacts.allocation.bufferMinor, 60_000);
   assert.deepEqual(runtime.kernel.accepted, acceptedBefore);
   assert.equal(runtime.kernel.revision, 1);
 
-  const conflict = runtime.assessPlanIntake({ ...base, planId: "plan_event_conflict", allocation: { totalBudgetMinor: 300_000, spentMinor: 0, committedMinor: 170_000, forecastMinor: 190_000, bufferMinor: 20_000 } });
+  const conflict = await runtime.assessPlanIntake({ ...base, planId: "plan_event_conflict", allocation: { totalBudgetMinor: 300_000, spentMinor: 0, committedMinor: 170_000, forecastMinor: 190_000, bufferMinor: 20_000 } });
   assert.equal(conflict.code, "INTAKE_FACTS_CONFLICT");
   assert(conflict.conflicts.some((issue) => issue.code === "FINITE_TOTAL_CONFLICT"));
 });
@@ -209,7 +209,7 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 30);
+  assert.equal(inventory.length, 33);
   assert(host.tools.has("finite_get_plan_blueprint"));
   assert(host.tools.has("finite_assess_plan_intake"));
   assert(host.tools.has("finite_get_amendment_blueprint"));
@@ -239,7 +239,7 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("event_change_headcount"));
-  assert.equal(host.tools.size, 30);
+  assert.equal(host.tools.size, 33);
 
   const amendment = await host.execute("finite_get_amendment_blueprint", {});
   amendment.profile.accepted.forecastMinor -= 5_000;

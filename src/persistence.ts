@@ -1,5 +1,5 @@
 import { clone } from "./crypto.js";
-import type { PlanActivationReceipt, PlanCatalogEntry, PlanSnapshot, ProfileDefinition } from "./types.js";
+import type { PlanActivationReceipt, PlanCatalogEntry, PlanConstructionPacket, PlanSnapshot, ProfileDefinition } from "./types.js";
 
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -61,6 +61,7 @@ export class PlanCatalogStore {
     private readonly storage: StoragePort,
     private readonly key = "finite-plan.catalog.v1",
     private readonly receiptKey = "finite-plan.activation-receipts.v1",
+    private readonly constructionKey = "finite-plan.construction.v1",
   ) {}
 
   load(): PlanCatalogEntry[] {
@@ -106,6 +107,30 @@ export class PlanCatalogStore {
   removeActivationReceipt(idempotencyKey: string): void {
     this.storage.setItem(this.receiptKey, JSON.stringify(this.loadActivationReceipts().filter((receipt) => receipt.idempotencyKey !== idempotencyKey)));
   }
+
+  loadConstructionPacket(): PlanConstructionPacket | null {
+    const raw = this.storage.getItem(this.constructionKey);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!isPlanConstructionPacket(parsed)) {
+        this.storage.removeItem(this.constructionKey);
+        return null;
+      }
+      return clone(parsed);
+    } catch {
+      this.storage.removeItem(this.constructionKey);
+      return null;
+    }
+  }
+
+  saveConstructionPacket(packet: PlanConstructionPacket): void {
+    this.storage.setItem(this.constructionKey, JSON.stringify(clone(packet)));
+  }
+
+  clearConstructionPacket(): void {
+    this.storage.removeItem(this.constructionKey);
+  }
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object";
@@ -138,3 +163,15 @@ const isPlanActivationReceipt = (value: unknown): value is PlanActivationReceipt
   && typeof value.draftId === "string"
   && typeof value.confirmationId === "string"
   && typeof value.replayChecksum === "string";
+
+const isPlanConstructionPacket = (value: unknown): value is PlanConstructionPacket => isRecord(value)
+  && value.packetVersion === "finite-plan-construction.v1"
+  && (value.kind === "intake" || value.kind === "draft")
+  && typeof value.packetId === "string"
+  && typeof value.basePlanId === "string"
+  && typeof value.baseProfileHash === "string"
+  && Number.isInteger(value.baseRevision)
+  && typeof value.createdAt === "string"
+  && typeof value.expiresAt === "string"
+  && typeof value.checksum === "string"
+  && isRecord(value.payload);

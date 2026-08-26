@@ -16,7 +16,7 @@ const supportedComponents = new Set<SurfaceComponentType>([
 ]);
 
 const coreActions = [
-  "finite_get_capabilities", "finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_get_amendment_blueprint", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
+  "finite_get_capabilities", "finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_get_construction_packet", "finite_resume_construction_packet", "finite_discard_construction_packet", "finite_get_amendment_blueprint", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
   "finite_simulate_reallocation", "finite_compare_options", "finite_record_consumer_feedback",
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction",
   "finite_apply_confirmed_actual_correction", "finite_stage_option", "finite_reject_staged_option",

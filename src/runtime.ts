@@ -10,6 +10,7 @@ import type {
   PlanAmendmentBinding,
   PlanAmendmentDiff,
   PlanCatalogEntry,
+  PlanConstructionPacket,
   PlanDraft,
   PlanIntakeInput,
   IntakeFactIssue,
@@ -34,6 +35,13 @@ const evidenceIntegrity = async (evidence: EvidenceRecord): Promise<boolean> => 
   return await sha256({ content: evidence.content }) === evidence.contentHash && await sha256(base) === recordHash;
 };
 
+const constructionTtlMs = 7 * 24 * 60 * 60 * 1000;
+
+const constructionPacketContent = (packet: PlanConstructionPacket): Omit<PlanConstructionPacket, "packetId" | "checksum"> => {
+  const { packetId: _packetId, checksum: _checksum, ...content } = packet;
+  return content;
+};
+
 export class FinitePlanRuntime {
   kernel: FinitePlanKernel;
   pendingPlanDraft: PlanDraft | null = null;
@@ -48,6 +56,7 @@ export class FinitePlanRuntime {
     initialPlanOrProfile: ProfileId | string = "travel",
     private readonly catalogStore?: PlanCatalogStore,
     catalogEntries: CompiledCatalogEntry[] = [],
+    private readonly now: () => Date = () => new Date(),
   ) {
     for (const profile of profiles.values()) this.plans.set(profile.planId, { profile, evidenceRecords: [] });
     for (const entry of catalogEntries) this.plans.set(entry.profile.planId, { profile: entry.profile, evidenceRecords: clone(entry.evidenceRecords), ...(entry.lineage ? { lineage: clone(entry.lineage) } : {}) });
@@ -56,6 +65,138 @@ export class FinitePlanRuntime {
     const entry = this.plans.get(initialPlanOrProfile) ?? (builtIn ? this.plans.get(builtIn.planId) : undefined);
     if (!entry) throw new Error(`Missing compiled plan or profile: ${initialPlanOrProfile}`);
     this.kernel = new FinitePlanKernel(entry.profile, store, entry.evidenceRecords);
+  }
+
+  private async persistConstructionPacket(kind: PlanConstructionPacket["kind"], payload: PlanConstructionPacket["payload"]): Promise<PlanConstructionPacket | null> {
+    if (!this.catalogStore) return null;
+    const createdAt = this.now();
+    const content = {
+      packetVersion: "finite-plan-construction.v1" as const,
+      kind,
+      basePlanId: this.kernel.profile.planId,
+      baseProfileHash: this.kernel.profile.profileHash,
+      baseRevision: this.kernel.revision,
+      createdAt: createdAt.toISOString(),
+      expiresAt: new Date(createdAt.getTime() + constructionTtlMs).toISOString(),
+      payload: clone(payload),
+    };
+    const checksum = await sha256(content);
+    const packet = { ...content, packetId: `construction_${checksum.slice(0, 16)}`, checksum } as PlanConstructionPacket;
+    this.catalogStore.saveConstructionPacket(packet);
+    return clone(packet);
+  }
+
+  private constructionPacketSummary(packet: PlanConstructionPacket): Record<string, unknown> {
+    const expiresAt = Date.parse(packet.expiresAt);
+    const expired = !Number.isFinite(expiresAt) || expiresAt <= this.now().getTime();
+    const baseCurrent = packet.basePlanId === this.kernel.profile.planId
+      && packet.baseProfileHash === this.kernel.profile.profileHash
+      && packet.baseRevision === this.kernel.revision;
+    return {
+      packetId: packet.packetId,
+      kind: packet.kind,
+      basePlanId: packet.basePlanId,
+      baseProfileHash: packet.baseProfileHash,
+      baseRevision: packet.baseRevision,
+      createdAt: packet.createdAt,
+      expiresAt: packet.expiresAt,
+      status: expired ? "expired" : baseCurrent ? "resumable" : "stale",
+      checksum: packet.checksum,
+      humanAuthorityPersisted: false,
+      ...(packet.kind === "intake"
+        ? { assessmentCode: packet.payload.assessmentCode }
+        : { draftId: packet.payload.draftId, planId: packet.payload.profile.planId, amendment: packet.payload.amendment ? { supersedesPlanId: packet.payload.amendment.supersedesPlanId, diffHash: packet.payload.amendment.diffHash } : null }),
+    };
+  }
+
+  private clearMatchingConstructionDraft(draftId: string): boolean {
+    const packet = this.catalogStore?.loadConstructionPacket();
+    if (!packet) return true;
+    if (packet.kind !== "draft" || packet.payload.draftId !== draftId) return false;
+    this.catalogStore?.clearConstructionPacket();
+    return true;
+  }
+
+  private async readVerifiedConstructionPacket(): Promise<PlanConstructionPacket | ToolResult> {
+    const packet = this.catalogStore?.loadConstructionPacket();
+    if (!packet) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+    const checksum = await sha256(constructionPacketContent(packet));
+    if (checksum !== packet.checksum || packet.packetId !== `construction_${checksum.slice(0, 16)}`) return { ok: false, code: "CONSTRUCTION_PACKET_INTEGRITY_FAILED", packetId: packet.packetId, acceptedStateChanged: false, next: "Discard the damaged packet; do not infer or restore construction work." };
+    const createdAt = Date.parse(packet.createdAt);
+    const expiresAt = Date.parse(packet.expiresAt);
+    if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt - createdAt !== constructionTtlMs) return { ok: false, code: "CONSTRUCTION_PACKET_TIME_INVALID", packetId: packet.packetId, acceptedStateChanged: false };
+    return packet;
+  }
+
+  async getConstructionPacket(): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified) return verified;
+    return { ok: true, code: "CONSTRUCTION_PACKET", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+  }
+
+  async resumeConstructionPacket(): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified) return verified;
+    const packet = verified;
+    if (Date.parse(packet.expiresAt) <= this.now().getTime()) return { ok: false, code: "CONSTRUCTION_PACKET_EXPIRED", packet: this.constructionPacketSummary(packet), acceptedStateChanged: false, next: "Explicitly discard the expired packet and reassess the current human order." };
+    if (packet.basePlanId !== this.kernel.profile.planId || packet.baseProfileHash !== this.kernel.profile.profileHash || packet.baseRevision !== this.kernel.revision) return { ok: false, code: "CONSTRUCTION_PACKET_BASE_STALE", packet: this.constructionPacketSummary(packet), activePlanId: this.kernel.profile.planId, activeProfileHash: this.kernel.profile.profileHash, activeRevision: this.kernel.revision, acceptedStateChanged: false, next: "Switch back to the exact source plan/revision or explicitly discard and rebuild the packet." };
+
+    for (const evidence of packet.payload.evidenceRecords) if (!await evidenceIntegrity(evidence)) return { ok: false, code: "CONSTRUCTION_PACKET_EVIDENCE_INTEGRITY_FAILED", evidenceId: evidence.evidenceId, acceptedStateChanged: false };
+
+    if (packet.kind === "intake") {
+      const priorEvidence = new Map(packet.payload.evidenceRecords.map((evidence) => [evidence.evidenceId, this.kernel.evidence.get(evidence.evidenceId)]));
+      for (const evidence of packet.payload.evidenceRecords) this.kernel.evidence.set(evidence.evidenceId, clone(evidence));
+      const assessment = this.assessPlanIntakeFacts(packet.payload.facts);
+      if (assessment.code !== packet.payload.assessmentCode) {
+        for (const [evidenceId, prior] of priorEvidence) prior ? this.kernel.evidence.set(evidenceId, prior) : this.kernel.evidence.delete(evidenceId);
+        return { ok: false, code: "CONSTRUCTION_PACKET_REASSESSMENT_CHANGED", priorAssessmentCode: packet.payload.assessmentCode, assessment, acceptedStateChanged: false, next: "Use the current assessment and save a replacement packet before continuing." };
+      }
+      this.pendingPlanDraft = null;
+      this.planActivationConfirmation = null;
+      return { ok: true, code: "CONSTRUCTION_INTAKE_RESUMED", packet: this.constructionPacketSummary(packet), assessment: clone(assessment), acceptedStateChanged: false, ...(assessment.next ? { next: assessment.next } : {}) };
+    }
+
+    let profile: CompiledProfile;
+    try { profile = await compileProfile(packet.payload.profile); }
+    catch (error) { return { ok: false, code: "CONSTRUCTION_DRAFT_INVALID", issues: error instanceof ProfileValidationError ? error.issues : [error instanceof Error ? error.message : String(error)], acceptedStateChanged: false }; }
+    if (this.plans.has(profile.planId)) return { ok: false, code: "CONSTRUCTION_DRAFT_PLAN_CONFLICT", planId: profile.planId, acceptedStateChanged: false };
+    const evidenceIds = new Set(packet.payload.evidenceRecords.map((evidence) => evidence.evidenceId));
+    if (profile.actuals.some((actual) => !evidenceIds.has(actual.evidenceRef))) return { ok: false, code: "CONSTRUCTION_DRAFT_EVIDENCE_MISSING", acceptedStateChanged: false };
+    let amendment: PlanAmendmentBinding | null = null;
+    if (packet.payload.amendment) {
+      const successor = [...this.plans.values()].find((entry) => entry.lineage?.supersedesPlanId === packet.basePlanId);
+      if (successor) return { ok: false, code: "PLAN_VERSION_SUPERSEDED", planId: packet.basePlanId, supersededBy: successor.profile.planId, acceptedStateChanged: false };
+      const rebound = await this.amendmentBinding(profile);
+      if ("ok" in rebound) return rebound;
+      if (JSON.stringify(rebound) !== JSON.stringify(packet.payload.amendment)) return { ok: false, code: "CONSTRUCTION_AMENDMENT_DIFF_MISMATCH", acceptedStateChanged: false };
+      amendment = rebound;
+    }
+    const bound = {
+      basePlanId: packet.basePlanId,
+      baseRevision: packet.baseRevision,
+      profileHash: profile.profileHash,
+      evidenceBindings: packet.payload.evidenceRecords.map(({ evidenceId, contentHash, recordHash }) => ({ evidenceId, contentHash, recordHash })),
+      amendment: amendment ? { supersedesPlanId: amendment.supersedesPlanId, supersedesProfileHash: amendment.supersedesProfileHash, supersedesRevision: amendment.supersedesRevision, diffHash: amendment.diffHash } : null,
+    };
+    const contentHash = await sha256(bound);
+    if (contentHash !== packet.payload.contentHash || packet.payload.draftId !== `plan_draft_${contentHash.slice(0, 16)}`) return { ok: false, code: "CONSTRUCTION_DRAFT_BINDING_MISMATCH", acceptedStateChanged: false };
+    for (const evidence of packet.payload.evidenceRecords) this.kernel.evidence.set(evidence.evidenceId, clone(evidence));
+    this.pendingPlanDraft = { draftId: packet.payload.draftId, basePlanId: packet.basePlanId, baseRevision: packet.baseRevision, profile, evidenceRecords: clone(packet.payload.evidenceRecords), contentHash, amendment };
+    this.planActivationConfirmation = null;
+    return { ok: true, code: "CONSTRUCTION_DRAFT_RESUMED", packet: this.constructionPacketSummary(packet), draft: { draftId: packet.payload.draftId, profileHash: profile.profileHash, contentHash, amendment: clone(amendment) }, humanConfirmationRestored: false, acceptedStateChanged: false, next: "Show the exact restored hashes and diff to the human again; prior confirmation was never persisted." };
+  }
+
+  async discardConstructionPacket({ packetId }: { packetId: string }): Promise<ToolResult> {
+    const packet = this.catalogStore?.loadConstructionPacket();
+    if (!packet || packet.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+    try { this.catalogStore?.clearConstructionPacket(); }
+    catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    if (packet.kind === "draft" && this.pendingPlanDraft?.draftId === packet.payload.draftId) {
+      this.pendingPlanDraft = null;
+      this.planActivationConfirmation = null;
+    }
+    if (packet.kind === "intake") this.latestIntakeAssessment = null;
+    return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Read the current plan before beginning replacement construction work." };
   }
 
   listPlans(): ToolResult {
@@ -115,7 +256,7 @@ export class FinitePlanRuntime {
     };
   }
 
-  assessPlanIntake(input: unknown): ToolResult {
+  private assessPlanIntakeFacts(input: unknown): ToolResult {
     const missing: IntakeFactIssue[] = [];
     const conflicts: IntakeFactIssue[] = [];
     const derivedFacts: Record<string, number> = {};
@@ -182,6 +323,23 @@ export class FinitePlanRuntime {
         : { ok: true, code: "INTAKE_FACTS_COMPLETE", missing: [], conflicts: [], derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Read the family blueprint, compile these facts into its safe grammar, and stage the complete profile." };
     this.latestIntakeAssessment = clone(result);
     return result;
+  }
+
+  async assessPlanIntake(input: unknown): Promise<ToolResult> {
+    const result = this.assessPlanIntakeFacts(input);
+    const normalizedFacts = result.normalizedFacts;
+    if (!normalizedFacts || typeof normalizedFacts !== "object") return result;
+    try {
+      const facts = normalizedFacts as PlanIntakeInput;
+      const evidenceRefs = [...new Set((facts.actuals ?? []).map((actual) => actual.evidenceRef))];
+      const evidenceRecords = evidenceRefs.map((evidenceId) => this.kernel.evidence.get(evidenceId)).filter((evidence): evidence is EvidenceRecord => Boolean(evidence)).map(clone);
+      const packet = await this.persistConstructionPacket("intake", { facts, assessmentCode: result.code, evidenceRecords });
+      this.pendingPlanDraft = null;
+      this.planActivationConfirmation = null;
+      return packet ? { ...result, constructionPacket: this.constructionPacketSummary(packet) } : result;
+    } catch (error) {
+      return { ...result, durability: { ok: false, code: "CONSTRUCTION_PACKET_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error) }, next: "The assessment is usable in this session but was not saved. Repair storage before relying on reload continuity." };
+    }
   }
 
   private currentActualDefinitions(): ProfileDefinition["actuals"] {
@@ -307,6 +465,19 @@ export class FinitePlanRuntime {
     };
     this.pendingPlanDraft = draft;
     this.planActivationConfirmation = null;
+    let constructionPacket: PlanConstructionPacket | null = null;
+    try {
+      constructionPacket = await this.persistConstructionPacket("draft", {
+        draftId: draft.draftId,
+        contentHash: draft.contentHash,
+        profile: profileDefinition(draft.profile),
+        evidenceRecords: clone(draft.evidenceRecords),
+        amendment: clone(draft.amendment),
+      });
+    } catch (error) {
+      this.pendingPlanDraft = null;
+      return { ok: false, code: "CONSTRUCTION_PACKET_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The plan was not staged because its non-authoritative work packet could not be made reload-safe." };
+    }
     return {
       ok: true,
       code: amendment ? "PLAN_AMENDMENT_STAGED" : "PLAN_DRAFT_STAGED",
@@ -319,6 +490,7 @@ export class FinitePlanRuntime {
         contentHash: draft.contentHash,
         amendment: amendment ? clone(amendment) : null,
       },
+      constructionPacket: constructionPacket ? this.constructionPacketSummary(constructionPacket) : null,
       acceptedStateChanged: false,
       next: "Show the exact compiled profile hash, draft hash, and any amendment diff to the human for confirmation. WebMCP cannot create that confirmation.",
     };
@@ -362,7 +534,10 @@ export class FinitePlanRuntime {
     if (!draft || draft.draftId !== draftId) return { ok: false, code: "PLAN_DRAFT_NOT_FOUND", acceptedStateChanged: false };
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
-    return { ok: true, code: "HUMAN_PLAN_DRAFT_REJECTED", draftId, reason: String(reason).slice(0, 500), acceptedStateChanged: false, next: "Codex may read the active catalog and stage a revised complete draft." };
+    let constructionPacketCleared = false;
+    try { constructionPacketCleared = this.clearMatchingConstructionDraft(draftId); }
+    catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", draftId, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The in-memory draft was returned, but durable construction cleanup must be retried explicitly." }; }
+    return { ok: true, code: "HUMAN_PLAN_DRAFT_REJECTED", draftId, reason: String(reason).slice(0, 500), constructionPacketCleared, acceptedStateChanged: false, next: constructionPacketCleared ? "Codex may read the active catalog and stage a revised complete draft." : "The exact draft was returned; a different durable construction packet remains available." };
   }
 
   async activateConfirmedPlanDraft({ draftId, confirmationId, expectedPlanId, expectedRevision, idempotencyKey }: {
@@ -429,7 +604,9 @@ export class FinitePlanRuntime {
     this.activationReceipts.set(idempotencyKey, receipt);
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
-    return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), acceptedStateChanged: true, next: "Rediscover contextual tools and operate the newly active immutable plan version." };
+    let constructionPacketCleared = true;
+    try { constructionPacketCleared = this.clearMatchingConstructionDraft(draftId); } catch { constructionPacketCleared = false; }
+    return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), constructionPacketCleared, acceptedStateChanged: true, next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another." };
   }
 
   switchPlan(planId: string): ToolResult {
@@ -463,6 +640,9 @@ export class FinitePlanRuntime {
   }
 
   clearCurrentProfile(): void {
+    this.catalogStore?.clearConstructionPacket();
+    this.pendingPlanDraft = null;
+    this.planActivationConfirmation = null;
     this.store.clear(this.kernel.profile.planId);
     const entry = this.plans.get(this.kernel.profile.planId)!;
     this.kernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords);
