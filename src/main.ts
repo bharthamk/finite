@@ -148,6 +148,7 @@ const renderPlanDraft = (): string => {
       ${confirmed
         ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`
         : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact kitchen</button>`}
+      <button class="text-button" data-action="reject-plan" data-draft="${escapeHtml(draft.draftId)}">Not this kitchen</button>
     </div>
   </section>`;
 };
@@ -240,12 +241,19 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
   await render();
 };
 
+const rejectPlanDraft = async (draftId: string): Promise<void> => {
+  const result = runtime.humanRejectPlanDraft({ draftId, reason: "Human returned the compiled plan from the consumption surface." });
+  announce(result.ok ? "Plan draft returned. The active plan is unchanged." : `The plan draft was not returned: ${result.code}`);
+  await render();
+};
+
 function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
 }
 
 await seedDecision();

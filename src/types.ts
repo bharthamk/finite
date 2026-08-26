@@ -323,6 +323,25 @@ export interface PlanCatalogEntry {
   evidenceRecords: EvidenceRecord[];
 }
 
+export interface PlanIntakeInput {
+  profileId?: ProfileId;
+  planId?: string;
+  name?: string;
+  brief?: string;
+  allocation?: Partial<Allocation>;
+  actuals?: ActualDefinition[];
+  locks?: string[];
+  preferenceLabels?: string[];
+  entityValues?: Record<string, Record<string, number>>;
+  stages?: Array<{ label: string; marker?: string }>;
+}
+
+export interface IntakeFactIssue {
+  path: string;
+  code: string;
+  prompt: string;
+}
+
 export interface CorrectionEvent {
   eventType: "actual_correction";
   correctionId: string;

@@ -18,11 +18,12 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Immediate WebMCP-to-surface synchronization after tool completion, with revision, active-event, and manifest proof returned to Codex; renderer failure is reported without rewriting the deterministic tool outcome.
 - Provenance-bound evidence registration for Codex research: SHA-256 content and record hashes, deterministic identifiers, content deduplication, forced untrusted classification, freshness/materiality assessment, candidate binding, integrity refusal, and accepted-lineage-only persistence.
 - Bounded staged plan intake: Codex can submit a complete travel, renovation, or event operating profile; the compiler closes its schema, finite-total arithmetic, actual ledger, entities, relationships, moves, search policy, evidence policy, surface grammar, and implemented contextual-tool contract before the draft exists.
+- A clean compiler-valid blueprint plus typed partial-intake assessment: Codex can discover the family contract, translate an incomplete human brief into bounded facts, receive exact missing/conflicting paths, and let code derive one residual allocation without adding an application-owned language model.
 - Exact plan activation authority: a draft remains inert until the human confirms its profile and draft hashes outside WebMCP; Codex can then activate only that bound packet with plan/revision guards and persistent idempotency proof.
 - A persistent multi-plan catalog keyed by actual `planId`, including compiled custom plans, bound actual evidence, legacy snapshot fallback, switching, contextual-tool replacement, and reload-safe activation receipts.
 - Human-only approval and confirmation creators, structurally excluded from WebMCP.
 - Accepted-state persistence with reload-safe receipt idempotency.
-- 23 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
+- 25 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
 
@@ -77,3 +78,4 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `LIVE_ORDER_ACCEPTANCE_2026-08-26.md` — active-order isolation, lifecycle recovery state, WebMCP-to-surface synchronization, and fail-contained rendering receipt.
 - `EVIDENCE_ACCEPTANCE_2026-08-26.md` — researched-evidence admission, quarantine, hashing, deduplication, integrity, event binding, and accepted-lineage persistence receipt.
 - `PLAN_INTAKE_ACCEPTANCE_2026-08-26.md` — complete profile compilation, human-confirmed activation, multi-plan persistence/switching, WebMCP authority separation, and refusal receipt.
+- `PLAN_CREATION_STORY_LAB_2026-08-26.md` — 12 human and 12 Codex creation stories, results, WebMCP superpowers, friction, blockers, and next engineering ruling.

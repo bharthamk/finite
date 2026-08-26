@@ -167,6 +167,7 @@ const surfaceComponents = new Set([
   "commitment_stack", "actual_forecast", "constraint_panel", "change_tray", "option_compare", "approval_panel",
 ]);
 const searchObjectives = new Set(["preserve_comfort", "preserve_experience", "preserve_buffer", "preserve_contingency", "preserve_schedule", "balanced"]);
+const evidenceSourceClasses = new Set(["supplier_quote", "actual_receipt", "user_statement"]);
 
 const unsafeSurfaceText = (value: string): boolean => /<\/?(?:script|style|iframe)|javascript:|data:text\/html|\{\{|\}\}/i.test(value);
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -296,7 +297,11 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(profile.evidencePolicy.asOf) || !Number.isFinite(Date.parse(`${profile.evidencePolicy.asOf}T00:00:00Z`))) issues.push("evidencePolicy.asOf must be YYYY-MM-DD");
   if (profile.evidencePolicy.materialityMinor < 0) issues.push("evidence materiality must not be negative");
-  for (const [sourceClass, days] of Object.entries(profile.evidencePolicy.maxAgeDaysBySourceClass)) if (!Number.isInteger(days) || days < 0) issues.push(`evidence max age for ${sourceClass} must be a non-negative integer`);
+  for (const [sourceClass, days] of Object.entries(profile.evidencePolicy.maxAgeDaysBySourceClass)) {
+    if (!evidenceSourceClasses.has(sourceClass)) issues.push(`evidence source class ${sourceClass} is unsupported`);
+    if (!Number.isInteger(days) || days < 0) issues.push(`evidence max age for ${sourceClass} must be a non-negative integer`);
+  }
+  for (const sourceClass of evidenceSourceClasses) if (!(sourceClass in profile.evidencePolicy.maxAgeDaysBySourceClass)) issues.push(`evidence policy must define ${sourceClass}`);
   const requiredFields = {
     travel: [["trip_days", "days"], ["booked_segment_days", "days"]],
     renovation: [["completion_day", "day"], ["committed_completion_day", "day"]],

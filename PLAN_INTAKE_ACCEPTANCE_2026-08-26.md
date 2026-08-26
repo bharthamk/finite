@@ -38,14 +38,14 @@ switches the live contextual WebMCP vocabulary. Activation receipts persist;
 exact retries replay, key reuse is refused, and a modified stored receipt fails
 its checksum.
 
-The live registry now exposes 23 stable WebMCP tools plus three contextual tools:
-`finite_list_plans`, `finite_stage_plan_draft`,
+The live registry now exposes 25 stable WebMCP tools plus three contextual tools:
+`finite_list_plans`, `finite_get_plan_blueprint`, `finite_assess_plan_intake`, `finite_stage_plan_draft`,
 `finite_activate_confirmed_plan`, and `finite_switch_plan` are the new stable
 operations. `humanConfirmPlanDraft` remains structurally absent.
 
 ## Automated proof
 
-The 27/27 production tests prove:
+The 29/29 production tests prove:
 
 1. a customer-summit plan with different totals, capacity, copy, and run-of-show
    compiles while the travel plan remains active;
@@ -56,16 +56,18 @@ The 27/27 production tests prove:
 5. travel-to-custom-event switching replaces contextual tools;
 6. malformed, unsafe, excessive, duplicate, missing-evidence, stale, and
    unsupported drafts fail closed; and
-7. WebMCP exposes all operator actions while exposing no human authority creator.
+7. WebMCP exposes all operator actions while exposing no human authority creator;
+8. family blueprints contain no inherited spent actuals or fixture evidence; and
+9. typed partial intake returns exact missing/conflicting paths and safely derives
+   one residual allocation without changing accepted truth.
 
 TypeScript typecheck, Vite 8 production build, and the production dependency
 audit pass with zero runtime vulnerabilities.
 
 ## What remains deliberately open
 
-This slice admits a complete compiled plan; it does not yet turn an incomplete
-human brief into a clarification dialogue. The next product work is to exercise
-real human/Codex creation stories over this boundary, add a typed partial-intake
-and missing-facts contract where those stories prove it necessary, and then add
-safe amendment/versioning for an already activated plan. Submission preparation
+This slice now assesses an incomplete Codex-interpreted brief, but that packet is
+volatile and deliberately does not interpret language or generate a profile.
+The next product work is safe amendment/versioning for an already activated plan,
+followed by experiments on the semantic-family ceiling. Submission preparation
 is not the next engineering task.

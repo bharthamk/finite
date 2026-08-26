@@ -131,6 +131,9 @@ test("malformed, unsafe, unconserved, unsupported, duplicate, missing-evidence, 
   const excessMoves = customLaunch("plan_event_excess_moves");
   for (let index = 0; index < 13; index += 1) excessMoves.moves[`extra_${index}`] = { savingsMinor: 1, daysDelta: 0, dimension: `extra_${index}`, tradeoff: "Bounded tradeoff", impacts: {} };
   await assert.rejects(() => compileProfile(excessMoves), ProfileValidationError);
+  const unsupportedEvidence = customLaunch("plan_event_unsupported_evidence");
+  unsupportedEvidence.evidencePolicy.maxAgeDaysBySourceClass.social_post = 2;
+  await assert.rejects(() => compileProfile(unsupportedEvidence), ProfileValidationError);
 
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
@@ -148,6 +151,57 @@ test("malformed, unsafe, unconserved, unsupported, duplicate, missing-evidence, 
   assert.equal(runtime.humanConfirmPlanDraft({ draftId: valid.draft.draftId }).code, "PLAN_DRAFT_STALE");
 });
 
+test("Codex receives a compiler-valid blueprint and the human can return an inert draft", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const blueprint = runtime.getPlanBlueprint("event");
+  assert.equal(blueprint.code, "PLAN_BLUEPRINT");
+  assert.equal((await compileProfile(blueprint.profile)).planId, "plan_event_new");
+  assert.equal(blueprint.profile.accepted.spentMinor, 0);
+  assert.deepEqual(blueprint.profile.actuals, []);
+  assert.match(blueprint.contract.mustConserve, /spentMinor/);
+  assert.deepEqual(blueprint.contract.familySemantics, ["guest_headcount.count", "venue.capacity", "run_of_show"]);
+  const staged = await runtime.stagePlanDraft(customLaunch("plan_event_returned"));
+  const rejected = runtime.humanRejectPlanDraft({ draftId: staged.draft.draftId, reason: "Wrong use case" });
+  assert.equal(rejected.code, "HUMAN_PLAN_DRAFT_REJECTED");
+  assert.equal(runtime.pendingPlanDraft, null);
+  assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
+  assert.equal(runtime.listPlans().plans.length, 3);
+});
+
+test("typed partial intake returns exact missing paths, conflicts, and one safe residual without changing truth", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const acceptedBefore = structuredClone(runtime.kernel.accepted);
+  const incomplete = runtime.assessPlanIntake({ profileId: "event", name: "Summit" });
+  assert.equal(incomplete.code, "INTAKE_FACTS_MISSING");
+  assert(incomplete.missing.some((issue) => issue.path === "allocation.totalBudgetMinor"));
+  assert(incomplete.missing.some((issue) => issue.path === "entityValues.guest_headcount.count"));
+
+  const base = {
+    profileId: "event",
+    planId: "plan_event_intake_summit",
+    name: "Customer summit",
+    brief: "Operate a 180-person summit within a fixed total.",
+    allocation: { totalBudgetMinor: 420_000, spentMinor: 0, committedMinor: 170_000, forecastMinor: 190_000 },
+    actuals: [],
+    locks: ["venue_capacity", "total_budget"],
+    preferenceLabels: ["protect_guest_experience"],
+    entityValues: { guest_headcount: { count: 180 }, venue: { capacity: 200 } },
+    stages: [{ label: "Arrival", marker: "08:30" }, { label: "Sessions", marker: "09:30" }],
+  };
+  const complete = runtime.assessPlanIntake(base);
+  assert.equal(complete.code, "INTAKE_FACTS_COMPLETE");
+  assert.equal(complete.derivedFacts["allocation.bufferMinor"], 60_000);
+  assert.equal(complete.normalizedFacts.allocation.bufferMinor, 60_000);
+  assert.deepEqual(runtime.kernel.accepted, acceptedBefore);
+  assert.equal(runtime.kernel.revision, 1);
+
+  const conflict = runtime.assessPlanIntake({ ...base, planId: "plan_event_conflict", allocation: { totalBudgetMinor: 300_000, spentMinor: 0, committedMinor: 170_000, forecastMinor: 190_000, bufferMinor: 20_000 } });
+  assert.equal(conflict.code, "INTAKE_FACTS_CONFLICT");
+  assert(conflict.conflicts.some((issue) => issue.code === "FINITE_TOTAL_CONFLICT"));
+});
+
 test("WebMCP exposes plan operations but never human plan authority and refreshes contextual tools after activation", async () => {
   const profiles = await compileBuiltInProfiles();
   const storage = new MemoryStorage();
@@ -155,7 +209,9 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 26);
+  assert.equal(inventory.length, 28);
+  assert(host.tools.has("finite_get_plan_blueprint"));
+  assert(host.tools.has("finite_assess_plan_intake"));
   assert(host.tools.has("finite_stage_plan_draft"));
   assert(host.tools.has("finite_activate_confirmed_plan"));
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
@@ -181,5 +237,5 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("event_change_headcount"));
-  assert.equal(host.tools.size, 26);
+  assert.equal(host.tools.size, 28);
 });

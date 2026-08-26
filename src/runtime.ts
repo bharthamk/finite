@@ -1,7 +1,7 @@
 import { clone, makeId, sha256 } from "./crypto.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
-import { compileProfile, ProfileValidationError } from "./profiles.js";
+import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
 import type {
   CompiledProfile,
   EvidenceRecord,
@@ -9,6 +9,8 @@ import type {
   PlanActivationReceipt,
   PlanCatalogEntry,
   PlanDraft,
+  PlanIntakeInput,
+  IntakeFactIssue,
   ProfileDefinition,
   ProfileId,
   ToolResult,
@@ -35,6 +37,7 @@ export class FinitePlanRuntime {
   planActivationConfirmation: PlanActivationConfirmation | null = null;
   private readonly plans = new Map<string, CompiledCatalogEntry>();
   private readonly activationReceipts = new Map<string, PlanActivationReceipt>();
+  latestIntakeAssessment: ToolResult | null = null;
 
   constructor(
     private readonly profiles: Map<ProfileId, CompiledProfile>,
@@ -74,6 +77,105 @@ export class FinitePlanRuntime {
       } : null,
       acceptedStateChanged: false,
     };
+  }
+
+  getPlanBlueprint(profileId: ProfileId): ToolResult {
+    if (!this.profiles.has(profileId)) return { ok: false, code: "PROFILE_NOT_FOUND", acceptedStateChanged: false };
+    const definition = getProfileDefinition(profileId);
+    definition.planId = `plan_${profileId}_new`;
+    definition.name = `New ${profileId} finite plan`;
+    definition.accepted.forecastMinor += definition.accepted.spentMinor;
+    definition.accepted.spentMinor = 0;
+    definition.actuals = [];
+    return {
+      ok: true,
+      code: "PLAN_BLUEPRINT",
+      profileId,
+      profile: definition,
+      contract: {
+        fixed: ["schemaVersion", "profileId", "contextualCapabilities", "surface.version", "surface.timeModel"],
+        mustConserve: "spentMinor + committedMinor + forecastMinor + bufferMinor = totalBudgetMinor",
+        actualLaw: "sum(actuals.originalAmountMinor) = accepted.spentMinor; every actual evidenceRef must already exist in the active evidence catalog",
+        familySemantics: {
+          travel: ["trip_days.days", "booked_segment_days.days", "timeline_lane"],
+          renovation: ["completion_day.day", "committed_completion_day.day", "phase_lane"],
+          event: ["guest_headcount.count", "venue.capacity", "run_of_show"],
+        }[profileId],
+        bounds: { serializedCharacters: 100_000, actuals: 100, entities: 50, relationships: 100, moves: 12, stages: 12, primaryMeasures: 8 },
+        authority: "Codex may edit and stage the profile. Only the human surface can confirm its exact compiled hashes; only then may Codex activate it.",
+      },
+      acceptedStateChanged: false,
+      next: "Assess the human facts first, replace the example values, register actual evidence, then stage the complete profile.",
+    };
+  }
+
+  assessPlanIntake(input: unknown): ToolResult {
+    const missing: IntakeFactIssue[] = [];
+    const conflicts: IntakeFactIssue[] = [];
+    const derivedFacts: Record<string, number> = {};
+    if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "OBJECT_REQUIRED", prompt: "Provide a typed intake object." }], acceptedStateChanged: false };
+    if (JSON.stringify(input).length > 30_000) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "INTAKE_TOO_LARGE", prompt: "Keep the human-fact packet under 30,000 serialized characters." }], acceptedStateChanged: false };
+    const facts = clone(input as PlanIntakeInput);
+    const ask = (path: string, code: string, prompt: string): void => { missing.push({ path, code, prompt }); };
+    const conflict = (path: string, code: string, prompt: string): void => { conflicts.push({ path, code, prompt }); };
+    const boundedText = (value: unknown, max: number): boolean => typeof value === "string" && Boolean(value.trim()) && value.length <= max;
+    const profileId = facts.profileId;
+    if (!(profileId === "travel" || profileId === "renovation" || profileId === "event")) ask("profileId", "FAMILY_REQUIRED", "Is this best operated as travel/calendar, renovation/phases, or event/run-of-show?");
+    if (!boundedText(facts.planId, 64) || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(facts.planId ?? "")) ask("planId", "PLAN_ID_REQUIRED", "Provide a new lowercase plan identifier.");
+    else if (this.plans.has(facts.planId!)) conflict("planId", "PLAN_ID_ALREADY_EXISTS", "Use a new plan id; amendments need a new version until supersession lineage is implemented.");
+    if (!boundedText(facts.name, 120)) ask("name", "PLAN_NAME_REQUIRED", "What should the human call this plan?");
+    if (!boundedText(facts.brief, 500)) ask("brief", "OUTCOME_BRIEF_REQUIRED", "What useful outcome is the human ordering, in one bounded sentence?");
+
+    const allocationFields = ["totalBudgetMinor", "spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
+    const allocation = { ...(facts.allocation ?? {}) };
+    for (const field of allocationFields) {
+      const value = allocation[field];
+      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) conflict(`allocation.${field}`, "INVALID_MONEY", `${field} must be a non-negative safe integer in minor units.`);
+    }
+    if (allocation.totalBudgetMinor === undefined) ask("allocation.totalBudgetMinor", "TOTAL_REQUIRED", "What is the fixed finite total?");
+    const componentFields = ["spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
+    const absentComponents = componentFields.filter((field) => allocation[field] === undefined);
+    if (allocation.totalBudgetMinor !== undefined && absentComponents.length === 1 && conflicts.length === 0) {
+      const missingField = absentComponents[0]!;
+      const known = componentFields.reduce((total, field) => total + (allocation[field] ?? 0), 0);
+      const residual = allocation.totalBudgetMinor - known;
+      if (residual < 0) conflict(`allocation.${missingField}`, "NEGATIVE_RESIDUAL", "Known allocations already exceed the finite total.");
+      else { allocation[missingField] = residual; derivedFacts[`allocation.${missingField}`] = residual; }
+    } else for (const field of absentComponents) ask(`allocation.${field}`, "ALLOCATION_REQUIRED", `How much is ${field.replace("Minor", "")}?`);
+    if (componentFields.every((field) => allocation[field] !== undefined) && allocation.totalBudgetMinor !== undefined) {
+      const sum = componentFields.reduce((total, field) => total + (allocation[field] ?? 0), 0);
+      if (sum !== allocation.totalBudgetMinor) conflict("allocation", "FINITE_TOTAL_CONFLICT", `Allocation components total ${sum}, not ${allocation.totalBudgetMinor}.`);
+    }
+
+    const spentMinor = allocation.spentMinor;
+    if (spentMinor !== undefined && spentMinor > 0 && !facts.actuals?.length) ask("actuals", "ACTUALS_REQUIRED", "List the already-paid items and their evidence references.");
+    if (facts.actuals) {
+      const actualSum = facts.actuals.reduce((total, actual) => total + (Number.isSafeInteger(actual.originalAmountMinor) ? actual.originalAmountMinor : 0), 0);
+      if (spentMinor !== undefined && actualSum !== spentMinor) conflict("actuals", "ACTUAL_LEDGER_CONFLICT", `Actual items total ${actualSum}, not spentMinor ${spentMinor}.`);
+      for (let index = 0; index < facts.actuals.length; index += 1) {
+        const actual = facts.actuals[index]!;
+        if (!this.kernel.evidence.has(actual.evidenceRef)) ask(`actuals.${index}.evidenceRef`, "EVIDENCE_REQUIRED", `Register evidence for ${actual.label || actual.actualId || `actual ${index + 1}`}.`);
+      }
+    }
+    if (!facts.locks?.length) ask("locks", "LOCKS_REQUIRED", "What must Codex protect even when the plan is under pressure?");
+    if (!facts.preferenceLabels?.length) ask("preferenceLabels", "PREFERENCES_REQUIRED", "What should Codex preserve when trade-offs are necessary?");
+    if (!facts.stages?.length) ask("stages", "TIME_SHAPE_REQUIRED", "What are the plan's meaningful calendar stops, phases, or run-of-show stages?");
+    if (profileId === "travel" || profileId === "renovation" || profileId === "event") {
+      const required = {
+        travel: [["trip_days", "days"], ["booked_segment_days", "days"]],
+        renovation: [["completion_day", "day"], ["committed_completion_day", "day"]],
+        event: [["guest_headcount", "count"], ["venue", "capacity"]],
+      }[profileId];
+      for (const [entityId, field] of required) if (!Number.isSafeInteger(facts.entityValues?.[entityId!]?.[field!])) ask(`entityValues.${entityId}.${field}`, "ENTITY_FACT_REQUIRED", `Provide ${entityId}.${field} for the ${profileId} operating contract.`);
+    }
+    const normalizedFacts = { ...facts, allocation };
+    const result: ToolResult = conflicts.length
+      ? { ok: false, code: "INTAKE_FACTS_CONFLICT", conflicts, missing, derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Ask the human only for the conflicting and missing paths; do not stage a profile." }
+      : missing.length
+        ? { ok: true, code: "INTAKE_FACTS_MISSING", missing, derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Ask the human only for these missing facts, update the typed packet, and reassess." }
+        : { ok: true, code: "INTAKE_FACTS_COMPLETE", missing: [], conflicts: [], derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Read the family blueprint, compile these facts into its safe grammar, and stage the complete profile." };
+    this.latestIntakeAssessment = clone(result);
+    return result;
   }
 
   async stagePlanDraft(input: unknown): Promise<ToolResult> {
@@ -145,6 +247,14 @@ export class FinitePlanRuntime {
     };
     this.planActivationConfirmation = confirmation;
     return { ok: true, code: "HUMAN_PLAN_ACTIVATION_CONFIRMED", confirmation: clone(confirmation), acceptedStateChanged: false, next: "Codex may now activate only this exact compiled draft." };
+  }
+
+  humanRejectPlanDraft({ draftId, reason }: { draftId: string; reason: string }): ToolResult {
+    const draft = this.pendingPlanDraft;
+    if (!draft || draft.draftId !== draftId) return { ok: false, code: "PLAN_DRAFT_NOT_FOUND", acceptedStateChanged: false };
+    this.pendingPlanDraft = null;
+    this.planActivationConfirmation = null;
+    return { ok: true, code: "HUMAN_PLAN_DRAFT_REJECTED", draftId, reason: String(reason).slice(0, 500), acceptedStateChanged: false, next: "Codex may read the active catalog and stage a revised complete draft." };
   }
 
   async activateConfirmedPlanDraft({ draftId, confirmationId, expectedPlanId, expectedRevision, idempotencyKey }: {
