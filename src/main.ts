@@ -43,7 +43,12 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
     <div class="public-surface">
       <header class="public-header">
         <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
-        <p>Travel · Renovation · Event / operated through WebMCP</p>
+        <nav class="public-nav" aria-label="Product">
+          <a href="#surfaces">Product</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#build">Build log</a>
+          <a href="#roadmap">Roadmap</a>
+        </nav>
         <div class="public-header__actions">
           <a class="public-header__cta" href="${signInPath}">Continue with ChatGPT</a>
           <button class="public-header__demo" data-action="start-demo">Try demo</button>
@@ -180,6 +185,97 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </div>
         </section>
 
+        <section class="build-story" id="build" aria-labelledby="build_title">
+          <div class="build-story__head">
+            <div class="public-section-head">
+              <p class="eyebrow">Build log / selected engineering milestones</p>
+              <h2 id="build_title">The product is live in the details.</h2>
+              <p>Finite is an active owner-private build, not a rendered concept. These are working contracts in the current product; the acceptance suite checks the boundaries again on every build.</p>
+            </div>
+            <aside class="build-state" aria-label="Current build state">
+              <span>Current build</span>
+              <strong>Active engineering</strong>
+              <dl>
+                <div><dt>Contract gate</dt><dd>61 / 61 passing</dd></div>
+                <div><dt>Plan families</dt><dd>3 compiled</dd></div>
+                <div><dt>Live tools</dt><dd>45 page-scoped</dd></div>
+                <div><dt>Audience</dt><dd>Owner-private</dd></div>
+              </dl>
+              <small>Verified 26 August 2026</small>
+            </aside>
+          </div>
+
+          <ol class="build-log" aria-label="Finite build milestones">
+            <li>
+              <div class="build-log__index"><span>Build 05</span><time datetime="2026-08-26">26 Aug 2026</time></div>
+              <div class="build-log__copy"><h3>The product gets a public front door.</h3><p>The Paris change now demonstrates whole-plan replanning across flights, accommodation, transport, dates, comfort and remaining resources. Travel, renovation and event each expose a different adaptive surface rather than one relabelled dashboard.</p></div>
+              <span class="build-status">Working</span>
+            </li>
+            <li>
+              <div class="build-log__index"><span>Build 04</span><time datetime="2026-08-26">26 Aug 2026</time></div>
+              <div class="build-log__copy"><h3>Identity becomes a boundary, not a credential store.</h3><p>ChatGPT owns sign-in. Finite derives an isolated tenant, provisions a private kitchen on first use, and offers a separate 24-hour demo whose complete namespace expires with it.</p></div>
+              <span class="build-status">Proven</span>
+            </li>
+            <li>
+              <div class="build-log__index"><span>Build 03</span><time datetime="2026-08-26">26 Aug 2026</time></div>
+              <div class="build-log__copy"><h3>One plan crosses devices without carrying authority with it.</h3><p>Travel, renovation and event each complete the same two-device journey. Codex can resume exact decision work; the receiving runtime rebuilds the candidate independently; only a fresh, short-lived human handoff can authorize the commit.</p></div>
+              <span class="build-status">Proven</span>
+            </li>
+            <li>
+              <div class="build-log__index"><span>Build 02</span><time datetime="2026-08-26">26 Aug 2026</time></div>
+              <div class="build-log__copy"><h3>Accepted truth leaves the browser.</h3><p>A D1 transaction now commits the head, immutable revision, receipt, domain event and referenced evidence together. Competing writers, stale revisions, tampered envelopes and lost-response retries fail closed or resolve through the stored receipt.</p></div>
+              <span class="build-status">Proven</span>
+            </li>
+            <li>
+              <div class="build-log__index"><span>Build 01</span><time datetime="2026-08-26">26 Aug 2026</time></div>
+              <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes 42 stable and three contextual tools against the page the human sees. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
+              <span class="build-status">Working</span>
+            </li>
+          </ol>
+
+          <p class="build-boundary"><span>Deliberate boundary</span>Finite models, compares and revises the plan. It does not currently change a booking, make a purchase, pay a supplier or imply that an external system has acted.</p>
+        </section>
+
+        <section class="roadmap-story" id="roadmap" aria-labelledby="roadmap_title">
+          <div class="public-section-head public-section-head--light">
+            <p class="eyebrow">Known roadmap / ordered by product risk</p>
+            <h2 id="roadmap_title">Make the loop harder to break before making it wider.</h2>
+            <p>The roadmap follows the control plane: deepen the real loop, make it portable, then earn external action one bounded capability at a time.</p>
+          </div>
+          <div class="roadmap-lanes">
+            <article class="roadmap-lane roadmap-lane--now">
+              <span>Now / hardening</span>
+              <h3>Production resilience for accepted plans.</h3>
+              <ul>
+                <li>Recovery and export drills against the durable plan lineage</li>
+                <li>Property and invariant fuzzing across replanning operations</li>
+                <li>Rate, latency and redacted telemetry budgets</li>
+                <li>Deeper end-to-end pressure on the Paris loop and all three surfaces</li>
+              </ul>
+            </article>
+            <article class="roadmap-lane">
+              <span>Next / portability</span>
+              <h3>A kitchen another person can own.</h3>
+              <ul>
+                <li>Standard OIDC for a portable, self-hosted identity route</li>
+                <li>Supported recovery, migration and first-run ownership paths</li>
+                <li>Recurring-period and milestone plan experiments</li>
+                <li>Public beta only after tenancy and recovery survive independent use</li>
+              </ul>
+            </article>
+            <article class="roadmap-lane">
+              <span>Later / earned expansion</span>
+              <h3>External action with capability-specific authority.</h3>
+              <ul>
+                <li>Booking, supplier and calendar connectors with explicit approval per action</li>
+                <li>Proof of what an external system actually accepted or refused</li>
+                <li>More plan families only where the work demands a genuinely different grammar</li>
+                <li>No generic automation permission and no invisible parallel state</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
         <section class="public-entry" id="enter" aria-labelledby="enter_title">
           <div>
             <p class="eyebrow">Your kitchen, when you are ready</p>
@@ -197,7 +293,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </dl>
         </section>
       </main>
-      <footer class="public-footer"><p>Plans that survive contact with reality.</p><span>Finite / adaptive planning through WebMCP</span></footer>
+      <footer class="public-footer"><p>Plans that survive contact with reality.</p><span><a href="#build">Build log</a> · <a href="#roadmap">Roadmap</a> / Finite through WebMCP</span></footer>
     </div>`;
   root.querySelectorAll<HTMLButtonElement>("[data-action='start-demo']").forEach((demoButton) => demoButton.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
@@ -412,17 +508,23 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           </div>
           <button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save my order</button>
         </form>` : `
-        <section class="arrival-order-head" aria-labelledby="arrival_order_title">
-          <div>
-            <p class="eyebrow">Human order / version ${order.version}</p>
-            <h1 id="arrival_order_title">${escapeHtml(order.rawOutcome)}</h1>
-          </div>
-          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p><small>Saved as human order version ${order.version}</small></aside>
+        <section class="arrival-order-head" aria-label="Arrival status">
+          <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
+          <details class="arrival-order-source">
+            <summary><span>Original order · version ${order.version}</span><strong>View what you asked Finite to make happen</strong></summary>
+            <p>${escapeHtml(order.rawOutcome)}</p>
+          </details>
+          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div><small>Order v${order.version}</small></aside>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer is saved as human input. Codex cannot fill it in for you.</small></section>` : ""}
-        ${interpretation ? `<section class="arrival-interpretation">
-          <div class="arrival-interpretation__head"><p class="eyebrow">Codex interpretation / not human fact</p><h2>${escapeHtml(interpretation.summary)}</h2><span>${interpretation.complete ? "Complete proposal" : "Work in progress"}</span></div>
+        ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
+          <div><p class="eyebrow">Your brief / ready for review</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Confirming releases this exact brief to Codex for plan construction. It does not activate a plan, spend money, make a booking, or authorize an external action.</p></div>
+          <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
+          <small>Need a change? Open “Add or correct something” below. Finite will invalidate this proposal automatically.</small>
+        </section>` : ""}
+        ${interpretation ? `<details class="arrival-interpretation">
+          <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex interpretation / not human fact</p><h2>Review assumptions and source details</h2></div><span>${interpretation.complete ? "Complete proposal" : "Work in progress"}</span></summary>
           <div class="arrival-interpretation__grid">
             <article class="arrival-interpretation__family"><span>Working shape</span><strong>${escapeHtml(humanLabel(interpretation.inferredFamily ?? "Still being inferred"))}</strong><p>Codex selected this planning grammar. You can correct it before anything becomes accepted.</p></article>
             <article><span>What I’m working from</span>${renderHumanValue(interpretation.known)}</article>
@@ -430,21 +532,18 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <article><span>What I still need</span>${renderTextList(interpretation.missing, "Nothing currently blocking")}</article>
             ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
           </div>
-        </section>` : ""}
-        ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
-          <div><p class="eyebrow">Human review boundary</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p>Confirming releases this exact interpretation to Codex for plan construction. It does not activate a plan, spend money, make a booking, or authorize an external action.</p></div>
-          <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
-          <small>Need a change? Add a correction below instead; Finite will invalidate this proposal automatically.</small>
-        </section>` : ""}
+        </details>` : ""}
         ${renderPlanDraft()}
-        <section class="arrival-continuity">
-          <div><p class="eyebrow">Keep shaping the order</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
-          <form data-arrival-form="append">
-            <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
-            <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
-            <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
-          </form>
-        </section>
+        <details class="arrival-continuity">
+          <summary><span>Order controls</span><strong>Add or correct something</strong><small>New facts create a fresh version and invalidate stale work.</small></summary>
+          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the order</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
+            <form data-arrival-form="append">
+              <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
+              <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
+              <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
+            </form>
+          </div>
+        </details>
         ${inputTrail.length ? `<details class="arrival-history"><summary>Recent details you supplied</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))} · ${escapeHtml(inputSurfaceLabel(input.sourceSurface))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol></details>` : ""}
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
