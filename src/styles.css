@@ -92,7 +92,7 @@ button { font: inherit; cursor: pointer; }
 .arrival-examples button { border:1px solid var(--line); padding:8px 11px; color:var(--ink); background:transparent; font-size:.72rem; }
 .arrival-order__submit { width:min(360px,100%); margin-top:34px; }
 .arrival-order-head { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.55fr); gap:clamp(50px,8vw,130px); align-items:center; padding:clamp(74px,10vw,150px) 0 clamp(54px,7vw,100px); border-bottom:1px solid var(--ink); }
-.arrival-order-head h1 { max-width:940px; margin:0; font-size:clamp(3.3rem,6.8vw,7.6rem); font-weight:500; line-height:.9; letter-spacing:-.07em; text-wrap:balance; }
+.arrival-order-head h1 { max-width:940px; margin:0; font-size:clamp(2.2rem,3.8vw,4.4rem); font-weight:500; line-height:1.02; letter-spacing:-.045em; text-wrap:balance; }
 .arrival-state { padding:30px; border:1px solid var(--ink); background:var(--panel); box-shadow:11px 11px 0 var(--accent-soft); }
 .arrival-state>span { display:inline-block; padding:7px 9px; color:white; background:var(--deep); font:500 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 .arrival-state h2 { margin:26px 0 13px; font-size:1.35rem; line-height:1.25; letter-spacing:-.035em; }
@@ -491,7 +491,7 @@ footer span { font:500 .7rem/1.2 "DM Mono",monospace; text-transform:uppercase; 
   .arrival-fields,.arrival-interpretation__grid { grid-template-columns:1fr; }
   .arrival-interpretation__grid article { border-right:0; }
   .arrival-order-head { padding:62px 0 48px; }
-  .arrival-order-head h1 { font-size:clamp(3rem,15vw,4.8rem); }
+  .arrival-order-head h1 { font-size:clamp(2rem,9.5vw,3rem); line-height:1.05; }
   .arrival-question,.arrival-continuity,.arrival-handoff { margin-inline:-18px; border-left:0; border-right:0; }
   .arrival-handoff dl { grid-template-columns:1fr; }
   .arrival-handoff dl>div+div { padding-left:0; border-left:0; }
