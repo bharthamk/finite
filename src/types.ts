@@ -353,6 +353,14 @@ export interface WebMCPToolDefinition {
   execute: (input?: unknown) => Promise<ToolResult>;
 }
 
+export interface WebMCPToolActivity {
+  toolName: string;
+  result: ToolResult;
+}
+
+export type WebMCPToolObserver = (activity: WebMCPToolActivity) =>
+  void | Record<string, unknown> | Promise<void | Record<string, unknown>>;
+
 export interface ModelContextHost {
   registerTool(tool: WebMCPToolDefinition, options?: { signal?: AbortSignal }): Promise<void> | void;
   getTools?(): Promise<Array<Omit<WebMCPToolDefinition, "execute">>>;

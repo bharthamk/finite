@@ -71,6 +71,7 @@ export class FinitePlanKernel {
   readonly feedback: FeedbackEvent[] = [];
   readonly receipts: Receipt[] = [];
   readonly candidates = new Map<string, Candidate>();
+  activeEventId: string | null = null;
   stagedCandidate: Candidate | null = null;
   approval: HumanApproval | null = null;
   pendingCorrection: PendingCorrection | null = null;
@@ -100,6 +101,7 @@ export class FinitePlanKernel {
     this.preferenceEvents.push(...clone(snapshot.preferenceEvents));
     this.feedback.push(...clone(snapshot.feedback));
     this.receipts.push(...clone(snapshot.receipts));
+    this.activeEventId = [...this.events].reverse().find((event) => event.baseRevision === this.revision)?.eventId ?? null;
     for (const receipt of this.receipts) {
       if (!receipt.idempotencyKey) continue;
       if (receipt.receiptType === "plan_option") this.optionIdempotency.set(receipt.idempotencyKey, receipt);
@@ -118,7 +120,7 @@ export class FinitePlanKernel {
       accepted: clone(this.accepted),
       preferenceWeights: clone(this.preferenceWeights),
       entities: clone(this.entities),
-      events: clone(this.events),
+      events: clone(this.events.filter((event) => event.baseRevision < this.revision)),
       correctionEvents: clone(this.correctionEvents),
       preferenceEvents: clone(this.preferenceEvents),
       feedback: clone(this.feedback),
@@ -157,9 +159,11 @@ export class FinitePlanKernel {
       mutationClasses: ["read", "simulation", "staged_write", "human_confirmation", "consequential_write", "export"],
       contextualCapabilities: clone(this.profile.contextualCapabilities),
       optionSearch: { strategy: "bounded_legal_move_enumeration", ...clone(this.profile.searchPolicy) },
+      decisionLifecycle: ["record_change", "search_or_simulate", "stage", "human_approval", "apply", "receipt"],
+      currentDecision: this.decisionState(),
       humanAuthorityActionsExposed: false,
       approvalLaw: "Only the human surface creates approval or confirmation identifiers bound to exact staged content and revision.",
-      next: "Read only the selectors needed, then inspect legal moves before simulating.",
+      next: this.decisionNext(),
     };
   }
 
@@ -172,7 +176,7 @@ export class FinitePlanKernel {
     if (unique.includes("constraints")) state.constraints = { locks: clone(this.profile.locks), relationships: clone(this.profile.relationships) };
     if (unique.includes("entities")) state.entities = clone(this.entities);
     if (unique.includes("preferences")) state.preferences = { labels: clone(this.profile.preferenceLabels), weights: clone(this.preferenceWeights) };
-    if (unique.includes("pending")) state.pending = { eventIds: this.events.filter((event) => event.baseRevision === this.revision).map((event) => event.eventId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null };
+    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, next: this.decisionNext() };
     if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
     return { ok: true, code: "PLAN_STATE", selectors: unique, state, acceptedStateChanged: false };
   }
@@ -185,6 +189,51 @@ export class FinitePlanKernel {
       target.push({ moveId, ...clone(move) });
     }
     return { ok: true, code: "MOVABLE_SET", revision: this.revision, legal, blocked, acceptedStateChanged: false };
+  }
+
+  private activeCandidates(): Candidate[] {
+    return [...this.candidates.values()].filter((candidate) => candidate.eventId === this.activeEventId && candidate.baseRevision === this.revision);
+  }
+
+  private decisionStatus(): "idle" | "change_recorded" | "options_available" | "option_staged" | "human_approved" {
+    if (this.approval) return "human_approved";
+    if (this.stagedCandidate) return "option_staged";
+    if (this.activeCandidates().length) return "options_available";
+    if (this.activeEventId) return "change_recorded";
+    return "idle";
+  }
+
+  private decisionState(): Record<string, unknown> {
+    return {
+      status: this.decisionStatus(),
+      activeEventId: this.activeEventId,
+      candidateCount: this.activeCandidates().length,
+      stagedCandidateId: this.stagedCandidate?.candidateId ?? null,
+      humanApprovalPresent: Boolean(this.approval),
+    };
+  }
+
+  private decisionNext(): string {
+    const status = this.decisionStatus();
+    if (status === "change_recorded") return "Inspect legal moves, then search or simulate against activeEventId.";
+    if (status === "options_available") return "Compare candidates and stage exactly one valid option.";
+    if (status === "option_staged") return "Wait for the human to approve, reject, or provide feedback.";
+    if (status === "human_approved") return "Apply the exact approved candidate with the current revision and a fresh idempotency key.";
+    return "Read only the selectors needed, then record one typed change event.";
+  }
+
+  private clearDecision(): { invalidatedEventId: string | null; invalidatedCandidateIds: string[]; invalidatedStagedCandidateId: string | null; invalidatedApprovalId: string | null } {
+    const invalidated = {
+      invalidatedEventId: this.activeEventId,
+      invalidatedCandidateIds: [...this.candidates.keys()],
+      invalidatedStagedCandidateId: this.stagedCandidate?.candidateId ?? null,
+      invalidatedApprovalId: this.approval?.approvalId ?? null,
+    };
+    this.activeEventId = null;
+    this.candidates.clear();
+    this.stagedCandidate = null;
+    this.approval = null;
+    return invalidated;
   }
 
   recordChangeEvent(input: ChangeEventInput): ToolResult {
@@ -212,8 +261,10 @@ export class FinitePlanKernel {
       entityChanges: clone(input.entityChanges ?? []),
       baseRevision: this.revision,
     };
+    const superseded = this.clearDecision();
     this.events.push(event);
-    return { ok: true, code: "CHANGE_RECORDED", event: clone(event), acceptedStateChanged: false, next: "Inspect legal moves or compare options." };
+    this.activeEventId = event.eventId;
+    return { ok: true, code: "CHANGE_RECORDED", event: clone(event), activeEventId: event.eventId, superseded, acceptedStateChanged: false, next: "Inspect legal moves, then search or simulate this active event." };
   }
 
   private entitiesAfter(changes: ChangeEvent["entityChanges"]): Record<string, EntityDefinition> {
@@ -377,6 +428,7 @@ export class FinitePlanKernel {
     const event = this.events.find((item) => item.eventId === eventId);
     if (!event) return { ok: false, code: "EVENT_NOT_FOUND", acceptedStateChanged: false };
     if (event.baseRevision !== this.revision) return { ok: false, code: "STALE_EVENT", eventRevision: event.baseRevision, currentRevision: this.revision, acceptedStateChanged: false };
+    if (eventId !== this.activeEventId) return { ok: false, code: "EVENT_SUPERSEDED", activeEventId: this.activeEventId, acceptedStateChanged: false, next: "Use activeEventId from pending state or record a new change." };
     const uniqueMoveIds = [...new Set(moveIds)];
     const unknown = uniqueMoveIds.filter((moveId) => !this.profile.moves[moveId]);
     if (unknown.length) return { ok: false, code: "UNKNOWN_MOVE", unknown, acceptedStateChanged: false };
@@ -394,6 +446,7 @@ export class FinitePlanKernel {
     const event = this.events.find((item) => item.eventId === eventId);
     if (!event) return { ok: false, code: "EVENT_NOT_FOUND", acceptedStateChanged: false };
     if (event.baseRevision !== this.revision) return { ok: false, code: "STALE_EVENT", eventRevision: event.baseRevision, currentRevision: this.revision, acceptedStateChanged: false };
+    if (eventId !== this.activeEventId) return { ok: false, code: "EVENT_SUPERSEDED", activeEventId: this.activeEventId, acceptedStateChanged: false, next: "Use activeEventId from pending state or record a new change." };
     let search: Record<string, unknown> | null = null;
     if (generate) {
       for (const [candidateId, candidate] of this.candidates) {
@@ -445,6 +498,15 @@ export class FinitePlanKernel {
     this.stagedCandidate = clone(integrity.canonical);
     this.approval = null;
     return { ok: true, code: "OPTION_STAGED", staged: clone(integrity.canonical), acceptedStateChanged: false, next: "Human may approve, reject, or provide feedback." };
+  }
+
+  rejectStagedOption({ reason }: { reason: string }): ToolResult {
+    if (typeof reason !== "string" || !reason.trim()) return { ok: false, code: "INPUT_REQUIRED", missing: ["reason"], acceptedStateChanged: false };
+    if (!this.stagedCandidate) return { ok: false, code: "OPTION_NOT_STAGED", acceptedStateChanged: false, next: this.decisionNext() };
+    const rejectedCandidateId = this.stagedCandidate.candidateId;
+    this.stagedCandidate = null;
+    this.approval = null;
+    return { ok: true, code: "OPTION_REJECTED", rejectedCandidateId, reason, activeEventId: this.activeEventId, acceptedStateChanged: false, next: "Compare the remaining options, simulate another legal combination, or record consumer feedback." };
   }
 
   async humanApprove({ candidateId, warningsAcknowledged = [] }: { candidateId: string; warningsAcknowledged?: string[] }): Promise<ToolResult> {
@@ -624,12 +686,10 @@ export class FinitePlanKernel {
   }
 
   private clearPending(): void {
-    this.stagedCandidate = null;
-    this.approval = null;
+    this.clearDecision();
     this.pendingCorrection = null;
     this.correctionConfirmation = null;
     this.pendingPreferenceChange = null;
     this.preferenceConfirmation = null;
-    this.candidates.clear();
   }
 }

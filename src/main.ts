@@ -8,6 +8,7 @@ import { FinitePlanWebMCPAdapter } from "./webmcp.js";
 const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
+const surfaceRoot = root;
 
 const profiles = await compileBuiltInProfiles();
 const store = new PlanSnapshotStore(localStorage);
@@ -15,7 +16,17 @@ const savedProfile = localStorage.getItem("finite-plan.surface.active-profile");
 const initialProfile: ProfileId = savedProfile === "renovation" || savedProfile === "event" ? savedProfile : "travel";
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile);
 const modelContext = document.modelContext;
-const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime) : null;
+const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
+  const manifest = await render();
+  return {
+    toolName,
+    resultCode: result.code,
+    planRevision: runtime.kernel.revision,
+    profileId: runtime.kernel.profile.profileId,
+    activeEventId: runtime.kernel.activeEventId,
+    manifestHash: manifest.manifestHash,
+  };
+}) : null;
 if (adapter) await adapter.register();
 
 let busy = false;
@@ -46,7 +57,7 @@ const objectiveLabel = (objective: string): string => ({
 }[objective] ?? objective.replaceAll("_", " "));
 
 const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values()]
-  .filter((candidate) => candidate.baseRevision === runtime.kernel.revision)
+  .filter((candidate) => candidate.baseRevision === runtime.kernel.revision && candidate.eventId === runtime.kernel.activeEventId)
   .sort((a, b) => Number(b.valid) - Number(a.valid)
     || (runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective))
       - (runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective))
@@ -87,7 +98,9 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
 
 const renderOptions = (): string => {
   const candidates = activeCandidates();
-  if (!candidates.length) return `<p class="quiet">No decision is waiting. The accepted plan is currently settled.</p>`;
+  if (!candidates.length) return runtime.kernel.activeEventId
+    ? `<p class="quiet">A change is recorded. Codex has not prepared the decision routes yet.</p>`
+    : `<p class="quiet">No decision is waiting. The accepted plan is currently settled.</p>`;
   return `<div class="option-grid">
     ${candidates.map((candidate, index) => `
       <article class="option-card ${candidate.candidateId === runtime.kernel.stagedCandidate?.candidateId ? "is-staged" : ""}">
@@ -120,7 +133,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   if (zone.collapsed) return "";
   const kernel = runtime.kernel;
   const actualsState = kernel.getState(["actuals"]).state as { actuals?: Array<{ label: string; currentAmountMinor: number }> };
-  const latestEvent = [...kernel.events].reverse().find((event) => event.baseRevision === kernel.revision);
+  const latestEvent = kernel.events.find((event) => event.eventId === kernel.activeEventId);
   let body = "";
   if (["finite_summary", "entity_table"].includes(zone.component)) body = `<div class="measure-grid">${formatBinding(zone)}</div>`;
   else if (zone.component === "pressure_meter") {
@@ -139,14 +152,14 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><p class="eyebrow">${escapeHtml(manifest.nouns.plan)}</p><h2>${escapeHtml(zone.title)}</h2></div>${body}</section>`;
 };
 
-const render = async (): Promise<void> => {
+async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
   const manifest = await compileSurfaceManifest(kernel.profile, kernel);
   const receipt = kernel.receipts.at(-1);
   const spentPercent = Math.round(((kernel.accepted.spentMinor + kernel.accepted.committedMinor) / kernel.accepted.totalBudgetMinor) * 100);
-  root.dataset.profile = kernel.profile.profileId;
-  root.setAttribute("aria-busy", String(busy));
-  root.innerHTML = `
+  surfaceRoot.dataset.profile = kernel.profile.profileId;
+  surfaceRoot.setAttribute("aria-busy", String(busy));
+  surfaceRoot.innerHTML = `
     <header class="site-header">
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
       <nav class="profile-nav" aria-label="Demonstration plan">
@@ -166,7 +179,8 @@ const render = async (): Promise<void> => {
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>`;
   bindInteractions();
-};
+  return manifest;
+}
 
 const chooseCandidate = async (candidateId: string): Promise<void> => {
   const result = await runtime.kernel.stageOption({ candidateId, expectedRevision: runtime.kernel.revision });
@@ -200,7 +214,7 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());
-  root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.stagedCandidate = null; runtime.kernel.approval = null; announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
 }
 
 await seedDecision();
