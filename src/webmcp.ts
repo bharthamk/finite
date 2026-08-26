@@ -474,8 +474,9 @@ export class FinitePlanWebMCPAdapter {
   private coreTools: WebMCPToolDefinition[] = [];
   private contextualTools: WebMCPToolDefinition[] = [];
   private contextualController: AbortController | null = null;
+  private entryTool: WebMCPToolDefinition | null = null;
 
-  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository()) {}
+  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false) {}
 
   private instrument(tool: WebMCPToolDefinition): WebMCPToolDefinition {
     return {
@@ -523,9 +524,18 @@ export class FinitePlanWebMCPAdapter {
 
   async register(): Promise<string[]> {
     this.coreTools = coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival).map((tool) => this.instrument(tool));
-    for (const tool of this.coreTools) await this.host.registerTool(tool);
+    this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;
+    for (const tool of this.coreTools) {
+      if (this.entryAlreadyRegistered && tool.name === "finite_enter_kitchen") continue;
+      await this.host.registerTool(tool);
+    }
     await this.refreshContextualTools();
     return this.inventory();
+  }
+
+  async enterKitchen(input: unknown = {}): Promise<ToolResult> {
+    if (!this.entryTool) return { ok: false, code: "WEBMCP_INITIALIZING", acceptedStateChanged: false, next: "Wait for Finite initialization, then retry this same entry call." };
+    return this.entryTool.execute(input);
   }
 
   async refreshContextualTools(): Promise<void> {

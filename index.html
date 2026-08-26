@@ -38,10 +38,40 @@
           annotations: { readOnlyHint: true },
           execute: async () => {
             const readiness = window.finiteWebMCPReadiness || { state: "initializing" };
-            if (readiness.state === "ready") return { ok: true, code: "WEBMCP_READY", inventory: readiness.inventory || [], acceptedStateChanged: false, next: "Refresh the page-tool registry and call finite_enter_kitchen exactly as supplied by the handoff." };
+            if (readiness.state === "ready") return { ok: true, code: "WEBMCP_READY", inventory: readiness.inventory || [], acceptedStateChanged: false, next: "Call finite_enter_kitchen from this bootstrap snapshot or refresh discovery for the full catalogue." };
             if (readiness.state === "signed_out") return { ok: false, code: "AUTHENTICATED_USER_REQUIRED", acceptedStateChanged: false, next: "Complete the Site's official sign-in boundary; do not request or transmit credentials through WebMCP." };
             if (readiness.state === "failed") return { ok: false, code: "WEBMCP_INITIALIZATION_FAILED", detail: readiness.detail || "Finite did not finish initializing.", acceptedStateChanged: false, next: "Reload the Site. Do not infer plan state from a partial registry." };
-            return { ok: true, code: "WEBMCP_INITIALIZING", retryAfterMs: 100, acceptedStateChanged: false, next: "Wait briefly, refresh the page-tool registry, then call finite_enter_kitchen. Do not infer that the kitchen has no tools." };
+            return { ok: true, code: "WEBMCP_INITIALIZING", retryAfterMs: 100, acceptedStateChanged: false, next: "Call the already-visible finite_enter_kitchen tool; it will wait for canonical state. Do not infer that the kitchen has no tools." };
+          },
+        });
+        document.modelContext.registerTool({
+          name: "finite_enter_kitchen",
+          title: "Enter Finite as the operator",
+          description: "A page-start proxy for the canonical Finite kitchen entry. It waits for authenticated state and then returns the same instrumented operator packet as the full registry tool.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] },
+              orderId: { type: "string", minLength: 1, maxLength: 200 },
+              expectedOrderVersion: { type: "integer", minimum: 1 },
+              expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 },
+              expectedPlanId: { type: "string", minLength: 1, maxLength: 200 },
+              expectedPlanRevision: { type: "integer", minimum: 1 },
+            },
+            required: [],
+            additionalProperties: false,
+          },
+          annotations: { readOnlyHint: true },
+          execute: async (input = {}) => {
+            const deadline = Date.now() + 15000;
+            while (Date.now() < deadline) {
+              const readiness = window.finiteWebMCPReadiness || { state: "initializing" };
+              if (readiness.state === "signed_out") return { ok: false, code: "AUTHENTICATED_USER_REQUIRED", acceptedStateChanged: false, next: "Complete the Site's official sign-in boundary; do not request or transmit credentials through WebMCP." };
+              if (readiness.state === "failed") return { ok: false, code: "WEBMCP_INITIALIZATION_FAILED", detail: readiness.detail || "Finite did not finish initializing.", acceptedStateChanged: false, next: "Reload the Site. Do not infer plan state from a partial registry." };
+              if (typeof window.finiteEnterKitchen === "function") return window.finiteEnterKitchen(input);
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            return { ok: false, code: "WEBMCP_INITIALIZATION_TIMEOUT", acceptedStateChanged: false, next: "Reload the Site and retry finite_enter_kitchen. Do not reconstruct plan state from the copied handoff." };
           },
         });
       }

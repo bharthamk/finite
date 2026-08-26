@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
@@ -29,6 +30,22 @@ test("page-start status prevents an empty registry without exposing kitchen stat
   const ready = await host.execute("finite_webmcp_status", {});
   assert.equal(ready.code, "WEBMCP_READY");
   assert.deepEqual(ready.inventory, readiness.inventory);
+});
+
+test("the page-start entry proxy stays registered while the adapter supplies its canonical operation", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const bootstrapProxy = { name: "finite_enter_kitchen", execute: async () => ({ ok: false, code: "BOOTSTRAP_PROXY" }) };
+  await host.registerTool(bootstrapProxy);
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), true);
+  const inventory = await adapter.register();
+  assert.equal(host.tools.get("finite_enter_kitchen"), bootstrapProxy);
+  assert.equal(inventory.includes("finite_enter_kitchen"), true);
+  const entered = await adapter.enterKitchen({ entryIntent: "start_new" });
+  assert.equal(entered.code, "KITCHEN_ENTERED");
+  assert.equal(entered.operatorPacket.nextAction.stage, "outcome_required");
+  assert.equal(entered.operationProof.toolName, "finite_enter_kitchen");
 });
 
 test("production adapter normalizes host input, excludes authority, and replaces contextual tools", async () => {

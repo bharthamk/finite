@@ -241,9 +241,10 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
   };
-}, arrivalRepository) : null;
+}, arrivalRepository, true) : null;
 if (adapter) {
   const inventory = await adapter.register();
+  window.finiteEnterKitchen = (input) => adapter.enterKitchen(input);
   webmcpReadiness.state = "ready";
   webmcpReadiness.inventory = inventory;
 }
