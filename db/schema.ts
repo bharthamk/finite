@@ -116,6 +116,16 @@ export const tenantAccounts = sqliteTable("tenant_accounts", {
   uniqueIndex("idx_tenant_accounts_user_hash").on(table.userIdHash),
 ]);
 
+export const demoSessions = sqliteTable("demo_sessions", {
+  sessionHash: text("session_hash").primaryKey(),
+  scopeId: text("scope_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_demo_sessions_scope").on(table.scopeId),
+  index("idx_demo_sessions_expiry").on(table.expiresAt),
+]);
+
 export const operatorSessions = sqliteTable("operator_sessions", {
   scopeId: text("scope_id").notNull(),
   sessionId: text("session_id").notNull(),

@@ -11,6 +11,64 @@ const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
 const surfaceRoot = root;
 
+interface FiniteAuthSession {
+  kind: "account" | "demo";
+  provider: "chatgpt" | "demo";
+  displayName: string;
+  email: string | null;
+  expiresAt: string | null;
+}
+
+interface FiniteAuthStatus {
+  ok: boolean;
+  code: string;
+  session: FiniteAuthSession | null;
+  signInPath?: string;
+}
+
+const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
+  const response = await fetch("/api/auth/session", { headers: { accept: "application/json" } });
+  if (!response.ok) throw new Error(`Finite identity returned HTTP ${response.status}.`);
+  return response.json() as Promise<FiniteAuthStatus>;
+};
+
+const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
+  document.title = "Finite — choose your kitchen";
+  root.innerHTML = `
+    <main class="entry-shell" id="main">
+      <section class="entry-card" aria-labelledby="entry_title">
+        <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+        <p class="eyebrow">One finite plan. Your private kitchen.</p>
+        <h1 id="entry_title">Choose how you want to be served.</h1>
+        <p class="entry-lede">Sign in to keep a private kitchen across visits, or try the complete service in an isolated demo that disappears after 24 hours.</p>
+        <div class="entry-actions">
+          <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
+          <button class="button button--demo" data-action="start-demo">Try the demo</button>
+        </div>
+        <dl class="entry-promises">
+          <div><dt>No Finite password</dt><dd>ChatGPT handles identity. Finite stores no credential.</dd></div>
+          <div><dt>No registration form</dt><dd>Your private kitchen is created on first use.</dd></div>
+          <div><dt>Demo means demo</dt><dd>It receives an isolated namespace, never a real user’s plan history.</dd></div>
+        </dl>
+        <p class="entry-footnote">Self-hosting? Your deployment can supply its own verified identity provider.</p>
+      </section>
+    </main>`;
+  root.querySelector<HTMLButtonElement>("[data-action='start-demo']")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    button.textContent = "Opening the demo kitchen…";
+    const response = await fetch("/api/auth/demo", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (response.ok) location.reload();
+    else {
+      button.disabled = false;
+      button.textContent = "Try the demo";
+      announcer.textContent = "The demo kitchen could not be opened. Nothing was saved.";
+    }
+  });
+};
+
+const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
+
 const profiles = await compileBuiltInProfiles();
 const store = new PlanSnapshotStore(localStorage);
 const catalogStore = new PlanCatalogStore(localStorage);
@@ -299,7 +357,10 @@ async function render(): Promise<SurfaceManifest> {
       <nav class="profile-nav" aria-label="Demonstration plan">
         ${(["travel", "renovation", "event"] as ProfileId[]).map((profileId) => `<button data-action="profile" data-profile="${profileId}" aria-pressed="${kernel.profile.profileId === profileId}">${profileId === "event" ? "Launch event" : profileId}</button>`).join("")}
       </nav>
-      <div class="operator-status"><span></span>${modelContext ? "Codex kitchen connected" : "Local kitchen"}</div>
+      <div class="identity-cluster">
+        <div class="operator-status"><span></span>${modelContext ? "Codex kitchen connected" : "Local kitchen"}</div>
+        <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
+      </div>
     </header>
     <main id="main">
       <section class="hero">
@@ -379,8 +440,18 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
+    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (response.ok) location.reload();
+    else announce("The demo session could not be ended safely.");
+  });
 }
 
 await seedDecision();
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
+};
+
+const authStatus = await loadAuthStatus();
+if (authStatus.session) await startKitchen(authStatus.session);
+else renderAuthGate(authStatus.signInPath);

@@ -1,3 +1,5 @@
+import { authSha256, resolveRequestPrincipal } from "./auth.js";
+
 interface D1Result<T = Record<string, unknown>> {
   success: boolean;
   meta?: { changes?: number };
@@ -137,19 +139,20 @@ const sha256 = async (value: unknown): Promise<string> => {
 };
 
 const ensureAuthenticatedTenant = async (request: Request, db: D1Database): Promise<string> => {
-  const userId = request.headers.get("oai-authenticated-user-id")?.trim();
-  if (!userId) throw new Error("AUTHENTICATED_USER_REQUIRED");
-  const userIdHash = await sha256({ siteUserId: userId });
-  const scopeId = `user_${userIdHash.slice(0, 32)}`;
+  const principal = await resolveRequestPrincipal(request, db);
+  if (!principal) throw new Error("AUTHENTICATED_USER_REQUIRED");
+  const userIdHash = await authSha256(principal.tenantIdentity);
+  const scopeId = principal.kind === "demo" ? `demo_${userIdHash.slice(0, 32)}` : `user_${userIdHash.slice(0, 32)}`;
   const existing = await db.prepare("SELECT scope_id FROM tenant_accounts WHERE scope_id = ? AND user_id_hash = ?")
     .bind(scopeId, userIdHash).first<{ scope_id: string }>();
   if (existing) return scopeId;
   const now = new Date().toISOString();
   const statements = [
-    db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM tenant_accounts WHERE legacy_scope_adopted = 1) THEN 0 ELSE 1 END, ?")
-      .bind(scopeId, userIdHash, now),
+    principal.kind === "account"
+      ? db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM tenant_accounts WHERE legacy_scope_adopted = 1) THEN 0 ELSE 1 END, ?").bind(scopeId, userIdHash, now)
+      : db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) VALUES (?, ?, 0, ?)").bind(scopeId, userIdHash, now),
   ];
-  statements.push(
+  if (principal.kind === "account") statements.push(
     db.prepare("INSERT OR IGNORE INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) SELECT ?, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at FROM plan_heads WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
     db.prepare("INSERT OR IGNORE INTO plan_revisions (scope_id, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at) SELECT ?, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at FROM plan_revisions WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
     db.prepare("INSERT OR IGNORE INTO receipts (scope_id, plan_id, idempotency_key, receipt_id, receipt_type, from_revision, to_revision, replay_checksum, request_hash, response_json, created_at) SELECT ?, plan_id, idempotency_key, receipt_id, receipt_type, from_revision, to_revision, replay_checksum, request_hash, response_json, created_at FROM receipts WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
@@ -525,7 +528,7 @@ export const handleAcceptedTruthRequest = async (request: Request, db: D1Databas
     return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported accepted-truth operation.");
   } catch (error) {
     const code = error instanceof Error ? error.message : "ACCEPTED_TRUTH_SERVICE_FAILED";
-    if (code === "AUTHENTICATED_USER_REQUIRED") return errorResponse(401, code, "A signed-in Site user is required.");
+    if (code === "AUTHENTICATED_USER_REQUIRED") return errorResponse(401, code, "Sign in with ChatGPT or start an isolated demo session.");
     if (["JSON_CONTENT_TYPE_REQUIRED", "JSON_BODY_TOO_LARGE", "JSON_OBJECT_REQUIRED"].includes(code)) return errorResponse(400, code, "Accepted-truth request body is invalid.");
     return errorResponse(500, "ACCEPTED_TRUTH_SERVICE_FAILED", "Accepted-truth service failed safely.");
   }

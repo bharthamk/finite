@@ -30,6 +30,7 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Transactional D1 accepted truth: plan heads, immutable revision snapshots, receipts, domain events, and accepted evidence commit behind an async repository boundary with optimistic concurrency and deterministic retry identity.
 - Cross-browser restore from D1 with client-side profile, finite-total, receipt, evidence, lineage, and snapshot-hash verification; browser snapshots are now only a best-effort cache when the remote repository is present.
 - Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and the first owner atomically adopts the prior `owner-private-v1` lineage once while later tenants receive empty namespaces.
+- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, tenant data, and authority traces are purged on end or expiry.
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
@@ -90,6 +91,7 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
 - `src/webmcp.ts` — native host adapter and tool registry.
 - `src/main.ts` — adaptive product renderer and human authority surface.
+- `worker/auth.ts` and `AUTHENTICATION.md` — provider-owned identity, automatic tenant provisioning, isolated demo lifecycle, and the portable self-hosting boundary.
 - `src/styles.css` — profile-aware responsive presentation.
 - `worker/index.ts` — deployment-only static asset pass-through.
 - `tests/` — profile, surface, kernel, persistence, authority, and adapter contracts.
@@ -104,3 +106,4 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.
+- `AUTH_ENTRY_ACCEPTANCE_2026-08-26.md` — provider-owned login, first-use kitchen provisioning, isolated demo lifecycle, signed-out WebMCP boundary, and portable OIDC release contract.
