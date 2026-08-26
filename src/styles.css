@@ -67,8 +67,8 @@ button { font: inherit; cursor: pointer; }
 
 .arrival-header__mode { margin:0; color:var(--muted); font:500 .68rem/1.2 "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }
 .arrival-main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) clamp(80px,9vw,140px); }
-.arrival-intro { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(300px,.6fr); gap:clamp(40px,8vw,130px); align-items:end; padding:clamp(80px,11vw,160px) 0 58px; border-bottom:1px solid var(--ink); }
-.arrival-intro .eyebrow { grid-column:1/-1; margin-bottom:-22px; }
+.arrival-intro { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(300px,.6fr); column-gap:clamp(40px,8vw,130px); row-gap:18px; align-items:start; padding:clamp(32px,4vw,56px) 0 clamp(34px,4vw,52px); border-bottom:1px solid var(--ink); }
+.arrival-intro .eyebrow { grid-column:1/-1; margin-bottom:0; }
 .arrival-intro h1 { max-width:960px; margin:0; font-size:clamp(4rem,8vw,8.8rem); font-weight:500; line-height:.87; letter-spacing:-.075em; text-wrap:balance; }
 .arrival-intro h1 em { color:var(--accent); font-family:Georgia,serif; font-weight:400; }
 .arrival-intro__paths { max-width:540px; margin-bottom:8px; }
@@ -483,7 +483,7 @@ footer span { font:500 .7rem/1.2 "DM Mono",monospace; text-transform:uppercase; 
   .arrival-header { grid-template-columns:1fr auto; }
   .arrival-header__mode,.arrival-header .operator-status { display:none; }
   .arrival-main { padding-inline:18px; }
-  .arrival-intro { padding:62px 0 38px; }
+  .arrival-intro { padding:34px 0 32px; }
   .arrival-intro h1 { font-size:clamp(3.7rem,19vw,5.4rem); }
   .arrival-codex-start { grid-template-columns:1fr; }
   .arrival-codex-start>small { max-width:none; text-align:left; }
