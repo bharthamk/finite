@@ -297,7 +297,7 @@ export class FinitePlanKernel {
     for (const [key, receipt] of checkpoint.preferenceIdempotency) this.preferenceIdempotency.set(key, clone(receipt));
   }
 
-  private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt): Promise<ToolResult | null> {
+  private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null): Promise<ToolResult | null> {
     if (this.acceptedRepository) {
       try {
         if (this.acceptedTruthStatus !== "ready" || !this.acceptedSnapshotHash) throw new AcceptedTruthRepositoryError("ACCEPTED_TRUTH_NOT_READY", "Durable accepted truth has not been hydrated.");
@@ -306,6 +306,7 @@ export class FinitePlanKernel {
           previousSnapshotHash: this.acceptedSnapshotHash,
           snapshot: this.snapshot(),
           receipt,
+          authorityChallengeId,
         });
         const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
         const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
@@ -541,6 +542,27 @@ export class FinitePlanKernel {
     this.events.push(event);
     this.activeEventId = event.eventId;
     return { ok: true, code: "CHANGE_RECORDED", event: clone(event), activeEventId: event.eventId, superseded, acceptedStateChanged: false, next: "Inspect legal moves, then search or simulate this active event." };
+  }
+
+  async restoreDecisionWork(payload: Record<string, unknown>): Promise<ToolResult> {
+    const checkpoint = this.checkpoint();
+    const saved = payload.event as Partial<ChangeEvent> | undefined;
+    const candidateId = typeof payload.candidateId === "string" ? payload.candidateId : "";
+    if (!saved || typeof saved.eventId !== "string" || saved.baseRevision !== this.revision || !candidateId) return { ok: false, code: "OPERATOR_DECISION_PACKET_INVALID", acceptedStateChanged: false };
+    const recorded = this.recordChangeEvent({ type: String(saved.type ?? ""), title: String(saved.title ?? ""), costDeltaMinor: Number(saved.costDeltaMinor), daysDelta: Number(saved.daysDelta ?? 0), minimumBufferMinor: Number(saved.minimumBufferMinor), evidenceRefs: clone(saved.evidenceRefs ?? []), assumptions: clone(saved.assumptions ?? []), entityChanges: clone(saved.entityChanges ?? []), expectedRevision: this.revision });
+    if (!recorded.ok) { this.restoreCheckpoint(checkpoint); return { ...recorded, code: "OPERATOR_DECISION_PACKET_INVALID" }; }
+    const generated = recorded.event as ChangeEvent;
+    const { eventId: _savedId, baseRevision: _savedRevision, ...savedContent } = saved as ChangeEvent;
+    const { eventId: _generatedId, baseRevision: _generatedRevision, ...generatedContent } = generated;
+    if (await sha256(savedContent) !== await sha256(generatedContent)) { this.restoreCheckpoint(checkpoint); return { ok: false, code: "OPERATOR_DECISION_PACKET_INTEGRITY_FAILED", acceptedStateChanged: false }; }
+    const restoredEvent = clone(saved as ChangeEvent);
+    this.events[this.events.length - 1] = restoredEvent;
+    this.activeEventId = restoredEvent.eventId;
+    const compared = await this.compareOptions({ eventId: restoredEvent.eventId, generate: true });
+    if (!compared.ok || !this.candidates.has(candidateId)) { this.restoreCheckpoint(checkpoint); return { ok: false, code: "OPERATOR_DECISION_CANDIDATE_NOT_REPRODUCIBLE", acceptedStateChanged: false }; }
+    const staged = await this.stageOption({ candidateId, expectedRevision: this.revision });
+    if (!staged.ok) { this.restoreCheckpoint(checkpoint); return { ...staged, code: "OPERATOR_DECISION_CANDIDATE_NOT_REPRODUCIBLE" }; }
+    return { ok: true, code: "OPERATOR_DECISION_WORK_RESTORED", event: clone(restoredEvent), staged: clone(this.stagedCandidate), authorityRestored: false, acceptedStateChanged: false, next: "Resume the exact unexpired human handoff challenge, or obtain fresh human authority." };
   }
 
   private entitiesAfter(changes: ChangeEvent["entityChanges"]): Record<string, EntityDefinition> {
@@ -803,8 +825,32 @@ export class FinitePlanKernel {
     const warningCodes = integrity.canonical.warnings.map((warning) => String(warning.code));
     const missingWarnings = warningCodes.filter((code) => !warningsAcknowledged.includes(code));
     if (missingWarnings.length) return { ok: false, code: "WARNINGS_NOT_ACKNOWLEDGED", missingWarnings, acceptedStateChanged: false };
-    this.approval = { approvalId: makeId("approval"), candidateId, planId: this.profile.planId, revision: this.revision, contentHash: integrity.canonical.contentHash, warningsAcknowledged: clone(warningsAcknowledged), source: "human_action" };
+    const approval: HumanApproval = { approvalId: makeId("approval"), candidateId, planId: this.profile.planId, revision: this.revision, contentHash: integrity.canonical.contentHash, warningsAcknowledged: clone(warningsAcknowledged), source: "human_action" };
+    if (this.acceptedRepository?.createAuthorityChallenge) {
+      try {
+        const challenge = await this.acceptedRepository.createAuthorityChallenge({ planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, targetId: candidateId, contentHash: integrity.canonical.contentHash, authorityId: approval.approvalId });
+        approval.authorityChallengeId = challenge.challengeId;
+      } catch (error) {
+        return { ok: false, code: "HUMAN_AUTHORITY_CHALLENGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The option remains staged. Retry the human approval action while the authenticated handoff service is available." };
+      }
+    }
+    this.approval = approval;
     return { ok: true, code: "HUMAN_APPROVAL_RECORDED", approval: clone(this.approval), acceptedStateChanged: false };
+  }
+
+  async resumeHumanAuthorityChallenge({ challengeId }: { challengeId: string }): Promise<ToolResult> {
+    if (!this.acceptedRepository?.loadAuthorityChallenge) return { ok: false, code: "AUTHORITY_HANDOFF_UNAVAILABLE", acceptedStateChanged: false };
+    if (!this.stagedCandidate) return { ok: false, code: "OPTION_NOT_STAGED", acceptedStateChanged: false, next: "Rebuild and stage the exact candidate named by the handoff packet before resuming human authority." };
+    try {
+      const challenge = await this.acceptedRepository.loadAuthorityChallenge(challengeId);
+      const candidate = this.stagedCandidate;
+      const expectedCommandHash = await sha256({ targetType: "plan_option", targetId: candidate.candidateId, planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, contentHash: candidate.contentHash, authorityId: challenge.authorityId });
+      if (challenge.planId !== this.profile.planId || challenge.profileHash !== this.profile.profileHash || challenge.revision !== this.revision || challenge.targetType !== "plan_option" || challenge.targetId !== candidate.candidateId || challenge.contentHash !== candidate.contentHash || challenge.commandHash !== expectedCommandHash) return { ok: false, code: "AUTHORITY_CHALLENGE_MISMATCH", acceptedStateChanged: false, next: "Do not apply. Reconcile the handoff packet with current staged content and obtain fresh human authority." };
+      this.approval = { approvalId: challenge.authorityId, candidateId: candidate.candidateId, planId: this.profile.planId, revision: this.revision, contentHash: candidate.contentHash, warningsAcknowledged: clone(candidate.warnings.map((warning) => String(warning.code))), source: "human_action", authorityChallengeId: challenge.challengeId };
+      return { ok: true, code: "HUMAN_AUTHORITY_HANDOFF_RESUMED", approval: clone(this.approval), expiresAt: challenge.expiresAt, acceptedStateChanged: false, next: "Apply only this exact staged candidate before the challenge expires; the accepted commit consumes it once." };
+    } catch (error) {
+      return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "AUTHORITY_HANDOFF_RESUME_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+    }
   }
 
   async applyApprovedOption({ candidateId, approvalId, expectedRevision, idempotencyKey }: { candidateId: string; approvalId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
@@ -821,6 +867,7 @@ export class FinitePlanKernel {
     if (!integrity.valid || !integrity.canonical) return { ok: false, code: "STAGED_CANDIDATE_INTEGRITY_FAILED", acceptedStateChanged: false, next: "Return the option and regenerate from accepted truth." };
     const canonical = integrity.canonical;
     if (!this.approval || this.approval.approvalId !== approvalId || this.approval.candidateId !== candidateId || this.approval.planId !== this.profile.planId || this.approval.source !== "human_action" || this.approval.contentHash !== canonical.contentHash || this.approval.revision !== this.revision) return { ok: false, code: "CONSENT_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallengeId = this.approval.authorityChallengeId ?? null;
     const before = clone(this.accepted);
     const after = { ...before, forecastMinor: before.forecastMinor + canonical.netForecastDeltaMinor, bufferMinor: before.bufferMinor - canonical.netForecastDeltaMinor };
     if (sumAllocation(before) !== before.totalBudgetMinor || sumAllocation(after) !== after.totalBudgetMinor) return { ok: false, code: "FINITE_TOTAL_INVARIANT_FAILED", acceptedStateChanged: false };
@@ -834,7 +881,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_option", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_option", receipt, authorityChallengeId);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "OPTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }

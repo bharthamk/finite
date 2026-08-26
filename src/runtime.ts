@@ -1,5 +1,5 @@
 import { clone, makeId, sha256 } from "./crypto.js";
-import type { AcceptedTruthRepository } from "./accepted-truth.js";
+import { AcceptedTruthRepositoryError, type AcceptedTruthRepository, type OperatorSession } from "./accepted-truth.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
@@ -71,6 +71,40 @@ export class FinitePlanRuntime {
 
   async hydrateAcceptedTruth(): Promise<ToolResult> {
     return this.kernel.hydrateAcceptedTruth();
+  }
+
+  async saveOperatorSession({ idempotencyKey, kind, payload, ttlSeconds }: { idempotencyKey: string; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<ToolResult> {
+    if (!this.acceptedRepository?.saveOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
+    if (!idempotencyKey || !payload || typeof payload !== "object" || JSON.stringify(payload).length > 30_000) return { ok: false, code: "OPERATOR_SESSION_INPUT_INVALID", acceptedStateChanged: false };
+    try {
+      const session = await this.acceptedRepository.saveOperatorSession({ idempotencyKey, planId: this.kernel.profile.planId, profileHash: this.kernel.profile.profileHash, baseRevision: this.kernel.revision, kind, payload: clone(payload), ...(ttlSeconds === undefined ? {} : { ttlSeconds }) });
+      return { ok: true, code: "OPERATOR_SESSION_SAVED", session, acceptedStateChanged: false, next: "Another authenticated device may resume this non-authoritative packet; accepted truth and human authority are unchanged." };
+    } catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_SAVE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+  }
+
+  async listOperatorSessions(): Promise<ToolResult> {
+    if (!this.acceptedRepository?.listOperatorSessions) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
+    try {
+      const sessions = await this.acceptedRepository.listOperatorSessions();
+      return { ok: true, code: "OPERATOR_SESSIONS", sessions: sessions.map((session) => ({ ...session, baseCurrent: session.planId === this.kernel.profile.planId && session.profileHash === this.kernel.profile.profileHash && session.baseRevision === this.kernel.revision })), acceptedStateChanged: false };
+    } catch (error) { return { ok: false, code: "OPERATOR_SESSION_LIST_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+  }
+
+  async resumeOperatorSession({ sessionId }: { sessionId: string }): Promise<ToolResult> {
+    if (!this.acceptedRepository?.loadOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
+    try {
+      const session = await this.acceptedRepository.loadOperatorSession(sessionId);
+      if (session.planId !== this.kernel.profile.planId || session.profileHash !== this.kernel.profile.profileHash || session.baseRevision !== this.kernel.revision) return { ok: false, code: "OPERATOR_SESSION_BASE_STALE", session, activePlanId: this.kernel.profile.planId, activeProfileHash: this.kernel.profile.profileHash, activeRevision: this.kernel.revision, acceptedStateChanged: false, next: "Do not replay this packet. Reconcile it against current accepted truth and save a replacement session." };
+      const restoredWork = session.kind === "decision_work" ? await this.kernel.restoreDecisionWork(session.payload) : null;
+      if (restoredWork && !restoredWork.ok) return { ...restoredWork, session, acceptedStateChanged: false };
+      return { ok: true, code: restoredWork ? "OPERATOR_DECISION_SESSION_RESUMED" : "OPERATOR_SESSION_RESUMED", session, restoredWork, authorityRestored: false, acceptedStateChanged: false, next: restoredWork ? "Resume the exact unexpired human handoff challenge; it will be consumed with the accepted commit." : "Use the packet as non-authoritative context, rebuild deterministic work, and obtain fresh human authority for any consequential command." };
+    } catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_RESUME_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+  }
+
+  async closeOperatorSession({ sessionId }: { sessionId: string }): Promise<ToolResult> {
+    if (!this.acceptedRepository?.closeOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
+    try { return { ok: true, code: "OPERATOR_SESSION_CLOSED", session: await this.acceptedRepository.closeOperatorSession(sessionId), acceptedStateChanged: false }; }
+    catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_CLOSE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
   private async persistConstructionPacket(kind: PlanConstructionPacket["kind"], payload: PlanConstructionPacket["payload"]): Promise<PlanConstructionPacket | null> {

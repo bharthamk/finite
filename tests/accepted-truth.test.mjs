@@ -4,6 +4,7 @@ import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.j
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
+import { handleAcceptedTruthRequest } from "../dist-test/worker/accepted-truth.js";
 
 const makeRuntime = (profiles, profileId, repository, storage = new MemoryStorage()) =>
   new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), profileId, undefined, [], () => new Date("2026-08-26T00:00:00.000Z"), repository);
@@ -29,6 +30,8 @@ const prepareApprovedOption = async (runtime, title) => {
   return {
     candidateId: chosen.candidateId,
     approvalId: approved.approval.approvalId,
+    authorityChallengeId: approved.approval.authorityChallengeId,
+    event: recorded.event,
     expectedRevision: kernel.revision,
   };
 };
@@ -97,6 +100,7 @@ test("a lost commit response retries with the same deterministic receipt and res
   const repository = {
     initialize: (...args) => durable.initialize(...args),
     load: (...args) => durable.load(...args),
+    createAuthorityChallenge: (...args) => durable.createAuthorityChallenge(...args),
     async commit(...args) {
       const result = await durable.commit(...args);
       if (loseNextResponse) {
@@ -139,4 +143,75 @@ test("client hydration refuses a tampered durable envelope before consequential 
   assert.equal(result.ok, false);
   assert.equal(result.code, "REMOTE_ACCEPTED_TRUTH_INTEGRITY_FAILED");
   assert.equal(runtime.kernel.acceptedTruth.status, "unavailable");
+});
+
+for (const profileId of ["travel", "renovation", "event"]) {
+  test(`${profileId} cross-device handoff rebuilds exact work and consumes one expiring human authority challenge`, async () => {
+    const profiles = await compileBuiltInProfiles();
+    const repository = new MemoryAcceptedTruthRepository();
+    const firstDevice = makeRuntime(profiles, profileId, repository);
+    const secondDevice = makeRuntime(profiles, profileId, repository);
+    await firstDevice.hydrateAcceptedTruth();
+    await secondDevice.hydrateAcceptedTruth();
+    const command = await prepareApprovedOption(firstDevice, `${profileId} cross-device route`);
+    assert(command.authorityChallengeId);
+    const saved = await firstDevice.saveOperatorSession({
+      idempotencyKey: `cross-device-${profileId}-0001`,
+      kind: "decision_work",
+      payload: { event: command.event, candidateId: command.candidateId, challengeId: command.authorityChallengeId },
+      ttlSeconds: 3600,
+    });
+    assert.equal(saved.code, "OPERATOR_SESSION_SAVED");
+    const listed = await secondDevice.listOperatorSessions();
+    assert.equal(listed.sessions.length, 1);
+    assert.equal(listed.sessions[0].baseCurrent, true);
+    const resumed = await secondDevice.resumeOperatorSession({ sessionId: saved.session.sessionId });
+    assert.equal(resumed.code, "OPERATOR_DECISION_SESSION_RESUMED");
+    assert.equal(resumed.authorityRestored, false);
+    assert.equal(secondDevice.kernel.stagedCandidate.candidateId, command.candidateId);
+    assert.equal(secondDevice.kernel.approval, null);
+
+    const authority = await secondDevice.kernel.resumeHumanAuthorityChallenge({ challengeId: command.authorityChallengeId });
+    assert.equal(authority.code, "HUMAN_AUTHORITY_HANDOFF_RESUMED");
+    assert.equal(authority.approval.approvalId, command.approvalId);
+    const applied = await secondDevice.kernel.applyApprovedOption({ candidateId: command.candidateId, approvalId: authority.approval.approvalId, expectedRevision: command.expectedRevision, idempotencyKey: `cross-device-apply-${profileId}` });
+    assert.equal(applied.code, "OPTION_APPLIED");
+    await assert.rejects(repository.loadAuthorityChallenge(command.authorityChallengeId), (error) => error.code === "AUTHORITY_CHALLENGE_CONSUMED");
+    await firstDevice.hydrateAcceptedTruth();
+    const stale = await firstDevice.resumeOperatorSession({ sessionId: saved.session.sessionId });
+    assert.equal(stale.code, "OPERATOR_SESSION_BASE_STALE");
+  });
+}
+
+test("operator sessions expire and human authority challenges fail closed without consuming accepted truth", async () => {
+  let clock = new Date("2026-08-26T00:00:00.000Z");
+  const profiles = await compileBuiltInProfiles();
+  const repository = new MemoryAcceptedTruthRepository(() => new Date(clock));
+  const runtime = makeRuntime(profiles, "travel", repository);
+  await runtime.hydrateAcceptedTruth();
+  const saved = await runtime.saveOperatorSession({ idempotencyKey: "expiring-session-0001", kind: "research_handoff", payload: { finding: "bounded context" }, ttlSeconds: 60 });
+  assert.equal(saved.code, "OPERATOR_SESSION_SAVED");
+  clock = new Date("2026-08-26T00:01:01.000Z");
+  assert.equal((await runtime.listOperatorSessions()).sessions.length, 0);
+  assert.equal((await runtime.resumeOperatorSession({ sessionId: saved.session.sessionId })).code, "OPERATOR_SESSION_EXPIRED");
+
+  clock = new Date("2026-08-26T01:00:00.000Z");
+  const command = await prepareApprovedOption(runtime, "Expiring authority route");
+  const before = runtime.kernel.getState(["allocations", "pending"]);
+  clock = new Date("2026-08-26T01:05:01.000Z");
+  const refused = await runtime.kernel.applyApprovedOption({ ...command, idempotencyKey: "expired-authority-0001" });
+  assert.equal(refused.code, "ACCEPTED_STATE_STORAGE_FAILED");
+  assert.equal(refused.repositoryCode, "AUTHORITY_CHALLENGE_EXPIRED");
+  assert.equal(runtime.kernel.revision, 1);
+  assert.deepEqual(runtime.kernel.getState(["allocations", "pending"]), before);
+});
+
+test("finite API refuses missing authenticated identity and cross-origin writes before touching D1", async () => {
+  const unavailableDb = {};
+  const missingIdentity = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/plan", { method: "GET" }), unavailableDb);
+  assert.equal(missingIdentity.status, 401);
+  assert.equal((await missingIdentity.json()).code, "AUTHENTICATED_USER_REQUIRED");
+  const crossOrigin = await handleAcceptedTruthRequest(new Request("https://finite.example/api/operator-sessions", { method: "POST", headers: { origin: "https://attacker.example", "content-type": "application/json", "oai-authenticated-user-id": "user-a" }, body: "{}" }), unavailableDb);
+  assert.equal(crossOrigin.status, 403);
+  assert.equal((await crossOrigin.json()).code, "CROSS_ORIGIN_WRITE_REFUSED");
 });

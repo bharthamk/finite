@@ -1,7 +1,7 @@
 import { clone, sha256 } from "./crypto.js";
 import type { CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanSnapshot, Receipt } from "./types.js";
 
-export const acceptedTruthScope = "owner-private-v1";
+export const acceptedTruthScope = "authenticated-user-v1";
 
 export interface AcceptedTruthEnvelope {
   envelopeVersion: "finite-plan-accepted-truth.v1";
@@ -22,8 +22,40 @@ export interface AcceptedTruthCommitRequest {
   previousSnapshotHash: string;
   envelope: AcceptedTruthEnvelope;
   receipt: Receipt;
+  authorityChallengeId: string | null;
   operationProof: Record<string, unknown> | null;
   requestHash: string;
+}
+
+export interface AuthorityChallenge {
+  challengeVersion: "finite-plan-authority-challenge.v1";
+  challengeId: string;
+  planId: string;
+  profileHash: string;
+  revision: number;
+  targetType: "plan_option";
+  targetId: string;
+  contentHash: string;
+  authorityId: string;
+  commandHash: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface OperatorSession {
+  sessionVersion: "finite-plan-operator-session.v1";
+  sessionId: string;
+  idempotencyKey: string;
+  planId: string;
+  profileHash: string;
+  baseRevision: number;
+  kind: "outcome_intake" | "decision_work" | "research_handoff";
+  status: "active" | "closed" | "expired";
+  payload: Record<string, unknown>;
+  contentHash: string;
+  createdAt: string;
+  expiresAt: string;
+  closedAt: string | null;
 }
 
 export interface AcceptedTruthCommitResult {
@@ -54,8 +86,30 @@ export interface AcceptedTruthRepository {
     previousSnapshotHash: string;
     snapshot: PlanSnapshot;
     receipt: Receipt;
+    authorityChallengeId?: string | null;
     operationProof?: Record<string, unknown> | null;
   }): Promise<AcceptedTruthCommitResult>;
+  createAuthorityChallenge?(input: {
+    planId: string;
+    profileHash: string;
+    revision: number;
+    targetId: string;
+    contentHash: string;
+    authorityId: string;
+  }): Promise<AuthorityChallenge>;
+  loadAuthorityChallenge?(challengeId: string): Promise<AuthorityChallenge>;
+  saveOperatorSession?(input: {
+    idempotencyKey: string;
+    planId: string;
+    profileHash: string;
+    baseRevision: number;
+    kind: OperatorSession["kind"];
+    payload: Record<string, unknown>;
+    ttlSeconds?: number;
+  }): Promise<OperatorSession>;
+  listOperatorSessions?(): Promise<OperatorSession[]>;
+  loadOperatorSession?(sessionId: string): Promise<OperatorSession>;
+  closeOperatorSession?(sessionId: string): Promise<OperatorSession>;
 }
 
 const evidenceIntegrity = async (evidence: EvidenceRecord): Promise<boolean> => {
@@ -136,6 +190,7 @@ export const createAcceptedTruthCommit = async (input: {
   previousSnapshotHash: string;
   snapshot: PlanSnapshot;
   receipt: Receipt;
+  authorityChallengeId?: string | null;
   operationProof?: Record<string, unknown> | null;
 }): Promise<AcceptedTruthCommitRequest> => {
   const envelope = await createAcceptedTruthEnvelope(input.snapshot, input.previousSnapshotHash);
@@ -146,6 +201,7 @@ export const createAcceptedTruthCommit = async (input: {
     previousSnapshotHash: input.previousSnapshotHash,
     envelope,
     receipt: clone(input.receipt),
+    authorityChallengeId: input.authorityChallengeId ?? null,
     operationProof: clone(input.operationProof ?? null),
   };
   return { ...base, requestHash: await sha256(base) };
@@ -178,7 +234,7 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
     return clone(payload.envelope);
   }
 
-  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; operationProof?: Record<string, unknown> | null }): Promise<AcceptedTruthCommitResult> {
+  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; authorityChallengeId?: string | null; operationProof?: Record<string, unknown> | null }): Promise<AcceptedTruthCommitResult> {
     const request = await createAcceptedTruthCommit(input);
     const response = await fetch(`${this.baseUrl}/commit`, {
       method: "POST",
@@ -187,12 +243,51 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
     });
     return decodeJson<AcceptedTruthCommitResult>(response);
   }
+
+  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }): Promise<AuthorityChallenge> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...input, targetType: "plan_option", ttlSeconds: 300 }),
+    });
+    return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
+  }
+
+  async loadAuthorityChallenge(challengeId: string): Promise<AuthorityChallenge> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges/${encodeURIComponent(challengeId)}`, { headers: { accept: "application/json" } });
+    return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
+  }
+
+  async saveOperatorSession(input: { idempotencyKey: string; planId: string; profileHash: string; baseRevision: number; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
+  }
+
+  async listOperatorSessions(): Promise<OperatorSession[]> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { headers: { accept: "application/json" } });
+    return (await decodeJson<{ ok: true; sessions: OperatorSession[] }>(response)).sessions;
+  }
+
+  async loadOperatorSession(sessionId: string): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}`, { headers: { accept: "application/json" } });
+    return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
+  }
+
+  async closeOperatorSession(sessionId: string): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}/close`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
+  }
 }
 
 export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
   private readonly heads = new Map<string, AcceptedTruthEnvelope>();
   private readonly receipts = new Map<string, { requestHash: string; result: AcceptedTruthCommitResult }>();
   private readonly activations = new Map<string, { requestHash: string; result: AcceptedTruthCommitResult }>();
+  private readonly challenges = new Map<string, AuthorityChallenge>();
+  private readonly consumedChallenges = new Map<string, string>();
+  private readonly sessions = new Map<string, OperatorSession>();
+
+  constructor(private readonly now: () => Date = () => new Date()) {}
 
   async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt): Promise<AcceptedTruthCommitResult> {
     const proposed = await createAcceptedTruthEnvelope(snapshot, null);
@@ -223,13 +318,22 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
     return clone(existing);
   }
 
-  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; operationProof?: Record<string, unknown> | null }): Promise<AcceptedTruthCommitResult> {
+  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; authorityChallengeId?: string | null; operationProof?: Record<string, unknown> | null }): Promise<AcceptedTruthCommitResult> {
     const request = await createAcceptedTruthCommit(input);
     const receiptKey = `${request.envelope.planId}:${request.receipt.idempotencyKey}`;
     const replay = this.receipts.get(receiptKey);
     if (replay) {
       if (replay.requestHash !== request.requestHash) throw new AcceptedTruthRepositoryError("IDEMPOTENCY_KEY_REUSED", "Accepted-truth idempotency key was reused with different content.");
       return { ...clone(replay.result), code: "ACCEPTED_TRUTH_REPLAY", replay: true };
+    }
+    if (request.receipt.receiptType === "plan_option") {
+      const challengeId = request.authorityChallengeId;
+      const challenge = challengeId ? this.challenges.get(challengeId) : null;
+      if (!challenge) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_REQUIRED", "A live human authority challenge is required.");
+      if (Date.parse(challenge.expiresAt) <= this.now().getTime()) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_EXPIRED", "The human authority challenge expired.");
+      if (this.consumedChallenges.has(challenge.challengeId)) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_CONSUMED", "The human authority challenge was already consumed.");
+      const expectedCommandHash = await sha256({ targetType: "plan_option", targetId: request.receipt.payload.candidateId, planId: request.envelope.planId, profileHash: request.envelope.profileHash, revision: request.expectedRevision, contentHash: request.receipt.payload.contentHash, authorityId: request.receipt.payload.approvalId });
+      if (challenge.commandHash !== expectedCommandHash) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_MISMATCH", "The human authority challenge does not bind this exact command.");
     }
     const current = this.heads.get(request.envelope.planId);
     if (!current) throw new AcceptedTruthRepositoryError("ACCEPTED_TRUTH_NOT_INITIALIZED", "The plan must be initialized before committing a revision.");
@@ -242,6 +346,57 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
     this.heads.set(request.envelope.planId, clone(request.envelope));
     const result: AcceptedTruthCommitResult = { ok: true, code: "ACCEPTED_TRUTH_COMMITTED", envelope: clone(request.envelope), receipt: clone(request.receipt), requestHash: request.requestHash, replay: false };
     this.receipts.set(receiptKey, { requestHash: request.requestHash, result: clone(result) });
+    if (request.authorityChallengeId) this.consumedChallenges.set(request.authorityChallengeId, request.receipt.receiptId);
     return result;
+  }
+
+  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }): Promise<AuthorityChallenge> {
+    const commandHash = await sha256({ targetType: "plan_option", ...input });
+    const challengeId = `authority_${commandHash.slice(0, 16)}`;
+    const existing = this.challenges.get(challengeId);
+    if (existing) return clone(existing);
+    const now = this.now();
+    const createdAt = now.toISOString();
+    const challenge: AuthorityChallenge = { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, targetType: "plan_option", ...clone(input), commandHash, createdAt, expiresAt: new Date(now.getTime() + 300_000).toISOString() };
+    this.challenges.set(challengeId, clone(challenge));
+    return challenge;
+  }
+
+  async loadAuthorityChallenge(challengeId: string): Promise<AuthorityChallenge> {
+    const challenge = this.challenges.get(challengeId);
+    if (!challenge) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_NOT_FOUND", "Human authority challenge was not found.");
+    if (this.consumedChallenges.has(challengeId)) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_CONSUMED", "Human authority challenge was already consumed.");
+    if (Date.parse(challenge.expiresAt) <= this.now().getTime()) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_EXPIRED", "Human authority challenge expired.");
+    return clone(challenge);
+  }
+
+  async saveOperatorSession(input: { idempotencyKey: string; planId: string; profileHash: string; baseRevision: number; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<OperatorSession> {
+    const contentHash = await sha256({ idempotencyKey: input.idempotencyKey, planId: input.planId, profileHash: input.profileHash, baseRevision: input.baseRevision, kind: input.kind, payload: input.payload });
+    const sessionId = `operator_session_${(await sha256({ idempotencyKey: input.idempotencyKey, contentHash })).slice(0, 16)}`;
+    const replay = [...this.sessions.values()].find((item) => item.idempotencyKey === input.idempotencyKey);
+    if (replay) {
+      if (replay.contentHash !== contentHash) throw new AcceptedTruthRepositoryError("IDEMPOTENCY_KEY_REUSED", "Operator-session idempotency key was reused.");
+      return clone(replay);
+    }
+    const now = this.now();
+    const createdAt = now.toISOString();
+    const session: OperatorSession = { sessionVersion: "finite-plan-operator-session.v1", sessionId, idempotencyKey: input.idempotencyKey, planId: input.planId, profileHash: input.profileHash, baseRevision: input.baseRevision, kind: input.kind, status: "active", payload: clone(input.payload), contentHash, createdAt, expiresAt: new Date(now.getTime() + Math.min(604_800, Math.max(60, input.ttlSeconds ?? 86_400)) * 1000).toISOString(), closedAt: null };
+    this.sessions.set(sessionId, clone(session));
+    return session;
+  }
+
+  async listOperatorSessions(): Promise<OperatorSession[]> { return [...this.sessions.values()].filter((item) => item.status === "active" && Date.parse(item.expiresAt) > this.now().getTime()).map(clone); }
+  async loadOperatorSession(sessionId: string): Promise<OperatorSession> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new AcceptedTruthRepositoryError("OPERATOR_SESSION_NOT_FOUND", "Operator session was not found.");
+    if (Date.parse(session.expiresAt) <= this.now().getTime()) throw new AcceptedTruthRepositoryError("OPERATOR_SESSION_EXPIRED", "Operator session expired.");
+    return clone(session);
+  }
+  async closeOperatorSession(sessionId: string): Promise<OperatorSession> {
+    const session = await this.loadOperatorSession(sessionId);
+    session.status = "closed";
+    session.closedAt = this.now().toISOString();
+    this.sessions.set(sessionId, clone(session));
+    return session;
   }
 }

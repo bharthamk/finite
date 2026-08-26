@@ -347,6 +347,8 @@ transition or none of it.
 
 ### Phase 3 — durable operator sessions without durable authority
 
+Status: implemented and locally accepted on 2026-08-26; hosted D1 receipt pending.
+
 Deliverables:
 
 - short-lived operator session identity and correlation id;
@@ -358,6 +360,13 @@ Deliverables:
 
 Exit: cross-device continuation is possible without turning confirmation into a
 replayable durable permission.
+
+Implementation note: Sites identity now derives the tenant server-side; the
+first owner atomically adopts the legacy owner-private lineage once. Expiring
+operator packets bind exact plan/profile/revision work, while an independently
+rebuilt candidate may resume one five-minute human-created challenge. Challenge
+consumption shares the accepted D1 batch, and receipt-first replay preserves
+lost-response recovery after that once-only consumption.
 
 ### Phase 4 — semantic-family grammar expansion
 

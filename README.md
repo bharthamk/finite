@@ -29,8 +29,10 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Failure-atomic accepted-state persistence: option, actual-correction, and preference commits restore memory, pending work, authority, receipts, and idempotency maps if the snapshot write fails, then permit exact retry.
 - Transactional D1 accepted truth: plan heads, immutable revision snapshots, receipts, domain events, and accepted evidence commit behind an async repository boundary with optimistic concurrency and deterministic retry identity.
 - Cross-browser restore from D1 with client-side profile, finite-total, receipt, evidence, lineage, and snapshot-hash verification; browser snapshots are now only a best-effort cache when the remote repository is present.
-- Owner-private tenancy is explicit as `owner-private-v1`; the deployment must not be shared until authenticated user scoping replaces that single-owner boundary.
-- 31 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
+- Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and the first owner atomically adopts the prior `owner-private-v1` lineage once while later tenants receive empty namespaces.
+- Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
+- Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
+- 36 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - A Cloudflare Worker accepted-truth API and inspected Drizzle/D1 migration; there is no backend model or application-owned agent.
 
@@ -55,7 +57,7 @@ The deployed owner-private build is [Finite](https://finite-plan-kitchen.bhartha
 3. The application validates and stages one exact option.
 4. The human sees the decision packet and approves that exact result.
 5. The application atomically applies the approved option and emits a receipt.
-6. Accepted truth and replay protection survive browser-empty reload from D1; volatile staging and authority do not.
+6. Accepted truth and replay protection survive browser-empty reload from D1. A bounded operator packet may cross devices, but authority crosses only as an unexpired exact challenge consumed with the accepted write.
 
 Plan creation uses the same authority law: Codex stages a complete compiled plan,
 the human confirms the exact hashes on the consumption surface, and Codex invokes
@@ -100,3 +102,4 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
+- `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

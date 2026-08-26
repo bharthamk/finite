@@ -278,6 +278,7 @@ export interface HumanApproval {
   contentHash: string;
   warningsAcknowledged: string[];
   source: "human_action";
+  authorityChallengeId?: string;
 }
 
 export interface Confirmation {

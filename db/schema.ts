@@ -106,3 +106,64 @@ export const operationLog = sqliteTable("operation_log", {
   primaryKey({ columns: [table.scopeId, table.operationHash] }),
   index("idx_operation_log_scope_plan_created").on(table.scopeId, table.planId, table.createdAt),
 ]);
+
+export const tenantAccounts = sqliteTable("tenant_accounts", {
+  scopeId: text("scope_id").primaryKey(),
+  userIdHash: text("user_id_hash").notNull(),
+  legacyScopeAdopted: integer("legacy_scope_adopted", { mode: "boolean" }).notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_tenant_accounts_user_hash").on(table.userIdHash),
+]);
+
+export const operatorSessions = sqliteTable("operator_sessions", {
+  scopeId: text("scope_id").notNull(),
+  sessionId: text("session_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  planId: text("plan_id").notNull(),
+  profileHash: text("profile_hash").notNull(),
+  baseRevision: integer("base_revision").notNull(),
+  kind: text("kind").notNull(),
+  status: text("status").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  closedAt: text("closed_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.sessionId] }),
+  uniqueIndex("idx_operator_sessions_scope_idempotency").on(table.scopeId, table.idempotencyKey),
+  index("idx_operator_sessions_scope_status_expiry").on(table.scopeId, table.status, table.expiresAt),
+  index("idx_operator_sessions_scope_plan_revision").on(table.scopeId, table.planId, table.baseRevision),
+]);
+
+export const authorityChallenges = sqliteTable("authority_challenges", {
+  scopeId: text("scope_id").notNull(),
+  challengeId: text("challenge_id").notNull(),
+  planId: text("plan_id").notNull(),
+  profileHash: text("profile_hash").notNull(),
+  revision: integer("revision").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  contentHash: text("content_hash").notNull(),
+  authorityId: text("authority_id").notNull(),
+  commandHash: text("command_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.challengeId] }),
+  index("idx_authority_challenges_scope_plan_revision").on(table.scopeId, table.planId, table.revision),
+  index("idx_authority_challenges_scope_expiry").on(table.scopeId, table.expiresAt),
+]);
+
+export const challengeConsumptions = sqliteTable("challenge_consumptions", {
+  scopeId: text("scope_id").notNull(),
+  challengeId: text("challenge_id").notNull(),
+  planId: text("plan_id").notNull(),
+  receiptId: text("receipt_id").notNull(),
+  requestHash: text("request_hash").notNull(),
+  consumedAt: text("consumed_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.challengeId] }),
+  uniqueIndex("idx_challenge_consumptions_scope_receipt").on(table.scopeId, table.receiptId),
+]);
