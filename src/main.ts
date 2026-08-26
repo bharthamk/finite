@@ -1,5 +1,5 @@
 import { compileBuiltInProfiles } from "./profiles.js";
-import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
+import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
@@ -19,7 +19,8 @@ const savedProfile = localStorage.getItem("finite-plan.surface.active-profile");
 const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
-const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), new HttpAcceptedTruthRepository());
+const acceptedRepository = new HttpAcceptedTruthRepository();
+const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository);
 await runtime.hydrateAcceptedTruth();
 await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
@@ -40,6 +41,7 @@ if (adapter) await adapter.register();
 let busy = false;
 let message = "";
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
+let labAcceptanceResult: unknown = null;
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -70,6 +72,104 @@ const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values
     || (runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(a.objective))
       - (runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective) < 0 ? Number.MAX_SAFE_INTEGER : runtime.kernel.profile.searchPolicy.objectives.indexOf(b.objective))
     || b.preferenceScore - a.preferenceScore);
+
+const requireCode = (result: { code: string }, expected: string): void => {
+  if (result.code !== expected) throw new Error(`Expected ${expected}; received ${result.code}.`);
+};
+
+const runAuthenticatedHandoffAcceptance = async (): Promise<void> => {
+  if (!labMode || busy) return;
+  busy = true;
+  labAcceptanceResult = { status: "running" };
+  announce("Running the authenticated three-kitchen handoff acceptance…");
+  await render();
+  try {
+    const journeys = [];
+    for (const profileId of ["travel", "renovation", "event"] as ProfileId[]) {
+      const deviceA = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), profileId, undefined, [], () => new Date(), acceptedRepository);
+      const hydratedA = await deviceA.hydrateAcceptedTruth();
+      requireCode(hydratedA, "ACCEPTED_TRUTH_CURRENT");
+      const fromRevision = deviceA.kernel.revision;
+      if (fromRevision >= 3) {
+        journeys.push({ profileId, status: "already_complete", revision: fromRevision });
+        continue;
+      }
+      if (fromRevision !== 2) throw new Error(`${profileId} must begin the hosted handoff at revision 2; received ${fromRevision}.`);
+
+      const recorded = deviceA.kernel.recordChangeEvent({
+        type: "live_acceptance",
+        title: `${profileId} authenticated cross-device acceptance`,
+        costDeltaMinor: 10_000,
+        daysDelta: 0,
+        minimumBufferMinor: 0,
+        evidenceRefs: ["evidence_current"],
+        expectedRevision: fromRevision,
+      });
+      requireCode(recorded, "CHANGE_RECORDED");
+      const event = recorded.event as { eventId: string };
+      const compared = await deviceA.kernel.compareOptions({ eventId: event.eventId, generate: true });
+      requireCode(compared, "OPTIONS_AVAILABLE");
+      const chosen = (compared.options as Candidate[]).find((candidate) => candidate.valid);
+      if (!chosen) throw new Error(`${profileId} produced no valid candidate.`);
+      const staged = await deviceA.kernel.stageOption({ candidateId: chosen.candidateId, expectedRevision: fromRevision });
+      requireCode(staged, "OPTION_STAGED");
+      const stagedCandidate = staged.staged as Candidate;
+      const approved = await deviceA.kernel.humanApprove({ candidateId: chosen.candidateId, warningsAcknowledged: stagedCandidate.warnings.map((warning) => String(warning.code)) });
+      requireCode(approved, "HUMAN_APPROVAL_RECORDED");
+      const approval = approved.approval as { approvalId: string; authorityChallengeId?: string };
+      if (!approval.authorityChallengeId) throw new Error(`${profileId} did not create an authority challenge.`);
+
+      const saved = await deviceA.saveOperatorSession({
+        idempotencyKey: `hosted-phase3-${profileId}-r${fromRevision}`,
+        kind: "decision_work",
+        payload: { event: recorded.event, candidateId: chosen.candidateId, challengeId: approval.authorityChallengeId },
+        ttlSeconds: 3600,
+      });
+      requireCode(saved, "OPERATOR_SESSION_SAVED");
+      const session = saved.session as { sessionId: string };
+
+      const deviceB = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), profileId, undefined, [], () => new Date(), acceptedRepository);
+      requireCode(await deviceB.hydrateAcceptedTruth(), "ACCEPTED_TRUTH_CURRENT");
+      const listed = await deviceB.listOperatorSessions();
+      requireCode(listed, "OPERATOR_SESSIONS");
+      const listedSession = (listed.sessions as Array<{ sessionId: string; baseCurrent: boolean }>).find((candidate) => candidate.sessionId === session.sessionId);
+      if (!listedSession?.baseCurrent) throw new Error(`${profileId} session was not listed against its current base.`);
+      const resumed = await deviceB.resumeOperatorSession({ sessionId: session.sessionId });
+      requireCode(resumed, "OPERATOR_DECISION_SESSION_RESUMED");
+      if (resumed.authorityRestored !== false) throw new Error(`${profileId} session improperly restored authority.`);
+      requireCode(await deviceB.kernel.resumeHumanAuthorityChallenge({ challengeId: approval.authorityChallengeId }), "HUMAN_AUTHORITY_HANDOFF_RESUMED");
+      const applied = await deviceB.kernel.applyApprovedOption({ candidateId: chosen.candidateId, approvalId: approval.approvalId, expectedRevision: fromRevision, idempotencyKey: `hosted-phase3-apply-${profileId}-r${fromRevision}` });
+      requireCode(applied, "OPTION_APPLIED");
+      const consumed = await deviceB.kernel.resumeHumanAuthorityChallenge({ challengeId: approval.authorityChallengeId });
+      requireCode(consumed, "AUTHORITY_CHALLENGE_CONSUMED");
+      requireCode(await deviceA.hydrateAcceptedTruth(), "ACCEPTED_TRUTH_CURRENT");
+      const stale = await deviceA.resumeOperatorSession({ sessionId: session.sessionId });
+      requireCode(stale, "OPERATOR_SESSION_BASE_STALE");
+      journeys.push({
+        profileId,
+        status: "passed",
+        fromRevision,
+        toRevision: deviceB.kernel.revision,
+        sessionId: session.sessionId,
+        challengeId: approval.authorityChallengeId,
+        receiptId: (applied.receipt as { receiptId: string }).receiptId,
+        authorityRestoredBySession: resumed.authorityRestored,
+        consumedReplay: consumed.code,
+        staleReplay: stale.code,
+      });
+    }
+    labAcceptanceResult = { status: "passed", journeys };
+    await runtime.hydrateAcceptedTruth();
+    announce("Authenticated handoff acceptance passed for travel, renovation and event.");
+  } catch (error) {
+    labAcceptanceResult = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+    announce(`Authenticated handoff acceptance failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    busy = false;
+    await render();
+    document.querySelector(".protocol-lab")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+};
 
 const seedDecision = async (): Promise<void> => {
   const kernel = runtime.kernel;
@@ -205,7 +305,7 @@ async function render(): Promise<SurfaceManifest> {
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
-      ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
+      ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three kitchens. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>`;
   bindInteractions();
@@ -273,6 +373,7 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
 }
 
 await seedDecision();
