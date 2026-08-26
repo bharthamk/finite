@@ -4,6 +4,18 @@ import type { ToolResult } from "./types.js";
 export type ArrivalSourceSurface = "site" | "codex" | "inline";
 export type ArrivalStatus = "waiting_for_codex" | "codex_reviewing" | "clarification_required" | "proposed_plan_ready" | "interpretation_confirmed" | "awaiting_human_authority" | "accepted" | "closed";
 export type ArrivalInputKind = "detail" | "constraint" | "preference" | "commitment" | "answer" | "evidence_reference" | "correction";
+export type ArrivalDependencyKind = "operator_research" | "human_coordination" | "external_evidence" | "human_decision";
+export type ArrivalDependencyStatus = "open" | "resolved" | "deferred";
+
+export interface ArrivalDependency {
+  dependencyId: string;
+  kind: ArrivalDependencyKind;
+  title: string;
+  status: ArrivalDependencyStatus;
+  blocking: boolean;
+  detail?: string;
+  sourcePaths: string[];
+}
 
 export interface ArrivalInput {
   inputId: string;
@@ -30,6 +42,7 @@ export interface ArrivalInterpretation {
   inferred: Record<string, unknown>;
   missing: string[];
   contradictions: string[];
+  dependencies: ArrivalDependency[];
   savedOperatorWork: Record<string, unknown>;
   nextHumanBoundary?: {
     prompt: string;
@@ -63,7 +76,7 @@ export interface ArrivalEvent {
   eventId: string;
   orderId: string;
   version: number;
-  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "interpretation_reviewed";
+  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "arrival_reconciled" | "interpretation_reviewed";
   actor: "human" | "codex";
   sourceSurface: ArrivalSourceSurface;
   payload: Record<string, unknown>;
@@ -81,6 +94,7 @@ export interface ArrivalOrientation {
   inferredFamily: string | null;
   missing: string[];
   contradictions: string[];
+  dependencies: ArrivalDependency[];
   savedOperatorWork: Record<string, unknown>;
   latestHumanInputVersion: number;
   latestOperatorEventVersion: number | null;
@@ -106,7 +120,8 @@ export interface ArrivalRepository {
   appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }): Promise<ArrivalResult>;
   checkpoint(input: { orderId: string; expectedVersion: number }): Promise<ArrivalResult>;
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }): Promise<ArrivalResult>;
-  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
+  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
+  reconcile(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult>;
   reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }): Promise<ArrivalResult>;
 }
 
@@ -145,6 +160,9 @@ export class HttpArrivalRepository implements ArrivalRepository {
   stageInterpretation(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/interpretation`, { method: "POST", body: JSON.stringify(input) });
   }
+  reconcile(input: Parameters<ArrivalRepository["reconcile"]>[0]): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/reconcile`, { method: "POST", body: JSON.stringify(input) });
+  }
   reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input) });
   }
@@ -181,6 +199,7 @@ const orientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVersion?:
     inferredFamily: order.interpretation?.inferredFamily ?? null,
     missing: clone(order.interpretation?.missing ?? []),
     contradictions: clone(order.interpretation?.contradictions ?? []),
+    dependencies: clone(order.interpretation?.dependencies ?? []),
     savedOperatorWork: clone(order.interpretation?.savedOperatorWork ?? {}),
     latestHumanInputVersion,
     latestOperatorEventVersion: operatorEvents.at(-1)?.version ?? null,
@@ -228,6 +247,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     const code = event.eventType === "operator_checkpointed" ? "ARRIVAL_CHECKPOINTED"
       : event.eventType === "clarification_staged" ? "ARRIVAL_CLARIFICATION_STAGED"
         : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED"
+          : event.eventType === "arrival_reconciled" ? "ARRIVAL_RECONCILED"
           : event.eventType === "interpretation_reviewed" ? "ARRIVAL_INTERPRETATION_REVIEWED"
             : "ARRIVAL_INPUT_APPENDED";
     return this.result(code, next);
@@ -296,6 +316,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       inferred: clone(input.inferred ?? {}),
       missing: clone(input.missing ?? []),
       contradictions: clone(input.contradictions ?? []),
+      dependencies: clone(input.dependencies ?? []),
       savedOperatorWork: clone(input.savedOperatorWork ?? {}),
       nextHumanBoundary: input.nextHumanBoundary ? {
         prompt: input.nextHumanBoundary.prompt,
@@ -307,6 +328,52 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       stagedAt,
     };
     return this.replace(order, input.expectedVersion, { interpretation, pendingClarification: null, status: interpretation.complete ? "proposed_plan_ready" : "codex_reviewing", lastOperatorCheckpoint: input.expectedVersion }, { eventType: "interpretation_staged", actor: "codex", sourceSurface: "codex", payload: { interpretation } });
+  }
+
+  async reconcile(input: Parameters<ArrivalRepository["reconcile"]>[0]): Promise<ArrivalResult> {
+    const order = this.orders.get(input.orderId);
+    if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+    const stagedAt = this.now().toISOString();
+    const interpretation: ArrivalInterpretation = {
+      basedOnVersion: input.expectedVersion,
+      inferredFamily: input.inferredFamily ?? null,
+      summary: input.summary,
+      known: clone(input.known ?? {}),
+      inferred: clone(input.inferred ?? {}),
+      missing: clone(input.missing ?? []),
+      contradictions: clone(input.contradictions ?? []),
+      dependencies: clone(input.dependencies ?? []),
+      savedOperatorWork: clone(input.savedOperatorWork ?? {}),
+      nextHumanBoundary: input.nextHumanBoundary ? {
+        prompt: input.nextHumanBoundary.prompt,
+        answerKind: input.nextHumanBoundary.answerKind,
+        fieldPaths: clone(input.nextHumanBoundary.fieldPaths ?? []),
+        choices: clone(input.nextHumanBoundary.choices ?? []),
+      } : null,
+      complete: input.complete === true,
+      stagedAt,
+    };
+    if (interpretation.complete && interpretation.dependencies.some((dependency) => dependency.blocking && dependency.status === "open")) return { ok: false, code: "ARRIVAL_BLOCKING_DEPENDENCY_OPEN", acceptedStateChanged: false };
+    if (interpretation.complete && interpretation.nextHumanBoundary) return { ok: false, code: "ARRIVAL_COMPLETE_WITH_HUMAN_BOUNDARY", acceptedStateChanged: false };
+    const question: ArrivalClarification | null = !interpretation.complete && interpretation.nextHumanBoundary ? {
+      questionId: `arrival_question_${order.orderId}_${input.expectedVersion + 1}`,
+      prompt: interpretation.nextHumanBoundary.prompt,
+      answerKind: interpretation.nextHumanBoundary.answerKind,
+      fieldPaths: clone(interpretation.nextHumanBoundary.fieldPaths),
+      choices: clone(interpretation.nextHumanBoundary.choices),
+      stagedAt,
+    } : null;
+    return this.replace(order, input.expectedVersion, {
+      interpretation,
+      pendingClarification: question,
+      status: interpretation.complete ? "proposed_plan_ready" : question ? "clarification_required" : "codex_reviewing",
+      lastOperatorCheckpoint: input.expectedVersion + 1,
+    }, {
+      eventType: "arrival_reconciled",
+      actor: "codex",
+      sourceSurface: "codex",
+      payload: { processedHumanThroughVersion: input.expectedVersion, interpretation, question },
+    });
   }
 
   async reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {

@@ -143,7 +143,8 @@ test("storage failure refuses staged durability and WebMCP exposes continuity wi
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 47);
+  assert.equal(inventory.length, 12);
+  assert.equal((await host.execute("finite_open_toolset", { group: "construction" })).code, "TOOLSET_READY");
   assert(host.tools.has("finite_get_construction_packet"));
   assert(host.tools.has("finite_resume_construction_packet"));
   assert(host.tools.has("finite_discard_construction_packet"));

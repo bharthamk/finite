@@ -209,7 +209,8 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 47);
+  assert.equal(inventory.length, 12);
+  assert.equal((await host.execute("finite_open_toolset", { group: "plan_management" })).code, "TOOLSET_READY");
   assert(host.tools.has("finite_get_plan_blueprint"));
   assert(host.tools.has("finite_assess_plan_intake"));
   assert(host.tools.has("finite_get_amendment_blueprint"));
@@ -239,7 +240,9 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("event_change_headcount"));
-  assert.equal(host.tools.size, 47);
+  assert(host.tools.size <= 20);
+
+  assert.equal((await host.execute("finite_open_toolset", { group: "plan_management" })).code, "TOOLSET_READY");
 
   const amendment = await host.execute("finite_get_amendment_blueprint", {});
   amendment.profile.accepted.forecastMinor -= 5_000;

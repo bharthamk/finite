@@ -107,6 +107,7 @@ test("WebMCP completion refreshes the consumer surface and returns synchronizati
     return { renderSequence: observed.length, planRevision: runtime.kernel.revision, decisionStatus: pending.decisionStatus, activeEventId: pending.activeEventId };
   });
   await adapter.register();
+  assert.equal((await host.execute("finite_open_toolset", { group: "planning" })).code, "TOOLSET_READY");
 
   const recorded = await host.execute("travel_extend_stay", JSON.stringify({ destination: "Paris", nights: 2, nightlyMinor: 15_000, minimumBufferMinor: 40_000 }));
   assert.equal(recorded.code, "CHANGE_RECORDED");

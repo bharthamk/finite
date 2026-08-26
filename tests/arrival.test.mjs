@@ -109,6 +109,45 @@ test("Codex-first, Site-later preserves a staged question and treats the later S
   assert.match(resumed.orientation.next, /Process 1 human-supplied update/);
 });
 
+test("one reconcile atomically checkpoints human input, classifies dependencies, and stages the exact next boundary", async () => {
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "reconcile-arrival-0001", rawOutcome: "Plan a Europe trip around people and one event.", sourceSurface: "site" });
+  const reconciled = await arrivals.reconcile({
+    orderId: created.order.orderId,
+    expectedVersion: 1,
+    inferredFamily: "travel",
+    summary: "A flexible Europe trip whose dates depend on one human decision and later research.",
+    known: { outcome: "Europe trip" },
+    inferred: { shape: "people-and-event anchored" },
+    missing: ["departure month"],
+    dependencies: [
+      { dependencyId: "departure_month", kind: "human_decision", title: "Choose the departure month", status: "open", blocking: true, sourcePaths: ["structured.deadline"] },
+      { dependencyId: "event_dates", kind: "operator_research", title: "Research event operating dates", status: "open", blocking: false, sourcePaths: ["rawOutcome"] },
+    ],
+    nextHumanBoundary: { prompt: "Which month should I plan around?", answerKind: "text", fieldPaths: ["structured.deadline"] },
+    complete: false,
+  });
+  assert.equal(reconciled.code, "ARRIVAL_RECONCILED");
+  assert.equal(reconciled.order.version, 2);
+  assert.equal(reconciled.order.status, "clarification_required");
+  assert.equal(reconciled.order.lastOperatorCheckpoint, 2);
+  assert.equal(reconciled.order.pendingClarification.prompt, "Which month should I plan around?");
+  assert.equal(reconciled.orientation.unprocessedHumanInputCount, 0);
+  assert.equal(reconciled.orientation.dependencies[0].kind, "human_decision");
+  assert.equal(reconciled.orientation.delta.length, 0);
+
+  const refused = await arrivals.reconcile({
+    orderId: reconciled.order.orderId,
+    expectedVersion: 2,
+    inferredFamily: "travel",
+    summary: "Pretend this is complete.",
+    dependencies: [{ dependencyId: "departure_month", kind: "human_decision", title: "Choose the departure month", status: "open", blocking: true, sourcePaths: [] }],
+    complete: true,
+  });
+  assert.equal(refused.code, "ARRIVAL_BLOCKING_DEPENDENCY_OPEN");
+  assert.equal(refused.acceptedStateChanged, false);
+});
+
 test("a concurrent Site edit refuses stale Codex staging and returns the reorientation delta", async () => {
   const arrivals = new MemoryArrivalRepository();
   const created = await arrivals.create({ idempotencyKey: "concurrent-arrival-0001", rawOutcome: "Plan a 120-person launch event.", sourceSurface: "site" });
@@ -133,8 +172,8 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 47);
-  for (const name of ["finite_enter_kitchen", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
+  assert.equal(inventory.length, 12);
+  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
   assert.equal(host.tools.has("finite_review_arrival_interpretation"), false);
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
@@ -169,7 +208,7 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.equal(reentered.handoffReceipt.matchedCurrentState, false);
   assert.equal(reentered.arrival.orientation.exactOrderVersion, 2);
   assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_delta_ready");
-  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_checkpoint_arrival");
+  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
   assert.match(reentered.operatorPacket.nextAction.reason, /2 human-supplied arrival update/);
 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });

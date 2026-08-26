@@ -530,6 +530,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <article><span>What I’m working from</span>${renderHumanValue(interpretation.known)}</article>
             <article><span>What Codex currently thinks</span>${renderHumanValue(interpretation.inferred)}<p class="interpretation-note">These are working assumptions, not facts you supplied.</p></article>
             <article><span>What I still need</span>${renderTextList(interpretation.missing, "Nothing currently blocking")}</article>
+            ${interpretation.dependencies?.length ? `<article><span>Work still outside the brief</span><ul class="interpretation-list">${interpretation.dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong><small class="interpretation-provenance">${escapeHtml(humanLabel(dependency.kind))} · ${escapeHtml(humanLabel(dependency.status))}${dependency.blocking ? " · blocking" : ""}</small>${dependency.detail ? `<p>${escapeHtml(dependency.detail)}</p>` : ""}</li>`).join("")}</ul></article>` : ""}
             ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
           </div>
         </details>` : ""}

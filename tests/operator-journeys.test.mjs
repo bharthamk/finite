@@ -79,6 +79,7 @@ for (const [profileId, scenario] of Object.entries(scenarios)) {
     const runtime = new FinitePlanRuntime(profiles, store, profileId);
     const host = new MemoryModelContext();
     await new FinitePlanWebMCPAdapter(host, runtime).register();
+    assert.equal((await host.execute("finite_open_toolset", { group: "planning" })).code, "TOOLSET_READY");
 
     const opened = await host.execute("finite_open_kitchen");
     assert.equal(opened.code, "KITCHEN_OPEN");

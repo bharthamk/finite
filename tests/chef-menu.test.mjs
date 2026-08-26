@@ -75,7 +75,7 @@ test("a waiting human order wins route arbitration over an accepted plan", async
   });
   assert.equal(entered.arrival.orientation.order.orderId, created.order.orderId);
   assert.equal(entered.operatorPacket.nextAction.stage, "arrival_delta_ready");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_checkpoint_arrival");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
   assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { orderId: created.order.orderId, expectedVersion: 1 });
   assert.equal(entered.next.includes("finite_create_arrival_order"), false);
 });
@@ -139,7 +139,7 @@ test("a saved incomplete interpretation advances to one operator-ready clarifica
   const refreshed = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(processed.orientation.latestHumanInputVersion, 5);
   assert.equal(refreshed.operatorPacket.nextAction.stage, "arrival_review");
-  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_stage_plan_interpretation");
+  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
   assert.match(refreshed.operatorPacket.nextAction.reason, /Human input advanced/);
 });
 
@@ -213,6 +213,7 @@ test("a custom family plan receives a generic live menu rather than built-in sto
 
 test("generated candidates replace suggestions with a validated menu and preserve human choice", async () => {
   const { runtime, host } = await setup("travel");
+  await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
   const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 3, nightlyMinor: 22_000, minimumBufferMinor: 50_000 });
   const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
   assert.equal(compared.code, "OPTIONS_AVAILABLE");

@@ -54,12 +54,17 @@ test("production adapter normalizes host input, excludes authority, and replaces
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 47);
-  assert.equal(inventory.filter((name) => name.startsWith("finite_")).length, 44);
-  assert(inventory.includes("travel_extend_stay"));
+  assert.equal(inventory.length, 12);
+  assert.equal(inventory.every((name) => name.startsWith("finite_")), true);
+  assert.equal(inventory.includes("travel_extend_stay"), false);
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
   assert.equal((await host.execute("finite_get_capabilities", {})).ok, true);
   assert.equal((await host.execute("finite_get_capabilities", "{}")).ok, true);
+  const planning = await host.execute("finite_open_toolset", { group: "planning" });
+  assert.equal(planning.code, "TOOLSET_READY");
+  assert.equal(planning.group, "planning");
+  assert(planning.advertisedTools.includes("travel_extend_stay"));
+  assert(planning.advertisedTools.length <= 20);
   assert.equal((await host.execute("finite_get_plan_state", "{bad-json")).code, "INVALID_TOOL_INPUT");
   const extension = await host.execute("travel_extend_stay", JSON.stringify({ destination: "Paris", nights: 2, nightlyMinor: 18_000, minimumBufferMinor: 50_000 }));
   assert.equal(extension.code, "CHANGE_RECORDED");
@@ -68,5 +73,5 @@ test("production adapter normalizes host input, excludes authority, and replaces
   assert.equal(switched.code, "PROFILE_SWITCHED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("renovation_replace_material"));
-  assert.equal(host.tools.size, 47);
+  assert(host.tools.size <= 20);
 });

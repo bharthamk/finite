@@ -8,6 +8,28 @@ const string = { type: "string", minLength: 1, maxLength: 200 };
 const integer = { type: "integer" };
 const revision = { type: "integer", minimum: 1 };
 const idempotencyKey = { type: "string", minLength: 8, maxLength: 100 };
+const arrivalInterpretationProperties = {
+  orderId: string,
+  expectedVersion: revision,
+  inferredFamily: { type: ["string", "null"], maxLength: 100 },
+  summary: { type: "string", minLength: 1, maxLength: 4000 },
+  known: { type: "object" },
+  inferred: { type: "object" },
+  missing: { type: "array", maxItems: 50, items: string },
+  contradictions: { type: "array", maxItems: 50, items: string },
+  dependencies: { type: "array", maxItems: 50, items: { type: "object", properties: {
+    dependencyId: string,
+    kind: { type: "string", enum: ["operator_research", "human_coordination", "external_evidence", "human_decision"] },
+    title: { type: "string", minLength: 1, maxLength: 500 },
+    status: { type: "string", enum: ["open", "resolved", "deferred"] },
+    blocking: { type: "boolean" },
+    detail: { type: "string", maxLength: 1000 },
+    sourcePaths: { type: "array", maxItems: 20, items: string },
+  }, required: ["dependencyId", "kind", "title", "status", "blocking", "sourcePaths"], additionalProperties: false } },
+  savedOperatorWork: { type: "object" },
+  nextHumanBoundary: { type: ["object", "null"], properties: { prompt: { type: "string", minLength: 1, maxLength: 1000 }, answerKind: { type: "string", enum: ["text", "number", "date", "choice", "multi_choice", "confirmation"] }, fieldPaths: { type: "array", maxItems: 20, items: string }, choices: { type: "array", maxItems: 20, items: string } }, required: ["prompt", "answerKind"], additionalProperties: false },
+  complete: { type: "boolean" },
+};
 
 export const humanOnlyActions = Object.freeze(["humanApprove", "humanConfirmActualCorrection", "humanConfirmPreferenceChange", "humanConfirmPlanDraft", "humanRejectPlanDraft", "reviewArrivalInterpretation"]);
 
@@ -36,6 +58,24 @@ type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
+const toolsetGroups = {
+  arrival: ["finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_plan_interpretation"],
+  construction: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_get_construction_packet", "finite_resume_construction_packet", "finite_discard_construction_packet", "finite_get_evidence_policy", "finite_register_evidence", "finite_read_evidence", "finite_stage_plan_draft"],
+  planning: ["finite_open_kitchen", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event", "finite_simulate_reallocation", "finite_compare_options", "finite_record_consumer_feedback", "finite_apply_approved_option", "finite_apply_confirmed_preference_change", "finite_apply_confirmed_actual_correction", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile"],
+  decisions: ["finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option", "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction"],
+  evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_export_plan_receipt"],
+  continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff"],
+  plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile"],
+} as const;
+type ToolsetGroup = keyof typeof toolsetGroups;
+const toolsetGroupNames = Object.keys(toolsetGroups) as ToolsetGroup[];
+const persistentToolNames = new Set(["finite_get_capabilities", "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_open_toolset"]);
+const routeRefreshToolNames = new Set([
+  "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation",
+  "finite_record_change_event", "finite_compare_options", "finite_record_consumer_feedback", "finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option",
+  "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction",
+  "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile",
+]);
 
 const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string; answerKind: string; fieldPaths: string[]; choices: string[]; reason: string } => {
   const interpretation = orientation.order.interpretation;
@@ -138,7 +178,7 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
 const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unknown> => {
   if (orientation.unprocessedHumanInputCount > 0) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_delta_ready", reason: `${orientation.unprocessedHumanInputCount} human-supplied arrival update(s) have not been checkpointed by Codex.`,
-    nextTool: "finite_checkpoint_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   if (orientation.order.status === "clarification_required" && orientation.order.pendingClarification) return {
@@ -183,14 +223,14 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
   }
   if (interpretation && orientation.interpretationIsCurrent) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_interpretation_incomplete", reason: "The saved interpretation is current but marked incomplete without a declared human gap. Codex must refine the operator work instead of pretending it is ready.",
-    nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   return {
     actionVersion: "finite-next-action.v1", stage: "arrival_review", reason: interpretation
       ? `Human input advanced to version ${orientation.latestHumanInputVersion} after the saved interpretation. Rebuild it from canonical human state.`
       : "The human order is current and ready for bounded interpretation.",
-    nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
 };
@@ -241,9 +281,9 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
   menuVersion: "finite-chef-menu.v1",
   basis,
   items: orientation ? [
-    { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will read every saved detail and continue without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_checkpoint_arrival" : null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: [], evidence: { status: "available", refs: [] } },
+    { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will reconcile every saved detail into one current interpretation and next boundary without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_reconcile_arrival" : null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: [], evidence: { status: "available", refs: [] } },
     { menuItemId: "arrival_clarify_only_material_gaps", rank: 2, kind: "suggested_route", title: "Ask only what materially blocks the plan", offer: "I will return with the smallest decision or fact that only you can provide.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_clarification", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["May pause the kitchen for one human answer"], evidence: { status: "not_required", refs: [] } },
-    { menuItemId: "arrival_prepare_interpretation", rank: 3, kind: "suggested_route", title: "Prepare the plan for review", offer: "I will separate known facts, inferences, gaps, and contradictions before anything becomes accepted truth.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_plan_interpretation", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["A complete interpretation still requires human review"], evidence: { status: "not_required", refs: [] } },
+    { menuItemId: "arrival_prepare_interpretation", rank: 3, kind: "suggested_route", title: "Prepare the plan for review", offer: "I will separate known facts, inferences, dependencies, gaps, and contradictions in one exact reconcile operation before anything becomes accepted truth.", status: "ready", viability: "not_yet_tested", nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["A complete interpretation still requires human review"], evidence: { status: "not_required", refs: [] } },
   ] : [
     { menuItemId: "arrival_tell_outcome", rank: 1, kind: "human_decision", title: "Tell me the outcome", offer: "Describe what you want in one sentence and I will build the kitchen around it.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "The outcome belongs to the human.", question: "What are we making happen?" }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
     { menuItemId: "arrival_talk_it_through", rank: 2, kind: "human_decision", title: "Talk it through with me", offer: "Start messy. I will preserve your words, identify the finite edges, and ask only useful questions.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "Conversation still begins with human intent.", question: "What is changing, and what outcome would feel successful?" }], tradeoffs: ["Takes a little longer than a complete brief"], evidence: { status: "not_required", refs: [] } },
@@ -432,9 +472,13 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_open_arrival", title: "Orient to the waiting human order", description: "Open the current or named arrival with the full human order, delta since the operator checkpoint, unprocessed count, evidence, inference labels, missing facts, contradictions, saved operator work, exact version/checksum, and next safe route.", readOnly: true, inputSchema: objectSchema({ orderId: string, sinceVersion: { type: "integer", minimum: 0 } }), execute: (input) => arrival.open({ ...(input.orderId ? { orderId: String(input.orderId) } : {}), ...(input.sinceVersion !== undefined ? { sinceVersion: Number(input.sinceVersion) } : {}) }) }),
   define({ name: "finite_checkpoint_arrival", title: "Checkpoint processed human input", description: "Mark one exact arrival version as processed by Codex and move it into operator review. If the human changed the order, the write fails closed and returns the new orientation delta.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision }, ["orderId", "expectedVersion"]), execute: (input) => arrival.checkpoint({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion) }) }),
   define({ name: "finite_stage_clarification", title: "Stage one clarification for the human", description: "Stage one bounded question against an exact arrival version. It changes no accepted plan truth and cannot answer on the human's behalf.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, prompt: { type: "string", minLength: 1, maxLength: 1000 }, answerKind: { type: "string", enum: ["text", "number", "date", "choice", "multi_choice", "confirmation"] }, fieldPaths: { type: "array", maxItems: 20, items: string }, choices: { type: "array", maxItems: 20, items: string } }, ["orderId", "expectedVersion", "prompt", "answerKind"]), execute: (input) => arrival.stageClarification({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), prompt: String(input.prompt), answerKind: input.answerKind as never, fieldPaths: Array.isArray(input.fieldPaths) ? input.fieldPaths.map(String) : [], choices: Array.isArray(input.choices) ? input.choices.map(String) : [] }) }),
-  define({ name: "finite_stage_plan_interpretation", title: "Stage Codex's arrival interpretation", description: "Store a clearly labelled Codex interpretation against an exact human-order version, including known facts, inferences, gaps, contradictions, resumable work, and one exact next-human boundary when needed. Complete interpretations become proposed plans awaiting human review, never accepted truth.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, inferredFamily: { type: ["string", "null"], maxLength: 100 }, summary: { type: "string", minLength: 1, maxLength: 4000 }, known: { type: "object" }, inferred: { type: "object" }, missing: { type: "array", maxItems: 50, items: string }, contradictions: { type: "array", maxItems: 50, items: string }, savedOperatorWork: { type: "object" }, nextHumanBoundary: { type: ["object", "null"], properties: { prompt: { type: "string", minLength: 1, maxLength: 1000 }, answerKind: { type: "string", enum: ["text", "number", "date", "choice", "multi_choice", "confirmation"] }, fieldPaths: { type: "array", maxItems: 20, items: string }, choices: { type: "array", maxItems: 20, items: string } }, required: ["prompt", "answerKind"], additionalProperties: false }, complete: { type: "boolean" } }, ["orderId", "expectedVersion", "summary"]), execute: (input) => {
+  define({ name: "finite_stage_plan_interpretation", title: "Stage Codex's arrival interpretation", description: "Legacy two-step storage for a clearly labelled Codex interpretation. Prefer finite_reconcile_arrival for new work so human input, dependencies, interpretation, and the next question share one exact write.", inputSchema: objectSchema(arrivalInterpretationProperties, ["orderId", "expectedVersion", "summary"]), execute: (input) => {
     const boundary = input.nextHumanBoundary && typeof input.nextHumanBoundary === "object" && !Array.isArray(input.nextHumanBoundary) ? input.nextHumanBoundary as Record<string, unknown> : null;
-    return arrival.stageInterpretation({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), inferredFamily: input.inferredFamily === null || input.inferredFamily === undefined ? null : String(input.inferredFamily), summary: String(input.summary), known: input.known && typeof input.known === "object" && !Array.isArray(input.known) ? input.known as Record<string, unknown> : {}, inferred: input.inferred && typeof input.inferred === "object" && !Array.isArray(input.inferred) ? input.inferred as Record<string, unknown> : {}, missing: Array.isArray(input.missing) ? input.missing.map(String) : [], contradictions: Array.isArray(input.contradictions) ? input.contradictions.map(String) : [], savedOperatorWork: input.savedOperatorWork && typeof input.savedOperatorWork === "object" && !Array.isArray(input.savedOperatorWork) ? input.savedOperatorWork as Record<string, unknown> : {}, nextHumanBoundary: boundary ? { prompt: String(boundary.prompt), answerKind: String(boundary.answerKind) as never, fieldPaths: Array.isArray(boundary.fieldPaths) ? boundary.fieldPaths.map(String) : [], choices: Array.isArray(boundary.choices) ? boundary.choices.map(String) : [] } : null, complete: input.complete === true });
+    return arrival.stageInterpretation({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), inferredFamily: input.inferredFamily === null || input.inferredFamily === undefined ? null : String(input.inferredFamily), summary: String(input.summary), known: input.known && typeof input.known === "object" && !Array.isArray(input.known) ? input.known as Record<string, unknown> : {}, inferred: input.inferred && typeof input.inferred === "object" && !Array.isArray(input.inferred) ? input.inferred as Record<string, unknown> : {}, missing: Array.isArray(input.missing) ? input.missing.map(String) : [], contradictions: Array.isArray(input.contradictions) ? input.contradictions.map(String) : [], dependencies: Array.isArray(input.dependencies) ? input.dependencies as never : [], savedOperatorWork: input.savedOperatorWork && typeof input.savedOperatorWork === "object" && !Array.isArray(input.savedOperatorWork) ? input.savedOperatorWork as Record<string, unknown> : {}, nextHumanBoundary: boundary ? { prompt: String(boundary.prompt), answerKind: String(boundary.answerKind) as never, fieldPaths: Array.isArray(boundary.fieldPaths) ? boundary.fieldPaths.map(String) : [], choices: Array.isArray(boundary.choices) ? boundary.choices.map(String) : [] } : null, complete: input.complete === true });
+  } }),
+  define({ name: "finite_reconcile_arrival", title: "Reconcile human input into one operator state", description: "Atomically process the exact current human-order version, store a source-separated interpretation, classify unresolved work as typed dependencies, and either stage one human question or a complete reviewable brief. This changes no accepted plan truth and grants no authority.", inputSchema: objectSchema(arrivalInterpretationProperties, ["orderId", "expectedVersion", "summary"]), execute: (input) => {
+    const boundary = input.nextHumanBoundary && typeof input.nextHumanBoundary === "object" && !Array.isArray(input.nextHumanBoundary) ? input.nextHumanBoundary as Record<string, unknown> : null;
+    return arrival.reconcile({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), inferredFamily: input.inferredFamily === null || input.inferredFamily === undefined ? null : String(input.inferredFamily), summary: String(input.summary), known: input.known && typeof input.known === "object" && !Array.isArray(input.known) ? input.known as Record<string, unknown> : {}, inferred: input.inferred && typeof input.inferred === "object" && !Array.isArray(input.inferred) ? input.inferred as Record<string, unknown> : {}, missing: Array.isArray(input.missing) ? input.missing.map(String) : [], contradictions: Array.isArray(input.contradictions) ? input.contradictions.map(String) : [], dependencies: Array.isArray(input.dependencies) ? input.dependencies as never : [], savedOperatorWork: input.savedOperatorWork && typeof input.savedOperatorWork === "object" && !Array.isArray(input.savedOperatorWork) ? input.savedOperatorWork as Record<string, unknown> : {}, nextHumanBoundary: boundary ? { prompt: String(boundary.prompt), answerKind: String(boundary.answerKind) as never, fieldPaths: Array.isArray(boundary.fieldPaths) ? boundary.fieldPaths.map(String) : [], choices: Array.isArray(boundary.choices) ? boundary.choices.map(String) : [] } : null, complete: input.complete === true });
   } }),
   define({ name: "finite_save_operator_session", title: "Save non-authoritative operator work", description: "Save a bounded, expiring cross-device work packet bound to the exact active plan/profile/revision. It cannot preserve human authority or change accepted truth.", inputSchema: objectSchema({ idempotencyKey, kind: { type: "string", enum: ["outcome_intake", "decision_work", "research_handoff"] }, payload: { type: "object" }, ttlSeconds: { type: "integer", minimum: 60, maximum: 604800 } }, ["idempotencyKey", "kind", "payload"]), execute: (input) => runtime.saveOperatorSession(input as never) }),
   define({ name: "finite_list_operator_sessions", title: "List resumable operator work", description: "List the authenticated user's unexpired non-authoritative packets and whether each still matches accepted truth.", readOnly: true, execute: () => runtime.listOperatorSessions() }),
@@ -497,9 +541,12 @@ const contextualDefinitions = (runtime: FinitePlanRuntime): WebMCPToolDefinition
 
 export class FinitePlanWebMCPAdapter {
   private coreTools: WebMCPToolDefinition[] = [];
+  private advertisedCoreTools: WebMCPToolDefinition[] = [];
   private contextualTools: WebMCPToolDefinition[] = [];
+  private routeController: AbortController | null = null;
   private contextualController: AbortController | null = null;
   private entryTool: WebMCPToolDefinition | null = null;
+  private activeToolset: ToolsetGroup = "arrival";
 
   constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false) {}
 
@@ -515,8 +562,9 @@ export class FinitePlanWebMCPAdapter {
         };
         const inputHash = await sha256(proofInput(input));
         const result = await tool.execute(input);
+        if (routeRefreshToolNames.has(tool.name)) await this.refreshRouteTools(result);
         let observed: ToolResult = result;
-        if (this.observer) {
+        if (this.observer && tool.name !== "finite_open_toolset") {
           try {
             const proof = await this.observer({ toolName: tool.name, result });
             if (proof) observed = { ...result, surfaceSync: { ok: true, ...proof } };
@@ -542,19 +590,28 @@ export class FinitePlanWebMCPAdapter {
           acceptedStateChangedClaim: observed.acceptedStateChanged === true,
           activeContextChanged: JSON.stringify(before) !== JSON.stringify(after),
         };
-        return { ...observed, operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
+        const toolsetReceipt = ["finite_enter_kitchen", "finite_get_chef_menu", "finite_get_capabilities", "finite_open_toolset"].includes(tool.name) ? {
+          discovery: "route_sized",
+          activeGroup: this.activeToolset,
+          advertisedTools: this.inventory(),
+          availableGroups: toolsetGroupNames,
+        } : undefined;
+        return { ...observed, ...(toolsetReceipt ? { webmcpToolset: toolsetReceipt } : {}), operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
       },
     };
   }
 
   async register(): Promise<string[]> {
-    this.coreTools = coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival).map((tool) => this.instrument(tool));
+    const openToolset = define({ name: "finite_open_toolset", title: "Open a bounded kitchen toolset", description: "Replace the currently advertised route tools with one bounded capability group. This changes page discovery only; it does not change plan truth, human input, or authority.", readOnly: true, inputSchema: objectSchema({ group: { type: "string", enum: toolsetGroupNames } }, ["group"]), execute: async ({ group }) => this.activateToolset(String(group) as ToolsetGroup) });
+    this.coreTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival), openToolset].map((tool) => this.instrument(tool));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;
-    for (const tool of this.coreTools) {
+    const persistent = this.coreTools.filter((tool) => persistentToolNames.has(tool.name));
+    for (const tool of persistent) {
       if (this.entryAlreadyRegistered && tool.name === "finite_enter_kitchen") continue;
       await this.host.registerTool(tool);
     }
-    await this.refreshContextualTools();
+    this.advertisedCoreTools = persistent;
+    await this.refreshRouteTools();
     return this.inventory();
   }
 
@@ -563,14 +620,65 @@ export class FinitePlanWebMCPAdapter {
     return this.entryTool.execute(input);
   }
 
+  private groupFromResult(result?: ToolResult): ToolsetGroup | null {
+    const nextAction = record(result?.nextAction ?? record(result?.operatorPacket).nextAction);
+    const stage = String(nextAction.stage ?? "");
+    if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required") return "construction";
+    if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved") return "decisions";
+    if (stage === "menu_ready") {
+      const intendedTools = Array.isArray(nextAction.intendedTools) ? nextAction.intendedTools.map(String) : [];
+      return intendedTools.includes("finite_stage_option") ? "decisions" : "planning";
+    }
+    if (stage === "change_recorded") return "planning";
+    if (stage === "outcome_required" || stage.startsWith("arrival_")) return "arrival";
+    const order = record(record(result?.orientation).order);
+    const status = String(order.status ?? "");
+    if (status === "interpretation_confirmed") return "construction";
+    if (status) return "arrival";
+    const code = String(result?.code ?? "");
+    if (code === "PLAN_ACTIVATED" || code === "PLAN_AMENDMENT_ACTIVATED") return "planning";
+    if (code.includes("PLAN_DRAFT") || code.includes("PLAN_AMENDMENT") || code.startsWith("PLAN_ACTIVATION")) return "plan_management";
+    if (code === "OPTIONS_GENERATED" || code === "OPTIONS_AVAILABLE" || code === "OPTION_STAGED" || code === "OPTION_REJECTED") return "decisions";
+    if (code === "OPTION_APPLIED" || code === "CHANGE_RECORDED") return "planning";
+    if (code === "PROFILE_SWITCHED" || code === "PLAN_SWITCHED") return "planning";
+    return null;
+  }
+
+  private async inferredToolset(): Promise<ToolsetGroup> {
+    const opened = await this.arrival.open();
+    if (!opened.ok || !opened.order) return "arrival";
+    if (opened.order.status === "interpretation_confirmed") return "construction";
+    return "arrival";
+  }
+
+  private async refreshRouteTools(result?: ToolResult): Promise<void> {
+    const group = this.groupFromResult(result) ?? await this.inferredToolset();
+    await this.activateToolset(group);
+  }
+
+  private async activateToolset(group: ToolsetGroup): Promise<ToolResult> {
+    if (!toolsetGroupNames.includes(group)) return { ok: false, code: "TOOLSET_GROUP_INVALID", acceptedStateChanged: false };
+    this.routeController?.abort("toolset changed");
+    this.routeController = new AbortController();
+    this.activeToolset = group;
+    const names = new Set<string>(toolsetGroups[group]);
+    const routeTools = this.coreTools.filter((tool) => names.has(tool.name) && !persistentToolNames.has(tool.name));
+    this.advertisedCoreTools = [...this.coreTools.filter((tool) => persistentToolNames.has(tool.name)), ...routeTools];
+    for (const tool of routeTools) await this.host.registerTool(tool, { signal: this.routeController.signal });
+    await this.refreshContextualTools();
+    return { ok: true, code: "TOOLSET_READY", group, advertisedTools: this.inventory(), acceptedStateChanged: false, next: "Continue with the route tool named by Finite's nextAction, or open another bounded group if the work changes." };
+  }
+
   async refreshContextualTools(): Promise<void> {
     this.contextualController?.abort("profile changed");
+    this.contextualTools = [];
+    if (this.activeToolset !== "planning") return;
     this.contextualController = new AbortController();
     this.contextualTools = contextualDefinitions(this.runtime).map((tool) => this.instrument(tool));
     for (const tool of this.contextualTools) await this.host.registerTool(tool, { signal: this.contextualController.signal });
   }
 
   inventory(): string[] {
-    return [...this.coreTools, ...this.contextualTools].map((tool) => tool.name).sort();
+    return [...this.advertisedCoreTools, ...this.contextualTools].map((tool) => tool.name).sort();
   }
 }

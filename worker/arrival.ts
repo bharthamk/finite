@@ -1,5 +1,8 @@
 import type {
   ArrivalClarification,
+  ArrivalDependency,
+  ArrivalDependencyKind,
+  ArrivalDependencyStatus,
   ArrivalEvent,
   ArrivalInput,
   ArrivalInputKind,
@@ -48,6 +51,8 @@ const activeStatuses: ArrivalStatus[] = ["waiting_for_codex", "codex_reviewing",
 const sourceSurfaces = new Set<ArrivalSourceSurface>(["site", "codex", "inline"]);
 const inputKinds = new Set<ArrivalInputKind>(["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"]);
 const answerKinds = new Set<ArrivalClarification["answerKind"]>(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
+const dependencyKinds = new Set<ArrivalDependencyKind>(["operator_research", "human_coordination", "external_evidence", "human_decision"]);
+const dependencyStatuses = new Set<ArrivalDependencyStatus>(["open", "resolved", "deferred"]);
 const humanEventTypes = new Set<ArrivalEvent["eventType"]>(["human_order_created", "human_input_added"]);
 
 const stableSerialize = (value: unknown): string => {
@@ -85,6 +90,24 @@ const sameOriginWrite = (request: Request): boolean => {
 
 const asRecord = (value: unknown): JsonRecord => value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 const asStringArray = (value: unknown, max = 50): string[] => Array.isArray(value) ? value.slice(0, max).filter((item): item is string => typeof item === "string").map((item) => item.slice(0, 500)) : [];
+const asDependencies = (value: unknown): ArrivalDependency[] | null => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 50) return null;
+  const dependencies: ArrivalDependency[] = [];
+  const ids = new Set<string>();
+  for (const item of value) {
+    const source = asRecord(item);
+    const dependencyId = String(source.dependencyId ?? "");
+    const kind = String(source.kind ?? "") as ArrivalDependencyKind;
+    const title = String(source.title ?? "").trim();
+    const status = String(source.status ?? "open") as ArrivalDependencyStatus;
+    const detail = source.detail === undefined ? undefined : String(source.detail).slice(0, 1_000);
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(dependencyId) || ids.has(dependencyId) || !dependencyKinds.has(kind) || !dependencyStatuses.has(status) || !title || title.length > 500 || typeof source.blocking !== "boolean") return null;
+    ids.add(dependencyId);
+    dependencies.push({ dependencyId, kind, title, status, blocking: source.blocking, ...(detail ? { detail } : {}), sourcePaths: asStringArray(source.sourcePaths, 20) });
+  }
+  return dependencies;
+};
 const validOrderId = (value: string): boolean => /^[a-zA-Z0-9_-]{1,100}$/.test(value);
 
 const orderFromRow = (row: ArrivalRow): ArrivalOrder => ({
@@ -169,6 +192,7 @@ const buildOrientation = (order: ArrivalOrder, events: ArrivalEvent[], sinceVers
     inferredFamily: order.interpretation?.inferredFamily ?? null,
     missing: order.interpretation?.missing ?? [],
     contradictions: order.interpretation?.contradictions ?? [],
+    dependencies: order.interpretation?.dependencies ?? [],
     savedOperatorWork: order.interpretation?.savedOperatorWork ?? {},
     latestHumanInputVersion,
     latestOperatorEventVersion: operatorEvents.at(-1)?.version ?? null,
@@ -294,7 +318,7 @@ const stageClarification = async (db: D1Database, scopeId: string, order: Arriva
   return mutateOrder(db, scopeId, order, expectedVersion, { pendingClarification: question, status: "clarification_required", lastOperatorCheckpoint: expectedVersion }, { eventType: "clarification_staged", actor: "codex", sourceSurface: "codex", payload: { question } }, "ARRIVAL_CLARIFICATION_STAGED");
 };
 
-const stageInterpretation = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+const interpretationFromBody = (body: JsonRecord): { expectedVersion: number; interpretation: ArrivalInterpretation } | Response => {
   const expectedVersion = Number(body.expectedVersion);
   const summary = String(body.summary ?? "").trim();
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
@@ -304,6 +328,8 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
   const boundaryRecord = asRecord(body.nextHumanBoundary);
   const boundaryPrompt = String(boundaryRecord.prompt ?? "").trim();
   const boundaryAnswerKind = String(boundaryRecord.answerKind ?? "text") as ArrivalClarification["answerKind"];
+  const dependencies = asDependencies(body.dependencies);
+  if (!dependencies) return errorResponse(422, "ARRIVAL_DEPENDENCY_INVALID", "Dependencies must be bounded, uniquely identified, typed operator or human work.");
   if (body.nextHumanBoundary !== null && body.nextHumanBoundary !== undefined) {
     if (!boundaryPrompt || boundaryPrompt.length > 1_000) return errorResponse(422, "ARRIVAL_BOUNDARY_INVALID", "A bounded next-human-boundary prompt is required.");
     if (!answerKinds.has(boundaryAnswerKind)) return errorResponse(422, "ARRIVAL_BOUNDARY_INVALID", "The next-human-boundary answer kind is invalid.");
@@ -318,6 +344,7 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
     inferred: asRecord(body.inferred),
     missing: asStringArray(body.missing),
     contradictions: asStringArray(body.contradictions),
+    dependencies,
     savedOperatorWork: asRecord(body.savedOperatorWork),
     nextHumanBoundary: boundaryPrompt ? {
       prompt: boundaryPrompt,
@@ -329,7 +356,41 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
     stagedAt,
   };
   if (stableSerialize(interpretation).length > 200_000) return errorResponse(413, "ARRIVAL_INTERPRETATION_TOO_LARGE", "The Codex interpretation exceeds its bounded storage contract.");
+  if (interpretation.complete && interpretation.dependencies.some((dependency) => dependency.blocking && dependency.status === "open")) return errorResponse(422, "ARRIVAL_BLOCKING_DEPENDENCY_OPEN", "A complete interpretation cannot retain an open blocking dependency.");
+  if (interpretation.complete && interpretation.nextHumanBoundary) return errorResponse(422, "ARRIVAL_COMPLETE_WITH_HUMAN_BOUNDARY", "A complete interpretation cannot retain a human decision boundary.");
+  return { expectedVersion, interpretation };
+};
+
+const stageInterpretation = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const parsed = interpretationFromBody(body);
+  if (parsed instanceof Response) return parsed;
+  const { expectedVersion, interpretation } = parsed;
   return mutateOrder(db, scopeId, order, expectedVersion, { interpretation, pendingClarification: null, status: interpretation.complete ? "proposed_plan_ready" : "codex_reviewing", lastOperatorCheckpoint: expectedVersion }, { eventType: "interpretation_staged", actor: "codex", sourceSurface: "codex", payload: { interpretation } }, "ARRIVAL_INTERPRETATION_STAGED");
+};
+
+const reconcileArrival = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const parsed = interpretationFromBody(body);
+  if (parsed instanceof Response) return parsed;
+  const { expectedVersion, interpretation } = parsed;
+  const question: ArrivalClarification | null = !interpretation.complete && interpretation.nextHumanBoundary ? {
+    questionId: `arrival_question_${order.orderId}_${expectedVersion + 1}`,
+    prompt: interpretation.nextHumanBoundary.prompt,
+    answerKind: interpretation.nextHumanBoundary.answerKind,
+    fieldPaths: interpretation.nextHumanBoundary.fieldPaths,
+    choices: interpretation.nextHumanBoundary.choices,
+    stagedAt: interpretation.stagedAt,
+  } : null;
+  return mutateOrder(db, scopeId, order, expectedVersion, {
+    interpretation,
+    pendingClarification: question,
+    status: interpretation.complete ? "proposed_plan_ready" : question ? "clarification_required" : "codex_reviewing",
+    lastOperatorCheckpoint: expectedVersion + 1,
+  }, {
+    eventType: "arrival_reconciled",
+    actor: "codex",
+    sourceSurface: "codex",
+    payload: { processedHumanThroughVersion: expectedVersion, interpretation, question },
+  }, "ARRIVAL_RECONCILED");
 };
 
 const reviewInterpretation = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
@@ -388,6 +449,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);
     if (operation === "clarification") return stageClarification(db, scopeId, order, body);
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);
+    if (operation === "reconcile") return reconcileArrival(db, scopeId, order, body);
     if (operation === "review") return reviewInterpretation(db, scopeId, order, body);
     return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
   } catch (error) {
