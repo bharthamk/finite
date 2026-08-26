@@ -371,6 +371,11 @@ export class FinitePlanRuntime {
       profileId,
       profile: definition,
       contract: {
+        templateRole: "Compiler grammar only. Every allocation, move, stage, title, and route value in profile is an example and must not be attributed to the current human order.",
+        constructionModes: {
+          exact: "Require exact allocation components and exact family entities.",
+          adaptive_shell: "Keep the finite total exact, admit source-labelled working entity estimates, initialize unsupplied ledger buckets at zero recorded value, and hold the residual as unallocated buffer rather than a fabricated forecast.",
+        },
         fixed: ["schemaVersion", "profileId", "contextualCapabilities", "surface.version", "surface.timeModel"],
         mustConserve: "spentMinor + committedMinor + forecastMinor + bufferMinor = totalBudgetMinor",
         actualLaw: "sum(actuals.originalAmountMinor) = accepted.spentMinor; every actual evidenceRef must already exist in the active evidence catalog",
@@ -383,7 +388,7 @@ export class FinitePlanRuntime {
         authority: "Codex may edit and stage the profile. Only the human surface can confirm its exact compiled hashes; only then may Codex activate it.",
       },
       acceptedStateChanged: false,
-      next: "Assess the human facts first, replace the example values, register actual evidence, then stage the complete profile.",
+      next: "Assess the reviewed human facts first. Use adaptive_shell when the outcome is intentionally open; then compile the exact intake packet so example-specific moves and stages cannot leak into the new draft.",
     };
   }
 
@@ -391,12 +396,26 @@ export class FinitePlanRuntime {
     const missing: IntakeFactIssue[] = [];
     const conflicts: IntakeFactIssue[] = [];
     const derivedFacts: Record<string, number> = {};
+    const constructionAssumptions: Array<{ path: string; value: number; basis: string; sourcePaths: string[]; status: "working" | "human_confirmed" }> = [];
     if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "OBJECT_REQUIRED", prompt: "Provide a typed intake object." }], acceptedStateChanged: false };
     if (JSON.stringify(input).length > 30_000) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "INTAKE_TOO_LARGE", prompt: "Keep the human-fact packet under 30,000 serialized characters." }], acceptedStateChanged: false };
     const facts = clone(input as PlanIntakeInput);
+    constructionAssumptions.push(...clone(facts.assumptions ?? []));
     const ask = (path: string, code: string, prompt: string): void => { missing.push({ path, code, prompt }); };
     const conflict = (path: string, code: string, prompt: string): void => { conflicts.push({ path, code, prompt }); };
     const boundedText = (value: unknown, max: number): boolean => typeof value === "string" && Boolean(value.trim()) && value.length <= max;
+    const adaptiveShell = facts.constructionMode === "adaptive_shell";
+    if (facts.constructionMode !== undefined && facts.constructionMode !== "exact" && !adaptiveShell) conflict("constructionMode", "CONSTRUCTION_MODE_INVALID", "Use exact or adaptive_shell construction mode.");
+    const dependencyIds = new Set<string>();
+    for (let index = 0; index < (facts.dependencies ?? []).length; index += 1) {
+      const dependency = facts.dependencies![index]!;
+      const path = `dependencies.${index}`;
+      if (!boundedText(dependency.dependencyId, 200) || dependencyIds.has(dependency.dependencyId)) conflict(`${path}.dependencyId`, "DEPENDENCY_ID_INVALID", "Use one unique bounded dependency id.");
+      dependencyIds.add(dependency.dependencyId);
+      if (!(dependency.kind === "operator_research" || dependency.kind === "human_coordination" || dependency.kind === "external_evidence" || dependency.kind === "human_decision")) conflict(`${path}.kind`, "DEPENDENCY_KIND_INVALID", "Classify the dependency as operator research, human coordination, external evidence, or human decision.");
+      if (!(dependency.status === "open" || dependency.status === "resolved" || dependency.status === "deferred")) conflict(`${path}.status`, "DEPENDENCY_STATUS_INVALID", "Use open, resolved, or deferred dependency status.");
+      if (!boundedText(dependency.title, 500) || typeof dependency.blocking !== "boolean" || dependency.sourcePaths.length > 20 || dependency.sourcePaths.some((sourcePath) => !boundedText(sourcePath, 200))) conflict(path, "DEPENDENCY_INVALID", "Keep dependency title, blocking state, and source paths bounded and explicit.");
+    }
     const profileId = facts.profileId;
     if (!(profileId === "travel" || profileId === "renovation" || profileId === "event")) ask("profileId", "FAMILY_REQUIRED", "Is this best operated as travel/calendar, renovation/phases, or event/run-of-show?");
     if (!boundedText(facts.planId, 64) || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(facts.planId ?? "")) ask("planId", "PLAN_ID_REQUIRED", "Provide a new lowercase plan identifier.");
@@ -412,7 +431,24 @@ export class FinitePlanRuntime {
     }
     if (allocation.totalBudgetMinor === undefined) ask("allocation.totalBudgetMinor", "TOTAL_REQUIRED", "What is the fixed finite total?");
     const componentFields = ["spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
-    const absentComponents = componentFields.filter((field) => allocation[field] === undefined);
+    let absentComponents = componentFields.filter((field) => allocation[field] === undefined);
+    if (adaptiveShell && allocation.totalBudgetMinor !== undefined && conflicts.length === 0) {
+      for (const field of ["spentMinor", "committedMinor", "forecastMinor"] as const) if (allocation[field] === undefined) {
+        allocation[field] = 0;
+        derivedFacts[`allocation.${field}`] = 0;
+        constructionAssumptions.push({ path: `allocation.${field}`, value: 0, basis: `No ${field.replace("Minor", "")} amount was supplied; initialize the recorded ledger at zero and keep the value provisional until evidence or human input arrives.`, sourcePaths: ["reviewed_interpretation"], status: "working" });
+      }
+      if (allocation.bufferMinor === undefined) {
+        const residual = allocation.totalBudgetMinor - (allocation.spentMinor ?? 0) - (allocation.committedMinor ?? 0) - (allocation.forecastMinor ?? 0);
+        if (residual < 0) conflict("allocation.bufferMinor", "NEGATIVE_RESIDUAL", "Known allocations already exceed the finite total.");
+        else {
+          allocation.bufferMinor = residual;
+          derivedFacts["allocation.bufferMinor"] = residual;
+          constructionAssumptions.push({ path: "allocation.bufferMinor", value: residual, basis: "Hold every dollar not yet evidenced or forecast as unallocated freedom; this is not a cost estimate.", sourcePaths: ["allocation.totalBudgetMinor"], status: "working" });
+        }
+      }
+      absentComponents = componentFields.filter((field) => allocation[field] === undefined);
+    }
     if (allocation.totalBudgetMinor !== undefined && absentComponents.length === 1 && conflicts.length === 0) {
       const missingField = absentComponents[0]!;
       const known = componentFields.reduce((total, field) => total + (allocation[field] ?? 0), 0);
@@ -444,14 +480,23 @@ export class FinitePlanRuntime {
         renovation: [["completion_day", "day"], ["committed_completion_day", "day"]],
         event: [["guest_headcount", "count"], ["venue", "capacity"]],
       }[profileId];
-      for (const [entityId, field] of required) if (!Number.isSafeInteger(facts.entityValues?.[entityId!]?.[field!])) ask(`entityValues.${entityId}.${field}`, "ENTITY_FACT_REQUIRED", `Provide ${entityId}.${field} for the ${profileId} operating contract.`);
+      const entityValues = clone(facts.entityValues ?? {});
+      for (const [entityId, field] of required) if (!Number.isSafeInteger(entityValues[entityId!]?.[field!])) {
+        const estimate = facts.entityEstimates?.[entityId!]?.[field!];
+        if (adaptiveShell && estimate && Number.isSafeInteger(estimate.value) && boundedText(estimate.basis, 500) && estimate.sourcePaths.length <= 20 && estimate.sourcePaths.every((sourcePath) => boundedText(sourcePath, 200))) {
+          entityValues[entityId!] = { ...(entityValues[entityId!] ?? {}), [field!]: estimate.value };
+          derivedFacts[`entityValues.${entityId}.${field}`] = estimate.value;
+          constructionAssumptions.push({ path: `entityValues.${entityId}.${field}`, value: estimate.value, basis: estimate.basis, sourcePaths: clone(estimate.sourcePaths), status: "working" });
+        } else ask(`entityValues.${entityId}.${field}`, "ENTITY_FACT_REQUIRED", adaptiveShell ? `Provide a sourced working estimate for ${entityId}.${field}; Finite will keep it visibly provisional.` : `Provide ${entityId}.${field} for the ${profileId} operating contract.`);
+      }
+      facts.entityValues = entityValues;
     }
-    const normalizedFacts = { ...facts, allocation };
+    const normalizedFacts = { ...facts, allocation, assumptions: constructionAssumptions };
     const result: ToolResult = conflicts.length
       ? { ok: false, code: "INTAKE_FACTS_CONFLICT", conflicts, missing, derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Ask the human only for the conflicting and missing paths; do not stage a profile." }
       : missing.length
         ? { ok: true, code: "INTAKE_FACTS_MISSING", missing, derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Ask the human only for these missing facts, update the typed packet, and reassess." }
-        : { ok: true, code: "INTAKE_FACTS_COMPLETE", missing: [], conflicts: [], derivedFacts, normalizedFacts, acceptedStateChanged: false, next: "Read the family blueprint, compile these facts into its safe grammar, and stage the complete profile." };
+        : { ok: true, code: adaptiveShell && constructionAssumptions.length ? "INTAKE_FACTS_COMPLETE_WITH_ASSUMPTIONS" : "INTAKE_FACTS_COMPLETE", missing: [], conflicts: [], derivedFacts, constructionAssumptions, normalizedFacts, acceptedStateChanged: false, next: "Compile the verified construction packet into a clean family profile; do not copy example-specific moves or stages from the blueprint." };
     this.latestIntakeAssessment = clone(result);
     return result;
   }
@@ -467,10 +512,87 @@ export class FinitePlanRuntime {
       const packet = await this.persistConstructionPacket("intake", { facts, assessmentCode: result.code, evidenceRecords });
       this.pendingPlanDraft = null;
       this.planActivationConfirmation = null;
-      return packet ? { ...result, constructionPacket: this.constructionPacketSummary(packet) } : result;
+      return packet ? {
+        ...result,
+        constructionPacket: this.constructionPacketSummary(packet),
+        ...(String(result.code).startsWith("INTAKE_FACTS_COMPLETE") ? {
+          nextAction: {
+            stage: "construction_intake_ready",
+            nextTool: "finite_compile_intake_to_draft",
+            knownArgs: { packetId: packet.packetId, expectedChecksum: packet.checksum },
+            requiresHuman: false,
+            authorityPresent: false,
+          },
+        } : {}),
+      } : result;
     } catch (error) {
       return { ...result, durability: { ok: false, code: "CONSTRUCTION_PACKET_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error) }, next: "The assessment is usable in this session but was not saved. Repair storage before relying on reload continuity." };
     }
+  }
+
+  async compileIntakeToDraft({ packetId, expectedChecksum }: { packetId: string; expectedChecksum: string }): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified) return verified;
+    if (verified.packetId !== packetId || verified.checksum !== expectedChecksum) return { ok: false, code: "CONSTRUCTION_PACKET_GUARD_MISMATCH", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false, next: "Re-open the exact construction packet; do not compile stale or guessed intake." };
+    if (verified.kind !== "intake") return { ok: false, code: "CONSTRUCTION_INTAKE_REQUIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+    if (Date.parse(verified.expiresAt) <= this.now().getTime()) return { ok: false, code: "CONSTRUCTION_PACKET_EXPIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+    if (verified.basePlanId !== this.kernel.profile.planId || verified.baseProfileHash !== this.kernel.profile.profileHash || verified.baseRevision !== this.kernel.revision) return { ok: false, code: "CONSTRUCTION_PACKET_BASE_STALE", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+    const assessment = this.assessPlanIntakeFacts(verified.payload.facts);
+    if (!String(assessment.code).startsWith("INTAKE_FACTS_COMPLETE")) return { ok: false, code: "CONSTRUCTION_INTAKE_INCOMPLETE", assessment, acceptedStateChanged: false, next: "Resolve only the typed missing paths or conflicts, then save a replacement intake packet." };
+    const facts = assessment.normalizedFacts as PlanIntakeInput;
+    const profileId = facts.profileId as ProfileId;
+    const template = getProfileDefinition(profileId);
+    const entityValues = facts.entityValues ?? {};
+    const boundedStageId = (value: string, index: number): string => {
+      const normalized = value.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+      return /^[a-z0-9][a-z0-9_-]{2,63}$/.test(normalized) ? normalized : `stage_${index + 1}`;
+    };
+    const stages = (facts.stages ?? []).map((stage, index) => ({
+      stageId: boundedStageId(stage.stageId || stage.label, index),
+      label: stage.label,
+      detail: stage.detail || "Timing and cost remain adaptive until the named dependency is resolved.",
+      marker: stage.marker || "Open",
+      status: stage.status === "complete" || stage.status === "current" || stage.status === "movable" || stage.status === "locked" ? stage.status : "planned" as const,
+    }));
+    const entities = clone(template.entities);
+    for (const [entityId, values] of Object.entries(entityValues)) if (entities[entityId]) entities[entityId] = { ...entities[entityId]!, values: { ...entities[entityId]!.values, ...clone(values) } };
+    const adaptiveShell = facts.constructionMode === "adaptive_shell";
+    const relationships = adaptiveShell && profileId === "travel" ? [{
+      relationshipId: "booked_days_within_trip",
+      type: "lte" as const,
+      left: { entityId: "booked_segment_days", field: "days" },
+      right: { entityId: "trip_days", field: "days" },
+      code: "BOOKED_DAYS_EXCEED_TRIP",
+    }] : clone(template.relationships);
+    const profile: ProfileDefinition = {
+      ...clone(template),
+      planId: facts.planId!,
+      name: facts.name!,
+      accepted: clone(facts.allocation as ProfileDefinition["accepted"]),
+      actuals: clone(facts.actuals ?? []),
+      locks: clone(facts.locks ?? []),
+      preferenceLabels: clone(facts.preferenceLabels ?? []),
+      entities,
+      relationships,
+      moves: {},
+      searchPolicy: { ...clone(template.searchPolicy), maxMovesPerOption: 0 },
+      evidencePolicy: { ...clone(template.evidencePolicy), asOf: this.now().toISOString().slice(0, 10) },
+      surface: {
+        ...clone(template.surface),
+        hero: { eyebrow: adaptiveShell ? "Adaptive planning shell" : "Finite plan", title: facts.name!, brief: facts.brief! },
+        stages,
+        preferredComponents: template.surface.preferredComponents.filter((component) => component !== "option_compare"),
+        dependencies: clone(facts.dependencies ?? []),
+        assumptions: clone((assessment.constructionAssumptions ?? []) as NonNullable<ProfileDefinition["surface"]["assumptions"]>),
+      },
+    };
+    const staged = await this.compileDraft(profile, null);
+    return staged.ok ? {
+      ...staged,
+      code: "PLAN_DRAFT_STAGED_FROM_INTAKE",
+      compiledFrom: { packetId, checksum: expectedChecksum, assessmentCode: assessment.code, constructionMode: facts.constructionMode ?? "exact" },
+      next: "The clean profile contains no example-specific moves. Show its working assumptions, open dependencies, profile hash, and draft hash to the human on the Site; WebMCP cannot confirm or activate it.",
+    } : staged;
   }
 
   private currentActualDefinitions(): ProfileDefinition["actuals"] {

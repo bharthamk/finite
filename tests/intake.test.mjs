@@ -202,6 +202,54 @@ test("typed partial intake returns exact missing paths, conflicts, and one safe 
   assert(conflict.conflicts.some((issue) => issue.code === "FINITE_TOTAL_CONFLICT"));
 });
 
+test("adaptive construction compiles a reviewed open brief without inventing exact costs or leaking example moves", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const acceptedBefore = structuredClone(runtime.kernel.accepted);
+  const assessed = await runtime.assessPlanIntake({
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_europe_sep_2026",
+    name: "September 2026 Europe trip",
+    brief: "Build a roughly one-month multi-stop Europe trip around people and Oktoberfest within an absolute A$10,000 ceiling.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [],
+    locks: ["total_budget"],
+    preferenceLabels: ["protect_people_and_event_anchors", "optimize_timing_and_price"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "The reviewed human brief says roughly one month and remains open-ended.", sourcePaths: ["known.duration"] } },
+      booked_segment_days: { days: { value: 0, basis: "No confirmed booked segment was supplied; zero means none recorded in Finite yet.", sourcePaths: ["known.anchors"] } },
+    },
+    dependencies: [
+      { dependencyId: "oktoberfest_dates", kind: "operator_research", title: "Confirm Oktoberfest dates", status: "open", blocking: false, sourcePaths: ["savedOperatorWork.researchQueue.dateWindows"] },
+      { dependencyId: "friend_availability", kind: "human_coordination", title: "Coordinate visit windows", status: "open", blocking: false, sourcePaths: ["savedOperatorWork.researchQueue.dateWindows"] },
+    ],
+    stages: [
+      { stageId: "oktoberfest", label: "Oktoberfest", marker: "Date pending", status: "planned" },
+      { stageId: "finland", label: "Finland", marker: "Date pending", status: "planned" },
+      { stageId: "optional_regions", label: "Baltics / Eastern Europe", marker: "If viable", status: "movable" },
+    ],
+  });
+  assert.equal(assessed.code, "INTAKE_FACTS_COMPLETE_WITH_ASSUMPTIONS");
+  assert.equal(assessed.normalizedFacts.allocation.spentMinor, 0);
+  assert.equal(assessed.normalizedFacts.allocation.forecastMinor, 0);
+  assert.equal(assessed.normalizedFacts.allocation.bufferMinor, 1_000_000);
+  assert.equal(assessed.normalizedFacts.entityValues.trip_days.days, 30);
+  assert.equal(assessed.nextAction.nextTool, "finite_compile_intake_to_draft");
+  assert.deepEqual(runtime.kernel.accepted, acceptedBefore);
+
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE");
+  assert.deepEqual(staged.draft.profile.moves, {});
+  assert.equal(staged.draft.profile.surface.stages.some((stage) => stage.label === "Paris"), false);
+  assert.equal(staged.draft.profile.surface.dependencies[0].dependencyId, "oktoberfest_dates");
+  assert(staged.draft.profile.surface.assumptions.some((assumption) => assumption.path === "entityValues.trip_days.days"));
+  assert.equal(staged.draft.profile.relationships[0].relationshipId, "booked_days_within_trip");
+  assert.deepEqual(runtime.kernel.accepted, acceptedBefore);
+  assert.equal(runtime.kernel.revision, 1);
+});
+
 test("WebMCP exposes plan operations but never human plan authority and refreshes contextual tools after activation", async () => {
   const profiles = await compileBuiltInProfiles();
   const storage = new MemoryStorage();
@@ -213,6 +261,7 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert.equal((await host.execute("finite_open_toolset", { group: "plan_management" })).code, "TOOLSET_READY");
   assert(host.tools.has("finite_get_plan_blueprint"));
   assert(host.tools.has("finite_assess_plan_intake"));
+  assert(host.tools.has("finite_compile_intake_to_draft"));
   assert(host.tools.has("finite_get_amendment_blueprint"));
   assert(host.tools.has("finite_stage_plan_draft"));
   assert(host.tools.has("finite_stage_plan_amendment"));

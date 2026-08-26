@@ -190,6 +190,9 @@ test("a complete interpretation stops at human review instead of entering plan t
   assert.equal(construction.operatorPacket.nextAction.authorityPresent, false);
   assert.equal(construction.operatorPacket.chefMenu.items[0].menuItemId, "arrival_compile_reviewed_brief");
   assert.equal(construction.operatorPacket.chefMenu.items[0].nextTool, "finite_get_plan_blueprint");
+  assert.equal(construction.plan.role, "source_guard_only");
+  assert.equal("consumerOutcome" in construction.plan, false);
+  assert.match(construction.plan.note, /not the human's newly reviewed order/i);
   assert.equal(construction.acceptedStateChanged, false);
 });
 

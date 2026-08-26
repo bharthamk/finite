@@ -813,12 +813,16 @@ const renderPlanDraft = (): string => {
   const confirmation = runtime.planActivationConfirmation;
   const confirmed = confirmation?.draftId === draft.draftId;
   const amendment = draft.amendment;
+  const dependencies = draft.profile.surface.dependencies ?? [];
+  const assumptions = draft.profile.surface.assumptions ?? [];
   return `<section class="zone zone--approval_panel plan-intake" aria-label="New plan activation">
     <div class="zone__heading"><p class="eyebrow">New finite kitchen</p><h2>${escapeHtml(draft.profile.name)}</h2></div>
     <div class="approval-copy">
       <p>Codex compiled a complete <strong>${escapeHtml(draft.profile.profileId)}</strong> operating profile${amendment ? ` that supersedes <strong>${escapeHtml(amendment.supersedesPlanId)}</strong>` : ""}. Confirming authorizes only this exact packet; it does not activate the plan.</p>
       <div><span>Profile proof</span><strong>${escapeHtml(draft.profile.profileHash.slice(0, 16))}…</strong></div>
       <div><span>Draft proof</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}…</strong></div>
+      ${dependencies.length ? `<details><summary>Open planning dependencies (${dependencies.filter((dependency) => dependency.status === "open").length})</summary><ul>${dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong> · ${escapeHtml(dependency.kind.replaceAll("_", " "))} · ${escapeHtml(dependency.status)}</li>`).join("")}</ul></details>` : ""}
+      ${assumptions.length ? `<details><summary>Working assumptions (${assumptions.length})</summary><ul>${assumptions.map((assumption) => `<li><strong>${escapeHtml(assumption.path)}</strong>: ${escapeHtml(String(assumption.value))} · ${escapeHtml(assumption.basis)}</li>`).join("")}</ul></details>` : ""}
       ${amendment ? `<div><span>Amendment proof</span><strong>${escapeHtml(amendment.diffHash.slice(0, 16))}…</strong></div><p class="quiet">Changed: ${escapeHtml(amendment.diff.changedSections.join(", "))}</p>` : ""}
       ${confirmed
         ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`

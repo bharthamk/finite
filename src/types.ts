@@ -41,6 +41,24 @@ export interface SurfaceStageDefinition {
   status: "complete" | "current" | "planned" | "movable" | "locked";
 }
 
+export interface PlanningDependencyDefinition {
+  dependencyId: string;
+  kind: "operator_research" | "human_coordination" | "external_evidence" | "human_decision";
+  title: string;
+  status: "open" | "resolved" | "deferred";
+  blocking: boolean;
+  detail?: string;
+  sourcePaths: string[];
+}
+
+export interface PlanningAssumptionDefinition {
+  path: string;
+  value: number;
+  basis: string;
+  sourcePaths: string[];
+  status: "working" | "human_confirmed";
+}
+
 export interface SurfaceProfileDefinition {
   version: "surface-profile.v1";
   timeModel: SurfaceTimeModel;
@@ -53,6 +71,8 @@ export interface SurfaceProfileDefinition {
   primaryMeasures: SurfaceFieldBinding[];
   preferredComponents: SurfaceComponentType[];
   stages: SurfaceStageDefinition[];
+  dependencies?: PlanningDependencyDefinition[];
+  assumptions?: PlanningAssumptionDefinition[];
 }
 
 export interface SurfaceIntent {
@@ -86,6 +106,8 @@ export interface SurfaceManifest {
   nouns: Record<string, string>;
   summaryFields: SurfaceFieldBinding[];
   stages: SurfaceStageDefinition[];
+  dependencies?: PlanningDependencyDefinition[];
+  assumptions?: PlanningAssumptionDefinition[];
   zones: SurfaceZone[];
   availableActions: string[];
   decisionFocus: string | null;
@@ -382,6 +404,7 @@ export interface PlanCatalogEntry {
 }
 
 export interface PlanIntakeInput {
+  constructionMode?: "exact" | "adaptive_shell";
   profileId?: ProfileId;
   planId?: string;
   name?: string;
@@ -391,7 +414,10 @@ export interface PlanIntakeInput {
   locks?: string[];
   preferenceLabels?: string[];
   entityValues?: Record<string, Record<string, number>>;
-  stages?: Array<{ label: string; marker?: string }>;
+  entityEstimates?: Record<string, Record<string, { value: number; basis: string; sourcePaths: string[] }>>;
+  dependencies?: PlanningDependencyDefinition[];
+  assumptions?: PlanningAssumptionDefinition[];
+  stages?: Array<{ stageId?: string; label: string; detail?: string; marker?: string; status?: SurfaceStageDefinition["status"] }>;
 }
 
 export interface IntakeFactIssue {

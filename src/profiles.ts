@@ -277,6 +277,20 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   if (new Set(profile.surface.preferredComponents).size !== profile.surface.preferredComponents.length) issues.push("surface components must be unique");
   if (new Set(profile.surface.stages.map((stage) => stage.stageId)).size !== profile.surface.stages.length) issues.push("surface stage ids must be unique");
   if (profile.surface.stages.length < 1 || profile.surface.stages.length > 12) issues.push("surface must contain between one and twelve stages");
+  const dependencies = profile.surface.dependencies ?? [];
+  if (dependencies.length > 50 || new Set(dependencies.map((dependency) => dependency.dependencyId)).size !== dependencies.length) issues.push("surface dependencies must contain at most fifty unique ids");
+  for (const dependency of dependencies) {
+    if (!boundedId(dependency.dependencyId) || !safeBoundedText(dependency.title, 500)) issues.push("surface dependency id and title must be safe bounded text");
+    if (!(dependency.kind === "operator_research" || dependency.kind === "human_coordination" || dependency.kind === "external_evidence" || dependency.kind === "human_decision")) issues.push(`surface dependency ${dependency.dependencyId} has unsupported kind`);
+    if (!(dependency.status === "open" || dependency.status === "resolved" || dependency.status === "deferred")) issues.push(`surface dependency ${dependency.dependencyId} has unsupported status`);
+    if (typeof dependency.blocking !== "boolean" || (dependency.detail !== undefined && !safeBoundedText(dependency.detail, 1000)) || dependency.sourcePaths.length > 20 || dependency.sourcePaths.some((path) => !safeBoundedText(path, 200))) issues.push(`surface dependency ${dependency.dependencyId} is malformed`);
+  }
+  const assumptions = profile.surface.assumptions ?? [];
+  if (assumptions.length > 50) issues.push("surface must contain at most fifty planning assumptions");
+  for (const assumption of assumptions) {
+    if (!safeBoundedText(assumption.path, 200) || !Number.isSafeInteger(assumption.value) || !safeBoundedText(assumption.basis, 500)) issues.push("surface planning assumption is malformed");
+    if (!(assumption.status === "working" || assumption.status === "human_confirmed") || assumption.sourcePaths.length > 20 || assumption.sourcePaths.some((path) => !safeBoundedText(path, 200))) issues.push(`surface planning assumption ${assumption.path} is malformed`);
+  }
   if (profile.surface.primaryMeasures.length < 1 || profile.surface.primaryMeasures.length > 8) issues.push("surface must contain between one and eight primary measures");
   const surfaceText = [profile.surface.hero.eyebrow, profile.surface.hero.title, profile.surface.hero.brief, ...Object.values(profile.surface.nouns), ...profile.surface.stages.flatMap((stage) => [stage.label, stage.detail, stage.marker])];
   if (surfaceText.some((text) => !safeBoundedText(text, 500))) issues.push("surface text must be safe, non-empty, and at most 500 characters");
