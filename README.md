@@ -1,8 +1,10 @@
 # Finite
 
-Finite is an agent-operated adaptive planning surface. Codex is the operator, WebMCP is the page-scoped socket, the deterministic kernel owns accepted truth, and the human receives the result and supplies the only consequential approval.
+Finite is an adaptive planning system for plans that must survive change. It is the live replanning layer between human intent, external reality, and agent execution. Codex is the operator, WebMCP is the page-scoped connection, the deterministic kernel owns accepted truth, and the human receives the result and supplies the only consequential approval.
 
-The product is not a travel planner or a generic budgeting dashboard. One finite-plan grammar compiles into materially different travel, renovation, and event surfaces while preserving the same arithmetic, revision, authority, persistence, and receipt laws.
+The product is not a travel planner, budgeting dashboard, task manager, or chat wrapper. Money is one constrained resource inside a plan alongside time, capacity, sequence, commitments, preferences, and contingency. One finite-plan grammar compiles into materially different travel, renovation, and event surfaces while preserving the same state, constraint, revision, authority, persistence, and receipt laws.
+
+The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_STAR.md). The defining question is: **Reality changed. What should the plan become now?**
 
 ## What is implemented
 
@@ -91,6 +93,8 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
 - `src/webmcp.ts` — native host adapter and tool registry.
 - `src/main.ts` — adaptive product renderer and human authority surface.
+- `PRODUCT_NORTH_STAR.md` — canonical category, operating model, plan grammar, adaptive-surface promise, moat, boundaries, and public narrative.
+- `PUBLIC_SURFACE_HANDOFF_2026-08-26.md` — bounded workstream brief for the public product surface; explicitly excludes submission preparation.
 - `worker/auth.ts` and `AUTHENTICATION.md` — provider-owned identity, automatic tenant provisioning, isolated demo lifecycle, and the portable self-hosting boundary.
 - `src/styles.css` — profile-aware responsive presentation.
 - `worker/index.ts` — deployment-only static asset pass-through.

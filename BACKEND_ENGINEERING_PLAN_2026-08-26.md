@@ -8,8 +8,10 @@ Product law: Codex is the operator; the human is the consumer.
 
 Build an operator-grade deterministic control plane that lets Codex turn a
 small human order into a safe, adaptive finite plan without making the human
-operate budgeting software and without hiding consequential decisions inside
-an application-owned agent.
+operate planning software and without hiding consequential decisions inside an
+application-owned agent. Money is one resource inside the plan; the control
+plane must also preserve typed time, capacity, sequence, commitments,
+preferences, evidence, and authority as each domain requires.
 
 The backend is successful when:
 
