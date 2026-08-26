@@ -71,7 +71,14 @@ button { font: inherit; cursor: pointer; }
 .arrival-intro .eyebrow { grid-column:1/-1; margin-bottom:-22px; }
 .arrival-intro h1 { max-width:960px; margin:0; font-size:clamp(4rem,8vw,8.8rem); font-weight:500; line-height:.87; letter-spacing:-.075em; text-wrap:balance; }
 .arrival-intro h1 em { color:var(--accent); font-family:Georgia,serif; font-weight:400; }
-.arrival-intro>p:last-child { max-width:520px; margin:0 0 8px; color:#4d5653; font-size:clamp(1rem,1.3vw,1.16rem); line-height:1.7; }
+.arrival-intro__paths { max-width:540px; margin-bottom:8px; }
+.arrival-intro__paths>p { margin:0; color:#4d5653; font-size:clamp(1rem,1.3vw,1.16rem); line-height:1.7; }
+.arrival-codex-start { width:100%; display:grid; grid-template-columns:1fr auto; gap:8px 22px; align-items:end; margin-top:26px; border:1px solid var(--deep); padding:20px; color:var(--deep); background:var(--signal); text-align:left; box-shadow:7px 7px 0 var(--deep); }
+.arrival-codex-start>span { grid-column:1/-1; font:500 .63rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.arrival-codex-start>strong { font-size:clamp(1.3rem,2vw,2rem); letter-spacing:-.035em; }
+.arrival-codex-start>small { max-width:220px; color:#3d524b; line-height:1.45; text-align:right; }
+.arrival-codex-start:hover { transform:translate(-2px,-2px); box-shadow:10px 10px 0 var(--deep); }
+.arrival-codex-start:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
 .arrival-order { padding:clamp(42px,7vw,90px); margin-top:34px; border:1px solid var(--ink); background:var(--panel); box-shadow:16px 16px 0 var(--deep); }
 .arrival-order label,.arrival-continuity label,.arrival-question label { display:grid; gap:9px; }
 .arrival-order label>span,.arrival-continuity label>span,.arrival-question label>span { color:var(--muted); font:500 .68rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
@@ -478,6 +485,8 @@ footer span { font:500 .7rem/1.2 "DM Mono",monospace; text-transform:uppercase; 
   .arrival-main { padding-inline:18px; }
   .arrival-intro { padding:62px 0 38px; }
   .arrival-intro h1 { font-size:clamp(3.7rem,19vw,5.4rem); }
+  .arrival-codex-start { grid-template-columns:1fr; }
+  .arrival-codex-start>small { max-width:none; text-align:left; }
   .arrival-order { padding:28px 20px; box-shadow:8px 8px 0 var(--deep); }
   .arrival-fields,.arrival-interpretation__grid { grid-template-columns:1fr; }
   .arrival-interpretation__grid article { border-right:0; }

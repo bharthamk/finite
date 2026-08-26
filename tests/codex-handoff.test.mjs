@@ -40,7 +40,8 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
     order: null,
     plan: { planId: "plan_travel_europe", profileId: "travel", revision: 1 },
   });
-  assert.equal(handoff.buttonLabel, "Codex is here");
+  assert.equal(handoff.buttonLabel, "Start with Codex");
+  assert.equal(handoff.title, "Start this with Codex.");
   assert.equal(handoff.copiedPayload.orderId, null);
   assert.equal(handoff.prompt.includes("orderId"), false);
   assert.match(handoff.detail, /this Codex task/i);

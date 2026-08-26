@@ -320,8 +320,7 @@ const renderCodexHandoffDialog = (): string => {
 
 const bindCodexHandoffInteractions = (): void => {
   const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
-  const trigger = root.querySelector<HTMLButtonElement>("[data-action='open-codex-handoff']");
-  trigger?.addEventListener("click", () => dialog?.showModal());
+  root.querySelectorAll<HTMLButtonElement>("[data-action='open-codex-handoff']").forEach((trigger) => trigger.addEventListener("click", () => dialog?.showModal()));
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
   root.querySelector<HTMLButtonElement>("[data-action='copy-codex-handoff']")?.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
@@ -376,7 +375,10 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         <section class="arrival-intro" aria-labelledby="arrival_title">
           <p class="eyebrow">Place the order. The kitchen adapts.</p>
           <h1 id="arrival_title">What are we making <em>happen?</em></h1>
-          <p>Describe the outcome in your own language. You do not need to choose a template, build a dashboard, or know what the plan should contain. Codex will interpret the order later; Finite preserves what you actually said now.</p>
+          <div class="arrival-intro__paths">
+            <p>Describe the outcome here in your own language, or start in Codex and talk it through. You do not need to choose a template, build a dashboard, or already know what the plan should contain.</p>
+            <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to begin with the chef?</span><strong>Start with Codex</strong><small>Codex will open this kitchen and create the order with you.</small></button>
+          </div>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         <form class="arrival-order" data-arrival-form="create">
