@@ -232,6 +232,27 @@ test("entering an already-active construction route does not invalidate the page
   assert.equal(host.tools.get("finite_get_plan_blueprint"), blueprintBefore);
 });
 
+test("a compiled plan draft asks for draft judgment and keeps the activation route discoverable", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "draft-review-route-0001", rawOutcome: "Plan a Europe trip.", sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A Europe trip.", complete: true });
+  await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
+  const staged = await runtime.stagePlanDraft(runtime.getPlanBlueprint("travel").profile);
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED");
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+  const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(entered.operatorPacket.nextAction.stage, "awaiting_human");
+  assert.equal(entered.operatorPacket.nextAction.missingInputs[0].argument, "plan_draft_judgment");
+  assert.match(entered.operatorPacket.nextAction.exactQuestion, /working assumptions and dependencies/i);
+  assert(host.tools.has("finite_activate_confirmed_plan"));
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_review_draft");
+});
+
 test("a custom family plan receives a generic live menu rather than built-in story assumptions", async () => {
   const profiles = await compileBuiltInProfiles();
   const definition = getProfileDefinition("travel");

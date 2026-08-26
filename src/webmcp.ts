@@ -153,7 +153,10 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
   }
   if (stage === "awaiting_human") {
     const item = items[0] ?? {};
-    const missingInputs = Array.isArray(item.missingInputs) ? item.missingInputs : [{ argument: String(route.humanAction ?? "human_action"), source: "human", reason: "Finite requires an explicit human action." }];
+    const planDraftReview = route.humanAction === "confirm_or_reject_plan_draft";
+    const missingInputs = planDraftReview
+      ? [{ argument: "plan_draft_judgment", source: "human", reason: "Only the human can confirm or return the exact compiled planning shell.", question: "Review the working assumptions and dependencies. Should Finite release this exact draft for activation, or what should change?" }]
+      : Array.isArray(item.missingInputs) ? item.missingInputs : [{ argument: String(route.humanAction ?? "human_action"), source: "human", reason: "Finite requires an explicit human action." }];
     return {
       actionVersion: "finite-next-action.v1", stage, reason: "Prepared work is waiting at the human-authority boundary.", nextTool: null,
       knownArgs: targetId ? { targetId } : {}, derivedArgs: [], missingInputs, requiresHuman: true,
@@ -667,7 +670,11 @@ export class FinitePlanWebMCPAdapter {
   private groupFromResult(result?: ToolResult): ToolsetGroup | null {
     const nextAction = record(result?.nextAction ?? record(result?.operatorPacket).nextAction);
     const stage = String(nextAction.stage ?? "");
+    const nextTool = String(nextAction.nextTool ?? "");
+    const targetId = String(nextAction.targetId ?? "");
+    if (nextTool === "finite_activate_confirmed_plan" || nextTool === "finite_stage_plan_draft" || nextTool === "finite_compile_intake_to_draft") return "plan_management";
     if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required") return "construction";
+    if (stage === "awaiting_human" && targetId.startsWith("plan_draft_")) return "plan_management";
     if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved") return "decisions";
     if (stage === "menu_ready") {
       const intendedTools = Array.isArray(nextAction.intendedTools) ? nextAction.intendedTools.map(String) : [];
