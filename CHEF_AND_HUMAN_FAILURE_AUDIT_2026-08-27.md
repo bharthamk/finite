@@ -15,6 +15,8 @@ All 54 items are now routed. Deterministic faults are closed in code; irreducibl
 
 Regression proof: 114/114 tests, including the original twelve full journeys, authority discovery/replay, same-revision hash drift, guarded switching, external execution vocabulary, all 24 human rules, group authority, and long nested mixed-language rendering.
 
+Live proof: owner-private Sites version 47, source `84934e2037aad1e92dd2334388d0beeec55f9c68`, deployment `appgdep_6a8f585c45348191ae761ce89d8b09e6`. Authenticated inspection returned `audit-closure-v47`, main top 78px, 32px arrival title, 1280px document/client width, and an authority-filtered construction registry with no activation tool.
+
 ## Operational failure points
 
 | # | Failure point | Current defence | Remaining chef burden / next improvement |
