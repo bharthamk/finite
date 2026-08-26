@@ -1,6 +1,6 @@
 import { compileBuiltInProfiles } from "./profiles.js";
-import { PlanSnapshotStore } from "./persistence.js";
-import { FinitePlanRuntime } from "./runtime.js";
+import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
+import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter } from "./webmcp.js";
@@ -12,11 +12,16 @@ const surfaceRoot = root;
 
 const profiles = await compileBuiltInProfiles();
 const store = new PlanSnapshotStore(localStorage);
+const catalogStore = new PlanCatalogStore(localStorage);
+const catalogEntries = await compileCatalogEntries(catalogStore.load());
 const savedProfile = localStorage.getItem("finite-plan.surface.active-profile");
-const initialProfile: ProfileId = savedProfile === "renovation" || savedProfile === "event" ? savedProfile : "travel";
-const runtime = new FinitePlanRuntime(profiles, store, initialProfile);
+const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
+const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
+const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
+const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries);
 const modelContext = document.modelContext;
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
+  if (["PLAN_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   const manifest = await render();
   return {
     toolName,
@@ -129,6 +134,24 @@ const renderReceipt = (receipt: Receipt): string => {
   </div>`;
 };
 
+const renderPlanDraft = (): string => {
+  const draft = runtime.pendingPlanDraft;
+  if (!draft) return "";
+  const confirmation = runtime.planActivationConfirmation;
+  const confirmed = confirmation?.draftId === draft.draftId;
+  return `<section class="zone zone--approval_panel plan-intake" aria-label="New plan activation">
+    <div class="zone__heading"><p class="eyebrow">New finite kitchen</p><h2>${escapeHtml(draft.profile.name)}</h2></div>
+    <div class="approval-copy">
+      <p>Codex compiled a complete <strong>${escapeHtml(draft.profile.profileId)}</strong> operating profile. Confirming authorizes only this exact pair of hashes; it does not activate the plan.</p>
+      <div><span>Profile proof</span><strong>${escapeHtml(draft.profile.profileHash.slice(0, 16))}…</strong></div>
+      <div><span>Draft proof</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}…</strong></div>
+      ${confirmed
+        ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`
+        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact kitchen</button>`}
+    </div>
+  </section>`;
+};
+
 const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   if (zone.collapsed) return "";
   const kernel = runtime.kernel;
@@ -173,6 +196,7 @@ async function render(): Promise<SurfaceManifest> {
         <aside class="plan-orbit" aria-label="Current finite plan summary"><div class="orbit-number"><span>Total plan</span><strong>${money(kernel.accepted.totalBudgetMinor)}</strong></div><div class="orbit-ring" style="--used:${spentPercent}%"><div><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span></div></div><p>${spentPercent}% spent or committed. Every option below keeps the same finite total.</p></aside>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+      ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
@@ -207,7 +231,13 @@ const approveAndApply = async (): Promise<void> => {
 
 const switchProfile = async (profileId: ProfileId): Promise<void> => {
   if (profileId === runtime.kernel.profile.profileId || busy) return;
-  busy = true; announce(""); runtime.switchProfile(profileId); localStorage.setItem("finite-plan.surface.active-profile", profileId); await adapter?.refreshContextualTools(); await seedDecision(); busy = false; await render(); window.scrollTo({ top: 0, behavior: "smooth" });
+  busy = true; announce(""); runtime.switchProfile(profileId); localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId); await adapter?.refreshContextualTools(); await seedDecision(); busy = false; await render(); window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+const confirmPlanDraft = async (draftId: string): Promise<void> => {
+  const result = runtime.humanConfirmPlanDraft({ draftId });
+  announce(result.ok ? "Exact plan draft confirmed. Codex may now activate it through the guarded WebMCP tool." : `The plan draft was not confirmed: ${result.code}`);
+  await render();
 };
 
 function bindInteractions(): void {
@@ -215,6 +245,7 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
 }
 
 await seedDecision();

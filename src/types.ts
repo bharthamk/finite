@@ -288,6 +288,41 @@ export interface Confirmation {
   source: "human_action";
 }
 
+export interface PlanDraft {
+  draftId: string;
+  basePlanId: string;
+  baseRevision: number;
+  profile: CompiledProfile;
+  evidenceRecords: EvidenceRecord[];
+  contentHash: string;
+}
+
+export interface PlanActivationConfirmation {
+  confirmationId: string;
+  draftId: string;
+  basePlanId: string;
+  baseRevision: number;
+  contentHash: string;
+  source: "human_action";
+}
+
+export interface PlanActivationReceipt {
+  receiptId: string;
+  idempotencyKey: string;
+  fromPlanId: string;
+  toPlanId: string;
+  profileId: ProfileId;
+  profileHash: string;
+  draftId: string;
+  confirmationId: string;
+  replayChecksum: string;
+}
+
+export interface PlanCatalogEntry {
+  definition: ProfileDefinition;
+  evidenceRecords: EvidenceRecord[];
+}
+
 export interface CorrectionEvent {
   eventType: "actual_correction";
   correctionId: string;

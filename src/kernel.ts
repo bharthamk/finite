@@ -93,12 +93,13 @@ export class FinitePlanKernel {
   private readonly correctionIdempotency = new Map<string, Receipt>();
   private readonly preferenceIdempotency = new Map<string, Receipt>();
 
-  constructor(profile: CompiledProfile, private readonly store?: PlanSnapshotStore) {
+  constructor(profile: CompiledProfile, private readonly store?: PlanSnapshotStore, initialEvidence: EvidenceRecord[] = []) {
     this.profile = profile;
     this.accepted = clone(profile.accepted);
     this.preferenceWeights = clone(profile.preferenceWeights);
     this.entities = clone(profile.entities);
-    const snapshot = store?.load(profile.profileId, profile.profileHash);
+    for (const evidence of initialEvidence) this.evidence.set(evidence.evidenceId, clone(evidence));
+    const snapshot = store?.load(profile.planId, profile.profileHash, profile.profileId);
     if (snapshot) this.restore(snapshot);
   }
 
@@ -125,6 +126,7 @@ export class FinitePlanKernel {
   snapshot(): PlanSnapshot {
     const acceptedEvents = this.events.filter((event) => event.baseRevision < this.revision);
     const acceptedEvidenceRefs = new Set([
+      ...this.profile.actuals.map((actual) => actual.evidenceRef),
       ...acceptedEvents.flatMap((event) => event.evidenceRefs),
       ...this.correctionEvents.map((event) => event.evidenceRef),
     ]);

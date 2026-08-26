@@ -16,12 +16,12 @@ const supportedComponents = new Set<SurfaceComponentType>([
 ]);
 
 const coreActions = [
-  "finite_get_capabilities", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
+  "finite_get_capabilities", "finite_list_plans", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
   "finite_simulate_reallocation", "finite_compare_options", "finite_record_consumer_feedback",
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction",
   "finite_apply_confirmed_actual_correction", "finite_stage_option", "finite_reject_staged_option",
   "finite_apply_approved_option", "finite_read_evidence", "finite_get_evidence_policy", "finite_export_plan_receipt",
-  "finite_switch_profile",
+  "finite_stage_plan_draft", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile",
 ] as const;
 
 const zoneContract: Record<SurfaceComponentType, { title: string; selectors: StateSelector[]; required?: boolean }> = {
@@ -124,4 +124,3 @@ export const resolveSurfaceBinding = (kernel: FinitePlanKernel, binding: Surface
   }
   return clone(value);
 };
-

@@ -169,6 +169,10 @@ const surfaceComponents = new Set([
 const searchObjectives = new Set(["preserve_comfort", "preserve_experience", "preserve_buffer", "preserve_contingency", "preserve_schedule", "balanced"]);
 
 const unsafeSurfaceText = (value: string): boolean => /<\/?(?:script|style|iframe)|javascript:|data:text\/html|\{\{|\}\}/i.test(value);
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+const safeBoundedText = (value: unknown, max = 200): value is string => typeof value === "string" && Boolean(value.trim()) && value.length <= max && !unsafeSurfaceText(value);
+const boundedId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9_-]{2,63}$/.test(value);
+const topLevelKeys = new Set(["schemaVersion", "profileId", "planId", "name", "accepted", "locks", "preferenceLabels", "preferenceWeights", "actuals", "entities", "relationships", "moves", "searchPolicy", "evidencePolicy", "contextualCapabilities", "surface"]);
 
 export class ProfileValidationError extends Error {
   constructor(readonly issues: string[]) {
@@ -177,21 +181,66 @@ export class ProfileValidationError extends Error {
   }
 }
 
-export const compileProfile = async (input: ProfileDefinition): Promise<CompiledProfile> => {
-  const profile = clone(input);
+const compileProfileUnchecked = async (input: ProfileDefinition): Promise<CompiledProfile> => {
+  if (!isRecord(input)) throw new ProfileValidationError(["profile must be an object"]);
+  if (JSON.stringify(input).length > 100_000) throw new ProfileValidationError(["profile definition exceeds 100,000 serialized characters"]);
+  const raw = clone(input as unknown);
+  if (!isRecord(raw)) throw new ProfileValidationError(["profile must be an object"]);
+  const structuralIssues: string[] = [];
+  if (!(raw.profileId === "travel" || raw.profileId === "renovation" || raw.profileId === "event")) structuralIssues.push("profileId must be travel, renovation, or event");
+  if (!isRecord(raw.accepted)) structuralIssues.push("accepted allocation is required");
+  if (!Array.isArray(raw.actuals)) structuralIssues.push("actuals must be an array");
+  if (!Array.isArray(raw.locks)) structuralIssues.push("locks must be an array");
+  if (!Array.isArray(raw.preferenceLabels)) structuralIssues.push("preferenceLabels must be an array");
+  if (!isRecord(raw.preferenceWeights)) structuralIssues.push("preferenceWeights are required");
+  if (!isRecord(raw.entities)) structuralIssues.push("entities are required");
+  if (!Array.isArray(raw.relationships)) structuralIssues.push("relationships must be an array");
+  if (!isRecord(raw.moves)) structuralIssues.push("moves are required");
+  if (!isRecord(raw.searchPolicy)) structuralIssues.push("searchPolicy is required");
+  if (!isRecord(raw.evidencePolicy)) structuralIssues.push("evidencePolicy is required");
+  if (!Array.isArray(raw.contextualCapabilities)) structuralIssues.push("contextualCapabilities must be an array");
+  if (!isRecord(raw.surface)) structuralIssues.push("surface profile is required");
+  if (structuralIssues.length) throw new ProfileValidationError(structuralIssues);
+  const profile = raw as unknown as ProfileDefinition;
   const issues: string[] = [];
+  for (const key of Object.keys(raw)) if (!topLevelKeys.has(key)) issues.push(`unknown top-level profile field ${key}`);
   if (profile.schemaVersion !== "finite-plan-profile.v1") issues.push("unsupported schemaVersion");
+  if (!boundedId(profile.planId)) issues.push("planId must be a lowercase bounded identifier");
+  if (!safeBoundedText(profile.name, 120)) issues.push("name must be safe text up to 120 characters");
+  if (profile.locks.length > 30 || profile.locks.some((lock) => !boundedId(lock))) issues.push("locks must contain at most 30 bounded identifiers");
+  if (new Set(profile.locks).size !== profile.locks.length) issues.push("locks must be unique");
+  if (profile.preferenceLabels.length > 20 || profile.preferenceLabels.some((label) => !boundedId(label))) issues.push("preferenceLabels must contain at most 20 bounded identifiers");
+  for (const [field, value] of Object.entries(profile.accepted)) if (!Number.isInteger(value) || value < 0) issues.push(`accepted ${field} must be a non-negative integer`);
+  if (profile.accepted.totalBudgetMinor <= 0) issues.push("totalBudgetMinor must be positive");
   if (allocationTotal(profile) !== profile.accepted.totalBudgetMinor) issues.push("accepted allocations do not conserve totalBudgetMinor");
+  if (profile.actuals.length > 100) issues.push("actual ledger must contain at most 100 records");
+  for (const actual of profile.actuals) {
+    if (!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(actual.actualId)) issues.push("actualId must be a lowercase bounded identifier");
+    if (!safeBoundedText(actual.label, 120)) issues.push(`actual ${actual.actualId} label must be safe bounded text`);
+    if (!Number.isInteger(actual.originalAmountMinor) || actual.originalAmountMinor < 0) issues.push(`actual ${actual.actualId} amount must be a non-negative integer`);
+    if (!safeBoundedText(actual.evidenceRef, 80)) issues.push(`actual ${actual.actualId} evidenceRef is required`);
+  }
   if (profile.actuals.reduce((total, actual) => total + actual.originalAmountMinor, 0) !== profile.accepted.spentMinor) issues.push("actual ledger does not equal spentMinor");
   if (new Set(profile.actuals.map((actual) => actual.actualId)).size !== profile.actuals.length) issues.push("actualId values must be unique");
   for (const [key, weight] of Object.entries(profile.preferenceWeights)) {
     if (!Number.isInteger(weight) || weight < 0 || weight > 100) issues.push(`preference weight ${key} must be an integer from 0 to 100`);
   }
   for (const [entityKey, entity] of Object.entries(profile.entities)) {
+    if (!boundedId(entityKey)) issues.push(`entity key ${entityKey} must be a bounded identifier`);
     if (entity.entityId !== entityKey) issues.push(`entity key ${entityKey} does not match entityId`);
-    for (const [field, value] of Object.entries(entity.values)) if (!Number.isFinite(value)) issues.push(`entity ${entityKey}.${field} must be numeric`);
+    if (!safeBoundedText(entity.kind, 80)) issues.push(`entity ${entityKey} kind must be safe bounded text`);
+    if (!isRecord(entity.values) || Object.keys(entity.values).length > 20) issues.push(`entity ${entityKey} must contain at most 20 values`);
+    else for (const [field, value] of Object.entries(entity.values)) {
+      if (!boundedId(field)) issues.push(`entity ${entityKey} field ${field} must be a bounded identifier`);
+      if (!Number.isSafeInteger(value)) issues.push(`entity ${entityKey}.${field} must be a safe integer`);
+    }
   }
+  if (Object.keys(profile.entities).length > 50) issues.push("profile must contain at most 50 entities");
+  if (profile.relationships.length > 100) issues.push("profile must contain at most 100 relationships");
+  if (new Set(profile.relationships.map((relationship) => relationship.relationshipId)).size !== profile.relationships.length) issues.push("relationship ids must be unique");
   for (const relationship of profile.relationships) {
+    if (!boundedId(relationship.relationshipId) || !safeBoundedText(relationship.code, 100)) issues.push("relationship id and code must be bounded text");
+    if (!(relationship.type === "lte" || relationship.type === "equal")) issues.push(`relationship ${relationship.relationshipId} has unsupported type`);
     for (const endpoint of [relationship.left, relationship.right]) {
       const entity = profile.entities[endpoint.entityId];
       if (!entity) issues.push(`relationship ${relationship.relationshipId} references missing entity ${endpoint.entityId}`);
@@ -199,18 +248,25 @@ export const compileProfile = async (input: ProfileDefinition): Promise<Compiled
     }
   }
   for (const [moveId, move] of Object.entries(profile.moves)) {
+    if (!boundedId(moveId)) issues.push(`move ${moveId} must be a bounded identifier`);
+    if (!Number.isInteger(move.savingsMinor)) issues.push(`move ${moveId} savings must be an integer`);
+    if (!Number.isInteger(move.daysDelta)) issues.push(`move ${moveId} daysDelta must be an integer`);
+    if (!safeBoundedText(move.dimension, 80) || !safeBoundedText(move.tradeoff, 240)) issues.push(`move ${moveId} text must be safe and bounded`);
     for (const [preference, impact] of Object.entries(move.impacts)) {
       if (!(preference in profile.preferenceWeights)) issues.push(`move ${moveId} references unknown preference ${preference}`);
       if (!Number.isInteger(impact) || impact < 0 || impact > 100) issues.push(`move ${moveId} impact ${preference} must be an integer from 0 to 100`);
     }
   }
+  if (Object.keys(profile.moves).length > 12) issues.push("profile must contain at most 12 moves");
   const legalMoveCount = Object.values(profile.moves).filter((move) => !profile.locks.includes(move.dimension)).length;
   if (!profile.searchPolicy.objectives.length || new Set(profile.searchPolicy.objectives).size !== profile.searchPolicy.objectives.length) issues.push("search objectives must be non-empty and unique");
   if (profile.searchPolicy.objectives.some((objective) => !searchObjectives.has(objective))) issues.push("search contains an unsupported objective");
   if (!Number.isInteger(profile.searchPolicy.optionCount) || profile.searchPolicy.optionCount < 1 || profile.searchPolicy.optionCount > profile.searchPolicy.objectives.length) issues.push("search optionCount must fit the objective count");
   if (!Number.isInteger(profile.searchPolicy.maxMovesPerOption) || profile.searchPolicy.maxMovesPerOption < 0 || profile.searchPolicy.maxMovesPerOption > legalMoveCount) issues.push("search maxMovesPerOption must fit the legal move count");
   if (!Number.isInteger(profile.searchPolicy.maxCombinations) || profile.searchPolicy.maxCombinations < profile.searchPolicy.optionCount || profile.searchPolicy.maxCombinations > 256) issues.push("search maxCombinations must be between optionCount and 256");
+  const expectedCapabilities = definitions[profile.profileId].contextualCapabilities;
   if (profile.contextualCapabilities.some((name) => !name.startsWith(`${profile.profileId}_`))) issues.push("contextual capability prefix must match profileId");
+  if (profile.contextualCapabilities.length !== expectedCapabilities.length || expectedCapabilities.some((name) => !profile.contextualCapabilities.includes(name))) issues.push("contextual capabilities must match the implemented profile tool set");
   if (profile.surface.version !== "surface-profile.v1") issues.push("unsupported surface profile version");
   const expectedTimeModel = ({ travel: "calendar", renovation: "phases", event: "run_of_show" } as const)[profile.profileId];
   if (profile.surface.timeModel !== expectedTimeModel) issues.push(`surface time model for ${profile.profileId} must be ${expectedTimeModel}`);
@@ -219,10 +275,16 @@ export const compileProfile = async (input: ProfileDefinition): Promise<Compiled
   if (profile.surface.preferredComponents.some((component) => !surfaceComponents.has(component))) issues.push("surface contains an unknown component");
   if (new Set(profile.surface.preferredComponents).size !== profile.surface.preferredComponents.length) issues.push("surface components must be unique");
   if (new Set(profile.surface.stages.map((stage) => stage.stageId)).size !== profile.surface.stages.length) issues.push("surface stage ids must be unique");
+  if (profile.surface.stages.length < 1 || profile.surface.stages.length > 12) issues.push("surface must contain between one and twelve stages");
+  if (profile.surface.primaryMeasures.length < 1 || profile.surface.primaryMeasures.length > 8) issues.push("surface must contain between one and eight primary measures");
   const surfaceText = [profile.surface.hero.eyebrow, profile.surface.hero.title, profile.surface.hero.brief, ...Object.values(profile.surface.nouns), ...profile.surface.stages.flatMap((stage) => [stage.label, stage.detail, stage.marker])];
-  if (surfaceText.some(unsafeSurfaceText)) issues.push("surface text contains executable or template syntax");
+  if (surfaceText.some((text) => !safeBoundedText(text, 500))) issues.push("surface text must be safe, non-empty, and at most 500 characters");
+  for (const stage of profile.surface.stages) {
+    if (!boundedId(stage.stageId)) issues.push(`surface stage ${stage.stageId} must use a bounded identifier`);
+    if (!(["complete", "current", "planned", "movable", "locked"] as string[]).includes(stage.status)) issues.push(`surface stage ${stage.stageId} has unsupported status`);
+  }
   for (const measure of profile.surface.primaryMeasures) {
-    if (unsafeSurfaceText(measure.label)) issues.push(`surface measure ${measure.label} contains unsafe text`);
+    if (!safeBoundedText(measure.label, 100)) issues.push(`surface measure ${measure.label} must be safe bounded text`);
     if (measure.selector === "allocations") {
       if (measure.path.length !== 1 || !(measure.path[0]! in profile.accepted)) issues.push(`surface measure ${measure.label} references an unknown allocation`);
     } else if (measure.selector === "entities") {
@@ -232,12 +294,27 @@ export const compileProfile = async (input: ProfileDefinition): Promise<Compiled
       issues.push(`surface measure ${measure.label} uses unsupported selector ${measure.selector}`);
     }
   }
-  if (!Number.isFinite(Date.parse(`${profile.evidencePolicy.asOf}T00:00:00Z`))) issues.push("evidencePolicy.asOf must be YYYY-MM-DD");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(profile.evidencePolicy.asOf) || !Number.isFinite(Date.parse(`${profile.evidencePolicy.asOf}T00:00:00Z`))) issues.push("evidencePolicy.asOf must be YYYY-MM-DD");
   if (profile.evidencePolicy.materialityMinor < 0) issues.push("evidence materiality must not be negative");
   for (const [sourceClass, days] of Object.entries(profile.evidencePolicy.maxAgeDaysBySourceClass)) if (!Number.isInteger(days) || days < 0) issues.push(`evidence max age for ${sourceClass} must be a non-negative integer`);
+  const requiredFields = {
+    travel: [["trip_days", "days"], ["booked_segment_days", "days"]],
+    renovation: [["completion_day", "day"], ["committed_completion_day", "day"]],
+    event: [["guest_headcount", "count"], ["venue", "capacity"]],
+  } as const;
+  for (const [entityId, field] of requiredFields[profile.profileId]) if (!(field in (profile.entities[entityId]?.values ?? {}))) issues.push(`${profile.profileId} contextual tools require ${entityId}.${field}`);
   if (issues.length) throw new ProfileValidationError(issues);
   const profileHash = await sha256(profile);
   return deepFreeze({ ...profile, profileHash }) as CompiledProfile;
+};
+
+export const compileProfile = async (input: ProfileDefinition | unknown): Promise<CompiledProfile> => {
+  try {
+    return await compileProfileUnchecked(input as ProfileDefinition);
+  } catch (error) {
+    if (error instanceof ProfileValidationError) throw error;
+    throw new ProfileValidationError([`malformed nested profile structure: ${error instanceof Error ? error.message : String(error)}`]);
+  }
 };
 
 export const compileBuiltInProfiles = async (): Promise<Map<ProfileId, CompiledProfile>> => {

@@ -81,8 +81,9 @@ test("Codex evidence is hashed, quarantined, deduplicated, bound, and persisted 
   assert.equal(restoredEvidence.code, "EVIDENCE");
   assert.equal(restoredEvidence.evidence.recordHash, registered.evidence.recordHash);
   const exported = await restored.exportReceipt({ receiptId: applied.receipt.receiptId });
-  assert.equal(exported.portable.snapshot.evidenceRecords.length, 1);
-  assert.equal(exported.portable.snapshot.evidenceRecords[0].evidenceId, registered.evidence.evidenceId);
+  assert.equal(exported.portable.snapshot.evidenceRecords.length, 2);
+  assert(exported.portable.snapshot.evidenceRecords.some((evidence) => evidence.evidenceId === registered.evidence.evidenceId));
+  assert(exported.portable.snapshot.evidenceRecords.some((evidence) => evidence.evidenceId === "evidence_current"));
   assert.equal(await restored.verifyExport(exported.portable), true);
 });
 
@@ -115,7 +116,7 @@ test("WebMCP exposes bounded registration and keeps evidence reads marked untrus
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 22);
+  assert.equal(inventory.length, 26);
   assert(host.tools.has("finite_register_evidence"));
   assert.equal(host.tools.get("finite_read_evidence").annotations.untrustedContentHint, true);
   const registered = await host.execute("finite_register_evidence", JSON.stringify(researchedQuote));

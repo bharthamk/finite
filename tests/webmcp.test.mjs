@@ -22,8 +22,8 @@ test("production adapter normalizes host input, excludes authority, and replaces
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 22);
-  assert.equal(inventory.filter((name) => name.startsWith("finite_")).length, 19);
+  assert.equal(inventory.length, 26);
+  assert.equal(inventory.filter((name) => name.startsWith("finite_")).length, 23);
   assert(inventory.includes("travel_extend_stay"));
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
   assert.equal((await host.execute("finite_get_capabilities", {})).ok, true);
@@ -36,5 +36,5 @@ test("production adapter normalizes host input, excludes authority, and replaces
   assert.equal(switched.code, "PROFILE_SWITCHED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("renovation_replace_material"));
-  assert.equal(host.tools.size, 22);
+  assert.equal(host.tools.size, 26);
 });

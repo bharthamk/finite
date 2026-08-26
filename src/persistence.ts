@@ -1,5 +1,5 @@
 import { clone } from "./crypto.js";
-import type { PlanSnapshot, ProfileId } from "./types.js";
+import type { PlanActivationReceipt, PlanCatalogEntry, PlanSnapshot, ProfileDefinition } from "./types.js";
 
 export interface StoragePort {
   getItem(key: string): string | null;
@@ -29,30 +29,73 @@ export class PlanSnapshotStore {
     private readonly namespace = "finite-plan.v1",
   ) {}
 
-  private key(profileId: ProfileId): string {
-    return `${this.namespace}:${profileId}`;
+  private key(planId: string): string {
+    return `${this.namespace}:${planId}`;
   }
 
   save(snapshot: PlanSnapshot): void {
-    this.storage.setItem(this.key(snapshot.profileId), JSON.stringify(snapshot));
+    this.storage.setItem(this.key(snapshot.planId), JSON.stringify(snapshot));
   }
 
-  load(profileId: ProfileId, expectedProfileHash: string): PlanSnapshot | null {
-    const raw = this.storage.getItem(this.key(profileId));
+  load(planId: string, expectedProfileHash: string, legacyProfileId?: string): PlanSnapshot | null {
+    const raw = this.storage.getItem(this.key(planId)) ?? (legacyProfileId ? this.storage.getItem(this.key(legacyProfileId)) : null);
     if (!raw) return null;
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      this.storage.removeItem(this.key(profileId));
+      this.storage.removeItem(this.key(planId));
       return null;
     }
-    if (!isPlanSnapshot(parsed) || parsed.profileId !== profileId || parsed.profileHash !== expectedProfileHash) return null;
+    if (!isPlanSnapshot(parsed) || parsed.planId !== planId || parsed.profileHash !== expectedProfileHash) return null;
     return clone(parsed);
   }
 
-  clear(profileId: ProfileId): void {
-    this.storage.removeItem(this.key(profileId));
+  clear(planId: string): void {
+    this.storage.removeItem(this.key(planId));
+  }
+}
+
+export class PlanCatalogStore {
+  constructor(
+    private readonly storage: StoragePort,
+    private readonly key = "finite-plan.catalog.v1",
+    private readonly receiptKey = "finite-plan.activation-receipts.v1",
+  ) {}
+
+  load(): PlanCatalogEntry[] {
+    const raw = this.storage.getItem(this.key);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return clone(parsed.filter((entry): entry is PlanCatalogEntry => isRecord(entry) && isRecord(entry.definition) && Array.isArray(entry.evidenceRecords)));
+    } catch {
+      return [];
+    }
+  }
+
+  save(definition: ProfileDefinition, evidenceRecords: PlanCatalogEntry["evidenceRecords"]): void {
+    const entries = this.load().filter((entry) => entry.definition.planId !== definition.planId);
+    entries.push({ definition: clone(definition), evidenceRecords: clone(evidenceRecords) });
+    this.storage.setItem(this.key, JSON.stringify(entries));
+  }
+
+  loadActivationReceipts(): PlanActivationReceipt[] {
+    const raw = this.storage.getItem(this.receiptKey);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? clone(parsed.filter(isPlanActivationReceipt)) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveActivationReceipt(receipt: PlanActivationReceipt): void {
+    const receipts = this.loadActivationReceipts().filter((existing) => existing.idempotencyKey !== receipt.idempotencyKey);
+    receipts.push(clone(receipt));
+    this.storage.setItem(this.receiptKey, JSON.stringify(receipts));
   }
 }
 
@@ -75,3 +118,14 @@ const isPlanSnapshot = (value: unknown): value is PlanSnapshot => {
     && (value.evidenceRecords === undefined || Array.isArray(value.evidenceRecords))
     && Array.isArray(value.receipts);
 };
+
+const isPlanActivationReceipt = (value: unknown): value is PlanActivationReceipt => isRecord(value)
+  && typeof value.receiptId === "string"
+  && typeof value.idempotencyKey === "string"
+  && typeof value.fromPlanId === "string"
+  && typeof value.toPlanId === "string"
+  && typeof value.profileId === "string"
+  && typeof value.profileHash === "string"
+  && typeof value.draftId === "string"
+  && typeof value.confirmationId === "string"
+  && typeof value.replayChecksum === "string";
