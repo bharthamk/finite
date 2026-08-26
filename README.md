@@ -6,6 +6,8 @@ The product is not a travel planner, budgeting dashboard, task manager, or chat 
 
 The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_STAR.md). The defining question is: **Reality changed. What should the plan become now?**
 
+[`ARRIVAL_AND_SURFACE_CONTINUITY.md`](./ARRIVAL_AND_SURFACE_CONTINUITY.md) governs the Site, Codex, and inline-browser relationship: useful input can begin on either primary surface, presence is optional, delays are normal, and every handoff resumes from one durable versioned state.
+
 ## What is implemented
 
 - TypeScript finite-plan kernel with exact integer-money conservation.
@@ -94,6 +96,7 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `src/webmcp.ts` — native host adapter and tool registry.
 - `src/main.ts` — adaptive product renderer and human authority surface.
 - `PRODUCT_NORTH_STAR.md` — canonical category, operating model, plan grammar, adaptive-surface promise, moat, boundaries, and public narrative.
+- `ARRIVAL_AND_SURFACE_CONTINUITY.md` — zero-plan arrival, asynchronous Site/Codex continuity, wrong-surface recovery, lifecycle truth, and version-conflict law.
 - `PUBLIC_SURFACE_HANDOFF_2026-08-26.md` — bounded workstream brief for the public product surface; explicitly excludes submission preparation.
 - `worker/auth.ts` and `AUTHENTICATION.md` — provider-owned identity, automatic tenant provisioning, isolated demo lifecycle, and the portable self-hosting boundary.
 - `src/styles.css` — profile-aware responsive presentation.

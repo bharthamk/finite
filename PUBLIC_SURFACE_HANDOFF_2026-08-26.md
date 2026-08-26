@@ -22,6 +22,7 @@ A person arriving cold should understand within one viewport that:
 ## Source truth to read first
 
 - `PRODUCT_NORTH_STAR.md`
+- `ARRIVAL_AND_SURFACE_CONTINUITY.md`
 - `README.md`
 - `SURFACE_ACCEPTANCE_2026-08-26.md`
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md`
@@ -46,6 +47,12 @@ their past claims.
 - Finite owns deterministic state, rules, safety, approval boundaries, and
   receipts; it has no backend reasoning model.
 - External bookings and third-party systems are not yet modified automatically.
+- The standalone Site, Codex conversation, and inline-browser Site share one
+  versioned state but have different capabilities.
+- The user may enter substantial information on the Site while Codex is absent;
+  saved input must say **waiting for Codex**, not pretend to be processing.
+- Wrong-surface work preserves intent and resumes after the smallest exact
+  handoff; consequential approval remains a human Site action.
 
 ## Creative freedom
 
@@ -97,5 +104,7 @@ weaken or duplicate its authority controls.
 - The agent/operator inversion is understandable without an architecture
   lecture.
 - Existing account/demo routes remain accurate and functional.
+- Site-first and Codex-first entry are both understandable; the surface never
+  equates connectivity with completed processing.
 - The surface is responsive, keyboard-operable, and build-clean.
 - The result remains private until public access is separately approved.

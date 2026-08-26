@@ -53,6 +53,20 @@ Finite performs the truth and safety work:
 WebMCP is the page-scoped operating connection between the two. There is no
 application-owned reasoning model behind the product.
 
+### Interaction surfaces
+
+Finite has two primary surfaces and one hybrid: the standalone Site, the Codex
+conversation, and the Site inside Codex's inline browser. A human may begin on
+either primary surface and may switch between them after a meaningful delay.
+They are different views of one versioned plan, never separate sources of
+truth.
+
+Useful intent is accepted where it arrives. Human input may wait durably for
+Codex; Codex work may wait durably for the human. Only genuinely
+surface-exclusive actions require a handoff—most importantly, consequential
+authority remains a human action on the Site. The governing continuity and
+arrival contract is in `ARRIVAL_AND_SURFACE_CONTINUITY.md`.
+
 ## What a plan contains
 
 A plan is an executable, evolving model of an outcome rather than a task list
@@ -143,6 +157,7 @@ The working product currently includes:
 - human-only approval, failure-atomic commits, immutable revisions, and
   content-addressed receipts;
 - authenticated D1 tenancy and cross-device operator continuity;
+- durable asynchronous continuity between Site-first and Codex-first journeys;
 - official ChatGPT sign-in plus an isolated expiring demo path; and
 - three materially different adaptive human surfaces.
 
@@ -158,6 +173,8 @@ Do not describe or design Finite as:
 - an application with its own hidden AI backend; or
 - a system that currently purchases, books, emails, or edits third-party
   systems without a connector.
+- a system that assumes the Site and Codex are simultaneously open or that
+  “Codex connected” means the latest human input has been processed.
 
 ## Public narrative order
 

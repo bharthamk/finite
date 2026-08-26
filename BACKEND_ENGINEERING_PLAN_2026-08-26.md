@@ -43,6 +43,13 @@ The backend is successful when:
   backend operation.
 - A storage failure cannot leave in-memory accepted truth ahead of durable truth.
 - No generic chat backend and no application-owned reasoning model are required.
+- Site presence, Codex presence, and processing completion are separate state;
+  neither surface may assume the other is currently open.
+- Human input and operator interpretation cross surfaces through one durable,
+  versioned, non-authoritative order packet; stale processing fails on exact
+  order-version conflict.
+- The wrong-surface route preserves intent and continuation, then asks for the
+  smallest exact handoff without weakening human authority.
 
 ## 3. The six release-gate journeys
 
@@ -227,6 +234,16 @@ The coordinator owns the generic state machine, not domain reasoning:
 - human-handoff state; and
 - recovery after reload or retry.
 
+For first-plan arrival and delayed cross-surface work it also owns:
+
+- one durable versioned human order per construction flow;
+- append-only raw human input separate from Codex interpretation;
+- lifecycle states for saved, waiting, reviewing, clarification, proposed,
+  authority, and accepted;
+- an operator checkpoint and delta since that checkpoint;
+- exact order-version guards on clarification and draft staging; and
+- surface-specific continuation without repeated human input.
+
 ### 5.5 Authority boundary
 
 Authority records are volatile, short-lived, exact-content bindings created
@@ -247,6 +264,7 @@ Persistence is divided by truth class:
 | Immutable plan definitions and lineage | catalog remains device-local; accepted activation head is D1-initialized | D1 catalog transaction after authenticated tenancy is designed |
 | Accepted evidence metadata/content | D1 records referenced by accepted snapshots | D1; R2 only for future source files |
 | Incomplete intake/draft | seven-day device-local packet | remain local unless cross-device continuation is explicitly required |
+| Human arrival order and answers | not yet implemented | D1 non-authoritative versioned packet so Site-first input can wait for Codex |
 | Human approval/confirmation | memory only | memory or short-lived identity-bound challenge; never durable authority |
 | Active projection preference | device local | device local |
 
