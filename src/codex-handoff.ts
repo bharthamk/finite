@@ -29,12 +29,7 @@ const cleanOrigin = (value: string): string => {
   return parsed.origin;
 };
 
-const buttonLabel = (context: CodexHandoffContext): string => {
-  if (!context.order) return "Start with Codex";
-  if (context.order.version > context.order.lastOperatorCheckpoint && context.order.lastOperatorCheckpoint > 0) return "Update Codex";
-  if (context.order.lastOperatorCheckpoint > 0) return "Resume with Codex";
-  return "Bring in Codex";
-};
+const buttonLabel = (): string => "Hand off to Codex";
 
 export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff => {
   const siteOrigin = cleanOrigin(context.siteOrigin);
@@ -65,7 +60,7 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
 
   return {
     handoffVersion: "finite-codex-handoff.v1",
-    buttonLabel: buttonLabel(context),
+    buttonLabel: buttonLabel(),
     title: order ? "Bring Codex into the kitchen." : "Start this with Codex.",
     detail: context.inline
       ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."

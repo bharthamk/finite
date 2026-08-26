@@ -22,7 +22,7 @@ test("Codex handoff copies a safe bootstrap pointer rather than plan or authenti
     credential: "SECRET_CREDENTIAL",
   });
 
-  assert.equal(handoff.buttonLabel, "Update Codex");
+  assert.equal(handoff.buttonLabel, "Hand off to Codex");
   assert.equal(handoff.copiedPayload.siteOrigin, "https://finite.example");
   assert.equal(handoff.copiedPayload.entryTool, "finite_enter_kitchen");
   assert.match(handoff.prompt, /finite_enter_kitchen/);
@@ -40,7 +40,7 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
     order: null,
     plan: { planId: "plan_travel_europe", profileId: "travel", revision: 1 },
   });
-  assert.equal(handoff.buttonLabel, "Start with Codex");
+  assert.equal(handoff.buttonLabel, "Hand off to Codex");
   assert.equal(handoff.title, "Start this with Codex.");
   assert.equal(handoff.copiedPayload.orderId, null);
   assert.equal(handoff.prompt.includes("orderId"), false);
