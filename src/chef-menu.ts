@@ -196,7 +196,34 @@ const candidateMenu = (kernel: FinitePlanKernel): ChefMenuItem[] => [...kernel.c
 
 export const buildChefMenu = (kernel: FinitePlanKernel, route: KitchenRoute): { menuVersion: "finite-chef-menu.v1"; basis: Record<string, unknown>; items: ChefMenuItem[] } => {
   let items: ChefMenuItem[];
-  if (route.stage === "human_approved" && kernel.stagedCandidate && kernel.approval) {
+  if (kernel.pendingLifecycleChange && kernel.lifecycleConfirmation) {
+    const change = kernel.pendingLifecycleChange;
+    items = [{
+      menuItemId: `lifecycle_apply_${change.lifecycleChangeId}`, rank: 1, kind: "operator_action",
+      title: `Apply ${change.after} status`, offer: `Record this plan as ${change.after} and return an immutable receipt.`,
+      whyNow: "The human confirmation matches the exact lifecycle change and current revision.", status: "ready", viability: "constraint_validated",
+      nextTool: "finite_apply_confirmed_plan_lifecycle", knownArgs: { lifecycleChangeId: change.lifecycleChangeId, confirmationId: kernel.lifecycleConfirmation.confirmationId, expectedRevision: kernel.revision },
+      missingInputs: [{ argument: "idempotencyKey", source: "derived", reason: "Codex must supply one stable retry identity for this exact command." }],
+      tradeoffs: [change.reason], evidence: { status: "not_required", refs: [] },
+    }];
+  } else if (kernel.pendingLifecycleChange) {
+    const change = kernel.pendingLifecycleChange;
+    items = [{
+      menuItemId: `lifecycle_review_${change.lifecycleChangeId}`, rank: 1, kind: "human_decision",
+      title: `Mark this plan ${change.after}?`, offer: change.reason, whyNow: "A lifecycle conclusion is staged but has no human authority.",
+      status: "human_choice_required", viability: "constraint_validated", nextTool: null,
+      knownArgs: { lifecycleChangeId: change.lifecycleChangeId, expectedRevision: kernel.revision },
+      missingInputs: [{ argument: "human_decision", source: "human", reason: "Only the human can conclude, pause, abandon, or reopen a plan.", question: `Should I mark this plan ${change.after}?` }],
+      tradeoffs: ["Accepted planning work is preserved and remains auditable"], evidence: { status: "not_required", refs: [] },
+    }];
+  } else if (kernel.lifecycleStatus !== "active") {
+    items = [{
+      menuItemId: "lifecycle_reopen", rank: 1, kind: "human_decision", title: "Reopen this plan", offer: "Return the plan to active work without losing its accepted history.",
+      whyNow: `The plan is ${kernel.lifecycleStatus}; new change events are intentionally blocked.`, status: "input_required", viability: "not_yet_tested", nextTool: "finite_stage_plan_lifecycle",
+      knownArgs: { status: "active", expectedRevision: kernel.revision }, missingInputs: [{ argument: "reason", source: "human", reason: "The reason for reopening belongs to the human.", question: "What changed that makes this plan active again?" }],
+      tradeoffs: ["Reopening creates a new accepted revision"], evidence: { status: "not_required", refs: [] },
+    }];
+  } else if (route.stage === "human_approved" && kernel.stagedCandidate && kernel.approval) {
     const candidate = kernel.stagedCandidate;
     items = [{
       menuItemId: `approved_${candidate.candidateId}`, rank: 1, kind: "operator_action",
@@ -242,6 +269,7 @@ export const buildChefMenu = (kernel: FinitePlanKernel, route: KitchenRoute): { 
       profileId: kernel.profile.profileId,
       profileHash: kernel.profile.profileHash,
       revision: kernel.revision,
+      lifecycleStatus: kernel.lifecycleStatus,
       routeStage: route.stage,
       activeEventId: kernel.activeEventId,
       authorityPresent: route.authorityPresent,

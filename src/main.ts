@@ -2,7 +2,7 @@ import { compileBuiltInProfiles } from "./profiles.js";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
-import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
+import type { Candidate, PlanLifecycleStatus, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository } from "./construction-packet.js";
@@ -815,14 +815,36 @@ const renderOptions = (): string => {
 
 const renderReceipt = (receipt: Receipt): string => {
   const after = receipt.payload.after as { bufferMinor?: number } | undefined;
+  const lifecycle = receipt.payload.lifecycle as { status?: PlanLifecycleStatus } | undefined;
   return `<div class="receipt">
-    <div><span class="receipt__tick" aria-hidden="true">✓</span><p class="eyebrow">Served and receipted</p><h2>The accepted plan is now revision ${receipt.toRevision}.</h2></div>
+    <div><span class="receipt__tick" aria-hidden="true">✓</span><p class="eyebrow">Served and receipted</p><h2>${lifecycle?.status ? `This plan is now ${escapeHtml(lifecycle.status)}.` : `The accepted plan is now revision ${receipt.toRevision}.`}</h2></div>
     <dl>
       <div><dt>${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)}</dt><dd>${typeof after?.bufferMinor === "number" ? money(after.bufferMinor) : money(runtime.kernel.accepted.bufferMinor)}</dd></div>
       <div><dt>Receipt</dt><dd>${escapeHtml(receipt.receiptId)}</dd></div>
       <div><dt>Replay proof</dt><dd>${escapeHtml(receipt.replayChecksum.slice(0, 12))}…</dd></div>
     </dl>
   </div>`;
+};
+
+const renderLifecycleControl = (): string => {
+  const kernel = runtime.kernel;
+  const pending = kernel.pendingLifecycleChange;
+  if (pending) return `<section class="lifecycle-control lifecycle-control--pending" aria-label="Plan status confirmation">
+    <div><p class="eyebrow">Plan conclusion</p><h2>Mark this plan ${escapeHtml(pending.after)}?</h2><p>${escapeHtml(pending.reason)}</p></div>
+    <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span><button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button></div>
+  </section>`;
+  const inactive = kernel.lifecycleStatus !== "active";
+  return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" ${inactive ? "open" : ""}>
+    <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : "Finish, pause, or stop cleanly"}</small></summary>
+    <form data-plan-lifecycle>
+      <label><span>What should happen?</span><select name="status" required>
+        <option value="">Choose one</option>
+        ${kernel.lifecycleStatus === "active" ? '<option value="completed">Complete — the outcome happened</option><option value="paused">Pause — keep it, but stop active work</option><option value="abandoned">Abandon — the outcome is no longer being pursued</option>' : '<option value="active">Reopen — resume active planning</option>'}
+      </select></label>
+      <label><span>Why?</span><textarea name="reason" required maxlength="1000" placeholder="Preserve what happened, or why the plan is changing state."></textarea></label>
+      <button class="button" type="submit" ${busy ? "disabled" : ""}>Review this status change</button>
+    </form>
+  </details>`;
 };
 
 const renderPlanDraft = (): string => {
@@ -944,6 +966,7 @@ async function render(): Promise<SurfaceManifest> {
         <aside class="plan-orbit" aria-label="Current finite plan summary"><div class="orbit-number"><span>Total plan</span><strong>${money(kernel.accepted.totalBudgetMinor)}</strong></div><div class="orbit-ring" style="--used:${spentPercent}%"><div><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span></div></div><p>${spentPercent}% spent or committed. Every option below keeps the same finite total.</p></aside>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+      ${renderLifecycleControl()}
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
@@ -1032,6 +1055,31 @@ const discardReturnedDraft = async (packetId: string): Promise<void> => {
   await render();
 };
 
+const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
+  if (busy) return;
+  const data = new FormData(form);
+  const status = String(data.get("status") ?? "") as PlanLifecycleStatus;
+  const reason = String(data.get("reason") ?? "").trim();
+  if (!status || !reason) return;
+  const result = await runtime.kernel.stagePlanLifecycle({ status, reason, expectedRevision: runtime.kernel.revision });
+  announce(result.ok ? "Review the exact plan status below. Nothing has changed yet." : `The plan status could not be prepared: ${result.code}`);
+  await render();
+  document.querySelector(".lifecycle-control")?.scrollIntoView({ behavior: "smooth", block: "center" });
+};
+
+const confirmLifecycle = async (lifecycleChangeId: string): Promise<void> => {
+  const pending = runtime.kernel.pendingLifecycleChange;
+  if (!pending || pending.lifecycleChangeId !== lifecycleChangeId) return;
+  busy = true;
+  await render();
+  const confirmed = runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId });
+  const confirmationId = (confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId;
+  const result = confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision: runtime.kernel.revision, idempotencyKey: `surface-lifecycle-${runtime.kernel.profile.planId}-${runtime.kernel.revision}-${pending.contentHash.slice(0, 12)}` }) : confirmed;
+  busy = false;
+  announce(result.ok ? `Plan status saved as ${runtime.kernel.lifecycleStatus}.` : `The plan status was not changed: ${result.code}`);
+  await render();
+};
+
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
@@ -1043,6 +1091,9 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
   root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
+  root?.querySelector<HTMLFormElement>("[data-plan-lifecycle]")?.addEventListener("submit", (event) => { event.preventDefault(); void stageLifecycle(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-lifecycle']")?.addEventListener("click", (event) => { void confirmLifecycle((event.currentTarget as HTMLButtonElement).dataset.lifecycle ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-lifecycle']")?.addEventListener("click", async () => { runtime.kernel.pendingLifecycleChange = null; runtime.kernel.lifecycleConfirmation = null; announce("Plan status change cancelled. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

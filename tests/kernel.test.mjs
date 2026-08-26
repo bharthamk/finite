@@ -71,6 +71,28 @@ test("correction and preference authority remain human-confirmed after productio
   assert.equal(kernel.revision, 3);
 });
 
+test("plan lifecycle conclusion is human-confirmed, receipted, reload-safe, and blocks accidental work", async () => {
+  const { kernel, profile, store } = await setup();
+  const staged = await kernel.stagePlanLifecycle({ status: "completed", reason: "The trip is home and reconciled.", expectedRevision: 1 });
+  assert.equal(staged.code, "PLAN_LIFECYCLE_STAGED");
+  assert.equal(kernel.lifecycleStatus, "active");
+  assert.equal((await kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: staged.lifecycleChange.lifecycleChangeId, confirmationId: "fabricated", expectedRevision: 1, idempotencyKey: "lifecycle-complete-0001" })).code, "CONFIRMATION_MISSING_OR_MISMATCHED");
+  const confirmation = kernel.humanConfirmPlanLifecycle({ lifecycleChangeId: staged.lifecycleChange.lifecycleChangeId });
+  const applied = await kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: staged.lifecycleChange.lifecycleChangeId, confirmationId: confirmation.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "lifecycle-complete-0001" });
+  assert.equal(applied.code, "PLAN_LIFECYCLE_APPLIED");
+  assert.equal(kernel.lifecycleStatus, "completed");
+  assert.equal(kernel.revision, 2);
+  assert.equal(kernel.recordChangeEvent({ type: "late_change", title: "One more idea", costDeltaMinor: 0, minimumBufferMinor: 0, expectedRevision: 2 }).code, "PLAN_NOT_ACTIVE");
+  const reloaded = new FinitePlanKernel(profile, store);
+  assert.equal(reloaded.lifecycleStatus, "completed");
+  assert.equal(reloaded.lifecycleEvents.length, 1);
+  assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: staged.lifecycleChange.lifecycleChangeId, confirmationId: confirmation.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "lifecycle-complete-0001" })).code, "IDEMPOTENT_REPLAY");
+  const reopen = await reloaded.stagePlanLifecycle({ status: "active", reason: "A delayed refund still needs handling.", expectedRevision: 2 });
+  const reopenConfirmation = reloaded.humanConfirmPlanLifecycle({ lifecycleChangeId: reopen.lifecycleChange.lifecycleChangeId });
+  assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: reopen.lifecycleChange.lifecycleChangeId, confirmationId: reopenConfirmation.confirmation.confirmationId, expectedRevision: 2, idempotencyKey: "lifecycle-reopen-0001" })).code, "PLAN_LIFECYCLE_APPLIED");
+  assert.equal(reloaded.lifecycleStatus, "active");
+});
+
 test("material evidence and typed relationship constraints are executable", async () => {
   const travel = (await setup()).kernel;
   const stale = travel.recordChangeEvent({ type: "quote_change", title: "Old quote", costDeltaMinor: 76_000, minimumBufferMinor: 0, evidenceRefs: ["evidence_stale"], expectedRevision: 1 });

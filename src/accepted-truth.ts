@@ -134,6 +134,7 @@ export const snapshotIntegrityIssues = async (profile: CompiledProfile, snapshot
   if (snapshot.profileId !== profile.profileId) issues.push("snapshot family does not match profile");
   if (snapshot.profileHash !== profile.profileHash) issues.push("snapshot profile hash does not match profile");
   if (!Number.isInteger(snapshot.revision) || snapshot.revision < 1) issues.push("snapshot revision must be a positive integer");
+  if (snapshot.lifecycle && !["active", "paused", "completed", "abandoned"].includes(snapshot.lifecycle.status)) issues.push("snapshot lifecycle status is invalid");
   const allocation = snapshot.accepted;
   const allocationValues = [allocation.totalBudgetMinor, allocation.spentMinor, allocation.committedMinor, allocation.forecastMinor, allocation.bufferMinor];
   if (allocationValues.some((value) => !Number.isSafeInteger(value) || value < 0)) issues.push("snapshot allocation contains invalid minor units");

@@ -2,6 +2,7 @@ export type ProfileId = "travel" | "renovation" | "event";
 export type PreferenceKey = "comfort" | "experience" | "buffer" | "schedule";
 export type StateSelector =
   | "identity"
+  | "lifecycle"
   | "allocations"
   | "actuals"
   | "constraints"
@@ -438,6 +439,8 @@ export interface PlanIntakeInput {
   actuals?: ActualDefinition[];
   locks?: string[];
   preferenceLabels?: string[];
+  moves?: Record<string, MoveDefinition>;
+  searchPolicy?: SearchPolicy;
   entityValues?: Record<string, Record<string, number>>;
   entityEstimates?: Record<string, Record<string, { value: number; basis: string; sourcePaths: string[] }>>;
   dependencies?: PlanningDependencyDefinition[];
@@ -480,9 +483,23 @@ export interface PreferenceEvent {
   toRevision: number;
 }
 
+export type PlanLifecycleStatus = "active" | "paused" | "completed" | "abandoned";
+
+export interface PlanLifecycleEvent {
+  eventType: "plan_lifecycle";
+  lifecycleChangeId: string;
+  before: PlanLifecycleStatus;
+  after: PlanLifecycleStatus;
+  reason: string;
+  contentHash: string;
+  confirmationId: string;
+  fromRevision: number;
+  toRevision: number;
+}
+
 export interface Receipt {
   receiptId: string;
-  receiptType: "plan_option" | "actual_correction" | "preference_change";
+  receiptType: "plan_option" | "actual_correction" | "preference_change" | "plan_lifecycle";
   idempotencyKey: string;
   planId: string;
   fromRevision: number;
@@ -504,12 +521,14 @@ export interface PlanSnapshot {
   profileHash: string;
   planId: string;
   revision: number;
+  lifecycle?: { status: PlanLifecycleStatus };
   accepted: Allocation;
   preferenceWeights: Record<PreferenceKey, number>;
   entities: Record<string, EntityDefinition>;
   events: ChangeEvent[];
   correctionEvents: CorrectionEvent[];
   preferenceEvents: PreferenceEvent[];
+  lifecycleEvents?: PlanLifecycleEvent[];
   feedback: FeedbackEvent[];
   evidenceRecords?: EvidenceRecord[];
   receipts: Receipt[];

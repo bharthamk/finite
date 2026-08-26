@@ -13,9 +13,9 @@ interface WorkerEnvironment {
 }
 
 export const finiteRelease = {
-  build: "returned-draft-v44",
-  script: "/assets/index-ulbeUIsS.js",
-  stylesheet: "/assets/index-DGV2Wpk6.css",
+  build: "full-journey-v45",
+  script: "/assets/index-1aJ-MMFh.js",
+  stylesheet: "/assets/index-DB9QVcV0.css",
 } as const;
 
 const assetRequest = (request: Request, pathname: string): Request => new Request(new URL(pathname, request.url), {

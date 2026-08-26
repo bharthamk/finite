@@ -378,7 +378,7 @@ export class FinitePlanRuntime {
   }
 
   async openKitchen(): Promise<ToolResult> {
-    const selectors = ["identity", "allocations", "actuals", "constraints", "entities", "preferences", "pending"] as const;
+    const selectors = ["identity", "lifecycle", "allocations", "actuals", "constraints", "entities", "preferences", "pending"] as const;
     const stateResult = this.kernel.getState([...selectors]);
     const state = stateResult.state as Record<string, unknown>;
     const pending = state.pending as Record<string, unknown>;
@@ -404,6 +404,10 @@ export class FinitePlanRuntime {
       route = this.kernel.preferenceConfirmation
         ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_preference_change", targetId: this.kernel.pendingPreferenceChange.preferenceChangeId, authorityPresent: true }
         : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_preference_change", targetId: this.kernel.pendingPreferenceChange.preferenceChangeId, authorityPresent: false };
+    } else if (this.kernel.pendingLifecycleChange) {
+      route = this.kernel.lifecycleConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_plan_lifecycle", targetId: this.kernel.pendingLifecycleChange.lifecycleChangeId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_plan_lifecycle", targetId: this.kernel.pendingLifecycleChange.lifecycleChangeId, authorityPresent: false };
     } else if (this.kernel.approval && this.kernel.stagedCandidate) {
       route = { stage: "human_approved", nextTool: "finite_apply_approved_option", targetId: this.kernel.stagedCandidate.candidateId, authorityPresent: true };
     } else if (this.kernel.stagedCandidate) {
@@ -412,6 +416,8 @@ export class FinitePlanRuntime {
       route = { stage: "options_available", nextTool: "finite_stage_option", targetId: this.kernel.activeEventId, authorityPresent: false };
     } else if (this.kernel.activeEventId) {
       route = { stage: "change_recorded", nextTool: "finite_compare_options", targetId: this.kernel.activeEventId, authorityPresent: false };
+    } else if (this.kernel.lifecycleStatus !== "active") {
+      route = { stage: "plan_inactive", nextTool: null, humanAction: "reopen_or_leave_plan_closed", targetId: null, authorityPresent: false };
     } else {
       route = { stage: "ready", nextTool: this.kernel.profile.contextualCapabilities[0] ?? "finite_record_change_event", targetId: null, authorityPresent: false };
     }
@@ -623,6 +629,8 @@ export class FinitePlanRuntime {
     }
     if (!facts.locks?.length) ask("locks", "LOCKS_REQUIRED", "What must Codex protect even when the plan is under pressure?");
     if (!facts.preferenceLabels?.length) ask("preferenceLabels", "PREFERENCES_REQUIRED", "What should Codex preserve when trade-offs are necessary?");
+    if (facts.moves && Object.keys(facts.moves).length > 12) conflict("moves", "TOO_MANY_MOVES", "Keep the bounded recovery menu to twelve moves or fewer.");
+    if (facts.searchPolicy && (!Number.isSafeInteger(facts.searchPolicy.optionCount) || !Number.isSafeInteger(facts.searchPolicy.maxMovesPerOption) || !Number.isSafeInteger(facts.searchPolicy.maxCombinations))) conflict("searchPolicy", "SEARCH_POLICY_INVALID", "Use bounded integer option, move, and combination limits.");
     if (!facts.stages?.length) ask("stages", "TIME_SHAPE_REQUIRED", "What are the plan's meaningful calendar stops, phases, or run-of-show stages?");
     if (profileId === "travel" || profileId === "renovation" || profileId === "event") {
       const required = {
@@ -724,8 +732,10 @@ export class FinitePlanRuntime {
       preferenceLabels: clone(facts.preferenceLabels ?? []),
       entities,
       relationships,
-      moves: {},
-      searchPolicy: { ...clone(template.searchPolicy), maxMovesPerOption: 0 },
+      moves: clone(facts.moves ?? {}),
+      searchPolicy: facts.moves && Object.keys(facts.moves).length
+        ? clone(facts.searchPolicy ?? template.searchPolicy)
+        : { ...clone(template.searchPolicy), maxMovesPerOption: 0 },
       evidencePolicy: { ...clone(template.evidencePolicy), asOf: this.now().toISOString().slice(0, 10) },
       surface: {
         ...clone(template.surface),
@@ -741,7 +751,7 @@ export class FinitePlanRuntime {
       ...staged,
       code: "PLAN_DRAFT_STAGED_FROM_INTAKE",
       compiledFrom: { packetId, checksum: expectedChecksum, assessmentCode: assessment.code, constructionMode: facts.constructionMode ?? "exact" },
-      next: "The clean profile contains no example-specific moves. Show its working assumptions, open dependencies, profile hash, and draft hash to the human on the Site; WebMCP cannot confirm or activate it.",
+      next: "The clean profile contains only intake-supplied plan-specific moves, never example moves. Show its working assumptions, recovery menu, open dependencies, profile hash, and draft hash to the human on the Site; WebMCP cannot confirm or activate it.",
     } : staged;
   }
 

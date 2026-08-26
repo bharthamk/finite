@@ -76,7 +76,7 @@ export interface ArrivalEvent {
   eventId: string;
   orderId: string;
   version: number;
-  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "arrival_reconciled" | "interpretation_reviewed";
+  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "arrival_reconciled" | "interpretation_reviewed" | "plan_activated";
   actor: "human" | "codex";
   sourceSurface: ArrivalSourceSurface;
   payload: Record<string, unknown>;
@@ -123,6 +123,7 @@ export interface ArrivalRepository {
   stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
   reconcile(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult>;
   reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }): Promise<ArrivalResult>;
+  acceptPlan(input: { orderId: string; expectedVersion: number; expectedChecksum: string; planId: string; profileHash: string; planRevision: number }): Promise<ArrivalResult>;
 }
 
 const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResult> => {
@@ -165,6 +166,9 @@ export class HttpArrivalRepository implements ArrivalRepository {
   }
   reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input) });
+  }
+  acceptPlan(input: Parameters<ArrivalRepository["acceptPlan"]>[0]): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/accept`, { method: "POST", body: JSON.stringify(input) });
   }
 }
 
@@ -249,6 +253,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
         : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED"
           : event.eventType === "arrival_reconciled" ? "ARRIVAL_RECONCILED"
           : event.eventType === "interpretation_reviewed" ? "ARRIVAL_INTERPRETATION_REVIEWED"
+            : event.eventType === "plan_activated" ? "ARRIVAL_PLAN_ACCEPTED"
             : "ARRIVAL_INPUT_APPENDED";
     return this.result(code, next);
   }
@@ -387,6 +392,17 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       actor: "human",
       sourceSurface: input.sourceSurface,
       payload: { decision: "confirm_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
+    });
+  }
+
+  async acceptPlan(input: Parameters<ArrivalRepository["acceptPlan"]>[0]): Promise<ArrivalResult> {
+    const order = this.orders.get(input.orderId);
+    if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+    if (order.version !== input.expectedVersion || order.checksum !== input.expectedChecksum) return this.conflict(order);
+    if (order.status !== "interpretation_confirmed" || !order.interpretation?.complete) return { ok: false, code: "ARRIVAL_NOT_ACCEPTABLE", acceptedStateChanged: false };
+    if (!input.planId || !/^[a-f0-9]{64}$/.test(input.profileHash) || !Number.isInteger(input.planRevision) || input.planRevision < 1) return { ok: false, code: "ARRIVAL_PLAN_BINDING_INVALID", acceptedStateChanged: false };
+    return this.replace(order, input.expectedVersion, { status: "accepted", lastOperatorCheckpoint: input.expectedVersion + 1 }, {
+      eventType: "plan_activated", actor: "codex", sourceSurface: "codex", payload: { planId: input.planId, profileHash: input.profileHash, planRevision: input.planRevision },
     });
   }
 }

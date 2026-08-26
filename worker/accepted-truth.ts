@@ -25,6 +25,7 @@ interface Snapshot extends JsonRecord {
   profileHash: string;
   planId: string;
   revision: number;
+  lifecycle?: { status: string };
   accepted: {
     totalBudgetMinor: number;
     spentMinor: number;
@@ -35,6 +36,7 @@ interface Snapshot extends JsonRecord {
   events: JsonRecord[];
   correctionEvents: JsonRecord[];
   preferenceEvents: JsonRecord[];
+  lifecycleEvents?: JsonRecord[];
   evidenceRecords?: JsonRecord[];
   receipts: JsonRecord[];
 }
@@ -211,12 +213,13 @@ const envelopeIssues = async (envelope: Envelope): Promise<string[]> => {
   if (!snapshot || snapshot.snapshotVersion !== "finite-plan-snapshot.v1") return [...issues, "invalid snapshot contract"];
   if (envelope.planId !== snapshot.planId || envelope.profileId !== snapshot.profileId || envelope.profileHash !== snapshot.profileHash || envelope.revision !== snapshot.revision) issues.push("envelope identity does not match snapshot");
   if (!Number.isInteger(snapshot.revision) || snapshot.revision < 1) issues.push("invalid snapshot revision");
+  if (snapshot.lifecycle && !["active", "paused", "completed", "abandoned"].includes(snapshot.lifecycle.status)) issues.push("invalid snapshot lifecycle");
   const allocation = snapshot.accepted;
   const parts = allocation && [allocation.totalBudgetMinor, allocation.spentMinor, allocation.committedMinor, allocation.forecastMinor, allocation.bufferMinor];
   if (!parts || parts.some((value) => !isSafeInteger(value))) issues.push("invalid finite allocation");
   else if (allocation.spentMinor + allocation.committedMinor + allocation.forecastMinor + allocation.bufferMinor !== allocation.totalBudgetMinor) issues.push("finite allocation does not conserve total");
   if (await sha256(snapshot) !== envelope.snapshotHash) issues.push("snapshot hash mismatch");
-  if (!Array.isArray(snapshot.receipts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.correctionEvents) || !Array.isArray(snapshot.preferenceEvents)) issues.push("invalid append-only collections");
+  if (!Array.isArray(snapshot.receipts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.correctionEvents) || !Array.isArray(snapshot.preferenceEvents) || (snapshot.lifecycleEvents !== undefined && !Array.isArray(snapshot.lifecycleEvents))) issues.push("invalid append-only collections");
   const receipts = Array.isArray(snapshot.receipts) ? snapshot.receipts as Receipt[] : [];
   if (!(await Promise.all(receipts.map(receiptValid))).every(Boolean)) issues.push("invalid historical receipt checksum");
   if (new Set(receipts.map((item) => item.receiptId)).size !== receipts.length || new Set(receipts.map((item) => item.idempotencyKey)).size !== receipts.length) issues.push("duplicate historical receipt identity");

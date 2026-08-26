@@ -21,6 +21,8 @@ import type {
   EvidenceRegistrationInput,
   FeedbackEvent,
   HumanApproval,
+  PlanLifecycleEvent,
+  PlanLifecycleStatus,
   PlanSnapshot,
   PreferenceEvent,
   PreferenceKey,
@@ -56,14 +58,25 @@ interface PendingPreferenceChange {
   contentHash: string;
 }
 
+interface PendingLifecycleChange {
+  lifecycleChangeId: string;
+  baseRevision: number;
+  before: PlanLifecycleStatus;
+  after: PlanLifecycleStatus;
+  reason: string;
+  contentHash: string;
+}
+
 interface KernelCheckpoint {
   revision: number;
+  lifecycleStatus: PlanLifecycleStatus;
   accepted: Allocation;
   preferenceWeights: Record<PreferenceKey, number>;
   entities: Record<string, EntityDefinition>;
   events: ChangeEvent[];
   correctionEvents: CorrectionEvent[];
   preferenceEvents: PreferenceEvent[];
+  lifecycleEvents: PlanLifecycleEvent[];
   feedback: FeedbackEvent[];
   receipts: Receipt[];
   candidates: Map<string, Candidate>;
@@ -74,9 +87,12 @@ interface KernelCheckpoint {
   correctionConfirmation: Confirmation | null;
   pendingPreferenceChange: PendingPreferenceChange | null;
   preferenceConfirmation: Confirmation | null;
+  pendingLifecycleChange: PendingLifecycleChange | null;
+  lifecycleConfirmation: Confirmation | null;
   optionIdempotency: Map<string, Receipt>;
   correctionIdempotency: Map<string, Receipt>;
   preferenceIdempotency: Map<string, Receipt>;
+  lifecycleIdempotency: Map<string, Receipt>;
 }
 
 const contentHash = (content: string): Promise<string> => sha256({ content });
@@ -102,12 +118,14 @@ export class FinitePlanKernel {
   readonly profile: CompiledProfile;
   readonly evidence = new Map(evidenceRecords.map((record) => [record.evidenceId, clone(record)]));
   revision = 1;
+  lifecycleStatus: PlanLifecycleStatus = "active";
   accepted: Allocation;
   preferenceWeights: Record<PreferenceKey, number>;
   entities: Record<string, EntityDefinition>;
   readonly events: ChangeEvent[] = [];
   readonly correctionEvents: CorrectionEvent[] = [];
   readonly preferenceEvents: PreferenceEvent[] = [];
+  readonly lifecycleEvents: PlanLifecycleEvent[] = [];
   readonly feedback: FeedbackEvent[] = [];
   readonly receipts: Receipt[] = [];
   readonly candidates = new Map<string, Candidate>();
@@ -118,9 +136,12 @@ export class FinitePlanKernel {
   correctionConfirmation: Confirmation | null = null;
   pendingPreferenceChange: PendingPreferenceChange | null = null;
   preferenceConfirmation: Confirmation | null = null;
+  pendingLifecycleChange: PendingLifecycleChange | null = null;
+  lifecycleConfirmation: Confirmation | null = null;
   private readonly optionIdempotency = new Map<string, Receipt>();
   private readonly correctionIdempotency = new Map<string, Receipt>();
   private readonly preferenceIdempotency = new Map<string, Receipt>();
+  private readonly lifecycleIdempotency = new Map<string, Receipt>();
   private acceptedSnapshotHash: string | null = null;
   private acceptedTruthStatus: "local" | "uninitialized" | "ready" | "unavailable";
 
@@ -146,12 +167,14 @@ export class FinitePlanKernel {
 
   private restore(snapshot: PlanSnapshot): void {
     this.revision = snapshot.revision;
+    this.lifecycleStatus = snapshot.lifecycle?.status ?? "active";
     this.accepted = clone(snapshot.accepted);
     this.preferenceWeights = clone(snapshot.preferenceWeights);
     this.entities = clone(snapshot.entities);
     this.events.push(...clone(snapshot.events));
     this.correctionEvents.push(...clone(snapshot.correctionEvents));
     this.preferenceEvents.push(...clone(snapshot.preferenceEvents));
+    this.lifecycleEvents.push(...clone(snapshot.lifecycleEvents ?? []));
     this.feedback.push(...clone(snapshot.feedback));
     this.receipts.push(...clone(snapshot.receipts));
     for (const evidence of snapshot.evidenceRecords ?? []) this.evidence.set(evidence.evidenceId, clone(evidence));
@@ -161,6 +184,7 @@ export class FinitePlanKernel {
       if (receipt.receiptType === "plan_option") this.optionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "actual_correction") this.correctionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "preference_change") this.preferenceIdempotency.set(receipt.idempotencyKey, receipt);
+      if (receipt.receiptType === "plan_lifecycle") this.lifecycleIdempotency.set(receipt.idempotencyKey, receipt);
     }
   }
 
@@ -168,12 +192,14 @@ export class FinitePlanKernel {
     this.events.splice(0);
     this.correctionEvents.splice(0);
     this.preferenceEvents.splice(0);
+    this.lifecycleEvents.splice(0);
     this.feedback.splice(0);
     this.receipts.splice(0);
     this.candidates.clear();
     this.optionIdempotency.clear();
     this.correctionIdempotency.clear();
     this.preferenceIdempotency.clear();
+    this.lifecycleIdempotency.clear();
     this.activeEventId = null;
     this.stagedCandidate = null;
     this.approval = null;
@@ -232,12 +258,14 @@ export class FinitePlanKernel {
       profileHash: this.profile.profileHash,
       planId: this.profile.planId,
       revision: this.revision,
+      lifecycle: { status: this.lifecycleStatus },
       accepted: clone(this.accepted),
       preferenceWeights: clone(this.preferenceWeights),
       entities: clone(this.entities),
       events: clone(acceptedEvents),
       correctionEvents: clone(this.correctionEvents),
       preferenceEvents: clone(this.preferenceEvents),
+      lifecycleEvents: clone(this.lifecycleEvents),
       feedback: clone(this.feedback),
       evidenceRecords: clone([...acceptedEvidenceRefs].map((evidenceId) => this.evidence.get(evidenceId)).filter((evidence): evidence is EvidenceRecord => Boolean(evidence))),
       receipts: clone(this.receipts),
@@ -251,12 +279,14 @@ export class FinitePlanKernel {
   private checkpoint(): KernelCheckpoint {
     return clone({
       revision: this.revision,
+      lifecycleStatus: this.lifecycleStatus,
       accepted: this.accepted,
       preferenceWeights: this.preferenceWeights,
       entities: this.entities,
       events: this.events,
       correctionEvents: this.correctionEvents,
       preferenceEvents: this.preferenceEvents,
+      lifecycleEvents: this.lifecycleEvents,
       feedback: this.feedback,
       receipts: this.receipts,
       candidates: this.candidates,
@@ -267,20 +297,25 @@ export class FinitePlanKernel {
       correctionConfirmation: this.correctionConfirmation,
       pendingPreferenceChange: this.pendingPreferenceChange,
       preferenceConfirmation: this.preferenceConfirmation,
+      pendingLifecycleChange: this.pendingLifecycleChange,
+      lifecycleConfirmation: this.lifecycleConfirmation,
       optionIdempotency: this.optionIdempotency,
       correctionIdempotency: this.correctionIdempotency,
       preferenceIdempotency: this.preferenceIdempotency,
+      lifecycleIdempotency: this.lifecycleIdempotency,
     });
   }
 
   private restoreCheckpoint(checkpoint: KernelCheckpoint): void {
     this.revision = checkpoint.revision;
+    this.lifecycleStatus = checkpoint.lifecycleStatus;
     this.accepted = clone(checkpoint.accepted);
     this.preferenceWeights = clone(checkpoint.preferenceWeights);
     this.entities = clone(checkpoint.entities);
     this.events.splice(0, this.events.length, ...clone(checkpoint.events));
     this.correctionEvents.splice(0, this.correctionEvents.length, ...clone(checkpoint.correctionEvents));
     this.preferenceEvents.splice(0, this.preferenceEvents.length, ...clone(checkpoint.preferenceEvents));
+    this.lifecycleEvents.splice(0, this.lifecycleEvents.length, ...clone(checkpoint.lifecycleEvents));
     this.feedback.splice(0, this.feedback.length, ...clone(checkpoint.feedback));
     this.receipts.splice(0, this.receipts.length, ...clone(checkpoint.receipts));
     this.candidates.clear();
@@ -292,12 +327,16 @@ export class FinitePlanKernel {
     this.correctionConfirmation = clone(checkpoint.correctionConfirmation);
     this.pendingPreferenceChange = clone(checkpoint.pendingPreferenceChange);
     this.preferenceConfirmation = clone(checkpoint.preferenceConfirmation);
+    this.pendingLifecycleChange = clone(checkpoint.pendingLifecycleChange);
+    this.lifecycleConfirmation = clone(checkpoint.lifecycleConfirmation);
     this.optionIdempotency.clear();
     for (const [key, receipt] of checkpoint.optionIdempotency) this.optionIdempotency.set(key, clone(receipt));
     this.correctionIdempotency.clear();
     for (const [key, receipt] of checkpoint.correctionIdempotency) this.correctionIdempotency.set(key, clone(receipt));
     this.preferenceIdempotency.clear();
     for (const [key, receipt] of checkpoint.preferenceIdempotency) this.preferenceIdempotency.set(key, clone(receipt));
+    this.lifecycleIdempotency.clear();
+    for (const [key, receipt] of checkpoint.lifecycleIdempotency) this.lifecycleIdempotency.set(key, clone(receipt));
   }
 
   private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null): Promise<ToolResult | null> {
@@ -385,12 +424,13 @@ export class FinitePlanKernel {
       revision: this.revision,
       operator: "Codex",
       consumer: "human",
-      selectors: ["identity", "allocations", "actuals", "constraints", "entities", "preferences", "pending", "lineage"] satisfies StateSelector[],
+      selectors: ["identity", "lifecycle", "allocations", "actuals", "constraints", "entities", "preferences", "pending", "lineage"] satisfies StateSelector[],
       mutationClasses: ["read", "simulation", "staged_write", "human_confirmation", "consequential_write", "export"],
       contextualCapabilities: clone(this.profile.contextualCapabilities),
       optionSearch: { strategy: "bounded_legal_move_enumeration", ...clone(this.profile.searchPolicy) },
       evidenceAdmission: { trustAssigned: "untrusted_external", contentExecuted: false, deduplication: "sha256_content", recordBinding: "sha256_provenance", acceptedPersistence: "referenced_evidence_only" },
       decisionLifecycle: ["record_change", "search_or_simulate", "stage", "human_approval", "apply", "receipt"],
+      planLifecycle: { status: this.lifecycleStatus, transitions: ["active", "paused", "completed", "abandoned"], humanConfirmationRequired: true },
       currentDecision: this.decisionState(),
       humanAuthorityActionsExposed: false,
       approvalLaw: "Only the human surface creates approval or confirmation identifiers bound to exact staged content and revision.",
@@ -402,13 +442,14 @@ export class FinitePlanKernel {
     const unique = [...new Set(selectors)];
     const state: Record<string, unknown> = {};
     if (unique.includes("identity")) state.identity = { planId: this.profile.planId, name: this.profile.name, profileId: this.profile.profileId, profileHash: this.profile.profileHash, revision: this.revision };
+    if (unique.includes("lifecycle")) state.lifecycle = { status: this.lifecycleStatus, history: clone(this.lifecycleEvents), pending: clone(this.pendingLifecycleChange) };
     if (unique.includes("allocations")) state.allocations = clone(this.accepted);
     if (unique.includes("actuals")) state.actuals = this.currentActuals();
     if (unique.includes("constraints")) state.constraints = { locks: clone(this.profile.locks), relationships: clone(this.profile.relationships) };
     if (unique.includes("entities")) state.entities = clone(this.entities);
     if (unique.includes("preferences")) state.preferences = { labels: clone(this.profile.preferenceLabels), weights: clone(this.preferenceWeights) };
-    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, next: this.decisionNext() };
-    if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
+    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, lifecycleChangeId: this.pendingLifecycleChange?.lifecycleChangeId ?? null, next: this.decisionNext() };
+    if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), lifecycleEvents: clone(this.lifecycleEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
     return { ok: true, code: "PLAN_STATE", selectors: unique, state, acceptedStateChanged: false };
   }
 
@@ -513,6 +554,7 @@ export class FinitePlanKernel {
   }
 
   recordChangeEvent(input: ChangeEventInput): ToolResult {
+    if (this.lifecycleStatus !== "active") return { ok: false, code: "PLAN_NOT_ACTIVE", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false, next: "Ask the human whether to reopen the plan, then stage that lifecycle change for confirmation." };
     if (input.expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false, next: "Read identity state and retry against its revision." };
     const invalidNumbers = [input.costDeltaMinor, input.daysDelta ?? 0, input.minimumBufferMinor].filter((value) => !Number.isInteger(value));
     if (typeof input.type !== "string" || typeof input.title !== "string" || !input.type.trim() || !input.title.trim() || invalidNumbers.length || input.minimumBufferMinor < 0) return { ok: false, code: "INVALID_CHANGE_EVENT", acceptedStateChanged: false, next: "Supply a type, title, integer money/day deltas, and a non-negative minimum buffer." };
@@ -942,6 +984,48 @@ export class FinitePlanKernel {
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
+  async stagePlanLifecycle({ status, reason, expectedRevision }: { status: PlanLifecycleStatus; reason: string; expectedRevision: number }): Promise<ToolResult> {
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    if (!["active", "paused", "completed", "abandoned"].includes(status) || typeof reason !== "string" || !reason.trim() || reason.length > 1000) return { ok: false, code: "INVALID_PLAN_LIFECYCLE_CHANGE", acceptedStateChanged: false };
+    if (status === this.lifecycleStatus) return { ok: false, code: "PLAN_LIFECYCLE_UNCHANGED", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false };
+    const base = { lifecycleChangeId: makeId("lifecycle_change"), baseRevision: this.revision, before: this.lifecycleStatus, after: status, reason: reason.trim() };
+    this.pendingLifecycleChange = { ...base, contentHash: await sha256(base) };
+    this.lifecycleConfirmation = null;
+    return { ok: true, code: "PLAN_LIFECYCLE_STAGED", lifecycleChange: clone(this.pendingLifecycleChange), acceptedStateChanged: false };
+  }
+
+  humanConfirmPlanLifecycle({ lifecycleChangeId }: { lifecycleChangeId: string }): ToolResult {
+    if (!this.pendingLifecycleChange || this.pendingLifecycleChange.lifecycleChangeId !== lifecycleChangeId) return { ok: false, code: "PLAN_LIFECYCLE_NOT_STAGED", acceptedStateChanged: false };
+    this.lifecycleConfirmation = { confirmationId: makeId("lifecycle_confirmation"), targetId: lifecycleChangeId, revision: this.revision, contentHash: this.pendingLifecycleChange.contentHash, source: "human_action" };
+    return { ok: true, code: "HUMAN_PLAN_LIFECYCLE_CONFIRMED", confirmation: clone(this.lifecycleConfirmation), acceptedStateChanged: false };
+  }
+
+  async applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision, idempotencyKey }: { lifecycleChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+    const replay = this.lifecycleIdempotency.get(idempotencyKey);
+    if (replay) {
+      const event = replay.payload.lifecycleEvent as Partial<PlanLifecycleEvent> | undefined;
+      const matches = event?.lifecycleChangeId === lifecycleChangeId && event.confirmationId === confirmationId && replay.fromRevision === expectedRevision;
+      return matches ? { ok: true, code: "IDEMPOTENT_REPLAY", replay: true, receipt: clone(replay), acceptedStateChanged: false } : { ok: false, code: "IDEMPOTENCY_KEY_REUSED", acceptedStateChanged: false };
+    }
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const pending = this.pendingLifecycleChange;
+    const confirmation = this.lifecycleConfirmation;
+    if (!pending || pending.lifecycleChangeId !== lifecycleChangeId) return { ok: false, code: "PLAN_LIFECYCLE_NOT_STAGED", acceptedStateChanged: false };
+    if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
+    const fromRevision = this.revision;
+    this.lifecycleStatus = pending.after;
+    this.revision += 1;
+    const event: PlanLifecycleEvent = { eventType: "plan_lifecycle", lifecycleChangeId, before: pending.before, after: pending.after, reason: pending.reason, contentHash: pending.contentHash, confirmationId, fromRevision, toRevision: this.revision };
+    this.lifecycleEvents.push(event);
+    const receipt = await this.makeReceipt("plan_lifecycle", fromRevision, idempotencyKey, { lifecycleEvent: event, lifecycle: { status: this.lifecycleStatus } });
+    this.lifecycleIdempotency.set(idempotencyKey, receipt);
+    this.clearPending();
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_lifecycle", receipt);
+    if (storageFailure) return storageFailure;
+    return { ok: true, code: "PLAN_LIFECYCLE_APPLIED", lifecycle: { status: this.lifecycleStatus }, receipt: clone(receipt), acceptedStateChanged: true };
+  }
+
   async stageActualCorrection({ actualId, correctedAmountMinor, reason, evidenceRef, expectedRevision }: { actualId: string; correctedAmountMinor: number; reason: string; evidenceRef: string; expectedRevision: number }): Promise<ToolResult> {
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     const actual = this.currentActuals().find((item) => item.actualId === actualId);
@@ -1035,5 +1119,7 @@ export class FinitePlanKernel {
     this.correctionConfirmation = null;
     this.pendingPreferenceChange = null;
     this.preferenceConfirmation = null;
+    this.pendingLifecycleChange = null;
+    this.lifecycleConfirmation = null;
   }
 }

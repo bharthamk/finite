@@ -411,6 +411,21 @@ const reviewInterpretation = async (db: D1Database, scopeId: string, order: Arri
   }, "ARRIVAL_INTERPRETATION_REVIEWED");
 };
 
+const acceptPlan = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const expectedChecksum = String(body.expectedChecksum ?? "");
+  const planId = String(body.planId ?? "");
+  const profileHash = String(body.profileHash ?? "");
+  const planRevision = Number(body.planRevision);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1 || !/^[a-f0-9]{64}$/.test(expectedChecksum)) return errorResponse(422, "ARRIVAL_PLAN_BINDING_INVALID", "An exact arrival version and checksum are required.");
+  if (!/^[a-z0-9][a-z0-9_-]{2,100}$/.test(planId) || !/^[a-f0-9]{64}$/.test(profileHash) || !Number.isInteger(planRevision) || planRevision < 1) return errorResponse(422, "ARRIVAL_PLAN_BINDING_INVALID", "The accepted plan binding is invalid.");
+  if (order.version !== expectedVersion || order.checksum !== expectedChecksum) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The arrival changed before its plan binding was recorded.", currentVersion: order.version, currentChecksum: order.checksum }, 409);
+  if (order.status !== "interpretation_confirmed" || !order.interpretation?.complete) return openedResponse(db, scopeId, order, "ARRIVAL_NOT_ACCEPTABLE", undefined, { ok: false, message: "Only a reviewed complete interpretation can be bound to an activated plan." }, 409);
+  return mutateOrder(db, scopeId, order, expectedVersion, { status: "accepted", lastOperatorCheckpoint: expectedVersion + 1 }, {
+    eventType: "plan_activated", actor: "codex", sourceSurface: "codex", payload: { planId, profileHash, planRevision },
+  }, "ARRIVAL_PLAN_ACCEPTED");
+};
+
 const listOrders = async (db: D1Database, scopeId: string): Promise<Response> => {
   const placeholders = activeStatuses.map(() => "?").join(", ");
   const { results } = await db.prepare(`SELECT order_id, version, status, raw_outcome, updated_at, packet_checksum FROM arrival_orders WHERE scope_id = ? AND status IN (${placeholders}) ORDER BY updated_at DESC LIMIT 50`)
@@ -451,6 +466,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);
     if (operation === "reconcile") return reconcileArrival(db, scopeId, order, body);
     if (operation === "review") return reviewInterpretation(db, scopeId, order, body);
+    if (operation === "accept") return acceptPlan(db, scopeId, order, body);
     return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
   } catch (error) {
     const code = error instanceof Error ? error.message : "ARRIVAL_SERVICE_FAILED";

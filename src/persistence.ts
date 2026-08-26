@@ -142,12 +142,14 @@ const isPlanSnapshot = (value: unknown): value is PlanSnapshot => {
     && typeof value.profileHash === "string"
     && typeof value.planId === "string"
     && Number.isInteger(value.revision)
+    && (value.lifecycle === undefined || (isRecord(value.lifecycle) && ["active", "paused", "completed", "abandoned"].includes(String(value.lifecycle.status))))
     && isRecord(value.accepted)
     && isRecord(value.preferenceWeights)
     && isRecord(value.entities)
     && Array.isArray(value.events)
     && Array.isArray(value.correctionEvents)
     && Array.isArray(value.preferenceEvents)
+    && (value.lifecycleEvents === undefined || Array.isArray(value.lifecycleEvents))
     && Array.isArray(value.feedback)
     && (value.evidenceRecords === undefined || Array.isArray(value.evidenceRecords))
     && Array.isArray(value.receipts);
