@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "operator-context-v51",
+  build: "semantic-recovery-v52",
 } as const;

@@ -13,12 +13,14 @@ export class ConstructionPacketRepositoryError extends Error {
 }
 
 export interface ConstructionPacketRepository {
-  load(): Promise<PlanConstructionPacket | null>;
-  loadReturned(): Promise<ReturnedConstructionReview | null>;
-  save(packet: PlanConstructionPacket): Promise<PlanConstructionPacket>;
-  returnForRevision(packetId: string, feedback: { reasonCode: ConstructionReturnReason; message: string }): Promise<ReturnedConstructionReview>;
-  clear(packetId: string): Promise<void>;
+  load(context?: RepositoryRequestContext): Promise<PlanConstructionPacket | null>;
+  loadReturned(context?: RepositoryRequestContext): Promise<ReturnedConstructionReview | null>;
+  save(packet: PlanConstructionPacket, context?: RepositoryRequestContext): Promise<PlanConstructionPacket>;
+  returnForRevision(packetId: string, feedback: { reasonCode: ConstructionReturnReason; message: string }, context?: RepositoryRequestContext): Promise<ReturnedConstructionReview>;
+  clear(packetId: string, context?: RepositoryRequestContext): Promise<void>;
 }
+
+export type RepositoryRequestContext = { signal?: AbortSignal };
 
 const decodeJson = async <T>(response: Response): Promise<T> => {
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -33,44 +35,47 @@ const decodeJson = async <T>(response: Response): Promise<T> => {
 export class HttpConstructionPacketRepository implements ConstructionPacketRepository {
   constructor(private readonly baseUrl = "/api/construction-packet") {}
 
-  async load(): Promise<PlanConstructionPacket | null> {
-    const response = await fetch(this.baseUrl, { headers: { accept: "application/json" } });
+  async load(context: RepositoryRequestContext = {}): Promise<PlanConstructionPacket | null> {
+    const response = await fetch(this.baseUrl, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     if (response.status === 404) return null;
     const payload = await decodeJson<{ ok: true; packet: PlanConstructionPacket }>(response);
     return clone(payload.packet);
   }
 
-  async save(packet: PlanConstructionPacket): Promise<PlanConstructionPacket> {
+  async save(packet: PlanConstructionPacket, context: RepositoryRequestContext = {}): Promise<PlanConstructionPacket> {
     const response = await fetch(this.baseUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ packet }),
+      ...(context.signal ? { signal: context.signal } : {}),
     });
     const payload = await decodeJson<{ ok: true; packet: PlanConstructionPacket }>(response);
     return clone(payload.packet);
   }
 
-  async loadReturned(): Promise<ReturnedConstructionReview | null> {
-    const response = await fetch(`${this.baseUrl}/returned`, { headers: { accept: "application/json" } });
+  async loadReturned(context: RepositoryRequestContext = {}): Promise<ReturnedConstructionReview | null> {
+    const response = await fetch(`${this.baseUrl}/returned`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     if (response.status === 404) return null;
     const payload = await decodeJson<{ ok: true; review: ReturnedConstructionReview }>(response);
     return clone(payload.review);
   }
 
-  async returnForRevision(packetId: string, feedback: { reasonCode: ConstructionReturnReason; message: string }): Promise<ReturnedConstructionReview> {
+  async returnForRevision(packetId: string, feedback: { reasonCode: ConstructionReturnReason; message: string }, context: RepositoryRequestContext = {}): Promise<ReturnedConstructionReview> {
     const response = await fetch(`${this.baseUrl}/${encodeURIComponent(packetId)}/return`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(feedback),
+      ...(context.signal ? { signal: context.signal } : {}),
     });
     const payload = await decodeJson<{ ok: true; review: ReturnedConstructionReview }>(response);
     return clone(payload.review);
   }
 
-  async clear(packetId: string): Promise<void> {
+  async clear(packetId: string, context: RepositoryRequestContext = {}): Promise<void> {
     await decodeJson(await fetch(`${this.baseUrl}/${encodeURIComponent(packetId)}`, {
       method: "DELETE",
       headers: { accept: "application/json" },
+      ...(context.signal ? { signal: context.signal } : {}),
     }));
   }
 }
@@ -79,6 +84,8 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
   private packet: PlanConstructionPacket | null = null;
   private tombstone: { packetId: string; clearedAt: string } | null = null;
   private returned: ReturnedConstructionReview | null = null;
+
+  constructor(private readonly now: () => Date = () => new Date()) {}
 
   async load(): Promise<PlanConstructionPacket | null> {
     if (this.tombstone) throw new ConstructionPacketRepositoryError("CONSTRUCTION_PACKET_CLEARED", "The last construction packet was discarded.", this.tombstone);
@@ -93,7 +100,7 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
     if (this.tombstone && (this.tombstone.packetId === packet.packetId || Date.parse(packet.createdAt) <= Date.parse(this.tombstone.clearedAt))) throw new ConstructionPacketRepositoryError("CONSTRUCTION_PACKET_TOMBSTONED", "A discarded construction packet cannot be restored by a stale surface.", this.tombstone);
     if (this.returned && this.returned.status !== "resolved" && packet.kind === "draft") {
       if (this.returned.packet.kind === "draft" && this.returned.packet.payload.contentHash === packet.payload.contentHash) throw new ConstructionPacketRepositoryError("CONSTRUCTION_RETURN_UNCHANGED", "A returned draft must be materially revised before it can be served again.");
-      const resolvedAt = new Date().toISOString();
+      const resolvedAt = this.now().toISOString();
       this.returned = { ...this.returned, status: "resolved", feedbackRequired: false, resolvedByPacketId: packet.packetId, resolvedAt };
     }
     this.packet = clone(packet);
@@ -104,7 +111,7 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
   async returnForRevision(packetId: string, feedback: { reasonCode: ConstructionReturnReason; message: string }): Promise<ReturnedConstructionReview> {
     if (this.returned?.packetId === packetId) return clone(this.returned);
     if (!this.packet || this.packet.packetId !== packetId || this.packet.kind !== "draft") throw new ConstructionPacketRepositoryError("CONSTRUCTION_DRAFT_NOT_RETURNABLE", "The exact draft packet is not available for return.");
-    const returnedAt = new Date().toISOString();
+    const returnedAt = this.now().toISOString();
     this.returned = {
       status: "returned",
       packet: clone(this.packet),
@@ -124,7 +131,7 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
   async clear(packetId: string): Promise<void> {
     if (this.tombstone?.packetId === packetId) { this.returned = null; return; }
     if (!this.packet || this.packet.packetId !== packetId) throw new ConstructionPacketRepositoryError("CONSTRUCTION_PACKET_NOT_FOUND", "Construction packet was not found.");
-    this.tombstone = { packetId, clearedAt: new Date().toISOString() };
+    this.tombstone = { packetId, clearedAt: this.now().toISOString() };
     this.packet = null;
     this.returned = null;
   }

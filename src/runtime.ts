@@ -42,6 +42,7 @@ const evidenceIntegrity = async (evidence: EvidenceRecord): Promise<boolean> => 
 };
 
 const constructionTtlMs = 7 * 24 * 60 * 60 * 1000;
+type RuntimeRequestContext = { signal?: AbortSignal };
 
 const constructionPacketContent = (packet: PlanConstructionPacket): Omit<PlanConstructionPacket, "packetId" | "checksum"> => {
   const { packetId: _packetId, checksum: _checksum, ...content } = packet;
@@ -81,41 +82,42 @@ export class FinitePlanRuntime {
     return this.activationReceipts.size > 0;
   }
 
-  async hydrateAcceptedTruth(): Promise<ToolResult> {
-    return this.kernel.hydrateAcceptedTruth();
+  async hydrateAcceptedTruth(context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    return this.kernel.hydrateAcceptedTruth(undefined, context);
   }
 
-  async hydrateConstructionPacket(): Promise<ToolResult> {
+  async hydrateConstructionPacket(context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.constructionRepository) return { ok: true, code: "CONSTRUCTION_PACKET_LOCAL_ONLY", acceptedStateChanged: false };
     try {
-      const remote = await this.constructionRepository.load();
+      const remote = await this.constructionRepository.load(context);
       if (remote) {
         this.returnedConstructionReview = null;
         try { this.catalogStore?.saveConstructionPacket(remote); } catch { /* remote packet remains authoritative */ }
-        await this.hydrateReturnedConstructionReview(false);
+        await this.hydrateReturnedConstructionReview(false, context);
         return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_HYDRATED", packet: this.constructionPacketSummary(remote), acceptedStateChanged: false };
       }
       const local = this.catalogStore?.loadConstructionPacket() ?? null;
-      if (!local) return this.hydrateReturnedConstructionReview();
-      const adopted = await this.constructionRepository.save(local);
+      if (!local) return this.hydrateReturnedConstructionReview(true, context);
+      const adopted = await this.constructionRepository.save(local, context);
       this.returnedConstructionReview = null;
       try { this.catalogStore?.saveConstructionPacket(adopted); } catch { /* remote packet remains authoritative */ }
-      await this.hydrateReturnedConstructionReview(false);
+      await this.hydrateReturnedConstructionReview(false, context);
       return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_ADOPTED", packet: this.constructionPacketSummary(adopted), acceptedStateChanged: false };
     } catch (error) {
       const code = error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_PACKET_REMOTE_HYDRATION_FAILED";
       if (["CONSTRUCTION_ARRIVAL_BINDING_REQUIRED", "CONSTRUCTION_ARRIVAL_STALE", "CONSTRUCTION_PACKET_BASE_STALE", "CONSTRUCTION_PACKET_INTEGRITY_FAILED", "CONSTRUCTION_PACKET_CLEARED", "CONSTRUCTION_PACKET_TOMBSTONED"].includes(code)) {
         try { this.catalogStore?.clearConstructionPacket(); } catch { /* local stale cache remains non-authoritative */ }
       }
-      if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") return this.hydrateReturnedConstructionReview();
+      if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+      if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") return this.hydrateReturnedConstructionReview(true, context);
       return { ok: false, code, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "Do not expose local construction as current until the authenticated server packet is reconciled." };
     }
   }
 
-  private async hydrateReturnedConstructionReview(activate = true): Promise<ToolResult> {
+  private async hydrateReturnedConstructionReview(activate = true, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.constructionRepository) return { ok: true, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
     try {
-      const review = await this.constructionRepository.loadReturned();
+      const review = await this.constructionRepository.loadReturned(context);
       this.lastConstructionReturnReview = review ? clone(review) : null;
       this.returnedConstructionReview = review && activate && review.status !== "resolved" ? clone(review) : null;
       if (!review) return { ok: true, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
@@ -126,47 +128,48 @@ export class FinitePlanRuntime {
         acceptedStateChanged: false,
       };
     } catch (error) {
+      if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
       this.returnedConstructionReview = null;
       this.lastConstructionReturnReview = null;
       return { ok: false, code: error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_RETURN_READ_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
     }
   }
 
-  async saveOperatorSession({ idempotencyKey, kind, payload, ttlSeconds }: { idempotencyKey: string; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<ToolResult> {
+  async saveOperatorSession({ idempotencyKey, kind, payload, ttlSeconds }: { idempotencyKey: string; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository?.saveOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
     if (!idempotencyKey || !payload || typeof payload !== "object" || JSON.stringify(payload).length > 30_000) return { ok: false, code: "OPERATOR_SESSION_INPUT_INVALID", acceptedStateChanged: false };
     try {
-      const session = await this.acceptedRepository.saveOperatorSession({ idempotencyKey, planId: this.kernel.profile.planId, profileHash: this.kernel.profile.profileHash, baseRevision: this.kernel.revision, kind, payload: clone(payload), ...(ttlSeconds === undefined ? {} : { ttlSeconds }) });
+      const session = await this.acceptedRepository.saveOperatorSession({ idempotencyKey, planId: this.kernel.profile.planId, profileHash: this.kernel.profile.profileHash, baseRevision: this.kernel.revision, kind, payload: clone(payload), ...(ttlSeconds === undefined ? {} : { ttlSeconds }) }, context);
       return { ok: true, code: "OPERATOR_SESSION_SAVED", session, acceptedStateChanged: false, next: "Another authenticated device may resume this non-authoritative packet; accepted truth and human authority are unchanged." };
-    } catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_SAVE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    } catch (error) { if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error; return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_SAVE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
-  async listOperatorSessions(): Promise<ToolResult> {
+  async listOperatorSessions(context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository?.listOperatorSessions) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
     try {
-      const sessions = await this.acceptedRepository.listOperatorSessions();
+      const sessions = await this.acceptedRepository.listOperatorSessions(context);
       return { ok: true, code: "OPERATOR_SESSIONS", sessions: sessions.map((session) => ({ ...session, baseCurrent: session.planId === this.kernel.profile.planId && session.profileHash === this.kernel.profile.profileHash && session.baseRevision === this.kernel.revision })), acceptedStateChanged: false };
-    } catch (error) { return { ok: false, code: "OPERATOR_SESSION_LIST_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    } catch (error) { if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error; return { ok: false, code: "OPERATOR_SESSION_LIST_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
-  async resumeOperatorSession({ sessionId }: { sessionId: string }): Promise<ToolResult> {
+  async resumeOperatorSession({ sessionId }: { sessionId: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository?.loadOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
     try {
-      const session = await this.acceptedRepository.loadOperatorSession(sessionId);
+      const session = await this.acceptedRepository.loadOperatorSession(sessionId, context);
       if (session.planId !== this.kernel.profile.planId || session.profileHash !== this.kernel.profile.profileHash || session.baseRevision !== this.kernel.revision) return { ok: false, code: "OPERATOR_SESSION_BASE_STALE", session, activePlanId: this.kernel.profile.planId, activeProfileHash: this.kernel.profile.profileHash, activeRevision: this.kernel.revision, acceptedStateChanged: false, next: "Do not replay this packet. Reconcile it against current accepted truth and save a replacement session." };
       const restoredWork = session.kind === "decision_work" ? await this.kernel.restoreDecisionWork(session.payload) : null;
       if (restoredWork && !restoredWork.ok) return { ...restoredWork, session, acceptedStateChanged: false };
       return { ok: true, code: restoredWork ? "OPERATOR_DECISION_SESSION_RESUMED" : "OPERATOR_SESSION_RESUMED", session, restoredWork, authorityRestored: false, acceptedStateChanged: false, next: restoredWork ? "Resume the exact unexpired human handoff challenge; it will be consumed with the accepted commit." : "Use the packet as non-authoritative context, rebuild deterministic work, and obtain fresh human authority for any consequential command." };
-    } catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_RESUME_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    } catch (error) { if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error; return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_RESUME_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
-  async closeOperatorSession({ sessionId }: { sessionId: string }): Promise<ToolResult> {
+  async closeOperatorSession({ sessionId }: { sessionId: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository?.closeOperatorSession) return { ok: false, code: "OPERATOR_SESSION_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
-    try { return { ok: true, code: "OPERATOR_SESSION_CLOSED", session: await this.acceptedRepository.closeOperatorSession(sessionId), acceptedStateChanged: false }; }
-    catch (error) { return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_CLOSE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    try { return { ok: true, code: "OPERATOR_SESSION_CLOSED", session: await this.acceptedRepository.closeOperatorSession(sessionId, context), acceptedStateChanged: false }; }
+    catch (error) { if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error; return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "OPERATOR_SESSION_CLOSE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
-  private async persistConstructionPacket(kind: PlanConstructionPacket["kind"], payload: PlanConstructionPacket["payload"]): Promise<PlanConstructionPacket | null> {
+  private async persistConstructionPacket(kind: PlanConstructionPacket["kind"], payload: PlanConstructionPacket["payload"], context: RuntimeRequestContext = {}): Promise<PlanConstructionPacket | null> {
     if (!this.catalogStore) return null;
     const createdAt = this.now();
     const content = {
@@ -181,9 +184,9 @@ export class FinitePlanRuntime {
     };
     const checksum = await sha256(content);
     const packet = { ...content, packetId: `construction_${checksum.slice(0, 16)}`, checksum } as PlanConstructionPacket;
-    const durable = this.constructionRepository ? await this.constructionRepository.save(packet) : packet;
+    const durable = this.constructionRepository ? await this.constructionRepository.save(packet, context) : packet;
     this.returnedConstructionReview = null;
-    if (this.constructionRepository) await this.hydrateReturnedConstructionReview(false);
+    if (this.constructionRepository) await this.hydrateReturnedConstructionReview(false, context);
     if (this.constructionRepository) {
       try { this.catalogStore.saveConstructionPacket(durable); } catch { /* authenticated server state remains authoritative */ }
     } else this.catalogStore.saveConstructionPacket(durable);
@@ -228,26 +231,27 @@ export class FinitePlanRuntime {
     };
   }
 
-  private async clearMatchingConstructionDraft(draftId: string): Promise<boolean> {
-    const verified = await this.readVerifiedConstructionPacket();
+  private async clearMatchingConstructionDraft(draftId: string, context: RuntimeRequestContext = {}): Promise<boolean> {
+    const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) return verified.code === "CONSTRUCTION_PACKET_NOT_FOUND";
     if (verified.kind !== "draft" || verified.payload.draftId !== draftId) return false;
-    if (this.constructionRepository) await this.constructionRepository.clear(verified.packetId);
+    if (this.constructionRepository) await this.constructionRepository.clear(verified.packetId, context);
     this.catalogStore?.clearConstructionPacket();
     return true;
   }
 
-  private async readVerifiedConstructionPacket(): Promise<PlanConstructionPacket | ToolResult> {
+  private async readVerifiedConstructionPacket(context: RuntimeRequestContext = {}): Promise<PlanConstructionPacket | ToolResult> {
     let packet: PlanConstructionPacket | null = null;
     if (this.constructionRepository) {
       try {
-        packet = await this.constructionRepository.load();
+        packet = await this.constructionRepository.load(context);
         if (packet) {
           try { this.catalogStore?.saveConstructionPacket(packet); } catch { /* remote packet remains authoritative */ }
         } else {
           try { this.catalogStore?.clearConstructionPacket(); } catch { /* stale cache is ignored below */ }
         }
       } catch (error) {
+        if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
         const code = error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_PACKET_REMOTE_READ_FAILED";
         if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") {
           try { this.catalogStore?.clearConstructionPacket(); } catch { /* remote tombstone remains authoritative */ }
@@ -265,11 +269,11 @@ export class FinitePlanRuntime {
     return packet;
   }
 
-  async getConstructionPacket(): Promise<ToolResult> {
-    const verified = await this.readVerifiedConstructionPacket();
+  async getConstructionPacket(context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) {
       if (verified.code === "CONSTRUCTION_PACKET_NOT_FOUND") {
-        if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview();
+        if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview(true, context);
         if (this.returnedConstructionReview) return { ok: true, code: this.returnedConstructionReview.feedbackRequired ? "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED" : "CONSTRUCTION_DRAFT_RETURNED", packet: this.returnedConstructionSummary(this.returnedConstructionReview), acceptedStateChanged: false };
       }
       return verified;
@@ -277,8 +281,8 @@ export class FinitePlanRuntime {
     return { ok: true, code: "CONSTRUCTION_PACKET", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
   }
 
-  async getReturnedPlanDraft(): Promise<ToolResult> {
-    if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview();
+  async getReturnedPlanDraft(context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview(true, context);
     const review = this.returnedConstructionReview;
     if (!review) return { ok: false, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
     if (review.feedbackRequired) return { ok: false, code: "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED", review: this.returnedConstructionSummary(review), acceptedStateChanged: false, next: "Wait for the human to explain what should change on the Site." };
@@ -301,8 +305,8 @@ export class FinitePlanRuntime {
     };
   }
 
-  async resumeConstructionPacket(): Promise<ToolResult> {
-    const verified = await this.readVerifiedConstructionPacket();
+  async resumeConstructionPacket(context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) return verified;
     const packet = verified;
     if (Date.parse(packet.expiresAt) <= this.now().getTime()) return { ok: false, code: "CONSTRUCTION_PACKET_EXPIRED", packet: this.constructionPacketSummary(packet), acceptedStateChanged: false, next: "Explicitly discard the expired packet and reassess the current human order." };
@@ -354,12 +358,12 @@ export class FinitePlanRuntime {
     return { ok: true, code: "CONSTRUCTION_DRAFT_RESUMED", packet: this.constructionPacketSummary(packet), draft: { draftId: packet.payload.draftId, profileHash: profile.profileHash, contentHash, amendment: clone(amendment) }, humanConfirmationRestored: false, acceptedStateChanged: false, next: "Show the exact restored hashes and diff to the human again; prior confirmation was never persisted." };
   }
 
-  async discardConstructionPacket({ packetId }: { packetId: string }): Promise<ToolResult> {
-    const verified = await this.readVerifiedConstructionPacket();
+  async discardConstructionPacket({ packetId }: { packetId: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) {
       if (this.returnedConstructionReview?.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
       try {
-        if (this.constructionRepository) await this.constructionRepository.clear(packetId);
+        if (this.constructionRepository) await this.constructionRepository.clear(packetId, context);
         this.catalogStore?.clearConstructionPacket();
         this.returnedConstructionReview = null;
         return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Begin again from the current reviewed human order." };
@@ -368,7 +372,7 @@ export class FinitePlanRuntime {
     if (verified.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
     const packet = verified;
     try {
-      if (this.constructionRepository) await this.constructionRepository.clear(packetId);
+      if (this.constructionRepository) await this.constructionRepository.clear(packetId, context);
       this.catalogStore?.clearConstructionPacket();
       this.returnedConstructionReview = null;
     }
@@ -381,14 +385,14 @@ export class FinitePlanRuntime {
     return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Read the current plan before beginning replacement construction work." };
   }
 
-  async openKitchen(): Promise<ToolResult> {
+  async openKitchen(context: RuntimeRequestContext = {}): Promise<ToolResult> {
     const selectors = ["identity", "lifecycle", "allocations", "actuals", "constraints", "entities", "preferences", "pending"] as const;
     const stateResult = this.kernel.getState([...selectors]);
     const state = stateResult.state as Record<string, unknown>;
     const pending = state.pending as Record<string, unknown>;
     const catalog = this.listPlans();
     const movable = this.kernel.getMovableSet();
-    const construction = await this.getConstructionPacket();
+    const construction = await this.getConstructionPacket(context);
     const activeEvent = this.kernel.events.find((event) => event.eventId === this.kernel.activeEventId) ?? null;
 
     let route: KitchenRoute;
@@ -671,7 +675,7 @@ export class FinitePlanRuntime {
     return result;
   }
 
-  async assessPlanIntake(input: unknown): Promise<ToolResult> {
+  async assessPlanIntake(input: unknown, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     const result = this.assessPlanIntakeFacts(input);
     const normalizedFacts = result.normalizedFacts;
     if (!normalizedFacts || typeof normalizedFacts !== "object") return result;
@@ -679,7 +683,7 @@ export class FinitePlanRuntime {
       const facts = normalizedFacts as PlanIntakeInput;
       const evidenceRefs = [...new Set((facts.actuals ?? []).map((actual) => actual.evidenceRef))];
       const evidenceRecords = evidenceRefs.map((evidenceId) => this.kernel.evidence.get(evidenceId)).filter((evidence): evidence is EvidenceRecord => Boolean(evidence)).map(clone);
-      const packet = await this.persistConstructionPacket("intake", { facts, assessmentCode: result.code, evidenceRecords });
+      const packet = await this.persistConstructionPacket("intake", { facts, assessmentCode: result.code, evidenceRecords }, context);
       this.pendingPlanDraft = null;
       this.planActivationConfirmation = null;
       return packet ? {
@@ -696,12 +700,13 @@ export class FinitePlanRuntime {
         } : {}),
       } : result;
     } catch (error) {
+      if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
       return { ...result, durability: { ok: false, code: "CONSTRUCTION_PACKET_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error) }, next: "The assessment is usable in this session but was not saved. Repair storage before relying on reload continuity." };
     }
   }
 
-  async compileIntakeToDraft({ packetId, expectedChecksum }: { packetId: string; expectedChecksum: string }): Promise<ToolResult> {
-    const verified = await this.readVerifiedConstructionPacket();
+  async compileIntakeToDraft({ packetId, expectedChecksum }: { packetId: string; expectedChecksum: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) return verified;
     if (verified.packetId !== packetId || verified.checksum !== expectedChecksum) return { ok: false, code: "CONSTRUCTION_PACKET_GUARD_MISMATCH", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false, next: "Re-open the exact construction packet; do not compile stale or guessed intake." };
     if (verified.kind !== "intake") return { ok: false, code: "CONSTRUCTION_INTAKE_REQUIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
@@ -758,7 +763,7 @@ export class FinitePlanRuntime {
         assumptions: clone((assessment.constructionAssumptions ?? []) as NonNullable<ProfileDefinition["surface"]["assumptions"]>),
       },
     };
-    const staged = await this.compileDraft(profile, null, facts.sourceArrival ?? null);
+    const staged = await this.compileDraft(profile, null, facts.sourceArrival ?? null, context);
     return staged.ok ? {
       ...staged,
       code: "PLAN_DRAFT_STAGED_FROM_INTAKE",
@@ -849,7 +854,7 @@ export class FinitePlanRuntime {
     };
   }
 
-  private async compileDraft(input: unknown, amendment: PlanAmendmentBinding | null, sourceArrival: ArrivalSourceBinding | null = null): Promise<ToolResult> {
+  private async compileDraft(input: unknown, amendment: PlanAmendmentBinding | null, sourceArrival: ArrivalSourceBinding | null = null, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     let profile: CompiledProfile;
     try {
       profile = await compileProfile(input);
@@ -901,8 +906,9 @@ export class FinitePlanRuntime {
         evidenceRecords: clone(draft.evidenceRecords),
         amendment: clone(draft.amendment),
         sourceArrival: clone(draft.sourceArrival),
-      });
+      }, context);
     } catch (error) {
+      if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
       this.pendingPlanDraft = null;
       return { ok: false, code: "CONSTRUCTION_PACKET_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The plan was not staged because its non-authoritative work packet could not be made reload-safe." };
     }
@@ -924,11 +930,11 @@ export class FinitePlanRuntime {
     };
   }
 
-  async stagePlanDraft(input: unknown): Promise<ToolResult> {
-    return this.compileDraft(input, null);
+  async stagePlanDraft(input: unknown, context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    return this.compileDraft(input, null, null, context);
   }
 
-  async stagePlanAmendment({ profile: input, supersedesPlanId, expectedRevision }: { profile: unknown; supersedesPlanId: string; expectedRevision: number }): Promise<ToolResult> {
+  async stagePlanAmendment({ profile: input, supersedesPlanId, expectedRevision }: { profile: unknown; supersedesPlanId: string; expectedRevision: number }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     if (supersedesPlanId !== this.kernel.profile.planId || expectedRevision !== this.kernel.revision) return { ok: false, code: "AMENDMENT_BASE_STALE", activePlanId: this.kernel.profile.planId, activeRevision: this.kernel.revision, acceptedStateChanged: false };
     const successor = [...this.plans.values()].find((entry) => entry.lineage?.supersedesPlanId === supersedesPlanId);
     if (successor) return { ok: false, code: "PLAN_VERSION_SUPERSEDED", planId: supersedesPlanId, supersededBy: successor.profile.planId, acceptedStateChanged: false };
@@ -938,7 +944,7 @@ export class FinitePlanRuntime {
     if (this.plans.has(profile.planId)) return { ok: false, code: "PLAN_ID_ALREADY_EXISTS", planId: profile.planId, acceptedStateChanged: false };
     const amendment = await this.amendmentBinding(profile);
     if ("ok" in amendment) return amendment;
-    return this.compileDraft(profileDefinition(profile), amendment);
+    return this.compileDraft(profileDefinition(profile), amendment, null, context);
   }
 
   humanConfirmPlanDraft({ draftId }: { draftId: string }): ToolResult {
@@ -1004,7 +1010,7 @@ export class FinitePlanRuntime {
     expectedPlanId: string;
     expectedRevision: number;
     idempotencyKey: string;
-  }): Promise<ToolResult> {
+  }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     const replay = this.activationReceipts.get(idempotencyKey);
     if (replay) {
       const { receiptId: _receiptId, replayChecksum, ...receiptBase } = replay;
@@ -1046,7 +1052,7 @@ export class FinitePlanRuntime {
       diffHash: draft.amendment?.diffHash ?? null,
       activationReceiptId: receipt.receiptId,
     };
-    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt);
+    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt, context);
     if (!remoteInitialization.ok) return {
       ok: false,
       code: "PLAN_ACTIVATION_DURABLE_TRUTH_FAILED",
@@ -1074,7 +1080,7 @@ export class FinitePlanRuntime {
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
     let constructionPacketCleared = true;
-    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId); } catch { constructionPacketCleared = false; }
+    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId, context); } catch { constructionPacketCleared = false; }
     return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), constructionPacketCleared, acceptedStateChanged: true, next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another." };
   }
 

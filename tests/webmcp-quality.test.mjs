@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
+import { MemoryConstructionPacketRepository } from "../dist-test/src/construction-packet.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
@@ -79,12 +81,21 @@ test("production WebMCP responses are bounded, content-addressed, and recoverabl
   assert.equal(entered.nextAction.stage, "menu_ready");
   assert.match(entered.detail.resultRef, /^[a-f0-9]{64}$/);
   assert(entered.detail.totalCharacters > WEBMCP_OUTPUT_CHARACTER_BUDGET);
-  const firstPage = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef });
-  assert.equal(firstPage.code, "RESULT_DETAIL_PAGE");
-  assert(JSON.stringify(firstPage).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
-  assert.equal(firstPage.cursor, 0);
-  assert.equal(typeof firstPage.nextCursor, "number");
-  assert.match(firstPage.chunkHash, /^[a-f0-9]{64}$/);
+  assert.equal(entered.detail.format, "semantic_paths");
+  const manifest = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef });
+  assert.equal(manifest.code, "RESULT_DETAIL_MANIFEST");
+  assert.equal(manifest.fullHash, entered.detail.fullHash);
+  assert(JSON.stringify(manifest).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
+  assert(manifest.availablePaths.includes("/operatorPacket/nextAction"));
+  const selected = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef, paths: ["/operatorPacket/nextAction"] });
+  assert.equal(selected.code, "RESULT_DETAIL_SELECTED");
+  assert.equal(selected.fullHash, entered.detail.fullHash);
+  assert.equal(selected.values[0].path, "/operatorPacket/nextAction");
+  assert.match(selected.selectionHash, /^[a-f0-9]{64}$/);
+  assert(JSON.stringify(selected).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
+  const tooLarge = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef, paths: ["/operatorPacket"] });
+  assert.equal(tooLarge.code, "RESULT_DETAIL_SELECTION_TOO_LARGE");
+  assert(tooLarge.narrowerPaths.length > 0);
   const missing = await host.execute("finite_read_result", { resultRef: "0".repeat(64) });
   assert.equal(missing.code, "RESULT_DETAIL_NOT_FOUND");
 });
@@ -133,4 +144,103 @@ test("a pre-cancelled WebMCP execution performs no operation", async () => {
   const result = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" }, { signal: controller.signal });
   assert.equal(result.code, "TOOL_CANCELLED");
   assert.equal(result.acceptedStateChanged, false);
+});
+
+test("an in-flight host cancellation reaches arrival I/O and forces canonical re-read", async () => {
+  class AbortAwareArrival extends MemoryArrivalRepository {
+    openCalls = 0;
+    signalSeen = false;
+    async open(input = {}, context = {}) {
+      this.openCalls += 1;
+      if (!context.signal) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+      this.signalSeen = true;
+      return new Promise((resolve, reject) => {
+        if (context.signal.aborted) return reject(new DOMException("Interrupted", "AbortError"));
+        context.signal.addEventListener("abort", () => reject(new DOMException("Interrupted", "AbortError")), { once: true });
+      });
+    }
+  }
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const arrival = new AbortAwareArrival();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrival).useBoundedOutputs().register();
+  const controller = new AbortController();
+  const pending = host.execute("finite_enter_kitchen", { entryIntent: "continue_current" }, { signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort("operator stopped");
+  const result = await pending;
+  assert.equal(result.code, "TOOL_CANCELLED_OUTCOME_UNKNOWN");
+  assert.equal(result.acceptedStateChanged, false);
+  assert.equal(arrival.signalSeen, true);
+  assert.equal(arrival.openCalls, 2);
+  assert.equal(runtime.kernel.revision, 1);
+});
+
+test("an interrupted accepted-truth commit rolls back locally and reports unknown outcome", async () => {
+  class AbortCommitRepository extends MemoryAcceptedTruthRepository {
+    signalSeen = false;
+    async commit(input, context = {}) {
+      if (!context.signal) return super.commit(input);
+      this.signalSeen = true;
+      return new Promise((resolve, reject) => {
+        if (context.signal.aborted) return reject(new DOMException("Interrupted", "AbortError"));
+        context.signal.addEventListener("abort", () => reject(new DOMException("Interrupted", "AbortError")), { once: true });
+      });
+    }
+  }
+  const profiles = await compileBuiltInProfiles();
+  const repository = new AbortCommitRepository();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel", undefined, [], () => new Date("2026-08-27T00:00:00.000Z"), repository);
+  assert.equal((await runtime.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_INITIALIZED");
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs().register();
+  await host.execute("finite_open_toolset", { group: "planning" });
+  const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 2, nightlyMinor: 20_000, minimumBufferMinor: 50_000 });
+  const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
+  const chosen = compared.options.find((option) => option.valid);
+  await host.execute("finite_stage_option", { candidateId: chosen.candidateId, expectedRevision: 1 });
+  const approved = await runtime.kernel.humanApprove({ candidateId: chosen.candidateId });
+  await host.execute("finite_enter_kitchen", { entryIntent: "continue_current" });
+  const controller = new AbortController();
+  const pending = host.execute("finite_apply_approved_option", { candidateId: chosen.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "cancelled-accepted-commit-0001" }, { signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort("operator stopped");
+  const result = await pending;
+  assert.equal(result.code, "TOOL_CANCELLED_OUTCOME_UNKNOWN");
+  assert.equal(result.acceptedStateChanged, false);
+  assert.equal(repository.signalSeen, true);
+  assert.equal(runtime.kernel.revision, 1);
+  assert(runtime.kernel.stagedCandidate);
+  assert(runtime.kernel.approval);
+});
+
+test("an in-flight cancellation reaches construction persistence without resurrecting work", async () => {
+  class AbortConstructionRepository extends MemoryConstructionPacketRepository {
+    signalSeen = false;
+    async load(context = {}) {
+      if (!context.signal) return super.load();
+      this.signalSeen = true;
+      return new Promise((resolve, reject) => {
+        if (context.signal.aborted) return reject(new DOMException("Interrupted", "AbortError"));
+        context.signal.addEventListener("abort", () => reject(new DOMException("Interrupted", "AbortError")), { once: true });
+      });
+    }
+  }
+  const profiles = await compileBuiltInProfiles();
+  const construction = new AbortConstructionRepository();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel", undefined, [], () => new Date("2026-08-27T00:00:00.000Z"), undefined, construction);
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useBoundedOutputs().register();
+  await host.execute("finite_open_toolset", { group: "construction" });
+  const controller = new AbortController();
+  const pending = host.execute("finite_get_construction_packet", {}, { signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.abort("operator stopped");
+  const result = await pending;
+  assert.equal(result.code, "TOOL_CANCELLED_OUTCOME_UNKNOWN");
+  assert.equal(result.acceptedStateChanged, false);
+  assert.equal(construction.signalSeen, true);
+  assert.equal(runtime.pendingPlanDraft, null);
+  assert.equal(runtime.kernel.revision, 1);
 });

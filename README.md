@@ -18,9 +18,9 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Compiled bounded option search that enumerates legal move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
 - Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
 - One-call operator orientation: `finite_enter_kitchen` arbitrates arrival-versus-plan work and returns a compact content-addressed service ticket containing canonical identity, one authoritative `nextAction`, known and missing inputs, authority state, and a state-grounded chef menu without asking the human to explain the application.
-- Production WebMCP output is capped at 1,500 characters. Larger deterministic results are retained in a 24-entry ephemeral content-addressed vault and exposed through 800-character verified pages only when the current route needs omitted detail; the initial operator response no longer dumps the full plan into model context.
+- Production WebMCP output is capped at 1,500 characters. Larger deterministic results are retained in a 24-entry ephemeral content-addressed vault; Codex first reads a bounded manifest, then requests only exact JSON Pointer fields. Oversized semantic values are refused with narrower descendants rather than truncated.
 - Every advertised tool and parameter is regression-tested against current discovery guidance: tool/parameter names stay within 30 characters, tool descriptions within 500, parameter descriptions within 150, every parameter has semantic metadata, and every route exposes at most 20 tools.
-- WebMCP execution accepts the host cancellation signal, refuses a pre-cancelled operation before work starts, and reports interrupted operations as outcome-unknown so Codex must re-read canonical state rather than infer failure.
+- WebMCP execution accepts the host cancellation signal through arrival, construction, operator-session, authority, and accepted-truth HTTP rails. Pre-cancelled work never starts; interrupted accepted commits roll back the exact local checkpoint and report the remote outcome as unknown so Codex must re-read canonical truth before idempotent replay.
 - A deterministic chef-menu contract distinguishes untested suggestions, research routes, constraint-validated options, and human-authority decisions. Codex may recommend and serve the menu; Finite alone decides when an option is proven viable, and the human alone chooses or authorizes it.
 - Content-addressed operation proofs on every stable and contextual WebMCP result, including canonical input/result hashes and exact plan/profile/revision context before and after execution.
 - Independent candidate re-derivation at stage, human approval, and apply so mutated numbers, context, hashes, approvals, locked moves, stale events, and impossible plans fail closed.
@@ -70,7 +70,7 @@ The deployed owner-private build is [Finite](https://finite-plan-kitchen.bhartha
 
 ## Product transaction
 
-1. Codex opens one checksum-bound service ticket containing canonical identity, authority state, the exact next route, and a compact menu. Full deterministic detail is content-addressed and paged only if the route actually needs it.
+1. Codex opens one checksum-bound service ticket containing canonical identity, authority state, the exact next route, and a compact menu. Full deterministic detail is content-addressed and selected by exact semantic path only if the route actually needs it.
 2. Codex records a change, explores legal moves, and composes deterministic options.
 3. The application validates and stages one exact option.
 4. The human sees the decision packet and approves that exact result.
@@ -148,6 +148,7 @@ testing, not basic Site Tools availability.
 - `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — all 54 operational and human failure points, their closed/controlled disposition, regression proof, and remaining external research boundaries.
 - `PRIZE_ENGINEERING_SCORECARD_2026-08-27.md` — current challenge criteria translated into executable product gates, measured WebMCP context budgets, proof status, and the remaining competition-grade engineering queue.
 - `WEBMCP_OPERATOR_CONTEXT_ACCEPTANCE_2026-08-27.md` — bounded service-ticket orientation, content-addressed detail recovery, metadata and cancellation budgets, fresh inline-Codex receipt, and remaining live-journey boundary.
+- `WEBMCP_SEMANTIC_RECOVERY_ACCEPTANCE_2026-08-27.md` — exact JSON Pointer recovery, refusal of semantic truncation, end-to-end HTTP cancellation, interrupted-commit rollback law, deterministic clocks, and complete regression receipt.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

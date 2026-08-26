@@ -4,6 +4,7 @@ import {
   createAcceptedTruthEnvelope,
   snapshotIntegrityIssues,
   type AcceptedTruthRepository,
+  type RepositoryRequestContext,
 } from "./accepted-truth.js";
 import type {
   Allocation,
@@ -270,7 +271,7 @@ export class FinitePlanKernel {
     this.restore(snapshot);
   }
 
-  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt): Promise<ToolResult> {
+  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository) return { ok: true, code: "LOCAL_ACCEPTED_TRUTH", acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     const localIssues = await snapshotIntegrityIssues(this.profile, this.snapshot());
     if (localIssues.length) {
@@ -278,10 +279,10 @@ export class FinitePlanKernel {
       return { ok: false, code: "LOCAL_ACCEPTED_TRUTH_INTEGRITY_FAILED", issues: localIssues, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     }
     try {
-      const existing = await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash);
+      const existing = await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash, context);
       const result = existing
         ? { ok: true as const, code: "ACCEPTED_TRUTH_CURRENT" as const, envelope: existing, receipt: null, requestHash: null, replay: true }
-        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt);
+        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt, context);
       const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
       const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
       if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
@@ -420,7 +421,7 @@ export class FinitePlanKernel {
     for (const [key, receipt] of checkpoint.externalActionIdempotency) this.externalActionIdempotency.set(key, clone(receipt));
   }
 
-  private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null): Promise<ToolResult | null> {
+  private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}): Promise<ToolResult | null> {
     if (this.acceptedRepository) {
       try {
         if (this.acceptedTruthStatus !== "ready" || !this.acceptedSnapshotHash) throw new AcceptedTruthRepositoryError("ACCEPTED_TRUTH_NOT_READY", "Durable accepted truth has not been hydrated.");
@@ -430,7 +431,7 @@ export class FinitePlanKernel {
           snapshot: this.snapshot(),
           receipt,
           authorityChallengeId,
-        });
+        }, context);
         const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
         const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
         if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
@@ -442,6 +443,7 @@ export class FinitePlanKernel {
         return null;
       } catch (error) {
         this.restoreCheckpoint(checkpoint);
+        if (context.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return { ok: false, code: "TOOL_CANCELLED_OUTCOME_UNKNOWN", mutation, acceptedStateChanged: false, retryable: false, next: "The commit response was interrupted and local optimistic state was rolled back. Re-read canonical accepted truth before deciding whether to replay the same idempotent command." };
         const code = error instanceof AcceptedTruthRepositoryError && error.code === "ACCEPTED_REVISION_CONFLICT"
           ? "ACCEPTED_STATE_CONFLICT"
           : error instanceof AcceptedTruthRepositoryError && error.code === "ACCEPTED_TRUTH_NOT_READY"
@@ -969,11 +971,11 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_APPROVAL_RECORDED", approval: clone(this.approval), acceptedStateChanged: false };
   }
 
-  async resumeHumanAuthorityChallenge({ challengeId }: { challengeId: string }): Promise<ToolResult> {
+  async resumeHumanAuthorityChallenge({ challengeId }: { challengeId: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository?.loadAuthorityChallenge) return { ok: false, code: "AUTHORITY_HANDOFF_UNAVAILABLE", acceptedStateChanged: false };
     if (!this.stagedCandidate) return { ok: false, code: "OPTION_NOT_STAGED", acceptedStateChanged: false, next: "Rebuild and stage the exact candidate named by the handoff packet before resuming human authority." };
     try {
-      const challenge = await this.acceptedRepository.loadAuthorityChallenge(challengeId);
+      const challenge = await this.acceptedRepository.loadAuthorityChallenge(challengeId, context);
       const candidate = this.stagedCandidate;
       const expectedCommandHash = await sha256({ targetType: "plan_option", targetId: candidate.candidateId, planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, contentHash: candidate.contentHash, authorityId: challenge.authorityId });
       if (challenge.planId !== this.profile.planId || challenge.profileHash !== this.profile.profileHash || challenge.revision !== this.revision || challenge.targetType !== "plan_option" || challenge.targetId !== candidate.candidateId || challenge.contentHash !== candidate.contentHash || challenge.commandHash !== expectedCommandHash) return { ok: false, code: "AUTHORITY_CHALLENGE_MISMATCH", acceptedStateChanged: false, next: "Do not apply. Reconcile the handoff packet with current staged content and obtain fresh human authority." };
@@ -984,7 +986,7 @@ export class FinitePlanKernel {
     }
   }
 
-  async applyApprovedOption({ candidateId, approvalId, expectedRevision, idempotencyKey }: { candidateId: string; approvalId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyApprovedOption({ candidateId, approvalId, expectedRevision, idempotencyKey }: { candidateId: string; approvalId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.optionIdempotency.get(idempotencyKey);
     if (replay) {
       const matches = replay.payload.candidateId === candidateId && replay.payload.approvalId === approvalId && replay.fromRevision === expectedRevision;
@@ -1012,7 +1014,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_option", receipt, authorityChallengeId);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_option", receipt, authorityChallengeId, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "OPTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1042,7 +1044,7 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_PREFERENCE_CONFIRMED", confirmation: clone(this.preferenceConfirmation), acceptedStateChanged: false };
   }
 
-  async applyConfirmedPreferenceChange({ preferenceChangeId, confirmationId, expectedRevision, idempotencyKey }: { preferenceChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyConfirmedPreferenceChange({ preferenceChangeId, confirmationId, expectedRevision, idempotencyKey }: { preferenceChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.preferenceIdempotency.get(idempotencyKey);
     if (replay) {
       const event = replay.payload.preferenceEvent as Partial<PreferenceEvent> | undefined;
@@ -1065,7 +1067,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("preference_change", fromRevision, idempotencyKey, { preferenceEvent: event, acceptedPreferenceWeights: clone(this.preferenceWeights) });
     this.preferenceIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "preference_change", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "preference_change", receipt, null, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1086,7 +1088,7 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_PLAN_LIFECYCLE_CONFIRMED", confirmation: clone(this.lifecycleConfirmation), acceptedStateChanged: false };
   }
 
-  async applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision, idempotencyKey }: { lifecycleChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision, idempotencyKey }: { lifecycleChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.lifecycleIdempotency.get(idempotencyKey);
     if (replay) {
       const event = replay.payload.lifecycleEvent as Partial<PlanLifecycleEvent> | undefined;
@@ -1107,7 +1109,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_lifecycle", fromRevision, idempotencyKey, { lifecycleEvent: event, lifecycle: { status: this.lifecycleStatus } });
     this.lifecycleIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_lifecycle", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_lifecycle", receipt, null, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "PLAN_LIFECYCLE_APPLIED", lifecycle: { status: this.lifecycleStatus }, receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1137,7 +1139,7 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_GROUP_DECISION_CONFIRMED", confirmation: clone(this.groupDecisionConfirmation), acceptedStateChanged: false };
   }
 
-  async applyConfirmedGroupDecision({ groupDecisionId, confirmationId, expectedRevision, idempotencyKey }: { groupDecisionId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyConfirmedGroupDecision({ groupDecisionId, confirmationId, expectedRevision, idempotencyKey }: { groupDecisionId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.groupDecisionIdempotency.get(idempotencyKey);
     if (replay) {
       const event = replay.payload.groupDecisionEvent as Partial<GroupDecisionEvent> | undefined;
@@ -1157,7 +1159,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("group_decision", fromRevision, idempotencyKey, { groupDecisionEvent: event });
     this.groupDecisionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "group_decision", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "group_decision", receipt, null, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "GROUP_DECISION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1194,7 +1196,7 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_EXTERNAL_ACTION_CONFIRMED", confirmation: clone(this.externalActionConfirmation), acceptedStateChanged: false };
   }
 
-  async applyConfirmedExternalAction({ externalActionChangeId, confirmationId, expectedRevision, idempotencyKey }: { externalActionChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyConfirmedExternalAction({ externalActionChangeId, confirmationId, expectedRevision, idempotencyKey }: { externalActionChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.externalActionIdempotency.get(idempotencyKey);
     if (replay) {
       const event = replay.payload.externalActionEvent as Partial<ExternalActionEvent> | undefined;
@@ -1214,7 +1216,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("external_action", fromRevision, idempotencyKey, { externalActionEvent: event });
     this.externalActionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "external_action", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "external_action", receipt, null, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "EXTERNAL_ACTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true, externalActionPerformedByFinite: false };
   }
@@ -1241,7 +1243,7 @@ export class FinitePlanKernel {
     return { ok: true, code: "HUMAN_CORRECTION_CONFIRMED", confirmation: clone(this.correctionConfirmation), acceptedStateChanged: false };
   }
 
-  async applyConfirmedActualCorrection({ correctionId, confirmationId, expectedRevision, idempotencyKey }: { correctionId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+  async applyConfirmedActualCorrection({ correctionId, confirmationId, expectedRevision, idempotencyKey }: { correctionId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     const replay = this.correctionIdempotency.get(idempotencyKey);
     if (replay) {
       const event = replay.payload.correctionEvent as Partial<CorrectionEvent> | undefined;
@@ -1267,7 +1269,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("actual_correction", fromRevision, idempotencyKey, { correctionEvent: event, accepted: clone(this.accepted) });
     this.correctionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "actual_correction", receipt);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "actual_correction", receipt, null, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "ACTUAL_CORRECTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }

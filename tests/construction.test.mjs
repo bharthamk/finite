@@ -169,7 +169,7 @@ test("storage failure refuses staged durability and WebMCP exposes continuity wi
 
 test("an authenticated construction packet follows the consumer across browser surfaces without carrying authority", async () => {
   const profiles = await compileBuiltInProfiles();
-  const remote = new MemoryConstructionPacketRepository();
+  const remote = new MemoryConstructionPacketRepository(() => new Date("2026-08-26T18:00:30.000Z"));
   const firstStorage = new MemoryStorage();
   const first = new FinitePlanRuntime(
     profiles,

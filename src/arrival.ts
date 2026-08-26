@@ -113,17 +113,19 @@ export type ArrivalResult = ToolResult & {
   replay?: boolean;
 };
 
+export type RepositoryRequestContext = { signal?: AbortSignal };
+
 export interface ArrivalRepository {
-  create(input: { idempotencyKey: string; rawOutcome: string; structured?: Record<string, unknown>; attachments?: unknown[]; sourceSurface: ArrivalSourceSurface }): Promise<ArrivalResult>;
-  list(): Promise<ArrivalResult>;
-  open(input?: { orderId?: string; sinceVersion?: number }): Promise<ArrivalResult>;
-  appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }): Promise<ArrivalResult>;
-  checkpoint(input: { orderId: string; expectedVersion: number }): Promise<ArrivalResult>;
-  stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }): Promise<ArrivalResult>;
-  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
-  reconcile(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult>;
-  reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }): Promise<ArrivalResult>;
-  acceptPlan(input: { orderId: string; expectedVersion: number; expectedChecksum: string; planId: string; profileHash: string; planRevision: number }): Promise<ArrivalResult>;
+  create(input: { idempotencyKey: string; rawOutcome: string; structured?: Record<string, unknown>; attachments?: unknown[]; sourceSurface: ArrivalSourceSurface }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  list(context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  open(input?: { orderId?: string; sinceVersion?: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  checkpoint(input: { orderId: string; expectedVersion: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  reconcile(input: Parameters<ArrivalRepository["stageInterpretation"]>[0], context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  acceptPlan(input: { orderId: string; expectedVersion: number; expectedChecksum: string; planId: string; profileHash: string; planRevision: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
 }
 
 const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResult> => {
@@ -132,6 +134,7 @@ const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResu
     const body = await response.json() as ArrivalResult;
     return body;
   } catch (error) {
+    if (init?.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
     return { ok: false, code: "ARRIVAL_SERVICE_UNAVAILABLE", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The human order remains unchanged. Retry orientation before doing more work." };
   }
 };
@@ -139,36 +142,36 @@ const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResu
 export class HttpArrivalRepository implements ArrivalRepository {
   constructor(private readonly baseUrl = "/api/arrivals") {}
 
-  create(input: Parameters<ArrivalRepository["create"]>[0]): Promise<ArrivalResult> {
-    return requestJson(this.baseUrl, { method: "POST", body: JSON.stringify(input) });
+  create(input: Parameters<ArrivalRepository["create"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(this.baseUrl, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  list(): Promise<ArrivalResult> { return requestJson(this.baseUrl); }
-  open(input: Parameters<ArrivalRepository["open"]>[0] = {}): Promise<ArrivalResult> {
+  list(context: RepositoryRequestContext = {}): Promise<ArrivalResult> { return requestJson(this.baseUrl, context.signal ? { signal: context.signal } : {}); }
+  open(input: Parameters<ArrivalRepository["open"]>[0] = {}, context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
     const query = new URLSearchParams();
     if (input.sinceVersion !== undefined) query.set("sinceVersion", String(input.sinceVersion));
     const path = input.orderId ? `${this.baseUrl}/${encodeURIComponent(input.orderId)}` : `${this.baseUrl}/current`;
-    return requestJson(`${path}${query.size ? `?${query}` : ""}`);
+    return requestJson(`${path}${query.size ? `?${query}` : ""}`, context.signal ? { signal: context.signal } : {});
   }
-  appendInput(input: Parameters<ArrivalRepository["appendInput"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/input`, { method: "POST", body: JSON.stringify(input) });
+  appendInput(input: Parameters<ArrivalRepository["appendInput"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/input`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  checkpoint(input: Parameters<ArrivalRepository["checkpoint"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/checkpoint`, { method: "POST", body: JSON.stringify(input) });
+  checkpoint(input: Parameters<ArrivalRepository["checkpoint"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/checkpoint`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  stageClarification(input: Parameters<ArrivalRepository["stageClarification"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/clarification`, { method: "POST", body: JSON.stringify(input) });
+  stageClarification(input: Parameters<ArrivalRepository["stageClarification"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/clarification`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  stageInterpretation(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/interpretation`, { method: "POST", body: JSON.stringify(input) });
+  stageInterpretation(input: Parameters<ArrivalRepository["stageInterpretation"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/interpretation`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  reconcile(input: Parameters<ArrivalRepository["reconcile"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/reconcile`, { method: "POST", body: JSON.stringify(input) });
+  reconcile(input: Parameters<ArrivalRepository["reconcile"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/reconcile`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input) });
+  reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
-  acceptPlan(input: Parameters<ArrivalRepository["acceptPlan"]>[0]): Promise<ArrivalResult> {
-    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/accept`, { method: "POST", body: JSON.stringify(input) });
+  acceptPlan(input: Parameters<ArrivalRepository["acceptPlan"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/accept`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
 }
 

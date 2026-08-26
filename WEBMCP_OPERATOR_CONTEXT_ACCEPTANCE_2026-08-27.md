@@ -61,3 +61,5 @@ No accepted-plan, arrival, candidate, feedback, authority, or staging mutation w
 ## Remaining boundary
 
 This closes deployed orientation, not the entire competition-grade system. In-flight HTTP cancellation remains partial; arbitrary JSON character pages should become semantic path reads; and deployed end-to-end change, shock, authority, commit, lost-response, reload, and conclusion journeys still need fresh receipts for travel, renovation, and event. Portable judging access and public source also remain release boundaries.
+
+Follow-on status: the first two boundaries above are closed in `WEBMCP_SEMANTIC_RECOVERY_ACCEPTANCE_2026-08-27.md`. Full deployed family journeys, portable judging access, and public source remain open.

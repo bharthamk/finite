@@ -79,9 +79,11 @@ export class AcceptedTruthRepositoryError extends Error {
   }
 }
 
+export type RepositoryRequestContext = { signal?: AbortSignal };
+
 export interface AcceptedTruthRepository {
-  initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt): Promise<AcceptedTruthCommitResult>;
-  load(planId: string, profileHash: string): Promise<AcceptedTruthEnvelope | null>;
+  initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
+  load(planId: string, profileHash: string, context?: RepositoryRequestContext): Promise<AcceptedTruthEnvelope | null>;
   commit(input: {
     expectedRevision: number;
     previousSnapshotHash: string;
@@ -89,7 +91,7 @@ export interface AcceptedTruthRepository {
     receipt: Receipt;
     authorityChallengeId?: string | null;
     operationProof?: Record<string, unknown> | null;
-  }): Promise<AcceptedTruthCommitResult>;
+  }, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
   createAuthorityChallenge?(input: {
     planId: string;
     profileHash: string;
@@ -97,8 +99,8 @@ export interface AcceptedTruthRepository {
     targetId: string;
     contentHash: string;
     authorityId: string;
-  }): Promise<AuthorityChallenge>;
-  loadAuthorityChallenge?(challengeId: string): Promise<AuthorityChallenge>;
+  }, context?: RepositoryRequestContext): Promise<AuthorityChallenge>;
+  loadAuthorityChallenge?(challengeId: string, context?: RepositoryRequestContext): Promise<AuthorityChallenge>;
   saveOperatorSession?(input: {
     idempotencyKey: string;
     planId: string;
@@ -107,10 +109,10 @@ export interface AcceptedTruthRepository {
     kind: OperatorSession["kind"];
     payload: Record<string, unknown>;
     ttlSeconds?: number;
-  }): Promise<OperatorSession>;
-  listOperatorSessions?(): Promise<OperatorSession[]>;
-  loadOperatorSession?(sessionId: string): Promise<OperatorSession>;
-  closeOperatorSession?(sessionId: string): Promise<OperatorSession>;
+  }, context?: RepositoryRequestContext): Promise<OperatorSession>;
+  listOperatorSessions?(context?: RepositoryRequestContext): Promise<OperatorSession[]>;
+  loadOperatorSession?(sessionId: string, context?: RepositoryRequestContext): Promise<OperatorSession>;
+  closeOperatorSession?(sessionId: string, context?: RepositoryRequestContext): Promise<OperatorSession>;
 }
 
 const evidenceIntegrity = async (evidence: EvidenceRecord): Promise<boolean> => {
@@ -225,65 +227,68 @@ const decodeJson = async <T>(response: Response): Promise<T> => {
 export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
   constructor(private readonly baseUrl = "/api/accepted-truth") {}
 
-  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt): Promise<AcceptedTruthCommitResult> {
+  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
     const envelope = await createAcceptedTruthEnvelope(snapshot, null);
     const activationRequestHash = activationReceipt ? await sha256({ envelope, activationReceipt }) : null;
     const response = await fetch(`${this.baseUrl}/initialize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ envelope, activationReceipt: activationReceipt ? clone(activationReceipt) : null, activationRequestHash }),
+      ...(context.signal ? { signal: context.signal } : {}),
     });
     return decodeJson<AcceptedTruthCommitResult>(response);
   }
 
-  async load(planId: string, profileHash: string): Promise<AcceptedTruthEnvelope | null> {
-    const response = await fetch(`${this.baseUrl}/${encodeURIComponent(planId)}?profileHash=${encodeURIComponent(profileHash)}`, { headers: { accept: "application/json" } });
+  async load(planId: string, profileHash: string, context: RepositoryRequestContext = {}): Promise<AcceptedTruthEnvelope | null> {
+    const response = await fetch(`${this.baseUrl}/${encodeURIComponent(planId)}?profileHash=${encodeURIComponent(profileHash)}`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     if (response.status === 404) return null;
     const payload = await decodeJson<{ ok: true; envelope: AcceptedTruthEnvelope }>(response);
     return clone(payload.envelope);
   }
 
-  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; authorityChallengeId?: string | null; operationProof?: Record<string, unknown> | null }): Promise<AcceptedTruthCommitResult> {
+  async commit(input: { expectedRevision: number; previousSnapshotHash: string; snapshot: PlanSnapshot; receipt: Receipt; authorityChallengeId?: string | null; operationProof?: Record<string, unknown> | null }, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
     const request = await createAcceptedTruthCommit(input);
     const response = await fetch(`${this.baseUrl}/commit`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
+      ...(context.signal ? { signal: context.signal } : {}),
     });
     return decodeJson<AcceptedTruthCommitResult>(response);
   }
 
-  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }): Promise<AuthorityChallenge> {
+  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
     const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...input, targetType: "plan_option", ttlSeconds: 300 }),
+      ...(context.signal ? { signal: context.signal } : {}),
     });
     return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
   }
 
-  async loadAuthorityChallenge(challengeId: string): Promise<AuthorityChallenge> {
-    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges/${encodeURIComponent(challengeId)}`, { headers: { accept: "application/json" } });
+  async loadAuthorityChallenge(challengeId: string, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges/${encodeURIComponent(challengeId)}`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
   }
 
-  async saveOperatorSession(input: { idempotencyKey: string; planId: string; profileHash: string; baseRevision: number; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<OperatorSession> {
-    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+  async saveOperatorSession(input: { idempotencyKey: string; planId: string; profileHash: string; baseRevision: number; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }, context: RepositoryRequestContext = {}): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
     return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
   }
 
-  async listOperatorSessions(): Promise<OperatorSession[]> {
-    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { headers: { accept: "application/json" } });
+  async listOperatorSessions(context: RepositoryRequestContext = {}): Promise<OperatorSession[]> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     return (await decodeJson<{ ok: true; sessions: OperatorSession[] }>(response)).sessions;
   }
 
-  async loadOperatorSession(sessionId: string): Promise<OperatorSession> {
-    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}`, { headers: { accept: "application/json" } });
+  async loadOperatorSession(sessionId: string, context: RepositoryRequestContext = {}): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
   }
 
-  async closeOperatorSession(sessionId: string): Promise<OperatorSession> {
-    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}/close`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  async closeOperatorSession(sessionId: string, context: RepositoryRequestContext = {}): Promise<OperatorSession> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/operator-sessions/${encodeURIComponent(sessionId)}/close`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", ...(context.signal ? { signal: context.signal } : {}) });
     return (await decodeJson<{ ok: true; session: OperatorSession }>(response)).session;
   }
 }
