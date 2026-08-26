@@ -13,6 +13,8 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Typed entities, executable relationships, locks, legal moves, evidence materiality/freshness, and preference weights.
 - Compiled bounded option search that enumerates legal move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
 - Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
+- One-call operator orientation: `finite_open_kitchen` returns exact accepted truth, the family-specific human outcome, legal/blocked move space, pending work, authority state, catalog context, and the next safe route behind a SHA-256 brief hash.
+- Content-addressed operation proofs on every stable and contextual WebMCP result, including canonical input/result hashes and exact plan/profile/revision context before and after execution.
 - Independent candidate re-derivation at stage, human approval, and apply so mutated numbers, context, hashes, approvals, locked moves, stale events, and impossible plans fail closed.
 - One active change-order lifecycle: a replacement order explicitly supersedes and invalidates every volatile candidate, staged packet, and approval from the prior order.
 - Immediate WebMCP-to-surface synchronization after tool completion, with revision, active-event, and manifest proof returned to Codex; renderer failure is reported without rewriting the deterministic tool outcome.
@@ -24,8 +26,9 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - Immutable linear plan amendments: Codex derives a successor from live accepted truth, stages a deterministic semantic diff, and activates only the exact human-confirmed supersession while both versions remain independently switchable and replayable.
 - A persistent multi-plan catalog keyed by actual `planId`, including compiled custom plans, bound actual evidence, legacy snapshot fallback, switching, contextual-tool replacement, and reload-safe activation receipts.
 - Human-only approval and confirmation creators, structurally excluded from WebMCP.
+- Failure-atomic accepted-state persistence: option, actual-correction, and preference commits restore memory, pending work, authority, receipts, and idempotency maps if the snapshot write fails, then permit exact retry.
 - Accepted-state persistence with reload-safe receipt idempotency.
-- 30 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
+- 31 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
 
@@ -45,7 +48,7 @@ The deployed owner-private build is [Finite](https://finite-plan-kitchen.bhartha
 
 ## Product transaction
 
-1. Codex discovers the profile and compact semantic state.
+1. Codex opens one checksum-bound kitchen brief containing the profile, compact semantic state, move space, pending lifecycle, authority state, and exact next route.
 2. Codex records a change, explores legal moves, and composes deterministic options.
 3. The application validates and stages one exact option.
 4. The human sees the decision packet and approves that exact result.
@@ -90,3 +93,5 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `PLAN_CREATION_STORY_LAB_2026-08-26.md` — 12 human and 12 Codex creation stories, results, WebMCP superpowers, friction, blockers, and next engineering ruling.
 - `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md` — live-state successor derivation, semantic diff, human authority, atomic rollback, immutable switching, lineage integrity, and replay receipt.
 - `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.
+- `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
+- `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.

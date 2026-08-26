@@ -50,6 +50,29 @@ interface PendingPreferenceChange {
   contentHash: string;
 }
 
+interface KernelCheckpoint {
+  revision: number;
+  accepted: Allocation;
+  preferenceWeights: Record<PreferenceKey, number>;
+  entities: Record<string, EntityDefinition>;
+  events: ChangeEvent[];
+  correctionEvents: CorrectionEvent[];
+  preferenceEvents: PreferenceEvent[];
+  feedback: FeedbackEvent[];
+  receipts: Receipt[];
+  candidates: Map<string, Candidate>;
+  activeEventId: string | null;
+  stagedCandidate: Candidate | null;
+  approval: HumanApproval | null;
+  pendingCorrection: PendingCorrection | null;
+  correctionConfirmation: Confirmation | null;
+  pendingPreferenceChange: PendingPreferenceChange | null;
+  preferenceConfirmation: Confirmation | null;
+  optionIdempotency: Map<string, Receipt>;
+  correctionIdempotency: Map<string, Receipt>;
+  preferenceIdempotency: Map<string, Receipt>;
+}
+
 const contentHash = (content: string): Promise<string> => sha256({ content });
 const recordHash = ({ source, sourceClass, observedAt, trust, content, contentHash: hashedContent, provenance }: Omit<EvidenceRecord, "evidenceId" | "recordHash">): Promise<string> =>
   sha256({ source, sourceClass, observedAt, trust, content, contentHash: hashedContent, provenance });
@@ -150,6 +173,78 @@ export class FinitePlanKernel {
 
   persist(): void {
     this.store?.save(this.snapshot());
+  }
+
+  private checkpoint(): KernelCheckpoint {
+    return clone({
+      revision: this.revision,
+      accepted: this.accepted,
+      preferenceWeights: this.preferenceWeights,
+      entities: this.entities,
+      events: this.events,
+      correctionEvents: this.correctionEvents,
+      preferenceEvents: this.preferenceEvents,
+      feedback: this.feedback,
+      receipts: this.receipts,
+      candidates: this.candidates,
+      activeEventId: this.activeEventId,
+      stagedCandidate: this.stagedCandidate,
+      approval: this.approval,
+      pendingCorrection: this.pendingCorrection,
+      correctionConfirmation: this.correctionConfirmation,
+      pendingPreferenceChange: this.pendingPreferenceChange,
+      preferenceConfirmation: this.preferenceConfirmation,
+      optionIdempotency: this.optionIdempotency,
+      correctionIdempotency: this.correctionIdempotency,
+      preferenceIdempotency: this.preferenceIdempotency,
+    });
+  }
+
+  private restoreCheckpoint(checkpoint: KernelCheckpoint): void {
+    this.revision = checkpoint.revision;
+    this.accepted = clone(checkpoint.accepted);
+    this.preferenceWeights = clone(checkpoint.preferenceWeights);
+    this.entities = clone(checkpoint.entities);
+    this.events.splice(0, this.events.length, ...clone(checkpoint.events));
+    this.correctionEvents.splice(0, this.correctionEvents.length, ...clone(checkpoint.correctionEvents));
+    this.preferenceEvents.splice(0, this.preferenceEvents.length, ...clone(checkpoint.preferenceEvents));
+    this.feedback.splice(0, this.feedback.length, ...clone(checkpoint.feedback));
+    this.receipts.splice(0, this.receipts.length, ...clone(checkpoint.receipts));
+    this.candidates.clear();
+    for (const [candidateId, candidate] of checkpoint.candidates) this.candidates.set(candidateId, clone(candidate));
+    this.activeEventId = checkpoint.activeEventId;
+    this.stagedCandidate = clone(checkpoint.stagedCandidate);
+    this.approval = clone(checkpoint.approval);
+    this.pendingCorrection = clone(checkpoint.pendingCorrection);
+    this.correctionConfirmation = clone(checkpoint.correctionConfirmation);
+    this.pendingPreferenceChange = clone(checkpoint.pendingPreferenceChange);
+    this.preferenceConfirmation = clone(checkpoint.preferenceConfirmation);
+    this.optionIdempotency.clear();
+    for (const [key, receipt] of checkpoint.optionIdempotency) this.optionIdempotency.set(key, clone(receipt));
+    this.correctionIdempotency.clear();
+    for (const [key, receipt] of checkpoint.correctionIdempotency) this.correctionIdempotency.set(key, clone(receipt));
+    this.preferenceIdempotency.clear();
+    for (const [key, receipt] of checkpoint.preferenceIdempotency) this.preferenceIdempotency.set(key, clone(receipt));
+  }
+
+  private persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"]): ToolResult | null {
+    try {
+      this.persist();
+      return null;
+    } catch (error) {
+      this.restoreCheckpoint(checkpoint);
+      return {
+        ok: false,
+        code: "ACCEPTED_STATE_STORAGE_FAILED",
+        mutation,
+        message: error instanceof Error ? error.message : String(error),
+        activePlanId: this.profile.planId,
+        activeRevision: this.revision,
+        acceptedStateChanged: false,
+        retryable: true,
+        next: "Durable truth did not advance. Repair storage and retry the exact confirmed command with the same idempotency key.",
+      };
+    }
   }
 
   private currentActuals(): CurrentActual[] {
@@ -618,6 +713,7 @@ export class FinitePlanKernel {
     const before = clone(this.accepted);
     const after = { ...before, forecastMinor: before.forecastMinor + canonical.netForecastDeltaMinor, bufferMinor: before.bufferMinor - canonical.netForecastDeltaMinor };
     if (sumAllocation(before) !== before.totalBudgetMinor || sumAllocation(after) !== after.totalBudgetMinor) return { ok: false, code: "FINITE_TOTAL_INVARIANT_FAILED", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.accepted = after;
     const beforeEntities = clone(this.entities);
@@ -627,7 +723,8 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    this.persist();
+    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "plan_option");
+    if (storageFailure) return storageFailure;
     return { ok: true, code: "OPTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
@@ -670,6 +767,7 @@ export class FinitePlanKernel {
     const confirmation = this.preferenceConfirmation;
     if (!pending || pending.preferenceChangeId !== preferenceChangeId) return { ok: false, code: "PREFERENCE_CHANGE_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.preferenceWeights = clone(pending.after);
     this.revision += 1;
@@ -678,7 +776,8 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("preference_change", fromRevision, idempotencyKey, { preferenceEvent: event, acceptedPreferenceWeights: clone(this.preferenceWeights) });
     this.preferenceIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    this.persist();
+    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "preference_change");
+    if (storageFailure) return storageFailure;
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
@@ -720,6 +819,7 @@ export class FinitePlanKernel {
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
     const currentActual = this.currentActuals().find((item) => item.actualId === pending.actualId);
     if (!currentActual || currentActual.currentAmountMinor !== pending.priorAmountMinor) return { ok: false, code: "ACTUAL_CHANGED_SINCE_STAGING", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.accepted = clone(pending.after);
     this.revision += 1;
@@ -729,7 +829,8 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("actual_correction", fromRevision, idempotencyKey, { correctionEvent: event, accepted: clone(this.accepted) });
     this.correctionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    this.persist();
+    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "actual_correction");
+    if (storageFailure) return storageFailure;
     return { ok: true, code: "ACTUAL_CORRECTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 

@@ -199,6 +199,94 @@ export class FinitePlanRuntime {
     return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Read the current plan before beginning replacement construction work." };
   }
 
+  async openKitchen(): Promise<ToolResult> {
+    const selectors = ["identity", "allocations", "actuals", "constraints", "entities", "preferences", "pending"] as const;
+    const stateResult = this.kernel.getState([...selectors]);
+    const state = stateResult.state as Record<string, unknown>;
+    const pending = state.pending as Record<string, unknown>;
+    const catalog = this.listPlans();
+    const movable = this.kernel.getMovableSet();
+    const construction = await this.getConstructionPacket();
+    const activeEvent = this.kernel.events.find((event) => event.eventId === this.kernel.activeEventId) ?? null;
+
+    let route: Record<string, unknown>;
+    if (this.pendingPlanDraft) {
+      route = this.planActivationConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_activate_confirmed_plan", targetId: this.pendingPlanDraft.draftId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_or_reject_plan_draft", targetId: this.pendingPlanDraft.draftId, authorityPresent: false };
+    } else if (this.kernel.pendingCorrection) {
+      route = this.kernel.correctionConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_actual_correction", targetId: this.kernel.pendingCorrection.correctionId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_actual_correction", targetId: this.kernel.pendingCorrection.correctionId, authorityPresent: false };
+    } else if (this.kernel.pendingPreferenceChange) {
+      route = this.kernel.preferenceConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_preference_change", targetId: this.kernel.pendingPreferenceChange.preferenceChangeId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_preference_change", targetId: this.kernel.pendingPreferenceChange.preferenceChangeId, authorityPresent: false };
+    } else if (this.kernel.approval && this.kernel.stagedCandidate) {
+      route = { stage: "human_approved", nextTool: "finite_apply_approved_option", targetId: this.kernel.stagedCandidate.candidateId, authorityPresent: true };
+    } else if (this.kernel.stagedCandidate) {
+      route = { stage: "awaiting_human", nextTool: null, humanAction: "approve_reject_or_give_feedback", targetId: this.kernel.stagedCandidate.candidateId, authorityPresent: false };
+    } else if (this.kernel.activeEventId && this.kernel.candidates.size) {
+      route = { stage: "options_available", nextTool: "finite_stage_option", targetId: this.kernel.activeEventId, authorityPresent: false };
+    } else if (this.kernel.activeEventId) {
+      route = { stage: "change_recorded", nextTool: "finite_compare_options", targetId: this.kernel.activeEventId, authorityPresent: false };
+    } else {
+      route = { stage: "ready", nextTool: this.kernel.profile.contextualCapabilities[0] ?? "finite_record_change_event", targetId: null, authorityPresent: false };
+    }
+
+    const legal = (movable.legal as Array<Record<string, unknown>> | undefined) ?? [];
+    const blocked = (movable.blocked as Array<Record<string, unknown>> | undefined) ?? [];
+    const briefBase = {
+      briefVersion: "finite-plan-kitchen.v1" as const,
+      operator: "Codex",
+      consumer: "human",
+      active: {
+        planId: this.kernel.profile.planId,
+        profileId: this.kernel.profile.profileId,
+        profileHash: this.kernel.profile.profileHash,
+        revision: this.kernel.revision,
+      },
+      consumerOutcome: {
+        name: this.kernel.profile.name,
+        orderedOutcome: activeEvent?.title ?? this.kernel.profile.surface.hero.brief,
+        projection: {
+          timeModel: this.kernel.profile.surface.timeModel,
+          nouns: clone(this.kernel.profile.surface.nouns),
+          headline: this.kernel.profile.surface.hero.title,
+          primaryMeasures: clone(this.kernel.profile.surface.primaryMeasures),
+        },
+      },
+      truth: state,
+      moveSpace: {
+        legal: legal.map(({ moveId, dimension, tradeoff, savingsMinor, daysDelta }) => ({ moveId, dimension, tradeoff, savingsMinor, daysDelta })),
+        blocked: blocked.map(({ moveId, dimension, tradeoff }) => ({ moveId, dimension, tradeoff })),
+        policy: clone(this.kernel.profile.searchPolicy),
+      },
+      work: {
+        route,
+        activeEvent: activeEvent ? clone(activeEvent) : null,
+        construction: construction.ok ? clone(construction.packet) : { status: "none", code: construction.code },
+      },
+      catalog: {
+        activePlanId: catalog.activePlanId,
+        plans: clone(catalog.plans),
+      },
+      authority: {
+        humanAuthorityActionsExposedThroughWebMCP: false,
+        authorityPersistedAcrossReload: false,
+        law: "Codex may prepare and apply exact human-authorized work; only the human surface may create approval or confirmation.",
+      },
+    };
+    const briefHash = await sha256(briefBase);
+    return {
+      ok: true,
+      code: "KITCHEN_OPEN",
+      brief: { ...briefBase, briefHash },
+      acceptedStateChanged: false,
+      next: route.nextTool ? `Use ${String(route.nextTool)} with the exact active plan context.` : `Wait for human action: ${String(route.humanAction)}.`,
+    };
+  }
+
   listPlans(): ToolResult {
     return {
       ok: true,

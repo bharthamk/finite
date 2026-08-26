@@ -1,3 +1,4 @@
+import { sha256 } from "./crypto.js";
 import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
 
@@ -21,6 +22,12 @@ const parseInput = (value: unknown): ParsedInput => {
   } catch (error) {
     return { ok: false, result: { ok: false, code: "INVALID_TOOL_INPUT", message: "Input must be a JSON object or serialized JSON object.", detail: error instanceof Error ? error.message : String(error), acceptedStateChanged: false } };
   }
+};
+
+const proofInput = (value: unknown): unknown => {
+  if (typeof value !== "string") return value ?? {};
+  try { return value.trim() ? JSON.parse(value) : {}; }
+  catch { return value; }
 };
 
 const define = ({ name, title, description, inputSchema = objectSchema(), readOnly = false, untrusted = false, execute }: {
@@ -50,6 +57,7 @@ const define = ({ name, title, description, inputSchema = objectSchema(), readOn
 
 const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
+  define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: () => runtime.openKitchen() }),
   define({ name: "finite_list_plans", title: "List compiled finite plans", description: "Read the active plan, available built-in and human-confirmed plans, and any staged activation awaiting the human.", readOnly: true, execute: () => runtime.listPlans() }),
   define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid travel, renovation, or event-family profile plus its fixed fields, conservation law, evidence prerequisites, semantic requirements, bounds, and authority path.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
   define({ name: "finite_assess_plan_intake", title: "Assess and save typed human plan facts", description: "Check a Codex-interpreted partial brief for machine-addressable missing facts and contradictions, derive at most one safe residual, and replace the durable non-authoritative construction packet. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, entityValues: { type: "object" }, stages: { type: "array", maxItems: 12, items: { type: "object" } } }), execute: (input) => runtime.assessPlanIntake(input) }),
@@ -111,24 +119,52 @@ export class FinitePlanWebMCPAdapter {
 
   constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver) {}
 
-  private observe(tool: WebMCPToolDefinition): WebMCPToolDefinition {
-    if (!this.observer) return tool;
+  private instrument(tool: WebMCPToolDefinition): WebMCPToolDefinition {
     return {
       ...tool,
       execute: async (input?: unknown) => {
+        const before = {
+          planId: this.runtime.kernel.profile.planId,
+          profileId: this.runtime.kernel.profile.profileId,
+          profileHash: this.runtime.kernel.profile.profileHash,
+          revision: this.runtime.kernel.revision,
+        };
+        const inputHash = await sha256(proofInput(input));
         const result = await tool.execute(input);
-        try {
-          const proof = await this.observer?.({ toolName: tool.name, result });
-          return proof ? { ...result, surfaceSync: { ok: true, ...proof } } : result;
-        } catch (error) {
-          return { ...result, surfaceSync: { ok: false, code: "SURFACE_SYNC_FAILED", message: error instanceof Error ? error.message : String(error) } };
+        let observed: ToolResult = result;
+        if (this.observer) {
+          try {
+            const proof = await this.observer({ toolName: tool.name, result });
+            if (proof) observed = { ...result, surfaceSync: { ok: true, ...proof } };
+          } catch (error) {
+            observed = { ...result, surfaceSync: { ok: false, code: "SURFACE_SYNC_FAILED", message: error instanceof Error ? error.message : String(error) } };
+          }
         }
+        const after = {
+          planId: this.runtime.kernel.profile.planId,
+          profileId: this.runtime.kernel.profile.profileId,
+          profileHash: this.runtime.kernel.profile.profileHash,
+          revision: this.runtime.kernel.revision,
+        };
+        const resultHash = await sha256(observed);
+        const proofBase = {
+          proofVersion: "finite-plan-operation.v1" as const,
+          toolName: tool.name,
+          inputHash,
+          resultHash,
+          resultCode: observed.code,
+          before,
+          after,
+          acceptedStateChangedClaim: observed.acceptedStateChanged === true,
+          activeContextChanged: JSON.stringify(before) !== JSON.stringify(after),
+        };
+        return { ...observed, operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
       },
     };
   }
 
   async register(): Promise<string[]> {
-    this.coreTools = coreDefinitions(this.runtime, () => this.refreshContextualTools()).map((tool) => this.observe(tool));
+    this.coreTools = coreDefinitions(this.runtime, () => this.refreshContextualTools()).map((tool) => this.instrument(tool));
     for (const tool of this.coreTools) await this.host.registerTool(tool);
     await this.refreshContextualTools();
     return this.inventory();
@@ -137,7 +173,7 @@ export class FinitePlanWebMCPAdapter {
   async refreshContextualTools(): Promise<void> {
     this.contextualController?.abort("profile changed");
     this.contextualController = new AbortController();
-    this.contextualTools = contextualDefinitions(this.runtime).map((tool) => this.observe(tool));
+    this.contextualTools = contextualDefinitions(this.runtime).map((tool) => this.instrument(tool));
     for (const tool of this.contextualTools) await this.host.registerTool(tool, { signal: this.contextualController.signal });
   }
 
