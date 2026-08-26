@@ -6,6 +6,7 @@ import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from
 import { FinitePlanWebMCPAdapter } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
+import { createCodexHandoff } from "./codex-handoff.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
@@ -271,6 +272,76 @@ const objectiveLabel = (objective: string): string => ({
 
 const currentArrival = (): ArrivalOrder | null => arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
 
+const currentCodexHandoff = () => createCodexHandoff({
+  siteOrigin: location.origin,
+  inline: Boolean(modelContext),
+  order: currentArrival(),
+  plan: {
+    planId: runtime.kernel.profile.planId,
+    profileId: runtime.kernel.profile.profileId,
+    revision: runtime.kernel.revision,
+  },
+});
+
+const renderCodexHandoffButton = (): string => {
+  const handoff = currentCodexHandoff();
+  return `<button type="button" class="codex-handoff-trigger" data-action="open-codex-handoff" aria-haspopup="dialog"><span aria-hidden="true"></span>${escapeHtml(handoff.buttonLabel)}</button>`;
+};
+
+const renderCodexHandoffDialog = (): string => {
+  const handoff = currentCodexHandoff();
+  const order = currentArrival();
+  return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
+    <form method="dialog" class="codex-handoff-sheet">
+      <header>
+        <div><p class="eyebrow">Operator handoff / no account connection</p><h2 id="codex_handoff_title">${escapeHtml(handoff.title)}</h2></div>
+        <button class="codex-handoff-close" value="close" aria-label="Close Codex handoff">×</button>
+      </header>
+      <p class="codex-handoff-lede">${escapeHtml(handoff.detail)}</p>
+      <ol class="codex-handoff-steps">
+        <li><span>01</span><p>Open your Codex task.</p></li>
+        <li><span>02</span><p>Paste the introduction below.</p></li>
+        <li><span>03</span><p>Codex opens Finite and reads the live kitchen.</p></li>
+      </ol>
+      <label class="codex-handoff-prompt"><span>What Codex receives</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label>
+      <div class="codex-handoff-actions">
+        <button type="button" class="button" data-action="copy-codex-handoff">Copy handoff prompt</button>
+        <p data-codex-handoff-status>Nothing has been sent to Codex yet.</p>
+      </div>
+      <dl class="codex-handoff-boundary">
+        <div><dt>Kitchen</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
+        <div><dt>Order receipt</dt><dd>${order ? `Version ${order.version} · ${escapeHtml(order.checksum.slice(0, 12))}…` : "No order yet"}</dd></div>
+        <div><dt>Copied</dt><dd>Directions only</dd></div>
+        <div><dt>Not copied</dt><dd>Credentials, plan contents, authority</dd></div>
+      </dl>
+    </form>
+  </dialog>`;
+};
+
+const bindCodexHandoffInteractions = (): void => {
+  const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
+  const trigger = root.querySelector<HTMLButtonElement>("[data-action='open-codex-handoff']");
+  trigger?.addEventListener("click", () => dialog?.showModal());
+  dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  root.querySelector<HTMLButtonElement>("[data-action='copy-codex-handoff']")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const prompt = currentCodexHandoff().prompt;
+    const status = root.querySelector<HTMLElement>("[data-codex-handoff-status]");
+    try {
+      await navigator.clipboard.writeText(prompt);
+      button.textContent = "Copied — open Codex";
+      if (status) status.textContent = "Copied. Nothing has been sent or connected; paste it into Codex when you are ready.";
+      announce("Codex handoff copied. Nothing has been sent yet.");
+    } catch {
+      const textarea = root.querySelector<HTMLTextAreaElement>("[data-codex-handoff-prompt]");
+      textarea?.focus();
+      textarea?.select();
+      if (status) status.textContent = "Automatic copying is unavailable here. The complete prompt is selected for you to copy.";
+      announce("The handoff prompt is selected and ready to copy.");
+    }
+  });
+};
+
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
   if (order.status === "waiting_for_codex") return modelContext
     ? { label: "Saved · ready for Codex", title: "Your order is safe. Codex has not processed the latest version yet.", detail: "You can keep adding details here. When Codex opens the order, it receives the full brief and every change since its last checkpoint." }
@@ -295,7 +366,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
       <p class="arrival-header__mode">New finite plan / human order</p>
       <div class="identity-cluster">
-        <div class="operator-status"><span></span>${modelContext ? "Codex kitchen connected" : "Saved kitchen"}</div>
+        ${renderCodexHandoffButton()}
+        <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Saved kitchen"}</div>
         <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
       </div>
     </header>
@@ -352,16 +424,12 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
           </form>
         </section>
-        <section class="arrival-handoff">
-          <div><p class="eyebrow">Continue in Codex</p><h2>“Open my Finite arrival and take it from here.”</h2></div>
-          <p>${modelContext ? "Codex is connected to this page and can call the arrival tools now." : "Open this Site from Codex, or open your Codex task and use Finite there. You will not need to repeat anything saved here."}</p>
-          <dl><div><dt>Exact version</dt><dd>${order.version}</dd></div><div><dt>Since checkpoint</dt><dd>${Math.max(0, order.version - order.lastOperatorCheckpoint)} changes</dd></div><div><dt>Human authority</dt><dd>Site only</dd></div></dl>
-        </section>
         ${inputTrail.length ? `<details class="arrival-history"><summary>Recent human-supplied updates</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(input.kind)} · ${escapeHtml(input.sourceSurface)}</span><p>${escapeHtml(JSON.stringify(input.payload))}</p></li>`).join("")}</ol></details>` : ""}
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No plan yet"}</span></footer>`;
+    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No plan yet"}</span></footer>
+    ${renderCodexHandoffDialog()}`;
   bindArrivalInteractions();
 };
 
@@ -407,6 +475,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
 };
 
 function bindArrivalInteractions(): void {
+  bindCodexHandoffInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
@@ -662,7 +731,8 @@ async function render(): Promise<SurfaceManifest> {
         ${(["travel", "renovation", "event"] as ProfileId[]).map((profileId) => `<button data-action="profile" data-profile="${profileId}" aria-pressed="${kernel.profile.profileId === profileId}">${profileId === "event" ? "Launch event" : profileId}</button>`).join("")}
       </nav>
       <div class="identity-cluster">
-        <div class="operator-status"><span></span>${modelContext ? "Codex kitchen connected" : "Local kitchen"}</div>
+        ${renderCodexHandoffButton()}
+        <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Local kitchen"}</div>
         <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
       </div>
     </header>
@@ -677,7 +747,8 @@ async function render(): Promise<SurfaceManifest> {
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
       ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three kitchens. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>`;
+    <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
+    ${renderCodexHandoffDialog()}`;
   bindInteractions();
   return manifest;
 }
@@ -737,6 +808,7 @@ const rejectPlanDraft = async (draftId: string): Promise<void> => {
 };
 
 function bindInteractions(): void {
+  bindCodexHandoffInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());

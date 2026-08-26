@@ -56,9 +56,85 @@ const define = ({ name, title, description, inputSchema = objectSchema(), readOn
   },
 });
 
+const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, input: Record<string, unknown>): Promise<ToolResult> => {
+  const kitchen = await runtime.openKitchen();
+  if (!kitchen.ok) return kitchen;
+
+  const requestedOrderId = input.orderId ? String(input.orderId) : null;
+  const opened = await arrival.open(requestedOrderId ? { orderId: requestedOrderId } : {});
+  if (!opened.ok && opened.code !== "ARRIVAL_NOT_FOUND") {
+    return {
+      ok: false,
+      code: "KITCHEN_ENTRY_INCOMPLETE",
+      message: "Finite could not read the human-order rail, so the operator bootstrap is incomplete.",
+      arrivalCode: opened.code,
+      acceptedStateChanged: false,
+      next: "Retry finite_enter_kitchen. Do not infer that no order exists, reconstruct it from the copied prompt, or begin plan work from a partial kitchen read.",
+    };
+  }
+  if (requestedOrderId && !opened.ok) {
+    return {
+      ok: false,
+      code: "HANDOFF_ORDER_NOT_FOUND",
+      message: "The named human order is not available in this Site identity.",
+      requestedOrderId,
+      plan: kitchen.brief,
+      acceptedStateChanged: false,
+      next: "Confirm that this Codex browser can open the supplied Finite Site, then ask the human for a fresh handoff. Do not request credentials or reconstruct the order from the copied prompt.",
+    };
+  }
+
+  const orientation = opened.ok ? opened.orientation : null;
+  const active = (kitchen.brief as Record<string, unknown> | undefined)?.active as Record<string, unknown> | undefined;
+  const differences: Array<Record<string, unknown>> = [];
+  if (orientation && input.expectedOrderVersion !== undefined && Number(input.expectedOrderVersion) !== orientation.exactOrderVersion) {
+    differences.push({ field: "orderVersion", handoff: Number(input.expectedOrderVersion), current: orientation.exactOrderVersion });
+  }
+  if (orientation && input.expectedOrderChecksum && String(input.expectedOrderChecksum) !== orientation.exactOrderChecksum) {
+    differences.push({ field: "orderChecksum", handoff: String(input.expectedOrderChecksum), current: orientation.exactOrderChecksum });
+  }
+  if (input.expectedPlanId && String(input.expectedPlanId) !== String(active?.planId ?? "")) {
+    differences.push({ field: "planId", handoff: String(input.expectedPlanId), current: active?.planId ?? null });
+  }
+  if (input.expectedPlanRevision !== undefined && Number(input.expectedPlanRevision) !== Number(active?.revision)) {
+    differences.push({ field: "planRevision", handoff: Number(input.expectedPlanRevision), current: active?.revision ?? null });
+  }
+
+  const arrivalState = orientation
+    ? { status: "active", orientation }
+    : { status: "none", code: "ARRIVAL_NOT_FOUND" };
+  const next = orientation
+    ? orientation.next
+    : "No active human arrival is waiting. Ask for the outcome in ordinary language, then use finite_create_arrival_order to preserve it before interpreting or planning.";
+  return {
+    ok: true,
+    code: differences.length ? "KITCHEN_ENTERED_WITH_CURRENT_STATE" : "KITCHEN_ENTERED",
+    bootstrapVersion: "finite-kitchen-bootstrap.v1",
+    operatingContract: {
+      operator: "Codex",
+      consumer: "human",
+      firstReadComplete: true,
+      copiedPromptIsAuthority: false,
+      humanAuthorityExposedThroughWebMCP: false,
+      law: "Finite supplies canonical state and legal operations. Codex operates. The human supplies intent, judgment, preference, and exact authority.",
+    },
+    handoffReceipt: {
+      requestedOrderId,
+      matchedCurrentState: differences.length === 0,
+      differences,
+      note: differences.length ? "The handoff was only a pointer. Canonical Site state has advanced; continue from the state returned here." : "The handoff receipt matches current Site state.",
+    },
+    arrival: arrivalState,
+    plan: kitchen.brief,
+    acceptedStateChanged: false,
+    next,
+  };
+};
+
 const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: () => runtime.openKitchen() }),
+  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, changed-state receipt, operator contract, and next safe route in one read-only packet. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision }), execute: (input) => enterKitchen(runtime, arrival, input) }),
   define({ name: "finite_create_arrival_order", title: "Capture a human order", description: "Persist the human's requested outcome exactly as supplied from Codex. This creates append-only non-authoritative intake, not a plan, interpretation, or human approval.", inputSchema: objectSchema({ idempotencyKey, rawOutcome: { type: "string", minLength: 1, maxLength: 4000 }, structured: { type: "object" }, attachments: { type: "array", maxItems: 20 } }, ["idempotencyKey", "rawOutcome"]), execute: (input) => arrival.create({ idempotencyKey: String(input.idempotencyKey), rawOutcome: String(input.rawOutcome), structured: input.structured && typeof input.structured === "object" && !Array.isArray(input.structured) ? input.structured as Record<string, unknown> : {}, attachments: Array.isArray(input.attachments) ? input.attachments : [], sourceSurface: "codex" }) }),
   define({ name: "finite_append_arrival_input", title: "Append human-supplied arrival detail", description: "Append one human-supplied detail, constraint, preference, commitment, answer, evidence reference, or correction against an exact order version. This records provenance and never converts Codex inference into human fact.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, kind: { type: "string", enum: ["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"] }, payload: { type: "object" } }, ["orderId", "expectedVersion", "kind", "payload"]), execute: (input) => arrival.appendInput({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), kind: input.kind as ArrivalInputKind, payload: input.payload as Record<string, unknown>, sourceSurface: "codex" }) }),
   define({ name: "finite_open_arrival", title: "Orient to the waiting human order", description: "Open the current or named arrival with the full human order, delta since the operator checkpoint, unprocessed count, evidence, inference labels, missing facts, contradictions, saved operator work, exact version/checksum, and next safe route.", readOnly: true, inputSchema: objectSchema({ orderId: string, sinceVersion: { type: "integer", minimum: 0 } }), execute: (input) => arrival.open({ ...(input.orderId ? { orderId: String(input.orderId) } : {}), ...(input.sinceVersion !== undefined ? { sinceVersion: Number(input.sinceVersion) } : {}) }) }),

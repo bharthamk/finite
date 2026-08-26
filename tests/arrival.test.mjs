@@ -97,14 +97,45 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const host = new MemoryModelContext();
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
-  assert.equal(inventory.length, 45);
-  for (const name of ["finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
+  assert.equal(inventory.length, 46);
+  for (const name of ["finite_enter_kitchen", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
   assert.equal(created.order.status, "waiting_for_codex");
   assert.equal(created.acceptedStateChanged, false);
   assert.equal(created.operationProof.toolName, "finite_create_arrival_order");
   assert.equal((await host.execute("finite_open_arrival", {})).orientation.exactOrderChecksum, created.order.checksum);
+
+  const entered = await host.execute("finite_enter_kitchen", {
+    orderId: created.order.orderId,
+    expectedOrderVersion: created.order.version,
+    expectedOrderChecksum: created.order.checksum,
+    expectedPlanId: runtime.kernel.profile.planId,
+    expectedPlanRevision: runtime.kernel.revision,
+  });
+  assert.equal(entered.code, "KITCHEN_ENTERED");
+  assert.equal(entered.operatingContract.operator, "Codex");
+  assert.equal(entered.operatingContract.consumer, "human");
+  assert.equal(entered.operatingContract.copiedPromptIsAuthority, false);
+  assert.equal(entered.arrival.orientation.exactOrderChecksum, created.order.checksum);
+
+  const changed = await arrivals.appendInput({ orderId: created.order.orderId, expectedVersion: 1, kind: "detail", payload: { text: "A later Site update" }, sourceSurface: "site" });
+  const reentered = await host.execute("finite_enter_kitchen", {
+    orderId: created.order.orderId,
+    expectedOrderVersion: 1,
+    expectedOrderChecksum: created.order.checksum,
+    expectedPlanId: runtime.kernel.profile.planId,
+    expectedPlanRevision: runtime.kernel.revision,
+  });
+  assert.equal(changed.order.version, 2);
+  assert.equal(reentered.code, "KITCHEN_ENTERED_WITH_CURRENT_STATE");
+  assert.equal(reentered.handoffReceipt.matchedCurrentState, false);
+  assert.equal(reentered.arrival.orientation.exactOrderVersion, 2);
+  assert.match(reentered.next, /Process 2 human-supplied updates/);
+
+  const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
+  assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");
+  assert.equal(missing.acceptedStateChanged, false);
 });
 
 test("arrival API refuses missing identity and cross-origin writes before touching D1", async () => {
@@ -115,4 +146,18 @@ test("arrival API refuses missing identity and cross-origin writes before touchi
   const crossOrigin = await handleArrivalRequest(new Request("https://finite.example/api/arrivals", { method: "POST", headers: { origin: "https://attacker.example", "content-type": "application/json", "oai-authenticated-user-id": "user-a" }, body: "{}" }), unavailableDb);
   assert.equal(crossOrigin.status, 403);
   assert.equal((await crossOrigin.json()).code, "CROSS_ORIGIN_WRITE_REFUSED");
+});
+
+test("kitchen entry distinguishes no waiting order from an unreadable arrival service", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const unavailable = {
+    open: async () => ({ ok: false, code: "ARRIVAL_SERVICE_UNAVAILABLE", acceptedStateChanged: false }),
+  };
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, unavailable).register();
+  const entered = await host.execute("finite_enter_kitchen", {});
+  assert.equal(entered.ok, false);
+  assert.equal(entered.code, "KITCHEN_ENTRY_INCOMPLETE");
+  assert.match(entered.next, /Do not infer that no order exists/);
 });

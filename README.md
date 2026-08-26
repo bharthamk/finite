@@ -38,7 +38,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- 42 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; all human authority creators remain absent.
+- 43 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; `finite_enter_kitchen` is the deterministic first call from a copied handoff, and all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations; there is no backend model or application-owned agent.
 
