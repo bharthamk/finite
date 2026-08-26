@@ -861,6 +861,21 @@ const renderLifecycleControl = (): string => {
   </details>`;
 };
 
+const renderHumanRealityControl = (): string => {
+  const kernel = runtime.kernel;
+  if (kernel.pendingGroupDecision) {
+    const pending = kernel.pendingGroupDecision;
+    const confirmed = kernel.groupDecisionConfirmation?.targetId === pending.groupDecisionId;
+    return `<section class="zone zone--approval_panel lifecycle-control" aria-label="Group decision review"><div class="zone__heading"><p class="eyebrow">Group decision</p><h2>${escapeHtml(pending.question)}</h2></div><div class="approval-copy"><p>${escapeHtml(pending.resolvedOutcome)}</p><div><span>Decision protocol</span><strong>${escapeHtml(pending.protocol.replaceAll("_", " "))}</strong></div><details><summary>Named positions (${pending.positions.length})</summary><ul>${pending.positions.map((position) => `<li><strong>${escapeHtml(position.participantName)}</strong>: ${escapeHtml(position.position)}</li>`).join("")}</ul></details>${pending.unresolvedConflicts.length ? `<details><summary>Still unresolved (${pending.unresolvedConflicts.length})</summary><ul>${pending.unresolvedConflicts.map((conflict) => `<li>${escapeHtml(conflict)}</li>`).join("")}</ul></details>` : ""}${confirmed ? `<p class="quiet">Human confirmation recorded. Codex may now append this exact group outcome.</p>` : `<button class="button button--approve" data-action="confirm-group-decision" data-group-decision="${escapeHtml(pending.groupDecisionId)}">Confirm this exact group outcome</button><button class="text-button" data-action="cancel-group-decision">Not accurate</button>`}</div></section>`;
+  }
+  if (kernel.pendingExternalAction) {
+    const pending = kernel.pendingExternalAction;
+    const confirmed = kernel.externalActionConfirmation?.targetId === pending.externalActionChangeId;
+    return `<section class="zone zone--approval_panel lifecycle-control" aria-label="External action review"><div class="zone__heading"><p class="eyebrow">Real-world status</p><h2>Is ${escapeHtml(pending.label)} really ${escapeHtml(pending.after)}?</h2></div><div class="approval-copy"><p>${escapeHtml(pending.reason)}</p><div><span>Prior status</span><strong>${escapeHtml(pending.before ?? "not recorded")}</strong></div><div><span>Proposed status</span><strong>${escapeHtml(pending.after)}</strong></div><p class="quiet">This records reality only. Finite has not booked, paid, verified, or cancelled anything.</p>${confirmed ? `<p class="quiet">Human confirmation recorded. Codex may now append this exact status.</p>` : `<button class="button button--approve" data-action="confirm-external-action" data-external-action="${escapeHtml(pending.externalActionChangeId)}">Confirm this exact status</button><button class="text-button" data-action="cancel-external-action">Not accurate</button>`}</div></section>`;
+  }
+  return "";
+};
+
 const renderPlanDraft = (): string => {
   const draft = runtime.pendingPlanDraft;
   const returned = runtime.returnedConstructionReview;
@@ -982,6 +997,7 @@ async function render(): Promise<SurfaceManifest> {
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
       ${renderLifecycleControl()}
+      ${renderHumanRealityControl()}
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
@@ -1096,6 +1112,20 @@ const confirmLifecycle = async (lifecycleChangeId: string): Promise<void> => {
   await render();
 };
 
+const confirmGroupDecision = async (groupDecisionId: string): Promise<void> => {
+  const result = runtime.kernel.humanConfirmGroupDecision({ groupDecisionId });
+  if (result.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
+  announce(result.ok ? "Exact group outcome confirmed. Codex may now append it with a receipt." : `The group outcome was not confirmed: ${result.code}`);
+  await render();
+};
+
+const confirmExternalAction = async (externalActionChangeId: string): Promise<void> => {
+  const result = runtime.kernel.humanConfirmExternalAction({ externalActionChangeId });
+  if (result.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
+  announce(result.ok ? "Exact real-world status confirmed. Codex may now append it with a receipt." : `The status was not confirmed: ${result.code}`);
+  await render();
+};
+
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
@@ -1110,6 +1140,10 @@ function bindInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-plan-lifecycle]")?.addEventListener("submit", (event) => { event.preventDefault(); void stageLifecycle(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-lifecycle']")?.addEventListener("click", (event) => { void confirmLifecycle((event.currentTarget as HTMLButtonElement).dataset.lifecycle ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-lifecycle']")?.addEventListener("click", async () => { runtime.kernel.pendingLifecycleChange = null; runtime.kernel.lifecycleConfirmation = null; announce("Plan status change cancelled. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-group-decision']")?.addEventListener("click", (event) => { void confirmGroupDecision((event.currentTarget as HTMLButtonElement).dataset.groupDecision ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-group-decision']")?.addEventListener("click", async () => { runtime.kernel.pendingGroupDecision = null; runtime.kernel.groupDecisionConfirmation = null; announce("Group decision returned. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-external-action']")?.addEventListener("click", (event) => { void confirmExternalAction((event.currentTarget as HTMLButtonElement).dataset.externalAction ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-external-action']")?.addEventListener("click", async () => { runtime.kernel.pendingExternalAction = null; runtime.kernel.externalActionConfirmation = null; announce("Real-world status returned. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

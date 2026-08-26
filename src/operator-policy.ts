@@ -1,4 +1,4 @@
-import type { ToolResult } from "./types.js";
+import type { ExternalActionStatus, ToolResult } from "./types.js";
 
 export const currencyContract = {
   code: "AUD",
@@ -7,7 +7,6 @@ export const currencyContract = {
 } as const;
 
 export const externalActionStatuses = ["researched", "quoted", "held", "booked", "paid", "verified", "cancelled"] as const;
-export type ExternalActionStatus = typeof externalActionStatuses[number];
 
 export const humanRealityPolicy = [
   { auditId: 31, signal: "sentimental_value", action: "Preserve the named meaning as a preference or lock; do not repeatedly optimize it away." },

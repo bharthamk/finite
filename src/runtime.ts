@@ -412,6 +412,14 @@ export class FinitePlanRuntime {
       route = this.kernel.lifecycleConfirmation
         ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_plan_lifecycle", targetId: this.kernel.pendingLifecycleChange.lifecycleChangeId, authorityPresent: true }
         : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_plan_lifecycle", targetId: this.kernel.pendingLifecycleChange.lifecycleChangeId, authorityPresent: false };
+    } else if (this.kernel.pendingGroupDecision) {
+      route = this.kernel.groupDecisionConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_group_decision", targetId: this.kernel.pendingGroupDecision.groupDecisionId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_group_decision", targetId: this.kernel.pendingGroupDecision.groupDecisionId, authorityPresent: false };
+    } else if (this.kernel.pendingExternalAction) {
+      route = this.kernel.externalActionConfirmation
+        ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_external_action", targetId: this.kernel.pendingExternalAction.externalActionChangeId, authorityPresent: true }
+        : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_external_action", targetId: this.kernel.pendingExternalAction.externalActionChangeId, authorityPresent: false };
     } else if (this.kernel.approval && this.kernel.stagedCandidate) {
       route = { stage: "human_approved", nextTool: "finite_apply_approved_option", targetId: this.kernel.stagedCandidate.candidateId, authorityPresent: true };
     } else if (this.kernel.stagedCandidate) {

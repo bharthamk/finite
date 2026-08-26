@@ -19,7 +19,12 @@ import type {
   EvidenceAssessment,
   EvidenceRecord,
   EvidenceRegistrationInput,
+  ExternalActionEvent,
+  ExternalActionStatus,
   FeedbackEvent,
+  GroupDecisionEvent,
+  GroupDecisionProtocol,
+  GroupPosition,
   HumanApproval,
   PlanLifecycleEvent,
   PlanLifecycleStatus,
@@ -68,6 +73,30 @@ interface PendingLifecycleChange {
   contentHash: string;
 }
 
+interface PendingGroupDecision {
+  groupDecisionId: string;
+  baseRevision: number;
+  question: string;
+  positions: GroupPosition[];
+  unresolvedConflicts: string[];
+  protocol: GroupDecisionProtocol;
+  resolvedOutcome: string;
+  contentHash: string;
+}
+
+interface PendingExternalAction {
+  externalActionChangeId: string;
+  baseRevision: number;
+  actionId: string;
+  label: string;
+  before: ExternalActionStatus | null;
+  after: ExternalActionStatus;
+  reason: string;
+  evidenceRef: string | null;
+  humanAttestationRequired: boolean;
+  contentHash: string;
+}
+
 interface KernelCheckpoint {
   revision: number;
   lifecycleStatus: PlanLifecycleStatus;
@@ -78,6 +107,8 @@ interface KernelCheckpoint {
   correctionEvents: CorrectionEvent[];
   preferenceEvents: PreferenceEvent[];
   lifecycleEvents: PlanLifecycleEvent[];
+  groupDecisionEvents: GroupDecisionEvent[];
+  externalActionEvents: ExternalActionEvent[];
   feedback: FeedbackEvent[];
   receipts: Receipt[];
   candidates: Map<string, Candidate>;
@@ -90,10 +121,16 @@ interface KernelCheckpoint {
   preferenceConfirmation: Confirmation | null;
   pendingLifecycleChange: PendingLifecycleChange | null;
   lifecycleConfirmation: Confirmation | null;
+  pendingGroupDecision: PendingGroupDecision | null;
+  groupDecisionConfirmation: Confirmation | null;
+  pendingExternalAction: PendingExternalAction | null;
+  externalActionConfirmation: Confirmation | null;
   optionIdempotency: Map<string, Receipt>;
   correctionIdempotency: Map<string, Receipt>;
   preferenceIdempotency: Map<string, Receipt>;
   lifecycleIdempotency: Map<string, Receipt>;
+  groupDecisionIdempotency: Map<string, Receipt>;
+  externalActionIdempotency: Map<string, Receipt>;
 }
 
 const contentHash = (content: string): Promise<string> => sha256({ content });
@@ -127,6 +164,8 @@ export class FinitePlanKernel {
   readonly correctionEvents: CorrectionEvent[] = [];
   readonly preferenceEvents: PreferenceEvent[] = [];
   readonly lifecycleEvents: PlanLifecycleEvent[] = [];
+  readonly groupDecisionEvents: GroupDecisionEvent[] = [];
+  readonly externalActionEvents: ExternalActionEvent[] = [];
   readonly feedback: FeedbackEvent[] = [];
   readonly receipts: Receipt[] = [];
   readonly candidates = new Map<string, Candidate>();
@@ -139,10 +178,16 @@ export class FinitePlanKernel {
   preferenceConfirmation: Confirmation | null = null;
   pendingLifecycleChange: PendingLifecycleChange | null = null;
   lifecycleConfirmation: Confirmation | null = null;
+  pendingGroupDecision: PendingGroupDecision | null = null;
+  groupDecisionConfirmation: Confirmation | null = null;
+  pendingExternalAction: PendingExternalAction | null = null;
+  externalActionConfirmation: Confirmation | null = null;
   private readonly optionIdempotency = new Map<string, Receipt>();
   private readonly correctionIdempotency = new Map<string, Receipt>();
   private readonly preferenceIdempotency = new Map<string, Receipt>();
   private readonly lifecycleIdempotency = new Map<string, Receipt>();
+  private readonly groupDecisionIdempotency = new Map<string, Receipt>();
+  private readonly externalActionIdempotency = new Map<string, Receipt>();
   private acceptedSnapshotHash: string | null = null;
   private acceptedTruthStatus: "local" | "uninitialized" | "ready" | "unavailable";
 
@@ -176,6 +221,8 @@ export class FinitePlanKernel {
     this.correctionEvents.push(...clone(snapshot.correctionEvents));
     this.preferenceEvents.push(...clone(snapshot.preferenceEvents));
     this.lifecycleEvents.push(...clone(snapshot.lifecycleEvents ?? []));
+    this.groupDecisionEvents.push(...clone(snapshot.groupDecisionEvents ?? []));
+    this.externalActionEvents.push(...clone(snapshot.externalActionEvents ?? []));
     this.feedback.push(...clone(snapshot.feedback));
     this.receipts.push(...clone(snapshot.receipts));
     for (const evidence of snapshot.evidenceRecords ?? []) this.evidence.set(evidence.evidenceId, clone(evidence));
@@ -186,6 +233,8 @@ export class FinitePlanKernel {
       if (receipt.receiptType === "actual_correction") this.correctionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "preference_change") this.preferenceIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "plan_lifecycle") this.lifecycleIdempotency.set(receipt.idempotencyKey, receipt);
+      if (receipt.receiptType === "group_decision") this.groupDecisionIdempotency.set(receipt.idempotencyKey, receipt);
+      if (receipt.receiptType === "external_action") this.externalActionIdempotency.set(receipt.idempotencyKey, receipt);
     }
   }
 
@@ -194,6 +243,8 @@ export class FinitePlanKernel {
     this.correctionEvents.splice(0);
     this.preferenceEvents.splice(0);
     this.lifecycleEvents.splice(0);
+    this.groupDecisionEvents.splice(0);
+    this.externalActionEvents.splice(0);
     this.feedback.splice(0);
     this.receipts.splice(0);
     this.candidates.clear();
@@ -201,6 +252,8 @@ export class FinitePlanKernel {
     this.correctionIdempotency.clear();
     this.preferenceIdempotency.clear();
     this.lifecycleIdempotency.clear();
+    this.groupDecisionIdempotency.clear();
+    this.externalActionIdempotency.clear();
     this.activeEventId = null;
     this.stagedCandidate = null;
     this.approval = null;
@@ -208,6 +261,12 @@ export class FinitePlanKernel {
     this.correctionConfirmation = null;
     this.pendingPreferenceChange = null;
     this.preferenceConfirmation = null;
+    this.pendingLifecycleChange = null;
+    this.lifecycleConfirmation = null;
+    this.pendingGroupDecision = null;
+    this.groupDecisionConfirmation = null;
+    this.pendingExternalAction = null;
+    this.externalActionConfirmation = null;
     this.restore(snapshot);
   }
 
@@ -252,6 +311,7 @@ export class FinitePlanKernel {
       ...this.profile.actuals.map((actual) => actual.evidenceRef),
       ...acceptedEvents.flatMap((event) => event.evidenceRefs),
       ...this.correctionEvents.map((event) => event.evidenceRef),
+      ...this.externalActionEvents.map((event) => event.evidenceRef).filter((value): value is string => Boolean(value)),
     ]);
     return {
       snapshotVersion: "finite-plan-snapshot.v1",
@@ -267,6 +327,8 @@ export class FinitePlanKernel {
       correctionEvents: clone(this.correctionEvents),
       preferenceEvents: clone(this.preferenceEvents),
       lifecycleEvents: clone(this.lifecycleEvents),
+      groupDecisionEvents: clone(this.groupDecisionEvents),
+      externalActionEvents: clone(this.externalActionEvents),
       feedback: clone(this.feedback),
       evidenceRecords: clone([...acceptedEvidenceRefs].map((evidenceId) => this.evidence.get(evidenceId)).filter((evidence): evidence is EvidenceRecord => Boolean(evidence))),
       receipts: clone(this.receipts),
@@ -288,6 +350,8 @@ export class FinitePlanKernel {
       correctionEvents: this.correctionEvents,
       preferenceEvents: this.preferenceEvents,
       lifecycleEvents: this.lifecycleEvents,
+      groupDecisionEvents: this.groupDecisionEvents,
+      externalActionEvents: this.externalActionEvents,
       feedback: this.feedback,
       receipts: this.receipts,
       candidates: this.candidates,
@@ -300,10 +364,16 @@ export class FinitePlanKernel {
       preferenceConfirmation: this.preferenceConfirmation,
       pendingLifecycleChange: this.pendingLifecycleChange,
       lifecycleConfirmation: this.lifecycleConfirmation,
+      pendingGroupDecision: this.pendingGroupDecision,
+      groupDecisionConfirmation: this.groupDecisionConfirmation,
+      pendingExternalAction: this.pendingExternalAction,
+      externalActionConfirmation: this.externalActionConfirmation,
       optionIdempotency: this.optionIdempotency,
       correctionIdempotency: this.correctionIdempotency,
       preferenceIdempotency: this.preferenceIdempotency,
       lifecycleIdempotency: this.lifecycleIdempotency,
+      groupDecisionIdempotency: this.groupDecisionIdempotency,
+      externalActionIdempotency: this.externalActionIdempotency,
     });
   }
 
@@ -317,6 +387,8 @@ export class FinitePlanKernel {
     this.correctionEvents.splice(0, this.correctionEvents.length, ...clone(checkpoint.correctionEvents));
     this.preferenceEvents.splice(0, this.preferenceEvents.length, ...clone(checkpoint.preferenceEvents));
     this.lifecycleEvents.splice(0, this.lifecycleEvents.length, ...clone(checkpoint.lifecycleEvents));
+    this.groupDecisionEvents.splice(0, this.groupDecisionEvents.length, ...clone(checkpoint.groupDecisionEvents));
+    this.externalActionEvents.splice(0, this.externalActionEvents.length, ...clone(checkpoint.externalActionEvents));
     this.feedback.splice(0, this.feedback.length, ...clone(checkpoint.feedback));
     this.receipts.splice(0, this.receipts.length, ...clone(checkpoint.receipts));
     this.candidates.clear();
@@ -330,6 +402,10 @@ export class FinitePlanKernel {
     this.preferenceConfirmation = clone(checkpoint.preferenceConfirmation);
     this.pendingLifecycleChange = clone(checkpoint.pendingLifecycleChange);
     this.lifecycleConfirmation = clone(checkpoint.lifecycleConfirmation);
+    this.pendingGroupDecision = clone(checkpoint.pendingGroupDecision);
+    this.groupDecisionConfirmation = clone(checkpoint.groupDecisionConfirmation);
+    this.pendingExternalAction = clone(checkpoint.pendingExternalAction);
+    this.externalActionConfirmation = clone(checkpoint.externalActionConfirmation);
     this.optionIdempotency.clear();
     for (const [key, receipt] of checkpoint.optionIdempotency) this.optionIdempotency.set(key, clone(receipt));
     this.correctionIdempotency.clear();
@@ -338,6 +414,10 @@ export class FinitePlanKernel {
     for (const [key, receipt] of checkpoint.preferenceIdempotency) this.preferenceIdempotency.set(key, clone(receipt));
     this.lifecycleIdempotency.clear();
     for (const [key, receipt] of checkpoint.lifecycleIdempotency) this.lifecycleIdempotency.set(key, clone(receipt));
+    this.groupDecisionIdempotency.clear();
+    for (const [key, receipt] of checkpoint.groupDecisionIdempotency) this.groupDecisionIdempotency.set(key, clone(receipt));
+    this.externalActionIdempotency.clear();
+    for (const [key, receipt] of checkpoint.externalActionIdempotency) this.externalActionIdempotency.set(key, clone(receipt));
   }
 
   private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null): Promise<ToolResult | null> {
@@ -436,6 +516,7 @@ export class FinitePlanKernel {
       externalActionLaw: { statuses: externalActionStatuses, planningDoesNotEqualExecution: true, humanAttestationRequiredFor: ["booked", "paid", "verified", "cancelled"] },
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
+      durableHumanReality: { groupDecisions: "append_only_confirmed_ledger", externalActions: "append_only_evidence_and_attestation_ledger" },
       currentDecision: this.decisionState(),
       humanAuthorityActionsExposed: false,
       approvalLaw: "Only the human surface creates approval or confirmation identifiers bound to exact staged content and revision.",
@@ -453,8 +534,8 @@ export class FinitePlanKernel {
     if (unique.includes("constraints")) state.constraints = { locks: clone(this.profile.locks), relationships: clone(this.profile.relationships) };
     if (unique.includes("entities")) state.entities = clone(this.entities);
     if (unique.includes("preferences")) state.preferences = { labels: clone(this.profile.preferenceLabels), weights: clone(this.preferenceWeights) };
-    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, lifecycleChangeId: this.pendingLifecycleChange?.lifecycleChangeId ?? null, next: this.decisionNext() };
-    if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), lifecycleEvents: clone(this.lifecycleEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
+    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, lifecycleChangeId: this.pendingLifecycleChange?.lifecycleChangeId ?? null, groupDecisionId: this.pendingGroupDecision?.groupDecisionId ?? null, groupDecisionConfirmationId: this.groupDecisionConfirmation?.confirmationId ?? null, externalActionChangeId: this.pendingExternalAction?.externalActionChangeId ?? null, externalActionConfirmationId: this.externalActionConfirmation?.confirmationId ?? null, next: this.decisionNext() };
+    if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), lifecycleEvents: clone(this.lifecycleEvents), groupDecisionEvents: clone(this.groupDecisionEvents), externalActionEvents: clone(this.externalActionEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
     return { ok: true, code: "PLAN_STATE", selectors: unique, state, acceptedStateChanged: false };
   }
 
@@ -1031,6 +1112,113 @@ export class FinitePlanKernel {
     return { ok: true, code: "PLAN_LIFECYCLE_APPLIED", lifecycle: { status: this.lifecycleStatus }, receipt: clone(receipt), acceptedStateChanged: true };
   }
 
+  getGroupDecisions(): ToolResult {
+    return { ok: true, code: "GROUP_DECISIONS", contract: groupDecisionContract, accepted: clone(this.groupDecisionEvents), pending: clone(this.pendingGroupDecision), confirmation: clone(this.groupDecisionConfirmation), acceptedStateChanged: false };
+  }
+
+  async stageGroupDecision({ question, positions, unresolvedConflicts, protocol, resolvedOutcome, expectedRevision }: { question: string; positions: GroupPosition[]; unresolvedConflicts: string[]; protocol: GroupDecisionProtocol; resolvedOutcome: string; expectedRevision: number }): Promise<ToolResult> {
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const cleanQuestion = typeof question === "string" ? question.trim() : "";
+    const cleanOutcome = typeof resolvedOutcome === "string" ? resolvedOutcome.trim() : "";
+    const cleanPositions = Array.isArray(positions) ? positions.map((position) => ({ participantId: String(position?.participantId ?? "").trim(), participantName: String(position?.participantName ?? "").trim(), position: String(position?.position ?? "").trim() })) : [];
+    const cleanConflicts = Array.isArray(unresolvedConflicts) ? unresolvedConflicts.map((item) => String(item).trim()).filter(Boolean) : [];
+    const protocols = groupDecisionContract.allowedProtocols as readonly string[];
+    const uniqueParticipants = new Set(cleanPositions.map((position) => position.participantId));
+    if (!cleanQuestion || cleanQuestion.length > 1000 || !cleanOutcome || cleanOutcome.length > 2000 || cleanPositions.length < 2 || uniqueParticipants.size !== cleanPositions.length || cleanPositions.some((position) => !position.participantId || !position.participantName || !position.position || position.position.length > 1000) || !protocols.includes(protocol)) return { ok: false, code: "GROUP_DECISION_INPUT_INVALID", acceptedStateChanged: false, required: groupDecisionContract.requiredBeforeAuthority };
+    const base = { groupDecisionId: makeId("group_decision"), baseRevision: this.revision, question: cleanQuestion, positions: cleanPositions, unresolvedConflicts: cleanConflicts, protocol, resolvedOutcome: cleanOutcome };
+    this.pendingGroupDecision = { ...base, contentHash: await sha256(base) };
+    this.groupDecisionConfirmation = null;
+    return { ok: true, code: "GROUP_DECISION_STAGED", groupDecision: clone(this.pendingGroupDecision), acceptedStateChanged: false, next: "Show every named position, unresolved conflict, selected protocol, and proposed outcome to the human. Only the human surface may confirm it." };
+  }
+
+  humanConfirmGroupDecision({ groupDecisionId }: { groupDecisionId: string }): ToolResult {
+    if (!this.pendingGroupDecision || this.pendingGroupDecision.groupDecisionId !== groupDecisionId) return { ok: false, code: "GROUP_DECISION_NOT_STAGED", acceptedStateChanged: false };
+    this.groupDecisionConfirmation = { confirmationId: makeId("group_decision_confirmation"), targetId: groupDecisionId, revision: this.revision, contentHash: this.pendingGroupDecision.contentHash, source: "human_action" };
+    return { ok: true, code: "HUMAN_GROUP_DECISION_CONFIRMED", confirmation: clone(this.groupDecisionConfirmation), acceptedStateChanged: false };
+  }
+
+  async applyConfirmedGroupDecision({ groupDecisionId, confirmationId, expectedRevision, idempotencyKey }: { groupDecisionId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+    const replay = this.groupDecisionIdempotency.get(idempotencyKey);
+    if (replay) {
+      const event = replay.payload.groupDecisionEvent as Partial<GroupDecisionEvent> | undefined;
+      const matches = event?.groupDecisionId === groupDecisionId && event.confirmationId === confirmationId && replay.fromRevision === expectedRevision;
+      return matches ? { ok: true, code: "IDEMPOTENT_REPLAY", replay: true, receipt: clone(replay), acceptedStateChanged: false } : { ok: false, code: "IDEMPOTENCY_KEY_REUSED", acceptedStateChanged: false };
+    }
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const pending = this.pendingGroupDecision;
+    const confirmation = this.groupDecisionConfirmation;
+    if (!pending || pending.groupDecisionId !== groupDecisionId) return { ok: false, code: "GROUP_DECISION_NOT_STAGED", acceptedStateChanged: false };
+    if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
+    const fromRevision = this.revision;
+    this.revision += 1;
+    const event: GroupDecisionEvent = { eventType: "group_decision", groupDecisionId, question: pending.question, positions: clone(pending.positions), unresolvedConflicts: clone(pending.unresolvedConflicts), protocol: pending.protocol, resolvedOutcome: pending.resolvedOutcome, contentHash: pending.contentHash, confirmationId, fromRevision, toRevision: this.revision };
+    this.groupDecisionEvents.push(event);
+    const receipt = await this.makeReceipt("group_decision", fromRevision, idempotencyKey, { groupDecisionEvent: event });
+    this.groupDecisionIdempotency.set(idempotencyKey, receipt);
+    this.clearPending();
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "group_decision", receipt);
+    if (storageFailure) return storageFailure;
+    return { ok: true, code: "GROUP_DECISION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
+  }
+
+  getExternalActions(): ToolResult {
+    const latest = new Map<string, ExternalActionEvent>();
+    for (const event of this.externalActionEvents) latest.set(event.actionId, event);
+    return { ok: true, code: "EXTERNAL_ACTIONS", stateLadder: externalActionStatuses, current: clone([...latest.values()]), history: clone(this.externalActionEvents), pending: clone(this.pendingExternalAction), confirmation: clone(this.externalActionConfirmation), acceptedStateChanged: false };
+  }
+
+  async stageExternalAction({ actionId, label, status, reason, evidenceRef, expectedRevision }: { actionId: string; label: string; status: ExternalActionStatus; reason: string; evidenceRef?: string; expectedRevision: number }): Promise<ToolResult> {
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const cleanActionId = typeof actionId === "string" ? actionId.trim() : "";
+    const cleanLabel = typeof label === "string" ? label.trim() : "";
+    const cleanReason = typeof reason === "string" ? reason.trim() : "";
+    const cleanEvidence = typeof evidenceRef === "string" ? evidenceRef.trim() : "";
+    if (!cleanActionId || !cleanLabel || !cleanReason || cleanReason.length > 1000 || !(externalActionStatuses as readonly string[]).includes(status)) return { ok: false, code: "EXTERNAL_ACTION_INPUT_INVALID", acceptedStateChanged: false };
+    const previous = [...this.externalActionEvents].reverse().find((event) => event.actionId === cleanActionId)?.after ?? null;
+    if (previous === status) return { ok: false, code: "EXTERNAL_ACTION_UNCHANGED", currentStatus: previous, acceptedStateChanged: false };
+    const evidenceRequired = ["quoted", "held", "booked", "paid", "verified"].includes(status);
+    if (evidenceRequired && (!cleanEvidence || !this.evidence.has(cleanEvidence))) return { ok: false, code: "EXTERNAL_ACTION_EVIDENCE_REQUIRED", status, acceptedStateChanged: false, next: "Register or select canonical evidence before staging this status." };
+    const ladder = externalActionStatuses as readonly string[];
+    if (previous && previous !== "cancelled" && status !== "cancelled" && ladder.indexOf(status) < ladder.indexOf(previous)) return { ok: false, code: "EXTERNAL_ACTION_REGRESSION", before: previous, after: status, acceptedStateChanged: false, next: "Record cancellation or create a new action identity; do not rewrite real-world history backward." };
+    const humanAttestationRequired = ["booked", "paid", "verified", "cancelled"].includes(status);
+    const base = { externalActionChangeId: makeId("external_action_change"), baseRevision: this.revision, actionId: cleanActionId, label: cleanLabel, before: previous, after: status, reason: cleanReason, evidenceRef: cleanEvidence || null, humanAttestationRequired };
+    this.pendingExternalAction = { ...base, contentHash: await sha256(base) };
+    this.externalActionConfirmation = null;
+    return { ok: true, code: "EXTERNAL_ACTION_STAGED", externalAction: clone(this.pendingExternalAction), acceptedStateChanged: false, requiresHuman: true, exactQuestion: humanAttestationRequired ? `Has ${cleanLabel} actually been ${status}, and do you want that recorded as human-attested reality?` : `Do you want ${cleanLabel} recorded as ${status} from the cited evidence?`, next: "The staged classification does not perform the external action. The human surface must confirm the exact record." };
+  }
+
+  humanConfirmExternalAction({ externalActionChangeId }: { externalActionChangeId: string }): ToolResult {
+    if (!this.pendingExternalAction || this.pendingExternalAction.externalActionChangeId !== externalActionChangeId) return { ok: false, code: "EXTERNAL_ACTION_NOT_STAGED", acceptedStateChanged: false };
+    this.externalActionConfirmation = { confirmationId: makeId("external_action_confirmation"), targetId: externalActionChangeId, revision: this.revision, contentHash: this.pendingExternalAction.contentHash, source: "human_action" };
+    return { ok: true, code: "HUMAN_EXTERNAL_ACTION_CONFIRMED", confirmation: clone(this.externalActionConfirmation), acceptedStateChanged: false };
+  }
+
+  async applyConfirmedExternalAction({ externalActionChangeId, confirmationId, expectedRevision, idempotencyKey }: { externalActionChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }): Promise<ToolResult> {
+    const replay = this.externalActionIdempotency.get(idempotencyKey);
+    if (replay) {
+      const event = replay.payload.externalActionEvent as Partial<ExternalActionEvent> | undefined;
+      const matches = event?.externalActionChangeId === externalActionChangeId && event.confirmationId === confirmationId && replay.fromRevision === expectedRevision;
+      return matches ? { ok: true, code: "IDEMPOTENT_REPLAY", replay: true, receipt: clone(replay), acceptedStateChanged: false } : { ok: false, code: "IDEMPOTENCY_KEY_REUSED", acceptedStateChanged: false };
+    }
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const pending = this.pendingExternalAction;
+    const confirmation = this.externalActionConfirmation;
+    if (!pending || pending.externalActionChangeId !== externalActionChangeId) return { ok: false, code: "EXTERNAL_ACTION_NOT_STAGED", acceptedStateChanged: false };
+    if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const checkpoint = this.checkpoint();
+    const fromRevision = this.revision;
+    this.revision += 1;
+    const event: ExternalActionEvent = { eventType: "external_action", externalActionChangeId, actionId: pending.actionId, label: pending.label, before: pending.before, after: pending.after, reason: pending.reason, evidenceRef: pending.evidenceRef, humanAttested: pending.humanAttestationRequired, contentHash: pending.contentHash, confirmationId, fromRevision, toRevision: this.revision };
+    this.externalActionEvents.push(event);
+    const receipt = await this.makeReceipt("external_action", fromRevision, idempotencyKey, { externalActionEvent: event });
+    this.externalActionIdempotency.set(idempotencyKey, receipt);
+    this.clearPending();
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "external_action", receipt);
+    if (storageFailure) return storageFailure;
+    return { ok: true, code: "EXTERNAL_ACTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true, externalActionPerformedByFinite: false };
+  }
+
   async stageActualCorrection({ actualId, correctedAmountMinor, reason, evidenceRef, expectedRevision }: { actualId: string; correctedAmountMinor: number; reason: string; evidenceRef: string; expectedRevision: number }): Promise<ToolResult> {
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     const actual = this.currentActuals().find((item) => item.actualId === actualId);
@@ -1126,5 +1314,9 @@ export class FinitePlanKernel {
     this.preferenceConfirmation = null;
     this.pendingLifecycleChange = null;
     this.lifecycleConfirmation = null;
+    this.pendingGroupDecision = null;
+    this.groupDecisionConfirmation = null;
+    this.pendingExternalAction = null;
+    this.externalActionConfirmation = null;
   }
 }

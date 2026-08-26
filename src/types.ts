@@ -485,6 +485,44 @@ export interface PreferenceEvent {
 }
 
 export type PlanLifecycleStatus = "active" | "paused" | "completed" | "abandoned";
+export type GroupDecisionProtocol = "named_decider" | "consensus" | "unanimous_for_locks" | "explicit_compromise";
+export type ExternalActionStatus = "researched" | "quoted" | "held" | "booked" | "paid" | "verified" | "cancelled";
+
+export interface GroupPosition {
+  participantId: string;
+  participantName: string;
+  position: string;
+}
+
+export interface GroupDecisionEvent {
+  eventType: "group_decision";
+  groupDecisionId: string;
+  question: string;
+  positions: GroupPosition[];
+  unresolvedConflicts: string[];
+  protocol: GroupDecisionProtocol;
+  resolvedOutcome: string;
+  contentHash: string;
+  confirmationId: string;
+  fromRevision: number;
+  toRevision: number;
+}
+
+export interface ExternalActionEvent {
+  eventType: "external_action";
+  externalActionChangeId: string;
+  actionId: string;
+  label: string;
+  before: ExternalActionStatus | null;
+  after: ExternalActionStatus;
+  reason: string;
+  evidenceRef: string | null;
+  humanAttested: boolean;
+  contentHash: string;
+  confirmationId: string;
+  fromRevision: number;
+  toRevision: number;
+}
 
 export interface PlanLifecycleEvent {
   eventType: "plan_lifecycle";
@@ -500,7 +538,7 @@ export interface PlanLifecycleEvent {
 
 export interface Receipt {
   receiptId: string;
-  receiptType: "plan_option" | "actual_correction" | "preference_change" | "plan_lifecycle";
+  receiptType: "plan_option" | "actual_correction" | "preference_change" | "plan_lifecycle" | "group_decision" | "external_action";
   idempotencyKey: string;
   planId: string;
   fromRevision: number;
@@ -530,6 +568,8 @@ export interface PlanSnapshot {
   correctionEvents: CorrectionEvent[];
   preferenceEvents: PreferenceEvent[];
   lifecycleEvents?: PlanLifecycleEvent[];
+  groupDecisionEvents?: GroupDecisionEvent[];
+  externalActionEvents?: ExternalActionEvent[];
   feedback: FeedbackEvent[];
   evidenceRecords?: EvidenceRecord[];
   receipts: Receipt[];

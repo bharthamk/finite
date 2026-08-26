@@ -37,6 +37,8 @@ interface Snapshot extends JsonRecord {
   correctionEvents: JsonRecord[];
   preferenceEvents: JsonRecord[];
   lifecycleEvents?: JsonRecord[];
+  groupDecisionEvents?: JsonRecord[];
+  externalActionEvents?: JsonRecord[];
   evidenceRecords?: JsonRecord[];
   receipts: JsonRecord[];
 }
@@ -219,16 +221,27 @@ const envelopeIssues = async (envelope: Envelope): Promise<string[]> => {
   if (!parts || parts.some((value) => !isSafeInteger(value))) issues.push("invalid finite allocation");
   else if (allocation.spentMinor + allocation.committedMinor + allocation.forecastMinor + allocation.bufferMinor !== allocation.totalBudgetMinor) issues.push("finite allocation does not conserve total");
   if (await sha256(snapshot) !== envelope.snapshotHash) issues.push("snapshot hash mismatch");
-  if (!Array.isArray(snapshot.receipts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.correctionEvents) || !Array.isArray(snapshot.preferenceEvents) || (snapshot.lifecycleEvents !== undefined && !Array.isArray(snapshot.lifecycleEvents))) issues.push("invalid append-only collections");
+  if (!Array.isArray(snapshot.receipts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.correctionEvents) || !Array.isArray(snapshot.preferenceEvents) || (snapshot.lifecycleEvents !== undefined && !Array.isArray(snapshot.lifecycleEvents)) || (snapshot.groupDecisionEvents !== undefined && !Array.isArray(snapshot.groupDecisionEvents)) || (snapshot.externalActionEvents !== undefined && !Array.isArray(snapshot.externalActionEvents))) issues.push("invalid append-only collections");
   const receipts = Array.isArray(snapshot.receipts) ? snapshot.receipts as Receipt[] : [];
   if (!(await Promise.all(receipts.map(receiptValid))).every(Boolean)) issues.push("invalid historical receipt checksum");
   if (new Set(receipts.map((item) => item.receiptId)).size !== receipts.length || new Set(receipts.map((item) => item.idempotencyKey)).size !== receipts.length) issues.push("duplicate historical receipt identity");
   for (const item of receipts) if (item.planId !== snapshot.planId || item.fromRevision + 1 !== item.toRevision || item.toRevision > snapshot.revision) issues.push("invalid historical receipt lineage");
   const evidence = Array.isArray(snapshot.evidenceRecords) ? snapshot.evidenceRecords : [];
+  const evidenceIds = new Set(evidence.map((item) => String(item.evidenceId ?? "")));
   for (const item of evidence) {
     if (typeof item.content !== "string" || await sha256({ content: item.content }) !== item.contentHash) issues.push("invalid evidence content hash");
     const { evidenceId: _evidenceId, recordHash, ...base } = item;
     if (typeof recordHash !== "string" || await sha256(base) !== recordHash) issues.push("invalid evidence provenance hash");
+  }
+  const appendOnlyEvents = [snapshot.correctionEvents, snapshot.preferenceEvents, snapshot.lifecycleEvents ?? [], snapshot.groupDecisionEvents ?? [], snapshot.externalActionEvents ?? []].flat();
+  for (const item of appendOnlyEvents) if (!Number.isInteger(item.fromRevision) || !Number.isInteger(item.toRevision) || Number(item.fromRevision) + 1 !== Number(item.toRevision) || Number(item.toRevision) > snapshot.revision) issues.push("invalid append-only event lineage");
+  for (const item of snapshot.groupDecisionEvents ?? []) {
+    const positions = Array.isArray(item.positions) ? item.positions as JsonRecord[] : [];
+    if (positions.length < 2 || positions.some((position) => typeof position.participantId !== "string" || !position.participantId || typeof position.participantName !== "string" || !position.participantName || typeof position.position !== "string" || !position.position) || new Set(positions.map((position) => position.participantId)).size !== positions.length || !["named_decider", "consensus", "unanimous_for_locks", "explicit_compromise"].includes(String(item.protocol))) issues.push("invalid group decision event");
+  }
+  for (const item of snapshot.externalActionEvents ?? []) {
+    if (!["researched", "quoted", "held", "booked", "paid", "verified", "cancelled"].includes(String(item.after))) issues.push("invalid external action status");
+    if (item.evidenceRef && !evidenceIds.has(String(item.evidenceRef))) issues.push("external action references missing evidence");
   }
   return [...new Set(issues)];
 };

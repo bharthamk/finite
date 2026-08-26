@@ -1,4 +1,5 @@
 import { clone, sha256 } from "./crypto.js";
+import { externalActionStatuses } from "./operator-policy.js";
 import type { CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanSnapshot, Receipt } from "./types.js";
 
 export const acceptedTruthScope = "authenticated-user-v1";
@@ -165,6 +166,13 @@ export const snapshotIntegrityIssues = async (profile: CompiledProfile, snapshot
   const evidenceIds = new Set(evidence.map((record) => record.evidenceId));
   for (const event of snapshot.events) for (const evidenceId of event.evidenceRefs) if (!evidenceIds.has(evidenceId)) issues.push(`accepted event references missing evidence ${evidenceId}`);
   for (const event of snapshot.correctionEvents) if (!evidenceIds.has(event.evidenceRef)) issues.push(`accepted correction references missing evidence ${event.evidenceRef}`);
+  for (const event of snapshot.externalActionEvents ?? []) if (event.evidenceRef && !evidenceIds.has(event.evidenceRef)) issues.push(`accepted external action references missing evidence ${event.evidenceRef}`);
+  const appendOnlyEvents = [...snapshot.correctionEvents, ...snapshot.preferenceEvents, ...(snapshot.lifecycleEvents ?? []), ...(snapshot.groupDecisionEvents ?? []), ...(snapshot.externalActionEvents ?? [])];
+  for (const event of appendOnlyEvents) if (event.fromRevision + 1 !== event.toRevision || event.toRevision > snapshot.revision) issues.push(`accepted ${event.eventType} event has invalid revision lineage`);
+  for (const event of snapshot.groupDecisionEvents ?? []) {
+    if (event.positions.length < 2 || new Set(event.positions.map((position) => position.participantId)).size !== event.positions.length) issues.push(`group decision ${event.groupDecisionId} does not preserve unique named positions`);
+  }
+  for (const event of snapshot.externalActionEvents ?? []) if (!externalActionStatuses.includes(event.after)) issues.push(`external action ${event.externalActionChangeId} has invalid status`);
 
   const correctedSpent = profile.actuals.reduce((total, actual) => {
     const latest = [...snapshot.correctionEvents].reverse().find((event) => event.actualId === actual.actualId);
