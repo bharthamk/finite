@@ -38,9 +38,9 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- 36 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; all human authority creators remain absent.
+- 42 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch; all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
-- A Cloudflare Worker accepted-truth API and inspected Drizzle/D1 migration; there is no backend model or application-owned agent.
+- Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations; there is no backend model or application-owned agent.
 
 ## Run
 
@@ -89,7 +89,9 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `src/surface.ts` — safe surface grammar, manifest compiler, bindings, and hashes.
 - `src/kernel.ts` — deterministic state machine and authority-gated transactions.
 - `src/accepted-truth.ts` — async accepted-truth repository contract, integrity verification, HTTP adapter, and in-memory concurrency test adapter.
+- `src/arrival.ts` — arrival-order contract, orientation packet, HTTP client, and in-memory delayed-surface acceptance adapter.
 - `worker/accepted-truth.ts` — same-origin D1 API, optimistic-concurrency commit, deterministic replay, and transactional revision/event/receipt/evidence persistence.
+- `worker/arrival.ts` — same-origin D1 arrival API with append-only human input, labelled Codex interpretation, operator checkpoints, and fail-closed order-version guards.
 - `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
 - `src/persistence.ts` — accepted snapshot, plan catalog, evidence bundle, and activation-receipt storage.
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.

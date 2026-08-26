@@ -150,7 +150,7 @@ The moat is the complete agent-operable system, not any single calculation:
 The working product currently includes:
 
 - travel, renovation, and event plan families;
-- 36 stable and three context-specific WebMCP tools;
+- 42 stable and three context-specific WebMCP tools;
 - native Codex discovery and operation from the live Site;
 - bounded deterministic option search and simulation;
 - typed evidence, entities, constraints, preferences, actuals, and locks;

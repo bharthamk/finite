@@ -177,3 +177,43 @@ export const challengeConsumptions = sqliteTable("challenge_consumptions", {
   primaryKey({ columns: [table.scopeId, table.challengeId] }),
   uniqueIndex("idx_challenge_consumptions_scope_receipt").on(table.scopeId, table.receiptId),
 ]);
+
+export const arrivalOrders = sqliteTable("arrival_orders", {
+  scopeId: text("scope_id").notNull(),
+  orderId: text("order_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  version: integer("version").notNull(),
+  status: text("status").notNull(),
+  rawOutcome: text("raw_outcome").notNull(),
+  structuredJson: text("structured_json").notNull(),
+  attachmentsJson: text("attachments_json").notNull(),
+  inputsJson: text("inputs_json").notNull(),
+  pendingClarificationJson: text("pending_clarification_json"),
+  interpretationJson: text("interpretation_json"),
+  lastOperatorCheckpoint: integer("last_operator_checkpoint").notNull(),
+  packetChecksum: text("packet_checksum").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.orderId] }),
+  uniqueIndex("idx_arrival_orders_scope_idempotency").on(table.scopeId, table.idempotencyKey),
+  index("idx_arrival_orders_scope_status_updated").on(table.scopeId, table.status, table.updatedAt),
+]);
+
+export const arrivalEvents = sqliteTable("arrival_events", {
+  scopeId: text("scope_id").notNull(),
+  orderId: text("order_id").notNull(),
+  version: integer("version").notNull(),
+  eventId: text("event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  actor: text("actor").notNull(),
+  sourceSurface: text("source_surface").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  eventHash: text("event_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.orderId, table.version] }),
+  uniqueIndex("idx_arrival_events_scope_event").on(table.scopeId, table.eventId),
+  index("idx_arrival_events_scope_order_version").on(table.scopeId, table.orderId, table.version),
+]);

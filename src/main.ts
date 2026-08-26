@@ -5,6 +5,7 @@ import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
+import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
@@ -33,27 +34,168 @@ const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
 };
 
 const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
-  document.title = "Finite — choose your kitchen";
+  document.title = "Finite — plans that survive contact with reality";
   root.innerHTML = `
-    <main class="entry-shell" id="main">
-      <section class="entry-card" aria-labelledby="entry_title">
+    <div class="public-surface">
+      <header class="public-header">
         <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
-        <p class="eyebrow">One finite plan. Your private kitchen.</p>
-        <h1 id="entry_title">Choose how you want to be served.</h1>
-        <p class="entry-lede">Sign in to keep a private kitchen across visits, or try the complete service in an isolated demo that disappears after 24 hours.</p>
-        <div class="entry-actions">
-          <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
-          <button class="button button--demo" data-action="start-demo">Try the demo</button>
+        <p>Travel · Renovation · Event / operated through WebMCP</p>
+        <div class="public-header__actions">
+          <a class="public-header__cta" href="${signInPath}">Continue with ChatGPT</a>
+          <button class="public-header__demo" data-action="start-demo">Try demo</button>
         </div>
-        <dl class="entry-promises">
-          <div><dt>No Finite password</dt><dd>ChatGPT handles identity. Finite stores no credential.</dd></div>
-          <div><dt>No registration form</dt><dd>Your private kitchen is created on first use.</dd></div>
-          <div><dt>Demo means demo</dt><dd>It receives an isolated namespace, never a real user’s plan history.</dd></div>
-        </dl>
-        <p class="entry-footnote">Self-hosting? Your deployment can supply its own verified identity provider.</p>
-      </section>
-    </main>`;
-  root.querySelector<HTMLButtonElement>("[data-action='start-demo']")?.addEventListener("click", async (event) => {
+      </header>
+      <main class="public-main" id="main">
+        <section class="public-hero" aria-labelledby="public_title">
+          <div class="public-hero__copy">
+            <p class="eyebrow">Travel · Renovation · Event / adaptive planning</p>
+            <h1 id="public_title">Plans that survive <em>contact with reality.</em></h1>
+            <p class="public-question">Reality changed. What should the plan become now?</p>
+            <p class="public-lede">Finite keeps the whole outcome coherent as dates, availability, commitments, comfort and remaining resources move. Codex operates the live plan. You choose and approve what it becomes.</p>
+            <div class="public-actions">
+              <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
+              <button class="button button--demo" data-action="start-demo">Try the demo</button>
+            </div>
+            <p class="public-auth-note">One private kitchen with ChatGPT identity, or a separate 24-hour demo.</p>
+          </div>
+          <article class="paris-plan" aria-label="Paris whole-plan replanning example">
+            <header class="paris-plan__head">
+              <p><span>Human order</span>Add three nights in Paris.</p>
+              <strong>Whole plan / revision 1</strong>
+            </header>
+            <div class="reality-change">
+              <span>Reality changed</span>
+              <p>Paris stays longer. The international flights cannot move. Keep at least A$500 of breathing room.</p>
+            </div>
+            <ol class="plan-system" aria-label="Resources considered in the revised plan">
+              <li class="is-locked"><span>01</span><p>Flights</p><strong>Locked</strong></li>
+              <li class="is-moving"><span>02</span><p>Accommodation</p><strong>+3 nights</strong></li>
+              <li><span>03</span><p>Transport</p><strong>Reconnected</strong></li>
+              <li><span>04</span><p>Dates</p><strong>Reflowed</strong></li>
+              <li><span>05</span><p>Comfort</p><strong>Protected</strong></li>
+              <li class="is-result"><span>06</span><p>Remaining room</p><strong>A$500+</strong></li>
+            </ol>
+            <footer><span>Changed reality</span><i aria-hidden="true"></i><strong>Viable revised trip</strong></footer>
+          </article>
+        </section>
+
+        <section class="adaptation-story" id="surfaces" aria-labelledby="surfaces_title">
+          <div class="public-section-head">
+            <p class="eyebrow">One planning grammar, three human outcomes</p>
+            <h2 id="surfaces_title">The plan changes shape with the work.</h2>
+            <p>Finite is not one dashboard with different labels. Time, measures, actions and the decision itself adapt to what must survive.</p>
+          </div>
+
+          <article class="travel-surface" aria-labelledby="travel_title">
+            <header class="surface-story__head">
+              <div><p class="eyebrow">Travel / calendar</p><h3 id="travel_title">More Paris, without losing the trip.</h3></div>
+              <p><span>Change</span>Three more nights</p>
+            </header>
+            <div class="travel-route" aria-label="Revised European itinerary">
+              <div class="travel-stop is-locked"><span>01–04</span><strong>London</strong><p>International flight fixed</p></div>
+              <div class="travel-stop is-changed"><span>05–11</span><strong>Paris</strong><p>Three nights added</p></div>
+              <div class="travel-stop"><span>12–14</span><strong>Amsterdam</strong><p>Stay rebalanced</p></div>
+              <div class="travel-stop"><span>15–18</span><strong>Barcelona</strong><p>Comfort protected</p></div>
+            </div>
+            <footer class="surface-story__result"><span>Flights fixed</span><span>Dates reflowed</span><span>Transport reconnected</span><strong>A$500+ room preserved</strong></footer>
+          </article>
+
+          <div class="secondary-surfaces">
+            <article class="renovation-surface" aria-labelledby="renovation_title">
+              <header class="surface-story__head">
+                <div><p class="eyebrow">Renovation / phases</p><h3 id="renovation_title">Protect the handover, not every finish.</h3></div>
+                <p><span>Reality</span>Tile delayed 10 days</p>
+              </header>
+              <ol class="phase-lane" aria-label="Revised renovation phases">
+                <li class="is-done"><span>Phase 01</span><div><strong>Strip-out</strong><p>Complete</p></div><b>✓</b></li>
+                <li><span>Phase 02</span><div><strong>Cabinetry</strong><p>Sequence held</p></div><b>Fixed</b></li>
+                <li class="is-replanned"><span>Phase 03</span><div><strong>Surfaces</strong><p>Local substitute evaluated</p></div><b>Replanned</b></li>
+                <li><span>Day 90</span><div><strong>Handover</strong><p>Commitment protected</p></div><b>Locked</b></li>
+              </ol>
+              <footer class="surface-story__result"><span>Materials</span><span>Trades</span><span>Dependencies</span><strong>Contingency floor held</strong></footer>
+            </article>
+
+            <article class="event-surface" aria-labelledby="event_title">
+              <header class="surface-story__head">
+                <div><p class="eyebrow">Event / run of show</p><h3 id="event_title">Welcome more guests without breaking the room.</h3></div>
+                <p><span>Change</span>+15 guests</p>
+              </header>
+              <div class="show-board" aria-label="Revised event run of show">
+                <div><time>15:00</time><p>Load-in</p><span>Supplier sequence</span></div>
+                <div><time>18:30</time><p>Doors</p><span>Timing locked</span></div>
+                <div class="is-live"><time>19:30</time><p>Programme</p><span>Experience protected</span></div>
+                <div><time>22:45</time><p>Close</p><span>Staffing rebalanced</span></div>
+              </div>
+              <div class="capacity-line"><span>Guest capacity</span><strong>115 / 120</strong><i aria-hidden="true"><b></b></i></div>
+              <footer class="surface-story__result"><span>Vendors</span><span>Capacity</span><span>Staffing</span><strong>Show remains viable</strong></footer>
+            </article>
+          </div>
+        </section>
+
+        <section class="operating-story" id="how-it-works" aria-labelledby="operating_title">
+          <div class="public-section-head public-section-head--light">
+            <p class="eyebrow">The operating inversion</p>
+            <h2 id="operating_title">Codex operates. You consume, choose and approve.</h2>
+            <p>Finite gives the agent a deterministic kitchen rather than giving you another appliance to operate.</p>
+          </div>
+          <ol class="service-line" aria-label="Finite operating sequence">
+            <li><span>01 / Order</span><h3>You state the outcome.</h3><p>Bring the change, preferences and hard constraints. Finite does not make you translate them into a dashboard.</p></li>
+            <li><span>02 / Operate</span><h3>Codex opens the whole kitchen.</h3><p>It sees accepted truth, legal moves, current evidence and the exact next safe action.</p></li>
+            <li><span>03 / Connect</span><h3>WebMCP uses the same live page.</h3><p>The operator works through page-scoped tools against the plan you can see, not a hidden parallel state.</p></li>
+            <li><span>04 / Authority</span><h3>You approve one exact result.</h3><p>No consequential change lands until you choose the bound option and authorize that revision.</p></li>
+          </ol>
+          <div class="webmcp-seam">
+            <div class="webmcp-seam__page">
+              <span>Live page / accepted plan</span>
+              <strong>Revision 1</strong>
+              <div><i></i><i></i><i></i></div>
+              <p>Travel surface</p>
+            </div>
+            <div class="webmcp-seam__connection"><span>WebMCP</span><i aria-hidden="true"></i><strong>Same state</strong></div>
+            <div class="webmcp-seam__operator">
+              <span>Operator</span>
+              <strong>Codex</strong>
+              <p>Interpret, research, explore, prepare.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="trust-story" id="trust" aria-labelledby="trust_title">
+          <div class="public-section-head">
+            <p class="eyebrow">Creative operator, deterministic control plane</p>
+            <h2 id="trust_title">The agent can be clever. Accepted truth cannot be persuaded.</h2>
+            <p>Finite owns the parts that must remain exact while Codex handles the interpretive work.</p>
+          </div>
+          <div class="trust-laws">
+            <article><span>01</span><h3>One accepted truth</h3><p>Immutable revisions, exact plan state and replayable lineage survive the session.</p></article>
+            <article><span>02</span><h3>Rules stay code</h3><p>Conservation, locks, relationships and legal moves are recalculated deterministically.</p></article>
+            <article><span>03</span><h3>Research stays evidence</h3><p>Prices, availability and observations enter as provenance-bound untrusted data.</p></article>
+            <article><span>04</span><h3>Authority stays human</h3><p>Approval creators remain outside WebMCP and bind only one candidate and revision.</p></article>
+            <article><span>05</span><h3>Every change leaves a receipt</h3><p>Applied outcomes carry content-addressed before-and-after proof and replay protection.</p></article>
+            <article><span>06</span><h3>No fictional execution</h3><p>Finite can model and revise the plan. It does not currently alter an external booking or supplier system.</p></article>
+          </div>
+        </section>
+
+        <section class="public-entry" id="enter" aria-labelledby="enter_title">
+          <div>
+            <p class="eyebrow">Your kitchen, when you are ready</p>
+            <h2 id="enter_title">Bring the plan that cannot afford to fall apart.</h2>
+            <p>Continue with ChatGPT for a private kitchen across visits, or enter an isolated demo that expires with its complete namespace after 24 hours.</p>
+          </div>
+          <div class="public-entry__actions">
+            <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
+            <button class="button button--demo" data-action="start-demo">Try the demo</button>
+          </div>
+          <dl class="identity-promises">
+            <div><dt>No Finite password</dt><dd>ChatGPT handles identity. Finite stores no credential.</dd></div>
+            <div><dt>No registration form</dt><dd>Your private kitchen is provisioned on first use.</dd></div>
+            <div><dt>Demo means isolated</dt><dd>It never adopts or copies an authenticated plan history.</dd></div>
+          </dl>
+        </section>
+      </main>
+      <footer class="public-footer"><p>Plans that survive contact with reality.</p><span>Finite / adaptive planning through WebMCP</span></footer>
+    </div>`;
+  root.querySelectorAll<HTMLButtonElement>("[data-action='start-demo']").forEach((demoButton) => demoButton.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     button.textContent = "Opening the demo kitchen…";
@@ -64,7 +206,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
       button.textContent = "Try the demo";
       announcer.textContent = "The demo kitchen could not be opened. Nothing was saved.";
     }
-  });
+  }));
 };
 
 const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
@@ -78,12 +220,15 @@ const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" |
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const acceptedRepository = new HttpAcceptedTruthRepository();
+const arrivalRepository = new HttpArrivalRepository();
+let arrivalResult: ArrivalResult = await arrivalRepository.open();
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository);
 await runtime.hydrateAcceptedTruth();
 await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT") arrivalResult = await arrivalRepository.open();
   const manifest = await render();
   return {
     toolName,
@@ -93,7 +238,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
   };
-}) : null;
+}, arrivalRepository) : null;
 if (adapter) await adapter.register();
 
 let busy = false;
@@ -123,6 +268,160 @@ const objectiveLabel = (objective: string): string => ({
   balanced: "Smallest balanced change",
   custom: "Custom route",
 }[objective] ?? objective.replaceAll("_", " "));
+
+const currentArrival = (): ArrivalOrder | null => arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
+
+const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
+  if (order.status === "waiting_for_codex") return modelContext
+    ? { label: "Saved · ready for Codex", title: "Your order is safe. Codex has not processed the latest version yet.", detail: "You can keep adding details here. When Codex opens the order, it receives the full brief and every change since its last checkpoint." }
+    : { label: "Saved · waiting for Codex", title: "Your order is safe. Nothing is pretending to process in the background.", detail: "Open Codex when you are ready and ask it to open your Finite arrival. It will receive this exact version and every saved detail." };
+  if (order.status === "codex_reviewing") return { label: "Codex reviewing", title: "The operator has checkpointed your latest order.", detail: "You may still add or correct facts. Any change creates a new order version and stale Codex work will be refused." };
+  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can keep cooking.", detail: "Your answer is appended as human-supplied input. Codex cannot fill it in for you." };
+  if (order.status === "proposed_plan_ready") return { label: "Proposed plan ready", title: "Codex has staged its interpretation for your review.", detail: "This is still a proposal. Accepted plan truth changes only through an exact human confirmation on the Site." };
+  if (order.status === "awaiting_human_authority") return { label: "Approval needed", title: "One exact plan is waiting for your authority.", detail: "Review the proposed outcome here. Codex cannot press the approval control." };
+  return { label: order.status.replaceAll("_", " "), title: "This arrival is complete.", detail: "Its immutable plan and receipt remain available in the kitchen." };
+};
+
+const renderArrival = (manifest: SurfaceManifest): void => {
+  const order = currentArrival();
+  const status = order ? arrivalStatus(order) : null;
+  const interpretation = order?.interpretation;
+  const question = order?.pendingClarification;
+  const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
+  surfaceRoot.dataset.profile = "arrival";
+  surfaceRoot.setAttribute("aria-busy", String(busy));
+  surfaceRoot.innerHTML = `
+    <header class="site-header arrival-header">
+      <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+      <p class="arrival-header__mode">New finite plan / human order</p>
+      <div class="identity-cluster">
+        <div class="operator-status"><span></span>${modelContext ? "Codex kitchen connected" : "Saved kitchen"}</div>
+        <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
+      </div>
+    </header>
+    <main id="main" class="arrival-main">
+      ${!order ? `
+        <section class="arrival-intro" aria-labelledby="arrival_title">
+          <p class="eyebrow">Place the order. The kitchen adapts.</p>
+          <h1 id="arrival_title">What are we making <em>happen?</em></h1>
+          <p>Describe the outcome in your own language. You do not need to choose a template, build a dashboard, or know what the plan should contain. Codex will interpret the order later; Finite preserves what you actually said now.</p>
+        </section>
+        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+        <form class="arrival-order" data-arrival-form="create">
+          <label class="arrival-order__outcome"><span>The outcome</span><textarea name="rawOutcome" required maxlength="4000" placeholder="I need to…"></textarea><small>Write it like an order, not a form submission.</small></label>
+          <div class="arrival-fields">
+            <label><span>When does it need to happen?</span><input name="deadline" maxlength="200" placeholder="A date, window, or ‘not sure’"></label>
+            <label><span>What is finite?</span><input name="finiteLimit" maxlength="300" placeholder="Money, time, capacity, energy—or none yet"></label>
+            <label><span>What must not move?</span><input name="hardConstraint" maxlength="500" placeholder="One known commitment or hard edge"></label>
+            <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
+          </div>
+          <div class="arrival-examples" aria-label="Example outcomes">
+            <span>Examples, not templates</span>
+            <button type="button" data-arrival-example="Plan a three-week Europe trip around my fixed flights, with room to change as prices and ideas move.">A trip</button>
+            <button type="button" data-arrival-example="Get my renovation to handover without losing the parts of the design I care about.">A renovation</button>
+            <button type="button" data-arrival-example="Deliver an event that can absorb guest, supplier and programme changes without falling apart.">An event</button>
+            <button type="button" data-arrival-example="Help me turn a messy outcome with limited time and resources into a plan that can keep adapting.">Something else</button>
+          </div>
+          <button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save my order</button>
+        </form>` : `
+        <section class="arrival-order-head" aria-labelledby="arrival_order_title">
+          <div>
+            <p class="eyebrow">Human order / version ${order.version}</p>
+            <h1 id="arrival_order_title">${escapeHtml(order.rawOutcome)}</h1>
+          </div>
+          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p><small>Order proof ${escapeHtml(order.checksum.slice(0, 16))}…</small></aside>
+        </section>
+        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Question ${escapeHtml(question.questionId)} · staged against an exact order version</small></section>` : ""}
+        ${interpretation ? `<section class="arrival-interpretation">
+          <div class="arrival-interpretation__head"><p class="eyebrow">Codex interpretation / not human fact</p><h2>${escapeHtml(interpretation.summary)}</h2><span>${interpretation.complete ? "Complete proposal" : "Work in progress"}</span></div>
+          <div class="arrival-interpretation__grid">
+            <article><span>Plan family</span><strong>${escapeHtml(interpretation.inferredFamily ?? "Still being inferred")}</strong></article>
+            <article><span>Known</span><pre>${escapeHtml(JSON.stringify(interpretation.known, null, 2))}</pre></article>
+            <article><span>Inferred</span><pre>${escapeHtml(JSON.stringify(interpretation.inferred, null, 2))}</pre></article>
+            <article><span>Still missing</span><p>${interpretation.missing.length ? interpretation.missing.map((item) => escapeHtml(item)).join(" · ") : "Nothing currently blocking"}</p></article>
+            ${interpretation.contradictions.length ? `<article class="is-warning"><span>Contradictions</span><p>${interpretation.contradictions.map((item) => escapeHtml(item)).join(" · ")}</p></article>` : ""}
+          </div>
+        </section>` : ""}
+        ${renderPlanDraft()}
+        <section class="arrival-continuity">
+          <div><p class="eyebrow">Keep shaping the order</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
+          <form data-arrival-form="append">
+            <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
+            <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
+            <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
+          </form>
+        </section>
+        <section class="arrival-handoff">
+          <div><p class="eyebrow">Continue in Codex</p><h2>“Open my Finite arrival and take it from here.”</h2></div>
+          <p>${modelContext ? "Codex is connected to this page and can call the arrival tools now." : "Open this Site from Codex, or open your Codex task and use Finite there. You will not need to repeat anything saved here."}</p>
+          <dl><div><dt>Exact version</dt><dd>${order.version}</dd></div><div><dt>Since checkpoint</dt><dd>${Math.max(0, order.version - order.lastOperatorCheckpoint)} changes</dd></div><div><dt>Human authority</dt><dd>Site only</dd></div></dl>
+        </section>
+        ${inputTrail.length ? `<details class="arrival-history"><summary>Recent human-supplied updates</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(input.kind)} · ${escapeHtml(input.sourceSurface)}</span><p>${escapeHtml(JSON.stringify(input.payload))}</p></li>`).join("")}</ol></details>` : ""}
+      `}
+      ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
+    </main>
+    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No plan yet"}</span></footer>`;
+  bindArrivalInteractions();
+};
+
+const refreshArrival = async (): Promise<void> => {
+  arrivalResult = await arrivalRepository.open();
+};
+
+const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
+  if (busy) return;
+  const data = new FormData(form);
+  const rawOutcome = String(data.get("rawOutcome") ?? "").trim();
+  if (!rawOutcome) return;
+  busy = true;
+  announce("Saving your exact order…");
+  await render();
+  const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
+  const evidence = String(data.get("evidence") ?? "").trim();
+  arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
+  busy = false;
+  announce(arrivalResult.ok ? "Your order is saved. Codex has not processed it yet." : `The order was not saved: ${arrivalResult.code}`);
+  await render();
+};
+
+const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promise<void> => {
+  const order = currentArrival();
+  if (!order || busy) return;
+  const data = new FormData(form);
+  const value = String(data.get(answer ? "answer" : "detail") ?? "").trim();
+  if (!value) return;
+  busy = true;
+  announce("Appending your update to the exact order…");
+  await render();
+  arrivalResult = await arrivalRepository.appendInput({
+    orderId: order.orderId,
+    expectedVersion: order.version,
+    kind: answer ? "answer" : String(data.get("kind") ?? "detail") as never,
+    payload: answer ? { questionId: order.pendingClarification?.questionId, value } : { text: value },
+    sourceSurface: modelContext ? "inline" : "site",
+  });
+  busy = false;
+  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex must re-open the new order version." : "Your update is saved. Any stale Codex work will now be refused.") : `The update was not saved: ${arrivalResult.code}`);
+  await render();
+};
+
+function bindArrivalInteractions(): void {
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
+  root?.querySelectorAll<HTMLButtonElement>("[data-arrival-example]").forEach((button) => button.addEventListener("click", () => {
+    const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='rawOutcome']");
+    if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
+  }));
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
+    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (response.ok) location.reload();
+    else announce("The demo session could not be ended safely.");
+  });
+}
 
 const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values()]
   .filter((candidate) => candidate.baseRevision === runtime.kernel.revision && candidate.eventId === runtime.kernel.activeEventId)
@@ -347,6 +646,11 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
 async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
   const manifest = await compileSurfaceManifest(kernel.profile, kernel);
+  const params = new URLSearchParams(location.search);
+  if (params.get("lab") !== "1" && params.get("kitchen") !== "1") {
+    renderArrival(manifest);
+    return manifest;
+  }
   const receipt = kernel.receipts.at(-1);
   const spentPercent = Math.round(((kernel.accepted.spentMinor + kernel.accepted.committedMinor) / kernel.accepted.totalBudgetMinor) * 100);
   surfaceRoot.dataset.profile = kernel.profile.profileId;
@@ -447,7 +751,7 @@ function bindInteractions(): void {
   });
 }
 
-await seedDecision();
+if (labMode || new URLSearchParams(location.search).get("kitchen") === "1") await seedDecision();
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 };

@@ -1,5 +1,6 @@
 import { handleAcceptedTruthRequest, type D1Database } from "./accepted-truth.js";
 import { handleAuthRequest } from "./auth.js";
+import { handleArrivalRequest } from "./arrival.js";
 
 interface AssetsBinding {
   fetch(request: Request): Promise<Response>;
@@ -14,6 +15,8 @@ export default {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
     const authResponse = await handleAuthRequest(request, environment.DB);
     if (authResponse) return authResponse;
+    const arrivalResponse = await handleArrivalRequest(request, environment.DB);
+    if (arrivalResponse) return arrivalResponse;
     const apiResponse = await handleAcceptedTruthRequest(request, environment.DB);
     if (apiResponse) return apiResponse;
     return environment.ASSETS.fetch(request);

@@ -138,7 +138,7 @@ const sha256 = async (value: unknown): Promise<string> => {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-const ensureAuthenticatedTenant = async (request: Request, db: D1Database): Promise<string> => {
+export const ensureAuthenticatedTenant = async (request: Request, db: D1Database): Promise<string> => {
   const principal = await resolveRequestPrincipal(request, db);
   if (!principal) throw new Error("AUTHENTICATED_USER_REQUIRED");
   const userIdHash = await authSha256(principal.tenantIdentity);

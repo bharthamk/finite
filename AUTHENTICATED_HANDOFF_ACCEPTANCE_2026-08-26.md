@@ -117,7 +117,7 @@ The hosted gate passed against the signed-in production Site on 2026-08-26.
 - The live user namespace now has three revision-3 heads with distinct snapshot
   hashes. The legacy revision-2 lineage remains intact for migration audit.
 - Production access remains `custom`: one owner, no groups, and zero external
-  visitors. The Site registers 36 stable plus three contextual WebMCP tools.
+  visitors. The Site registers 42 stable plus three contextual WebMCP tools.
 - The final exact source is commit
   `7c45848fa904ff4a924f08a6d5acf32b6eab5318`, Sites version 16, deployment
   `appgdep_6a8ec00332908191a2065b4d6b41b1ab`, at
