@@ -61,3 +61,8 @@ the Site asks the human what was wrong before Codex proceeds.
 - 93 of 93 automated tests passed, including cross-surface return, legacy
   recovery, exact feedback, route arbitration, and resolution by a revised
   draft, plus fail-safe Worker selection of the exact release shell.
+- Fresh authenticated live replay passed on owner-private Sites version 44:
+  build marker `returned-draft-v44`, exact script `index-ulbeUIsS.js`, preserved
+  packet `construction_aea68b33a4493416`, visible feedback form, accepted travel
+  revision 3, and an authority-free `awaiting_human` Codex route with no false
+  stale-arrival claim. Deployment: `appgdep_6a8f4737ed7c8191a0216df632609f37`.
