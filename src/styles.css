@@ -355,6 +355,10 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .plan-orbit>p { margin:0 auto; max-width:290px; color:var(--muted); font-size:.82rem; line-height:1.5; text-align:center; }
 
 .service-message { margin-top:26px; padding:14px 18px; color:var(--deep); background:var(--signal); border-left:4px solid var(--deep); font-weight:600; }
+.plan-status-strip { display:flex; align-items:center; gap:.65rem; margin:.45rem 0 .75rem; padding:.55rem .75rem; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.38); font-size:.78rem; }
+.plan-status-strip>span { padding:.2rem .5rem; border-radius:999px; background:var(--ink); color:var(--paper); text-transform:uppercase; letter-spacing:.08em; font-size:.64rem; }
+.plan-status-strip>small { margin-left:auto; color:var(--muted); }
+.plan-status-strip--paused,.plan-status-strip--abandoned,.plan-status-strip--completed { border-color:var(--accent); background:#fff0cf; }
 .lifecycle-control { margin-top:18px; border:1px solid var(--line); background:rgba(255,255,255,.34); }
 .lifecycle-control>summary { display:grid; grid-template-columns:auto auto 1fr; align-items:center; gap:14px; padding:14px 18px; cursor:pointer; list-style:none; }
 .lifecycle-control>summary::-webkit-details-marker { display:none; }
@@ -603,6 +607,8 @@ footer span { font:500 .7rem/1.2 "DM Mono",monospace; text-transform:uppercase; 
   .approval-copy>* { margin-bottom:18px!important; }
   .receipt { padding:26px 20px; gap:38px; }
   .receipt dl div { display:grid; }
+  .plan-status-strip { align-items:flex-start; border-radius:18px; flex-wrap:wrap; }
+  .plan-status-strip>small { width:100%; margin-left:0; }
   footer { align-items:start; flex-direction:column; }
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; } }

@@ -69,9 +69,53 @@ test("production adapter normalizes host input, excludes authority, and replaces
   const extension = await host.execute("travel_extend_stay", JSON.stringify({ destination: "Paris", nights: 2, nightlyMinor: 18_000, minimumBufferMinor: 50_000 }));
   assert.equal(extension.code, "CHANGE_RECORDED");
   assert.equal(extension.event.entityChanges.length, 2);
-  const switched = await host.execute("finite_switch_profile", JSON.stringify({ profileId: "renovation" }));
+  const switched = await host.execute("finite_switch_profile", JSON.stringify({ profileId: "renovation", expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision }));
   assert.equal(switched.code, "PROFILE_SWITCHED");
   assert.equal([...host.tools].some(([name]) => name.startsWith("travel_")), false);
   assert(host.tools.has("renovation_replace_material"));
   assert(host.tools.size <= 20);
+});
+
+test("authority-only tools appear after human authority and remain for exact receipt replay", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).register();
+  await host.execute("finite_open_toolset", { group: "planning" });
+  assert.equal(host.tools.has("finite_apply_approved_option"), false);
+  const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 1, nightlyMinor: 10_000, minimumBufferMinor: 0 });
+  assert.equal(recorded.code, "CHANGE_RECORDED");
+  assert.equal(recorded.operatorContinuation.nextAction.stage, "change_recorded");
+  assert.equal(recorded.chefEffort.toolCalls >= 2, true);
+  assert.equal(recorded.chefEffort.tokenMeasure, "host_owned_unavailable");
+  const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
+  const candidate = compared.options.find((option) => option.valid);
+  await host.execute("finite_open_toolset", { group: "decisions" });
+  const staged = await host.execute("finite_stage_option", { candidateId: candidate.candidateId, expectedRevision: 1 });
+  assert.equal(staged.code, "OPTION_STAGED");
+  assert.equal(host.tools.has("finite_apply_approved_option"), false);
+  const approved = await runtime.kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => warning.code) });
+  await host.execute("finite_open_toolset", { group: "decisions" });
+  assert.equal(host.tools.has("finite_apply_approved_option"), true);
+  const input = { candidateId: candidate.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "authority-discovery-0001" };
+  const applied = await host.execute("finite_apply_approved_option", input);
+  assert.equal(applied.code, "OPTION_APPLIED");
+  assert.equal(host.tools.has("finite_apply_approved_option"), true);
+  assert.equal((await host.execute("finite_apply_approved_option", input)).code, "IDEMPOTENT_REPLAY");
+});
+
+test("context switches require the exact current plan guard and return a checksum receipt", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).register();
+  await host.execute("finite_open_toolset", { group: "planning" });
+  const stale = await host.execute("finite_switch_profile", { profileId: "event", expectedCurrentPlanId: "wrong", expectedCurrentRevision: 1 });
+  assert.equal(stale.code, "PLAN_SWITCH_GUARD_MISMATCH");
+  assert.equal(runtime.kernel.profile.profileId, "travel");
+  const switched = await host.execute("finite_switch_profile", { profileId: "event", expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
+  assert.equal(switched.code, "PROFILE_SWITCHED");
+  assert.match(switched.contextReceipt.receiptHash, /^[a-f0-9]{64}$/);
+  assert.equal(switched.contextReceipt.from.planId, "plan_travel_europe");
+  assert.equal(switched.contextReceipt.to.planId, "plan_event_launch");
 });

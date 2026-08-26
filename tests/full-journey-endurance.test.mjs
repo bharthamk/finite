@@ -85,6 +85,7 @@ const applyPreference = async (host, runtime, changes, id) => {
   await openGroup(host, "decisions");
   const staged = requireCode(await host.execute("finite_stage_preference_change", { feedbackId: feedback.feedback.feedbackId, changes, expectedRevision: runtime.kernel.revision }), "PREFERENCE_CHANGE_STAGED");
   const confirmation = requireCode(runtime.kernel.humanConfirmPreferenceChange({ preferenceChangeId: staged.preferenceChange.preferenceChangeId }), "HUMAN_PREFERENCE_CONFIRMED");
+  await openGroup(host, "decisions");
   requireCode(await host.execute("finite_apply_confirmed_preference_change", { preferenceChangeId: staged.preferenceChange.preferenceChangeId, confirmationId: confirmation.confirmation.confirmationId, expectedRevision: runtime.kernel.revision, idempotencyKey: `journey-pref-${id}` }), "PREFERENCE_CHANGE_APPLIED");
 };
 
@@ -100,6 +101,7 @@ const stageAndApply = async (host, runtime, candidate, id) => {
   await openGroup(host, "decisions");
   requireCode(await host.execute("finite_stage_option", { candidateId: candidate.candidateId, expectedRevision: runtime.kernel.revision }), "OPTION_STAGED");
   const approval = requireCode(await runtime.kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => String(warning.code)) }), "HUMAN_APPROVAL_RECORDED");
+  await openGroup(host, "decisions");
   return requireCode(await host.execute("finite_apply_approved_option", { candidateId: candidate.candidateId, approvalId: approval.approval.approvalId, expectedRevision: runtime.kernel.revision, idempotencyKey: `journey-option-${id}` }), "OPTION_APPLIED");
 };
 
@@ -109,6 +111,7 @@ const applyActualCorrection = async (host, runtime, spec) => {
   await openGroup(host, "decisions");
   const staged = requireCode(await host.execute("finite_stage_actual_correction", { actualId: actual.actualId, correctedAmountMinor: Math.max(0, actual.originalAmountMinor - 1_000), reason: "Late receipt reconciliation", evidenceRef: "evidence_actual", expectedRevision: runtime.kernel.revision }), "ACTUAL_CORRECTION_STAGED");
   const confirmation = requireCode(runtime.kernel.humanConfirmActualCorrection({ correctionId: staged.correction.correctionId }), "HUMAN_CORRECTION_CONFIRMED");
+  await openGroup(host, "decisions");
   return requireCode(await host.execute("finite_apply_confirmed_actual_correction", { correctionId: staged.correction.correctionId, confirmationId: confirmation.confirmation.confirmationId, expectedRevision: runtime.kernel.revision, idempotencyKey: `journey-actual-${spec.id}` }), "ACTUAL_CORRECTION_APPLIED");
 };
 
@@ -122,6 +125,7 @@ const applyAmendment = async (host, runtime, spec) => {
   const fromRevision = runtime.kernel.revision;
   const staged = requireCode(await host.execute("finite_stage_plan_amendment", { profile: blueprint.profile, supersedesPlanId: fromPlanId, expectedRevision: fromRevision }), "PLAN_AMENDMENT_STAGED");
   const confirmation = requireCode(runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId }), "HUMAN_PLAN_ACTIVATION_CONFIRMED");
+  await openGroup(host, "plan_management");
   return requireCode(await host.execute("finite_activate_confirmed_plan", { draftId: staged.draft.draftId, confirmationId: confirmation.confirmation.confirmationId, expectedPlanId: fromPlanId, expectedRevision: fromRevision, idempotencyKey: `journey-amend-${spec.id}` }), "PLAN_AMENDMENT_ACTIVATED");
 };
 
@@ -199,6 +203,7 @@ for (const [index, spec] of journeys.entries()) {
     await openGroup(host, "decisions");
     const lifecycle = requireCode(await host.execute("finite_stage_plan_lifecycle", { status: spec.finalStatus, reason: spec.conclusion, expectedRevision: runtime.kernel.revision }), "PLAN_LIFECYCLE_STAGED");
     const lifecycleConfirmation = requireCode(runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId: lifecycle.lifecycleChange.lifecycleChangeId }), "HUMAN_PLAN_LIFECYCLE_CONFIRMED");
+    await openGroup(host, "decisions");
     const concluded = requireCode(await host.execute("finite_apply_confirmed_plan_lifecycle", { lifecycleChangeId: lifecycle.lifecycleChange.lifecycleChangeId, confirmationId: lifecycleConfirmation.confirmation.confirmationId, expectedRevision: runtime.kernel.revision, idempotencyKey: `journey-conclude-${spec.id}` }), "PLAN_LIFECYCLE_APPLIED");
     assert.equal(runtime.kernel.lifecycleStatus, spec.finalStatus);
     assert.equal(runtime.kernel.recordChangeEvent({ type: "human_one_more_thing", title: "Actually, one more thing", costDeltaMinor: 0, minimumBufferMinor: 0, expectedRevision: runtime.kernel.revision }).code, "PLAN_NOT_ACTIVE");

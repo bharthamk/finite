@@ -20,7 +20,7 @@
     <meta name="twitter:description" content="Reality changed. What should the plan become now?" />
     <meta name="twitter:image" content="https://finite-plan-kitchen.bharthamk.chatgpt.site/og.png" />
     <meta name="theme-color" content="#f4f0e8" />
-    <meta name="finite-build" content="full-journey-v46" />
+    <meta name="finite-build" content="initializing" />
     <title>Finite — adaptive plans, served</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
@@ -58,6 +58,8 @@
               expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 },
               expectedPlanId: { type: "string", minLength: 1, maxLength: 200 },
               expectedPlanRevision: { type: "integer", minimum: 1 },
+              expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 },
+              expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 },
             },
             required: [],
             additionalProperties: false,

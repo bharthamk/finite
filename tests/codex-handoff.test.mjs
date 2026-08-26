@@ -17,7 +17,7 @@ test("Codex handoff copies a safe bootstrap pointer rather than plan or authenti
     siteOrigin: "https://finite.example/private/plan?token=SECRET_URL_TOKEN",
     inline: false,
     order,
-    plan: { planId: "plan_travel_europe", profileId: "travel", revision: 3 },
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 3, snapshotHash: "c".repeat(64) },
     email: "private@example.test",
     credential: "SECRET_CREDENTIAL",
   });
@@ -27,6 +27,8 @@ test("Codex handoff copies a safe bootstrap pointer rather than plan or authenti
   assert.equal(handoff.copiedPayload.entryTool, "finite_enter_kitchen");
   assert.equal(handoff.copiedPayload.entryIntent, "resume_handoff");
   assert.equal(handoff.copiedPayload.expectedPlanId, "plan_travel_europe");
+  assert.equal(handoff.copiedPayload.expectedProfileHash, "b".repeat(64));
+  assert.equal(handoff.copiedPayload.expectedSnapshotHash, "c".repeat(64));
   assert.match(handoff.prompt, /finite_enter_kitchen/);
   assert.match(handoff.prompt, /arrival_0123456789abcdef/);
   assert.match(handoff.prompt, /no authentication, credentials, plan contents, or human authority/i);
@@ -40,7 +42,7 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
     siteOrigin: "https://finite.example",
     inline: true,
     order: null,
-    plan: { planId: "plan_travel_europe", profileId: "travel", revision: 1 },
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
   });
   assert.equal(handoff.buttonLabel, "Hand off to Codex");
   assert.equal(handoff.title, "Start this with Codex.");
@@ -48,6 +50,8 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
   assert.equal(handoff.copiedPayload.entryIntent, "start_new");
   assert.equal(handoff.copiedPayload.expectedPlanId, null);
   assert.equal(handoff.copiedPayload.expectedPlanRevision, null);
+  assert.equal(handoff.copiedPayload.expectedProfileHash, null);
+  assert.equal(handoff.copiedPayload.expectedSnapshotHash, null);
   assert.match(handoff.prompt, /"entryIntent":"start_new"/);
   assert.equal(handoff.prompt.includes("expectedPlanId"), false);
   assert.equal(handoff.prompt.includes("orderId"), false);

@@ -8,9 +8,11 @@ import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
+import { finiteRelease } from "./release.js";
 import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
 
 const root = document.querySelector<HTMLElement>("#app");
+document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
 const surfaceRoot = root;
@@ -359,6 +361,15 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
+const violationMessage = (code: string): string => ({
+  MINIMUM_BUFFER: "This would use more breathing room than you allowed.",
+  LOCKED_COMPLETION_DATE: "This would move a date you marked as fixed.",
+  LOCKED_COMMITMENT: "This would change something you marked as fixed.",
+  RELATIONSHIP_CONSTRAINT: "This combination conflicts with another part of the plan.",
+  EVIDENCE_REQUIRED: "This needs current evidence before it is safe to rely on.",
+  INSUFFICIENT_CAPACITY: "The current plan does not have enough room for this combination.",
+}[code] ?? "This option conflicts with one of the plan's current boundaries.");
+
 const money = (minor: number): string => new Intl.NumberFormat("en-AU", {
   style: "currency", currency: "AUD", maximumFractionDigits: 0,
 }).format(minor / 100);
@@ -403,7 +414,9 @@ const currentCodexHandoff = () => createCodexHandoff({
   plan: {
     planId: runtime.kernel.profile.planId,
     profileId: runtime.kernel.profile.profileId,
+    profileHash: runtime.kernel.profile.profileHash,
     revision: runtime.kernel.revision,
+    snapshotHash: runtime.kernel.acceptedTruth.snapshotHash,
   },
 });
 
@@ -564,7 +577,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No plan yet"}</span></footer>
+    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No arrival waiting · accepted plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}`;
   bindArrivalInteractions();
 };
@@ -761,7 +774,7 @@ const runAuthenticatedHandoffAcceptance = async (): Promise<void> => {
 
 const seedDecision = async (): Promise<void> => {
   const kernel = runtime.kernel;
-  if (kernel.receipts.length || activeCandidates().length) return;
+  if (kernel.lifecycleStatus !== "active" || kernel.receipts.length || activeCandidates().length) return;
   const revision = kernel.revision;
   const input = kernel.profile.profileId === "travel"
     ? { type: "intent_change", title: "Add three nights in Paris", costDeltaMinor: 66_000, daysDelta: 3, minimumBufferMinor: 50_000, evidenceRefs: ["evidence_current"], entityChanges: [{ entityId: "trip_days", field: "days", delta: 3 }, { entityId: "booked_segment_days", field: "days", delta: 3 }], expectedRevision: revision }
@@ -808,7 +821,7 @@ const renderOptions = (): string => {
         <div class="option-card__delta"><span>Plan impact</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
           ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Choose this ${escapeHtml(runtime.kernel.profile.surface.nouns.option)}</button>`
-          : `<p class="refusal">${escapeHtml(candidate.violations.map((violation) => violation.code).join(", "))}</p>`}
+          : `<p class="refusal">${escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</p>`}
       </article>`).join("")}
   </div>`;
 };
@@ -829,13 +842,14 @@ const renderReceipt = (receipt: Receipt): string => {
 const renderLifecycleControl = (): string => {
   const kernel = runtime.kernel;
   const pending = kernel.pendingLifecycleChange;
+  const latest = kernel.lifecycleEvents.at(-1);
   if (pending) return `<section class="lifecycle-control lifecycle-control--pending" aria-label="Plan status confirmation">
     <div><p class="eyebrow">Plan conclusion</p><h2>Mark this plan ${escapeHtml(pending.after)}?</h2><p>${escapeHtml(pending.reason)}</p></div>
     <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span><button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button></div>
   </section>`;
   const inactive = kernel.lifecycleStatus !== "active";
   return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" ${inactive ? "open" : ""}>
-    <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : "Finish, pause, or stop cleanly"}</small></summary>
+    <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : latest ? `Last changed because: ${escapeHtml(latest.reason)}` : "Finish, pause, or stop cleanly"}</small></summary>
     <form data-plan-lifecycle>
       <label><span>What should happen?</span><select name="status" required>
         <option value="">Choose one</option>
@@ -961,6 +975,7 @@ async function render(): Promise<SurfaceManifest> {
       </div>
     </header>
     <main id="main">
+      <div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>${kernel.lifecycleStatus === "active" ? "This plan is open for change." : `This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.`}</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>
       <section class="hero">
         <div class="hero__copy"><p class="eyebrow">${escapeHtml(kernel.profile.surface.hero.eyebrow)}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p><div class="brief-card"><span>You ordered</span><p>${escapeHtml(manifest.decisionFocus ?? kernel.profile.surface.hero.brief)}</p></div></div>
         <aside class="plan-orbit" aria-label="Current finite plan summary"><div class="orbit-number"><span>Total plan</span><strong>${money(kernel.accepted.totalBudgetMinor)}</strong></div><div class="orbit-ring" style="--used:${spentPercent}%"><div><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span></div></div><p>${spentPercent}% spent or committed. Every option below keeps the same finite total.</p></aside>
@@ -1005,7 +1020,7 @@ const switchProfile = async (profileId: ProfileId): Promise<void> => {
   if (profileId === runtime.kernel.profile.profileId || busy) return;
   busy = true;
   announce("");
-  const result = await runtime.switchProfilePersisted(profileId);
+  const result = await runtime.switchProfilePersisted(profileId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
   if (!result.ok) {
     busy = false;
     announce(`That plan could not be opened safely: ${result.code}`);
@@ -1027,6 +1042,7 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
     return;
   }
   const result = runtime.humanConfirmPlanDraft({ draftId });
+  if (result.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
   announce(result.ok ? "Exact plan draft confirmed. Codex may now activate it through the guarded WebMCP tool." : `The plan draft was not confirmed: ${result.code}`);
   await render();
 };

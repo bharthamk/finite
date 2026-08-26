@@ -77,6 +77,10 @@ export class FinitePlanRuntime {
     this.kernel = new FinitePlanKernel(entry.profile, store, entry.evidenceRecords, acceptedRepository);
   }
 
+  hasActivationReceipt(): boolean {
+    return this.activationReceipts.size > 0;
+  }
+
   async hydrateAcceptedTruth(): Promise<ToolResult> {
     return this.kernel.hydrateAcceptedTruth();
   }
@@ -1022,6 +1026,7 @@ export class FinitePlanRuntime {
       draftId,
       confirmationId,
       activationKind: draft.amendment ? "amendment" as const : "new_plan" as const,
+      sourceArrival: clone(draft.sourceArrival),
       ...(draft.amendment ? { supersedesPlanId: draft.amendment.supersedesPlanId, supersedesProfileHash: draft.amendment.supersedesProfileHash, diffHash: draft.amendment.diffHash } : {}),
     };
     const replayChecksum = await sha256(receiptBase);
@@ -1086,16 +1091,20 @@ export class FinitePlanRuntime {
     };
   }
 
-  async switchPlanPersisted(planId: string): Promise<ToolResult> {
+  async switchPlanPersisted(planId: string, guard?: { expectedCurrentPlanId: string; expectedCurrentRevision: number }): Promise<ToolResult> {
+    if (guard && (guard.expectedCurrentPlanId !== this.kernel.profile.planId || guard.expectedCurrentRevision !== this.kernel.revision)) return { ok: false, code: "PLAN_SWITCH_GUARD_MISMATCH", expected: guard, current: { planId: this.kernel.profile.planId, revision: this.kernel.revision }, acceptedStateChanged: false, next: "Re-enter the kitchen and choose the target plan from the current catalog." };
     const entry = this.plans.get(planId);
     if (!entry) return { ok: false, code: "PLAN_NOT_FOUND", planId, acceptedStateChanged: false };
     if (planId === this.kernel.profile.planId) return { ok: true, code: "PLAN_ALREADY_ACTIVE", planId, acceptedStateChanged: false };
     const invalidatedCandidateId = this.kernel.stagedCandidate?.candidateId ?? null;
+    const from = { planId: this.kernel.profile.planId, profileHash: this.kernel.profile.profileHash, revision: this.kernel.revision };
     const nextKernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords, this.acceptedRepository);
     const hydrated = await nextKernel.hydrateAcceptedTruth();
     if (!hydrated.ok) return { ok: false, code: "PLAN_SWITCH_DURABLE_TRUTH_UNAVAILABLE", repositoryCode: hydrated.code, planId, acceptedStateChanged: false, next: "Keep the current plan active until the target plan's accepted truth can be verified." };
     try { this.kernel.persist(); } catch { /* accepted repository remains authoritative */ }
     this.kernel = nextKernel;
+    const to = { planId, profileHash: entry.profile.profileHash, revision: this.kernel.revision };
+    const contextReceiptBase = { receiptVersion: "finite-context-switch.v1", from, to, invalidatedCandidateId };
     return {
       ok: true,
       code: "PLAN_SWITCHED",
@@ -1105,15 +1114,16 @@ export class FinitePlanRuntime {
       revision: this.kernel.revision,
       contextualCapabilities: [...entry.profile.contextualCapabilities],
       invalidatedCandidateId,
+      contextReceipt: { ...contextReceiptBase, receiptHash: await sha256(contextReceiptBase) },
       acceptedStateChanged: false,
       next: "Rediscover tools and read identity, constraints, and pending selectors.",
     };
   }
 
-  async switchProfilePersisted(profileId: ProfileId): Promise<ToolResult> {
+  async switchProfilePersisted(profileId: ProfileId, guard?: { expectedCurrentPlanId: string; expectedCurrentRevision: number }): Promise<ToolResult> {
     const profile = this.profiles.get(profileId);
     if (!profile) return { ok: false, code: "PROFILE_NOT_FOUND", acceptedStateChanged: false };
-    const result = await this.switchPlanPersisted(profile.planId);
+    const result = await this.switchPlanPersisted(profile.planId, guard);
     if (result.code === "PLAN_SWITCHED") return { ...result, code: "PROFILE_SWITCHED" };
     if (result.code === "PLAN_ALREADY_ACTIVE") return { ...result, code: "PROFILE_ALREADY_ACTIVE", profileId };
     return result;

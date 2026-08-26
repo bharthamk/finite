@@ -414,6 +414,7 @@ export interface PlanActivationReceipt {
   supersedesPlanId?: string;
   supersedesProfileHash?: string;
   diffHash?: string;
+  sourceArrival?: ArrivalSourceBinding | null;
 }
 
 export interface PlanCatalogEntry {

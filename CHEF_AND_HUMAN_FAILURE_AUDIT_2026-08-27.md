@@ -2,6 +2,19 @@
 
 This register is written from the operator's side of the kitchen. “Chef burden” means the judgment Codex still has to exercise even when the deterministic backend behaves correctly.
 
+## Full-pass disposition
+
+All 54 items are now routed. Deterministic faults are closed in code; irreducibly external or human conditions are controlled through explicit boundaries rather than silently inferred.
+
+- Items 1–10: stable bootstrap, one route arbiter, hash-bound pointer handoff, stale refusal, receipt-backed activation/arrival reconciliation, concurrency guards, and one release source.
+- Items 11–17: returned-draft separation, expiry refusal, template-leak prevention, bounded recovery moves, evidence freshness, and explicit AUD/minor-unit metadata.
+- Items 18–21: external-state ladder with evidence/human attestation, consumer-language impossible-scope refusal, staged-work invalidation, and immutable amendment routing.
+- Items 22–30: receipted lifecycle/status history, append-only correction, confirmed preference effects, authority-only discovery with receipt replay, guarded context switches, hostile-input rendering, and truthful empty states.
+- Items 31–54: a versioned 24-rule human-reality contract returned to Codex. Group work preserves named positions and requires a selected human decision protocol rather than averaging people away.
+- Cross-cutting proof: every tool result now reports chef-effort counters for calls, human boundaries, stale work, authority refusals, failures, accepted mutations, and elapsed time. Token measurement is explicitly host-owned.
+
+Regression proof: 114/114 tests, including the original twelve full journeys, authority discovery/replay, same-revision hash drift, guarded switching, external execution vocabulary, all 24 human rules, group authority, and long nested mixed-language rendering.
+
 ## Operational failure points
 
 | # | Failure point | Current defence | Remaining chef burden / next improvement |

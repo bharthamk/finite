@@ -39,6 +39,22 @@ test("empty arrival handoff starts a new outcome instead of routing into the see
   assert.equal(entered.acceptedStateChanged, false);
 });
 
+test("handoff integrity detects same-revision profile and snapshot drift", async () => {
+  const { runtime, host } = await setup("travel");
+  const entered = await host.execute("finite_enter_kitchen", {
+    entryIntent: "resume_handoff",
+    expectedPlanId: runtime.kernel.profile.planId,
+    expectedPlanRevision: runtime.kernel.revision,
+    expectedProfileHash: "f".repeat(64),
+    expectedSnapshotHash: "e".repeat(64),
+  });
+  assert.equal(entered.code, "KITCHEN_ENTERED_WITH_CURRENT_STATE");
+  assert.equal(entered.handoffReceipt.matchedCurrentState, false);
+  assert(entered.handoffReceipt.differences.some((difference) => difference.field === "profileHash"));
+  assert(entered.handoffReceipt.differences.some((difference) => difference.field === "snapshotHash"));
+  assert.equal(runtime.kernel.revision, 1);
+});
+
 for (const [profileId, expectedFirst, expectedTool] of [
   ["travel", "travel_research_paris_stays", "finite_register_evidence"],
   ["renovation", "renovation_source_substitute", "finite_register_evidence"],
@@ -266,7 +282,7 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   assert.equal(entered.operatorPacket.nextAction.stage, "awaiting_human");
   assert.equal(entered.operatorPacket.nextAction.missingInputs[0].argument, "plan_draft_judgment");
   assert.match(entered.operatorPacket.nextAction.exactQuestion, /working assumptions and dependencies/i);
-  assert(host.tools.has("finite_activate_confirmed_plan"));
+  assert.equal(host.tools.has("finite_activate_confirmed_plan"), false);
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_review_draft");
 
   const returned = await runtime.humanRejectPlanDraft({ draftId: staged.draft.draftId, reasonCode: "structure", reason: "Make the route and open decisions primary; keep the budget subordinate." });

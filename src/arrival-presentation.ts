@@ -50,7 +50,7 @@ export const renderHumanValue = (value: unknown, key = "", parent: Record<string
   }
   if (value !== null && typeof value === "object") {
     const fact = value as Record<string, unknown>;
-    const entries = Object.entries(fact).filter(([entryKey]) => !["source", "questionId"].includes(entryKey));
+    const entries = Object.entries(fact).filter(([entryKey]) => !/^(?:source|questionId|internal.*|.*Path|.*Paths)$/i.test(entryKey));
     const provenance = sourceLabel(fact.source);
     return `${entries.length ? `<dl class="interpretation-facts">${entries.map(([entryKey, entryValue]) => `<div><dt>${escapeHtml(humanLabel(entryKey))}</dt><dd>${renderHumanValue(entryValue, entryKey, fact, depth + 1)}</dd></div>`).join("")}</dl>` : `<span class="interpretation-value is-muted">No additional detail</span>`}${provenance ? `<small class="interpretation-provenance">${escapeHtml(provenance)}</small>` : ""}`;
   }

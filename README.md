@@ -117,6 +117,8 @@ testing, not basic Site Tools availability.
 - `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
 - `src/persistence.ts` — accepted snapshot, plan catalog, evidence bundle, and activation-receipt storage.
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
+- `src/operator-policy.ts` — explicit AUD ledger law, external execution-state ladder, 24-rule human-reality contract, and named group decision protocols.
+- `src/release.ts` — single release marker consumed by both the client and Worker shell.
 - `src/webmcp.ts` — native host adapter and tool registry.
 - `src/main.ts` — adaptive product renderer and human authority surface.
 - `PRODUCT_NORTH_STAR.md` — canonical category, operating model, plan grammar, adaptive-surface promise, moat, boundaries, and public narrative.
@@ -138,7 +140,7 @@ testing, not basic Site Tools availability.
 - `CROSS_SURFACE_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — live v27 Codex-to-Site draft continuity, authenticated D1 packet law, authority exclusion, stale-browser tombstones, and deployment proof.
 - `DRAFT_RETURN_REVISION_ACCEPTANCE_2026-08-27.md` — returned-draft preservation, exact human revision feedback, Codex route arbitration, materially different replacement, and explicit-discard separation.
 - `FULL_JOURNEY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — twelve arrival-to-conclusion journeys, late shocks, stale-work invalidation, impossible-request refusal, lifecycle closure, reload, and repair receipt.
-- `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — 54 operational and human failure points from the operator's side of the kitchen, with current defences and next engineering work.
+- `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — all 54 operational and human failure points, their closed/controlled disposition, regression proof, and remaining external research boundaries.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

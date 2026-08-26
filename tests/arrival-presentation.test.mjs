@@ -37,3 +37,17 @@ test("interpretation labels and missing lists remain generic across plan familie
   assert.match(list, /Australian departure airport/);
   assert.equal(list.includes("["), false);
 });
+
+test("long nested and mixed-language arrival input remains consumer text rather than protocol", () => {
+  const hostile = {
+    plan_family: "旅行_renovación",
+    notes: "Nous voulons protéger la famille — でも予算は有限です. ".repeat(120),
+    nested: Array.from({ length: 20 }, (_, index) => ({ internal_path: `facts.secret.${index}`, value: `<script>${index}</script>`, source: "operator.internal" })),
+  };
+  const rendered = renderHumanValue(hostile);
+  assert.match(rendered, /protéger la famille/);
+  assert.equal(rendered.includes("operator.internal"), false);
+  assert.equal(rendered.includes("facts.secret"), false);
+  assert.equal(rendered.includes("{"), false);
+  assert.equal(rendered.includes("}"), false);
+});

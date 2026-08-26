@@ -265,20 +265,15 @@ test("WebMCP exposes plan operations but never human plan authority and refreshe
   assert(host.tools.has("finite_get_amendment_blueprint"));
   assert(host.tools.has("finite_stage_plan_draft"));
   assert(host.tools.has("finite_stage_plan_amendment"));
-  assert(host.tools.has("finite_activate_confirmed_plan"));
+  assert.equal(host.tools.has("finite_activate_confirmed_plan"), false);
   assert.equal(inventory.some((name) => humanOnlyActions.includes(name)), false);
 
   const staged = await host.execute("finite_stage_plan_draft", { profile: customLaunch("plan_event_webmcp") });
   assert.equal(staged.code, "PLAN_DRAFT_STAGED");
-  const refused = await host.execute("finite_activate_confirmed_plan", {
-    draftId: staged.draft.draftId,
-    confirmationId: "fake",
-    expectedPlanId: "plan_travel_europe",
-    expectedRevision: 1,
-    idempotencyKey: "activate-webmcp-plan-0001",
-  });
-  assert.equal(refused.code, "PLAN_ACTIVATION_CONFIRMATION_MISSING_OR_MISMATCHED");
+  assert.equal(host.tools.has("finite_activate_confirmed_plan"), false);
   const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  await host.execute("finite_open_toolset", { group: "plan_management" });
+  assert(host.tools.has("finite_activate_confirmed_plan"));
   const activated = await host.execute("finite_activate_confirmed_plan", {
     draftId: staged.draft.draftId,
     confirmationId: confirmed.confirmation.confirmationId,

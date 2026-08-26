@@ -129,6 +129,7 @@ test("WebMCP completion refreshes the consumer surface and returns synchronizati
 
   const restaged = await host.execute("finite_stage_option", JSON.stringify({ candidateId: candidate.candidateId, expectedRevision: 1 }));
   const approved = await runtime.kernel.humanApprove({ candidateId: restaged.staged.candidateId });
+  await host.execute("finite_open_toolset", { group: "decisions" });
   const applied = await host.execute("finite_apply_approved_option", JSON.stringify({
     candidateId: candidate.candidateId,
     approvalId: approved.approval.approvalId,

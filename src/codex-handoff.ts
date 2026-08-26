@@ -5,7 +5,7 @@ export interface CodexHandoffContext {
   inline: boolean;
   entryIntent?: "start_new" | "continue_current" | "resume_handoff";
   order: Pick<ArrivalOrder, "orderId" | "version" | "status" | "lastOperatorCheckpoint" | "checksum"> | null;
-  plan: { planId: string; profileId: string; revision: number };
+  plan: { planId: string; profileId: string; profileHash: string; revision: number; snapshotHash: string | null };
 }
 
 export interface CodexHandoff {
@@ -23,6 +23,8 @@ export interface CodexHandoff {
     expectedOrderChecksum: string | null;
     expectedPlanId: string | null;
     expectedPlanRevision: number | null;
+    expectedProfileHash: string | null;
+    expectedSnapshotHash: string | null;
   };
 }
 
@@ -47,6 +49,8 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     ...(entryIntent === "start_new" ? {} : {
       expectedPlanId: context.plan.planId,
       expectedPlanRevision: context.plan.revision,
+      expectedProfileHash: context.plan.profileHash,
+      ...(context.plan.snapshotHash ? { expectedSnapshotHash: context.plan.snapshotHash } : {}),
     }),
   };
   const prompt = [
@@ -81,6 +85,8 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
       expectedOrderChecksum: order?.checksum ?? null,
       expectedPlanId: entryIntent === "start_new" ? null : context.plan.planId,
       expectedPlanRevision: entryIntent === "start_new" ? null : context.plan.revision,
+      expectedProfileHash: entryIntent === "start_new" ? null : context.plan.profileHash,
+      expectedSnapshotHash: entryIntent === "start_new" ? null : context.plan.snapshotHash,
     },
   };
 };
