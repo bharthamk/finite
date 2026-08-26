@@ -28,6 +28,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - A clean compiler-valid blueprint plus typed partial-intake assessment: Codex can discover the family contract, translate an incomplete human brief into bounded facts, receive exact missing/conflicting paths, and let code derive one residual allocation without adding an application-owned language model.
 - An adaptive-shell compiler that can start useful planning from exact finite limits plus source-labelled working assumptions and typed operator-research, human-coordination, external-evidence, and human-decision dependencies without inventing complete costs, dates, moves, or a seeded vertical plan.
 - Authenticated cross-surface construction packets: incomplete intake or an exact staged draft survives reload and follows the signed-in consumer between the Site and Codex behind checksum, seven-day expiry, evidence integrity, source-plan/revision guards, and—when built from arrival—an exact order id/version/checksum; resuming never restores human confirmation. Server tombstones prevent a stale browser from resurrecting discarded work.
+- First-class draft revision: **Request changes** preserves the exact rejected draft, captures a bounded human reason and free-text instruction, routes Codex to `finite_get_returned_plan_draft`, and keeps that immutable review active until a materially different draft resolves it. **Start over** is a separate destructive discard, not an accidental consequence of asking for changes.
 - Arrival-first invalidation: newer human input outranks draft review, marks older construction `stale_arrival`, removes its pending authority and activation tool, and forces Codex to reconcile and compile from the current order before anything can be confirmed.
 - Exact plan activation authority: a draft remains inert until the human confirms its profile and draft hashes outside WebMCP; Codex can then activate only that bound packet with plan/revision guards and persistent idempotency proof.
 - Immutable linear plan amendments: Codex derives a successor from live accepted truth, stages a deterministic semantic diff, and activates only the exact human-confirmed supersession while both versions remain independently switchable and replayable.
@@ -83,8 +84,11 @@ The consumer's confirmation is never part of that packet and must be recreated
 on the restored exact hashes. Arrival-built construction also binds the exact
 human-order id, version, and checksum. If the order advances, arrival
 reconciliation takes priority and the old draft cannot be reviewed or activated.
-An explicit discard leaves a server tombstone so an older browser cache cannot
-restore the rejected packet.
+Returning a draft for revision is not discard. The exact packet and human
+feedback remain durable revision context across the Site and Codex until a
+materially different compiled draft resolves the return. An explicit **Start
+over** action is the only route that discards the packet and leaves a server
+tombstone so an older browser cache cannot restore it.
 
 ## Architecture boundary
 
@@ -129,6 +133,7 @@ testing, not basic Site Tools availability.
 - `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.
 - `ARRIVAL_BOUND_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — exact arrival-source binding, delayed-input invalidation, stale activation refusal, live v24→v26 journey, and deployment proof.
 - `CROSS_SURFACE_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — live v27 Codex-to-Site draft continuity, authenticated D1 packet law, authority exclusion, stale-browser tombstones, and deployment proof.
+- `DRAFT_RETURN_REVISION_ACCEPTANCE_2026-08-27.md` — returned-draft preservation, exact human revision feedback, Codex route arbitration, materially different replacement, and explicit-discard separation.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
 - `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.

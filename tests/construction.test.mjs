@@ -203,7 +203,7 @@ test("an authenticated construction packet follows the consumer across browser s
     "travel",
     new PlanCatalogStore(firstStorage),
     [],
-    () => new Date("2026-08-26T18:00:30.000Z"),
+    () => new Date("2026-08-26T20:00:00.000Z"),
     undefined,
     remote,
   );
@@ -227,9 +227,38 @@ test("an authenticated construction packet follows the consumer across browser s
   assert.equal(second.planActivationConfirmation, null);
   assert.equal(JSON.stringify(secondStorage.getItem("finite-plan.construction.v1")).includes("confirmationId"), false);
 
-  assert.equal((await second.humanRejectPlanDraft({ draftId: staged.draft.draftId, reason: "Return for revision" })).code, "HUMAN_PLAN_DRAFT_REJECTED");
-  assert.equal((await migratingFirstSurface.hydrateConstructionPacket()).code, "CONSTRUCTION_PACKET_NOT_FOUND");
-  assert.equal((await migratingFirstSurface.getConstructionPacket()).code, "CONSTRUCTION_PACKET_NOT_FOUND");
+  assert.equal((await second.humanRejectPlanDraft({ draftId: staged.draft.draftId, reasonCode: "structure", reason: "Keep the route primary and the budget subordinate." })).code, "HUMAN_PLAN_DRAFT_RETURNED");
+  assert.equal((await migratingFirstSurface.hydrateConstructionPacket()).code, "CONSTRUCTION_DRAFT_RETURNED");
+  const returned = await migratingFirstSurface.getReturnedPlanDraft();
+  assert.equal(returned.code, "RETURNED_PLAN_DRAFT_CONTEXT");
+  assert.equal(returned.draft.draftId, staged.draft.draftId);
+  assert.equal(returned.returned.returnReview.message, "Keep the route primary and the budget subordinate.");
+  const revised = await migratingFirstSurface.assessPlanIntake({
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_cross_surface_trip_revision",
+    name: "Cross-surface Europe trip — route first",
+    brief: "Keep the living route and open decisions primary while the finite budget remains a constraint.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [], locks: ["total_budget"], preferenceLabels: ["preserve_route_flexibility"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "One-month working estimate.", sourcePaths: ["reviewed_interpretation"] } },
+      booked_segment_days: { days: { value: 0, basis: "No confirmed bookings are recorded.", sourcePaths: ["reviewed_interpretation"] } },
+    },
+    stages: [{ stageId: "europe", label: "Europe", marker: "Open", status: "planned" }],
+  });
+  assert.match(revised.code, /^INTAKE_FACTS_COMPLETE/);
+  assert.equal((await migratingFirstSurface.getConstructionPacket()).packet.kind, "intake");
+  assert.equal((await remote.loadReturned()).status, "returned");
+  const revisedDraft = await migratingFirstSurface.compileIntakeToDraft({
+    packetId: revised.constructionPacket.packetId,
+    expectedChecksum: revised.constructionPacket.checksum,
+  });
+  assert.equal(revisedDraft.code, "PLAN_DRAFT_STAGED_FROM_INTAKE");
+  const resolvedReturn = await remote.loadReturned();
+  assert.equal(resolvedReturn.status, "resolved");
+  assert.equal(resolvedReturn.resolvedByPacketId, revisedDraft.constructionPacket.packetId);
+  assert.equal(migratingFirstSurface.lastConstructionReturnReview.status, "resolved");
 });
 
 test("server construction validation accepts exact work and refuses embedded human authority", async () => {

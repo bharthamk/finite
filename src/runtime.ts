@@ -20,6 +20,8 @@ import type {
   IntakeFactIssue,
   ProfileDefinition,
   ProfileId,
+  ConstructionReturnReason,
+  ReturnedConstructionReview,
   ToolResult,
 } from "./types.js";
 
@@ -50,6 +52,8 @@ export class FinitePlanRuntime {
   kernel: FinitePlanKernel;
   pendingPlanDraft: PlanDraft | null = null;
   planActivationConfirmation: PlanActivationConfirmation | null = null;
+  returnedConstructionReview: ReturnedConstructionReview | null = null;
+  lastConstructionReturnReview: ReturnedConstructionReview | null = null;
   private readonly plans = new Map<string, CompiledCatalogEntry>();
   private readonly activationReceipts = new Map<string, PlanActivationReceipt>();
   latestIntakeAssessment: ToolResult | null = null;
@@ -82,21 +86,45 @@ export class FinitePlanRuntime {
     try {
       const remote = await this.constructionRepository.load();
       if (remote) {
+        this.returnedConstructionReview = null;
         try { this.catalogStore?.saveConstructionPacket(remote); } catch { /* remote packet remains authoritative */ }
+        await this.hydrateReturnedConstructionReview(false);
         return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_HYDRATED", packet: this.constructionPacketSummary(remote), acceptedStateChanged: false };
       }
       const local = this.catalogStore?.loadConstructionPacket() ?? null;
-      if (!local) return { ok: true, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+      if (!local) return this.hydrateReturnedConstructionReview();
       const adopted = await this.constructionRepository.save(local);
+      this.returnedConstructionReview = null;
       try { this.catalogStore?.saveConstructionPacket(adopted); } catch { /* remote packet remains authoritative */ }
+      await this.hydrateReturnedConstructionReview(false);
       return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_ADOPTED", packet: this.constructionPacketSummary(adopted), acceptedStateChanged: false };
     } catch (error) {
       const code = error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_PACKET_REMOTE_HYDRATION_FAILED";
       if (["CONSTRUCTION_ARRIVAL_BINDING_REQUIRED", "CONSTRUCTION_ARRIVAL_STALE", "CONSTRUCTION_PACKET_BASE_STALE", "CONSTRUCTION_PACKET_INTEGRITY_FAILED", "CONSTRUCTION_PACKET_CLEARED", "CONSTRUCTION_PACKET_TOMBSTONED"].includes(code)) {
         try { this.catalogStore?.clearConstructionPacket(); } catch { /* local stale cache remains non-authoritative */ }
       }
-      if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") return { ok: true, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+      if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") return this.hydrateReturnedConstructionReview();
       return { ok: false, code, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "Do not expose local construction as current until the authenticated server packet is reconciled." };
+    }
+  }
+
+  private async hydrateReturnedConstructionReview(activate = true): Promise<ToolResult> {
+    if (!this.constructionRepository) return { ok: true, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
+    try {
+      const review = await this.constructionRepository.loadReturned();
+      this.lastConstructionReturnReview = review ? clone(review) : null;
+      this.returnedConstructionReview = review && activate && review.status !== "resolved" ? clone(review) : null;
+      if (!review) return { ok: true, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
+      return {
+        ok: true,
+        code: review.status === "resolved" ? "CONSTRUCTION_RETURN_RESOLVED" : review.feedbackRequired ? "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED" : "CONSTRUCTION_DRAFT_RETURNED",
+        review: this.returnedConstructionSummary(review),
+        acceptedStateChanged: false,
+      };
+    } catch (error) {
+      this.returnedConstructionReview = null;
+      this.lastConstructionReturnReview = null;
+      return { ok: false, code: error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_RETURN_READ_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
     }
   }
 
@@ -150,6 +178,8 @@ export class FinitePlanRuntime {
     const checksum = await sha256(content);
     const packet = { ...content, packetId: `construction_${checksum.slice(0, 16)}`, checksum } as PlanConstructionPacket;
     const durable = this.constructionRepository ? await this.constructionRepository.save(packet) : packet;
+    this.returnedConstructionReview = null;
+    if (this.constructionRepository) await this.hydrateReturnedConstructionReview(false);
     if (this.constructionRepository) {
       try { this.catalogStore.saveConstructionPacket(durable); } catch { /* authenticated server state remains authoritative */ }
     } else this.catalogStore.saveConstructionPacket(durable);
@@ -177,6 +207,20 @@ export class FinitePlanRuntime {
       ...(packet.kind === "intake"
         ? { assessmentCode: packet.payload.assessmentCode }
         : { draftId: packet.payload.draftId, planId: packet.payload.profile.planId, amendment: packet.payload.amendment ? { supersedesPlanId: packet.payload.amendment.supersedesPlanId, diffHash: packet.payload.amendment.diffHash } : null }),
+    };
+  }
+
+  private returnedConstructionSummary(review: ReturnedConstructionReview): Record<string, unknown> {
+    return {
+      ...this.constructionPacketSummary(review.packet),
+      status: review.status === "resolved" ? "revision_resolved" : review.feedbackRequired ? "return_feedback_required" : "returned_for_revision",
+      returnReview: {
+        reasonCode: review.reasonCode,
+        message: review.message,
+        returnedAt: review.returnedAt,
+        feedbackRequired: review.feedbackRequired,
+        source: review.source,
+      },
     };
   }
 
@@ -219,8 +263,38 @@ export class FinitePlanRuntime {
 
   async getConstructionPacket(): Promise<ToolResult> {
     const verified = await this.readVerifiedConstructionPacket();
-    if ("ok" in verified) return verified;
+    if ("ok" in verified) {
+      if (verified.code === "CONSTRUCTION_PACKET_NOT_FOUND") {
+        if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview();
+        if (this.returnedConstructionReview) return { ok: true, code: this.returnedConstructionReview.feedbackRequired ? "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED" : "CONSTRUCTION_DRAFT_RETURNED", packet: this.returnedConstructionSummary(this.returnedConstructionReview), acceptedStateChanged: false };
+      }
+      return verified;
+    }
     return { ok: true, code: "CONSTRUCTION_PACKET", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+  }
+
+  async getReturnedPlanDraft(): Promise<ToolResult> {
+    if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview();
+    const review = this.returnedConstructionReview;
+    if (!review) return { ok: false, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
+    if (review.feedbackRequired) return { ok: false, code: "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED", review: this.returnedConstructionSummary(review), acceptedStateChanged: false, next: "Wait for the human to explain what should change on the Site." };
+    const packet = review.packet;
+    if (packet.kind !== "draft") return { ok: false, code: "CONSTRUCTION_RETURN_INVALID", acceptedStateChanged: false };
+    return {
+      ok: true,
+      code: "RETURNED_PLAN_DRAFT_CONTEXT",
+      returned: this.returnedConstructionSummary(review),
+      draft: {
+        draftId: packet.payload.draftId,
+        contentHash: packet.payload.contentHash,
+        profile: clone(packet.payload.profile),
+        evidenceRecords: clone(packet.payload.evidenceRecords),
+        amendment: clone(packet.payload.amendment),
+        sourceArrival: clone(packet.payload.sourceArrival),
+      },
+      acceptedStateChanged: false,
+      next: "Revise from this exact rejected draft and human feedback. Save a replacement intake or draft; do not silently rebuild the same packet.",
+    };
   }
 
   async resumeConstructionPacket(): Promise<ToolResult> {
@@ -278,11 +352,21 @@ export class FinitePlanRuntime {
 
   async discardConstructionPacket({ packetId }: { packetId: string }): Promise<ToolResult> {
     const verified = await this.readVerifiedConstructionPacket();
-    if ("ok" in verified || verified.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+    if ("ok" in verified) {
+      if (this.returnedConstructionReview?.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+      try {
+        if (this.constructionRepository) await this.constructionRepository.clear(packetId);
+        this.catalogStore?.clearConstructionPacket();
+        this.returnedConstructionReview = null;
+        return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Begin again from the current reviewed human order." };
+      } catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+    }
+    if (verified.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
     const packet = verified;
     try {
       if (this.constructionRepository) await this.constructionRepository.clear(packetId);
       this.catalogStore?.clearConstructionPacket();
+      this.returnedConstructionReview = null;
     }
     catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
     if (packet.kind === "draft" && this.pendingPlanDraft?.draftId === packet.payload.draftId) {
@@ -308,6 +392,10 @@ export class FinitePlanRuntime {
       route = this.planActivationConfirmation
         ? { stage: "human_confirmed", nextTool: "finite_activate_confirmed_plan", targetId: this.pendingPlanDraft.draftId, authorityPresent: true }
         : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_or_reject_plan_draft", targetId: this.pendingPlanDraft.draftId, authorityPresent: false };
+    } else if (this.returnedConstructionReview) {
+      route = this.returnedConstructionReview.feedbackRequired
+        ? { stage: "awaiting_human", nextTool: null, humanAction: "describe_returned_plan_draft", targetId: this.returnedConstructionReview.draftId, authorityPresent: false }
+        : { stage: "draft_returned", nextTool: "finite_get_returned_plan_draft", targetId: this.returnedConstructionReview.draftId, authorityPresent: false };
     } else if (this.kernel.pendingCorrection) {
       route = this.kernel.correctionConfirmation
         ? { stage: "human_confirmed", nextTool: "finite_apply_confirmed_actual_correction", targetId: this.kernel.pendingCorrection.correctionId, authorityPresent: true }
@@ -847,15 +935,45 @@ export class FinitePlanRuntime {
     return { ok: true, code: "HUMAN_PLAN_ACTIVATION_CONFIRMED", confirmation: clone(confirmation), acceptedStateChanged: false, next: "Codex may now activate only this exact compiled draft." };
   }
 
-  async humanRejectPlanDraft({ draftId, reason }: { draftId: string; reason: string }): Promise<ToolResult> {
+  async humanRejectPlanDraft({ draftId, reasonCode = "other", reason }: { draftId: string; reasonCode?: ConstructionReturnReason; reason: string }): Promise<ToolResult> {
     const draft = this.pendingPlanDraft;
     if (!draft || draft.draftId !== draftId) return { ok: false, code: "PLAN_DRAFT_NOT_FOUND", acceptedStateChanged: false };
-    this.pendingPlanDraft = null;
-    this.planActivationConfirmation = null;
-    let constructionPacketCleared = false;
-    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId); }
-    catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", draftId, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The in-memory draft was returned, but durable construction cleanup must be retried explicitly." }; }
-    return { ok: true, code: "HUMAN_PLAN_DRAFT_REJECTED", draftId, reason: String(reason).slice(0, 500), constructionPacketCleared, acceptedStateChanged: false, next: constructionPacketCleared ? "Codex may read the active catalog and stage a revised complete draft." : "The exact draft was returned; a different durable construction packet remains available." };
+    const message = String(reason).trim().slice(0, 1_000);
+    if (!message) return { ok: false, code: "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED", draftId, acceptedStateChanged: false };
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified && !this.constructionRepository && !this.catalogStore) {
+      this.pendingPlanDraft = null;
+      this.planActivationConfirmation = null;
+      return { ok: true, code: "HUMAN_PLAN_DRAFT_RETURNED", draftId, reasonCode, reason: message, reviewPersisted: false, acceptedStateChanged: false, next: "Stage a revised complete draft from the current in-memory context." };
+    }
+    if ("ok" in verified || verified.kind !== "draft" || verified.payload.draftId !== draftId) return { ok: false, code: "CONSTRUCTION_DRAFT_NOT_RETURNABLE", draftId, acceptedStateChanged: false };
+    try {
+      const returnedAt = this.now().toISOString();
+      const review = this.constructionRepository
+        ? await this.constructionRepository.returnForRevision(verified.packetId, { reasonCode, message })
+        : { status: "returned" as const, packet: clone(verified), packetId: verified.packetId, draftId, reasonCode, message, returnedAt, feedbackRequired: false, source: "human_action" as const };
+      this.pendingPlanDraft = null;
+      this.planActivationConfirmation = null;
+      this.returnedConstructionReview = clone(review);
+      this.lastConstructionReturnReview = clone(review);
+      this.catalogStore?.clearConstructionPacket();
+      return { ok: true, code: "HUMAN_PLAN_DRAFT_RETURNED", draftId, review: this.returnedConstructionSummary(review), acceptedStateChanged: false, next: "Codex can now read the exact returned draft and human feedback, then stage a visibly revised replacement." };
+    } catch (error) { return { ok: false, code: error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_RETURN_FAILED", draftId, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
+  }
+
+  async humanDescribeReturnedDraft({ packetId, reasonCode, message }: { packetId: string; reasonCode: ConstructionReturnReason; message: string }): Promise<ToolResult> {
+    if (!this.returnedConstructionReview) await this.hydrateReturnedConstructionReview();
+    const review = this.returnedConstructionReview;
+    if (!review || review.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_RETURN_NOT_FOUND", acceptedStateChanged: false };
+    const detail = String(message).trim().slice(0, 1_000);
+    if (!detail) return { ok: false, code: "CONSTRUCTION_RETURN_FEEDBACK_REQUIRED", acceptedStateChanged: false };
+    if (!this.constructionRepository) return { ok: false, code: "CONSTRUCTION_RETURN_STORAGE_UNAVAILABLE", acceptedStateChanged: false };
+    try {
+      const returned = await this.constructionRepository.returnForRevision(packetId, { reasonCode, message: detail });
+      this.returnedConstructionReview = clone(returned);
+      this.lastConstructionReturnReview = clone(returned);
+      return { ok: true, code: "HUMAN_PLAN_DRAFT_RETURNED", draftId: returned.draftId, review: this.returnedConstructionSummary(returned), acceptedStateChanged: false, next: "Codex can now read the exact returned draft and human feedback, then stage a visibly revised replacement." };
+    } catch (error) { return { ok: false, code: error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_RETURN_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
   }
 
   async activateConfirmedPlanDraft({ draftId, confirmationId, expectedPlanId, expectedRevision, idempotencyKey }: {

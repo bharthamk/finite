@@ -268,6 +268,19 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   assert.match(entered.operatorPacket.nextAction.exactQuestion, /working assumptions and dependencies/i);
   assert(host.tools.has("finite_activate_confirmed_plan"));
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_review_draft");
+
+  const returned = await runtime.humanRejectPlanDraft({ draftId: staged.draft.draftId, reasonCode: "structure", reason: "Make the route and open decisions primary; keep the budget subordinate." });
+  assert.equal(returned.code, "HUMAN_PLAN_DRAFT_RETURNED");
+  const reentered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(reentered.operatorPacket.nextAction.stage, "draft_returned");
+  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_get_returned_plan_draft");
+  assert.equal(reentered.operatorPacket.chefMenu.items[0].menuItemId, "construction_revise_returned_draft");
+  assert.equal(reentered.plan.construction.status, "returned_for_revision");
+  assert.equal("staleReason" in reentered.plan.construction, false);
+  const context = await host.execute("finite_get_returned_plan_draft", {});
+  assert.equal(context.code, "RETURNED_PLAN_DRAFT_CONTEXT");
+  assert.equal(context.returned.returnReview.message, "Make the route and open decisions primary; keep the budget subordinate.");
+  assert.equal(context.acceptedStateChanged, false);
 });
 
 test("new human input invalidates an older kitchen draft and restores the arrival reconcile route", async () => {

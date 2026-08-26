@@ -233,5 +233,24 @@ export const constructionPackets = sqliteTable("construction_packets", {
   createdAt: text("created_at").notNull(),
   expiresAt: text("expires_at").notNull(),
   clearedAt: text("cleared_at"),
+  disposition: text("disposition").default("current").notNull(),
+  returnReasonCode: text("return_reason_code"),
+  returnMessage: text("return_message"),
+  returnedAt: text("returned_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const constructionReturnReviews = sqliteTable("construction_return_reviews", {
+  scopeId: text("scope_id").primaryKey(),
+  returnId: text("return_id").notNull(),
+  packetId: text("packet_id").notNull(),
+  packetJson: text("packet_json").notNull(),
+  draftId: text("draft_id").notNull(),
+  reasonCode: text("reason_code").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull(),
+  returnedAt: text("returned_at").notNull(),
+  resolvedByPacketId: text("resolved_by_packet_id"),
+  resolvedAt: text("resolved_at"),
   updatedAt: text("updated_at").notNull(),
 });

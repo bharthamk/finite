@@ -351,6 +351,7 @@ if (adapter) {
 
 let busy = false;
 let message = "";
+let draftReturnFormOpen = false;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -637,7 +638,10 @@ function bindArrivalInteractions(): void {
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
   }));
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
-  root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
+  root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     if (response.ok) location.reload();
@@ -823,7 +827,37 @@ const renderReceipt = (receipt: Receipt): string => {
 
 const renderPlanDraft = (): string => {
   const draft = runtime.pendingPlanDraft;
+  const returned = runtime.returnedConstructionReview;
+  if (!draft && !returned) return "";
+  if (!draft && returned && returned.packet.kind === "draft") {
+    const profile = returned.packet.payload.profile;
+    const feedback = returned.feedbackRequired ? `<form class="draft-return-form" data-plan-return="legacy" data-packet="${escapeHtml(returned.packetId)}">
+      <div><p class="eyebrow">Help the chef revise it</p><h3>What wasn’t right about this kitchen?</h3><p>Your answer changes the next draft, not the confirmed trip brief or accepted plan.</p></div>
+      <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
+      <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="For example: this feels like a budget shell, not the living trip plan I expected."></textarea></label>
+      <button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button>
+    </form>` : `<div class="draft-returned-copy"><span>Changes requested</span><strong>${escapeHtml(returned.reasonCode?.replaceAll("_", " ") ?? "Revision requested")}</strong><p>${escapeHtml(returned.message)}</p><button class="button" type="button" data-action="open-codex-handoff">Hand off this revision to Codex</button></div>`;
+    return `<section class="zone zone--approval_panel plan-intake plan-intake--returned" aria-label="Returned plan draft">
+      <div class="zone__heading"><p class="eyebrow">Kitchen returned / accepted plan unchanged</p><h2>${escapeHtml(profile.name)}</h2></div>
+      <div class="approval-copy"><p>The rejected draft remains visible as revision context. It cannot be confirmed or activated.</p><div><span>Packet proof</span><strong>${escapeHtml(returned.packet.checksum.slice(0, 16))}…</strong></div><div><span>Draft proof</span><strong>${escapeHtml(returned.packet.payload.contentHash.slice(0, 16))}…</strong></div></div>
+      ${feedback}
+      <details class="draft-discard"><summary>Start over instead</summary><p>Discard the returned draft and begin again from the unchanged reviewed brief.</p><button class="text-button" type="button" data-action="discard-returned-draft" data-packet="${escapeHtml(returned.packetId)}">Discard this draft entirely</button></details>
+    </section>`;
+  }
   if (!draft) return "";
+  const priorReview = runtime.lastConstructionReturnReview?.status === "resolved" && runtime.lastConstructionReturnReview.packet.kind === "draft"
+    ? runtime.lastConstructionReturnReview
+    : null;
+  const priorProfile = priorReview?.packet.kind === "draft" ? priorReview.packet.payload.profile : null;
+  const changedSinceReturn = priorProfile ? [
+    ["outcome framing", priorProfile.name !== draft.profile.name || JSON.stringify(priorProfile.surface.hero) !== JSON.stringify(draft.profile.surface.hero)],
+    ["finite allocation", JSON.stringify(priorProfile.accepted) !== JSON.stringify(draft.profile.accepted)],
+    ["route and stages", JSON.stringify(priorProfile.surface.stages) !== JSON.stringify(draft.profile.surface.stages)],
+    ["working assumptions", JSON.stringify(priorProfile.surface.assumptions ?? []) !== JSON.stringify(draft.profile.surface.assumptions ?? [])],
+    ["planning dependencies", JSON.stringify(priorProfile.surface.dependencies ?? []) !== JSON.stringify(draft.profile.surface.dependencies ?? [])],
+    ["constraints and preferences", JSON.stringify({ locks: priorProfile.locks, preferenceLabels: priorProfile.preferenceLabels, preferenceWeights: priorProfile.preferenceWeights, relationships: priorProfile.relationships }) !== JSON.stringify({ locks: draft.profile.locks, preferenceLabels: draft.profile.preferenceLabels, preferenceWeights: draft.profile.preferenceWeights, relationships: draft.profile.relationships })],
+  ].filter((entry) => entry[1]).map((entry) => String(entry[0])) : [];
+  const revisionReceipt = priorReview ? `<section class="draft-revision-diff" aria-label="Revision response"><div><p class="eyebrow">Revised from your returned kitchen</p><h3>${escapeHtml(priorReview.message)}</h3></div><div><span>Codex changed</span><strong>${escapeHtml(changedSinceReturn.join(" · ") || "the compiled plan content")}</strong></div></section>` : "";
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
   if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Kitchen update queued">
     <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous kitchen is no longer confirmable.</h2></div>
@@ -842,11 +876,17 @@ const renderPlanDraft = (): string => {
       <div><span>Draft proof</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}…</strong></div>
       ${dependencies.length ? `<details><summary>Open planning dependencies (${dependencies.filter((dependency) => dependency.status === "open").length})</summary><ul>${dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong> · ${escapeHtml(dependency.kind.replaceAll("_", " "))} · ${escapeHtml(dependency.status)}</li>`).join("")}</ul></details>` : ""}
       ${assumptions.length ? `<details><summary>Working assumptions (${assumptions.length})</summary><ul>${assumptions.map((assumption) => `<li><strong>${escapeHtml(assumption.path)}</strong>: ${escapeHtml(String(assumption.value))} · ${escapeHtml(assumption.basis)}</li>`).join("")}</ul></details>` : ""}
+      ${revisionReceipt}
       ${amendment ? `<div><span>Amendment proof</span><strong>${escapeHtml(amendment.diffHash.slice(0, 16))}…</strong></div><p class="quiet">Changed: ${escapeHtml(amendment.diff.changedSections.join(", "))}</p>` : ""}
       ${confirmed
         ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`
         : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact kitchen</button>`}
-      <button class="text-button" data-action="reject-plan" data-draft="${escapeHtml(draft.draftId)}">Not this kitchen</button>
+      ${draftReturnFormOpen ? `<form class="draft-return-form" data-plan-return="current" data-draft="${escapeHtml(draft.draftId)}">
+        <div><p class="eyebrow">Return for revision</p><h3>What wasn’t right about this kitchen?</h3><p>The draft stays visible while you explain. This does not change the confirmed brief or accepted plan.</p></div>
+        <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
+        <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="Say what you expected to receive instead."></textarea></label>
+        <div class="draft-return-actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button><button class="text-button" type="button" data-action="cancel-plan-return">Keep reviewing</button></div>
+      </form>` : `<button class="text-button" data-action="open-plan-return" data-draft="${escapeHtml(draft.draftId)}">Request changes</button>`}
     </div>
   </section>`;
 };
@@ -968,9 +1008,27 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
   await render();
 };
 
-const rejectPlanDraft = async (draftId: string): Promise<void> => {
-  const result = await runtime.humanRejectPlanDraft({ draftId, reason: "Human returned the compiled plan from the consumption surface." });
-  announce(result.ok ? "Plan draft returned. The active plan is unchanged." : `The plan draft was not returned: ${result.code}`);
+const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {
+  if (busy) return;
+  const data = new FormData(form);
+  const reasonCode = String(data.get("reasonCode") ?? "") as import("./types.js").ConstructionReturnReason;
+  const reason = String(data.get("reason") ?? "").trim();
+  if (!reasonCode || !reason) return;
+  busy = true;
+  announce("Returning the exact kitchen with your revision notes…");
+  await render();
+  const result = form.dataset.draft
+    ? await runtime.humanRejectPlanDraft({ draftId: form.dataset.draft, reasonCode, reason })
+    : await runtime.humanDescribeReturnedDraft({ packetId: form.dataset.packet ?? "", reasonCode, message: reason });
+  busy = false;
+  draftReturnFormOpen = false;
+  announce(result.ok ? "Your revision request is saved. Codex will receive this exact draft and your notes; the accepted plan is unchanged." : `The revision request was not saved: ${result.code}`);
+  await render();
+};
+
+const discardReturnedDraft = async (packetId: string): Promise<void> => {
+  const result = await runtime.discardConstructionPacket({ packetId });
+  announce(result.ok ? "The returned draft was discarded. Codex will begin again from the unchanged reviewed brief." : `The draft was not discarded: ${result.code}`);
   await render();
 };
 
@@ -981,7 +1039,10 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
-  root?.querySelector<HTMLButtonElement>("[data-action='reject-plan']")?.addEventListener("click", (event) => { void rejectPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
+  root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

@@ -73,7 +73,7 @@ const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_c
 const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
 const toolsetGroups = {
   arrival: ["finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_plan_interpretation"],
-  construction: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_resume_construction_packet", "finite_discard_construction_packet", "finite_get_evidence_policy", "finite_register_evidence", "finite_read_evidence", "finite_stage_plan_draft"],
+  construction: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_get_returned_plan_draft", "finite_resume_construction_packet", "finite_discard_construction_packet", "finite_get_evidence_policy", "finite_register_evidence", "finite_read_evidence", "finite_stage_plan_draft"],
   planning: ["finite_open_kitchen", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event", "finite_simulate_reallocation", "finite_compare_options", "finite_record_consumer_feedback", "finite_apply_approved_option", "finite_apply_confirmed_preference_change", "finite_apply_confirmed_actual_correction", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile"],
   decisions: ["finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option", "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction"],
   evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_export_plan_receipt"],
@@ -167,8 +167,11 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
   if (stage === "awaiting_human") {
     const item = items[0] ?? {};
     const planDraftReview = route.humanAction === "confirm_or_reject_plan_draft";
+    const returnedDraftFeedback = route.humanAction === "describe_returned_plan_draft";
     const missingInputs = planDraftReview
       ? [{ argument: "plan_draft_judgment", source: "human", reason: "Only the human can confirm or return the exact compiled planning shell.", question: "Review the working assumptions and dependencies. Should Finite release this exact draft for activation, or what should change?" }]
+      : returnedDraftFeedback
+        ? [{ argument: "returned_draft_feedback", source: "human", reason: "Codex must not invent why the human returned a draft.", question: "What wasn't right about this kitchen, and what should Codex change?" }]
       : Array.isArray(item.missingInputs) ? item.missingInputs : [{ argument: String(route.humanAction ?? "human_action"), source: "human", reason: "Finite requires an explicit human action." }];
     return {
       actionVersion: "finite-next-action.v1", stage, reason: "Prepared work is waiting at the human-authority boundary.", nextTool: null,
@@ -176,6 +179,11 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
       exactQuestion: record(missingInputs[0]).question ?? "Review the prepared outcome and choose whether to approve, return, or change it.", targetId, authorityPresent: false,
     };
   }
+  if (stage === "draft_returned") return {
+    actionVersion: "finite-next-action.v1", stage, reason: "The human returned an exact compiled draft with revision feedback. Codex must inspect that packet before preparing a replacement.",
+    nextTool: "finite_get_returned_plan_draft", knownArgs: targetId ? { draftId: targetId } : {}, derivedArgs: [], missingInputs: [],
+    requiresHuman: false, exactQuestion: null, targetId, authorityPresent: false,
+  };
   if (stage === "human_approved" && items[0]) {
     const item = items[0]!;
     return {
@@ -417,7 +425,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   const constructionCurrent = orientation ? constructionMatchesArrival(constructionPacket, orientation) : true;
   if (orientation?.order.status === "interpretation_confirmed" && orientation.interpretationIsCurrent) {
     const planRoute = record(record(plan.work).route);
-    if ((planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed") && constructionCurrent) nextAction = planNextAction(plan);
+    if ((planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed" || planRoute.stage === "draft_returned") && constructionCurrent) nextAction = planNextAction(plan);
     else if (constructionPacket.kind === "intake" && String(constructionPacket.assessmentCode).startsWith("INTAKE_FACTS_COMPLETE")) nextAction = {
       actionVersion: "finite-next-action.v1", stage: "construction_intake_ready", reason: "The reviewed order has a complete checksum-bound construction packet ready for clean compilation.",
       nextTool: "finite_compile_intake_to_draft", knownArgs: { packetId: constructionPacket.packetId, expectedChecksum: constructionPacket.checksum }, derivedArgs: [], missingInputs: [], requiresHuman: false, exactQuestion: null, targetId: constructionPacket.packetId, authorityPresent: false,
@@ -434,26 +442,29 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     const currentMenu = record(chefMenu);
     const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
     const waitingForHuman = nextAction.stage === "awaiting_human";
+    const returnedForRevision = nextAction.stage === "draft_returned";
     const primary = {
-      menuItemId: waitingForHuman ? "construction_review_draft" : nextAction.stage === "construction_intake_ready" ? "construction_compile_intake" : "construction_resume_intake",
+      menuItemId: waitingForHuman ? "construction_review_draft" : returnedForRevision ? "construction_revise_returned_draft" : nextAction.stage === "construction_intake_ready" ? "construction_compile_intake" : "construction_resume_intake",
       rank: 1,
       kind: waitingForHuman ? "human_decision" : "operator_action",
-      title: waitingForHuman ? "Review the compiled kitchen" : nextAction.stage === "construction_intake_ready" ? "Compile the clean adaptive draft" : "Resume the saved construction work",
-      offer: waitingForHuman ? "The exact non-authoritative draft is waiting on the Site for human review." : nextAction.stage === "construction_intake_ready" ? "I will compile the checksum-bound intake without copying example moves or stages." : "I will restore the exact missing paths and continue without restarting or asking you to repeat the brief.",
+      title: waitingForHuman ? "Review the compiled kitchen" : returnedForRevision ? "Revise the returned kitchen" : nextAction.stage === "construction_intake_ready" ? "Compile the clean adaptive draft" : "Resume the saved construction work",
+      offer: waitingForHuman ? "The exact non-authoritative draft is waiting on the Site for human review." : returnedForRevision ? "I will read the exact rejected draft and the human's feedback, then prepare a visibly changed replacement rather than restarting blindly." : nextAction.stage === "construction_intake_ready" ? "I will compile the checksum-bound intake without copying example moves or stages." : "I will restore the exact missing paths and continue without restarting or asking you to repeat the brief.",
       status: waitingForHuman ? "input_required" : "ready",
       viability: "not_yet_tested",
       nextTool: nextAction.nextTool ?? null,
       knownArgs: nextAction.knownArgs ?? {},
       missingInputs: waitingForHuman ? nextAction.missingInputs ?? [] : [],
-      tradeoffs: waitingForHuman ? [] : ["Working assumptions remain visibly provisional until human review"],
+      tradeoffs: waitingForHuman ? [] : returnedForRevision ? ["The rejected draft remains audit context, never authority"] : ["Working assumptions remain visibly provisional until human review"],
       evidence: { status: "not_required", refs: [] },
     };
     chefMenu = { ...currentMenu, items: [primary, ...currentItems.slice(1)] };
   }
   const constructionFocused = Boolean(orientation);
-  const focusedConstruction = constructionCurrent
-    ? constructionPacket
-    : { ...constructionPacket, status: "stale_arrival", staleReason: "The human order advanced after this packet was compiled.", currentArrival: exactArrivalBinding(orientation!), sourceArrival: constructionPacket.sourceArrival ?? null };
+  const focusedConstruction = !constructionPacket.packetId
+    ? { status: "none", code: constructionPacket.code ?? "CONSTRUCTION_PACKET_NOT_FOUND" }
+    : constructionCurrent
+      ? constructionPacket
+      : { ...constructionPacket, status: "stale_arrival", staleReason: "The human order advanced after this packet was compiled.", currentArrival: exactArrivalBinding(orientation!), sourceArrival: constructionPacket.sourceArrival ?? null };
   const focusedPlan = constructionFocused ? {
     role: "source_guard_only",
     note: "This accepted plan is the persistence and concurrency base for construction. It is not the human's newly reviewed order and its consumer outcome, menu, moves, and sample surface are intentionally omitted.",
@@ -564,6 +575,7 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   } }),
   define({ name: "finite_compile_intake_to_draft", title: "Compile the verified intake into a clean draft", description: "Compile one exact resumable intake packet into a family-safe, non-authoritative plan draft without carrying example-specific moves or stages across. Working assumptions and dependencies remain visible for human review.", inputSchema: objectSchema({ packetId: string, expectedChecksum: { type: "string", minLength: 64, maxLength: 64 } }, ["packetId", "expectedChecksum"]), execute: (input) => runtime.compileIntakeToDraft({ packetId: String(input.packetId), expectedChecksum: String(input.expectedChecksum) }) }),
   define({ name: "finite_get_construction_packet", title: "Inspect resumable construction work", description: "Read checksum, expiry, source-plan guard, work kind, and safe status for the one durable non-authoritative intake or draft packet without exposing human authority.", readOnly: true, execute: () => runtime.getConstructionPacket() }),
+  define({ name: "finite_get_returned_plan_draft", title: "Inspect an exact returned kitchen", description: "Read the rejected draft, its exact source binding, assumptions, dependencies, hashes, and human revision feedback. Returned work is context, never authority.", readOnly: true, execute: () => runtime.getReturnedPlanDraft() }),
   define({ name: "finite_resume_construction_packet", title: "Resume verified construction work", description: "Restore only a checksum-valid, unexpired packet bound to the exact active plan/profile/revision. Human confirmation is never restored.", execute: () => runtime.resumeConstructionPacket() }),
   define({ name: "finite_discard_construction_packet", title: "Discard construction work", description: "Explicitly remove one exact durable intake or draft packet and its matching volatile work without changing accepted plan truth.", inputSchema: objectSchema({ packetId: string }, ["packetId"]), execute: (input) => runtime.discardConstructionPacket(input as never) }),
   define({ name: "finite_get_amendment_blueprint", title: "Read the active plan as a new version", description: "Derive a compiler-valid amendment blueprint from exact accepted allocations, entities, preferences, actuals, and evidence while preserving the active plan as the immutable prior version.", readOnly: true, execute: () => runtime.getAmendmentBlueprint() }),
@@ -715,7 +727,7 @@ export class FinitePlanWebMCPAdapter {
     const nextTool = String(nextAction.nextTool ?? "");
     const targetId = String(nextAction.targetId ?? "");
     if (nextTool === "finite_activate_confirmed_plan" || nextTool === "finite_stage_plan_draft" || nextTool === "finite_compile_intake_to_draft") return "plan_management";
-    if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required") return "construction";
+    if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required" || stage === "draft_returned") return "construction";
     if (stage === "awaiting_human" && targetId.startsWith("plan_draft_")) return "plan_management";
     if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved") return "decisions";
     if (stage === "menu_ready") {

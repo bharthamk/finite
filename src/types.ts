@@ -374,6 +374,22 @@ export type PlanConstructionPacket = PlanConstructionPacketBase & ({
   };
 });
 
+export type ConstructionReturnReason = "assumptions" | "structure" | "missing" | "too_rigid" | "too_vague" | "other";
+
+export interface ReturnedConstructionReview {
+  status: "returned" | "legacy_return_pending" | "resolved";
+  packet: PlanConstructionPacket;
+  packetId: string;
+  draftId: string;
+  reasonCode: ConstructionReturnReason | null;
+  message: string | null;
+  returnedAt: string;
+  feedbackRequired: boolean;
+  source: "human_action" | "legacy_unknown";
+  resolvedByPacketId?: string | null;
+  resolvedAt?: string | null;
+}
+
 export interface PlanActivationConfirmation {
   confirmationId: string;
   draftId: string;

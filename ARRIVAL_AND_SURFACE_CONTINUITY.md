@@ -163,10 +163,18 @@ per tenant in D1 and cached locally only for rendering and one-time migration.
 Every surface rechecks the packet checksum, expiry, accepted-plan base, and exact
 arrival binding before restoration. Human confirmation is never included.
 
-Discard is also cross-surface state. The server retains a tombstone for the
-discarded packet so a delayed browser cannot re-upload an older local copy. A
-genuinely revised packet created after that boundary may replace the tombstone;
-the rejected packet may not.
+Returning a draft for revision and discarding it are different lifecycle
+events. **Request changes** keeps the exact draft visible and durable, records a
+bounded reason plus the human's own instruction, and exposes that immutable
+review to Codex as the next authoritative route. The Site remains on the draft
+review surface; Codex receives the prior draft, feedback, source binding, and
+proof without asking the human to repeat anything. A materially different
+compiled draft resolves the return and the Site shows what changed.
+
+Only **Start over** discards construction. The server then retains a tombstone
+for the discarded packet so a delayed browser cannot re-upload an older local
+copy. A genuinely new packet created after that boundary may replace the
+tombstone; the discarded packet may not.
 
 Examples:
 
@@ -180,6 +188,10 @@ Examples:
   overwriting it.
 - The human answers a clarification on the Site while Codex is idle. The answer
   remains queued until the next operator orientation.
+- The human requests changes to a compiled kitchen while Codex is absent. The
+  rejected draft and exact feedback remain on the Site; the next Codex kitchen
+  entry routes directly to revision context, and a replacement must be
+  materially different before it can be served.
 
 ## Capability ownership
 

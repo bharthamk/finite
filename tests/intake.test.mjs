@@ -163,7 +163,7 @@ test("Codex receives a compiler-valid blueprint and the human can return an iner
   assert.deepEqual(blueprint.contract.familySemantics, ["guest_headcount.count", "venue.capacity", "run_of_show"]);
   const staged = await runtime.stagePlanDraft(customLaunch("plan_event_returned"));
   const rejected = await runtime.humanRejectPlanDraft({ draftId: staged.draft.draftId, reason: "Wrong use case" });
-  assert.equal(rejected.code, "HUMAN_PLAN_DRAFT_REJECTED");
+  assert.equal(rejected.code, "HUMAN_PLAN_DRAFT_RETURNED");
   assert.equal(runtime.pendingPlanDraft, null);
   assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
   assert.equal(runtime.listPlans().plans.length, 3);
