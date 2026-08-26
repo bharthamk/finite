@@ -140,8 +140,13 @@ const runAuthenticatedHandoffAcceptance = async (): Promise<void> => {
       requireCode(await deviceB.kernel.resumeHumanAuthorityChallenge({ challengeId: approval.authorityChallengeId }), "HUMAN_AUTHORITY_HANDOFF_RESUMED");
       const applied = await deviceB.kernel.applyApprovedOption({ candidateId: chosen.candidateId, approvalId: approval.approvalId, expectedRevision: fromRevision, idempotencyKey: `hosted-phase3-apply-${profileId}-r${fromRevision}` });
       requireCode(applied, "OPTION_APPLIED");
-      const consumed = await deviceB.kernel.resumeHumanAuthorityChallenge({ challengeId: approval.authorityChallengeId });
-      requireCode(consumed, "AUTHORITY_CHALLENGE_CONSUMED");
+      let consumedCode = "AUTHORITY_CHALLENGE_STILL_AVAILABLE";
+      try {
+        await acceptedRepository.loadAuthorityChallenge(approval.authorityChallengeId);
+      } catch (error) {
+        consumedCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "AUTHORITY_CHALLENGE_LOOKUP_FAILED";
+      }
+      if (consumedCode !== "AUTHORITY_CHALLENGE_CONSUMED") throw new Error(`${profileId} challenge was not durably consumed; received ${consumedCode}.`);
       requireCode(await deviceA.hydrateAcceptedTruth(), "ACCEPTED_TRUTH_CURRENT");
       const stale = await deviceA.resumeOperatorSession({ sessionId: session.sessionId });
       requireCode(stale, "OPERATOR_SESSION_BASE_STALE");
@@ -154,7 +159,7 @@ const runAuthenticatedHandoffAcceptance = async (): Promise<void> => {
         challengeId: approval.authorityChallengeId,
         receiptId: (applied.receipt as { receiptId: string }).receiptId,
         authorityRestoredBySession: resumed.authorityRestored,
-        consumedReplay: consumed.code,
+        consumedReplay: consumedCode,
         staleReplay: stale.code,
       });
     }
