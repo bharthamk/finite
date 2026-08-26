@@ -9,7 +9,7 @@ const integer = { type: "integer" };
 const revision = { type: "integer", minimum: 1 };
 const idempotencyKey = { type: "string", minLength: 8, maxLength: 100 };
 
-export const humanOnlyActions = Object.freeze(["humanApprove", "humanConfirmActualCorrection", "humanConfirmPreferenceChange", "humanConfirmPlanDraft", "humanRejectPlanDraft"]);
+export const humanOnlyActions = Object.freeze(["humanApprove", "humanConfirmActualCorrection", "humanConfirmPreferenceChange", "humanConfirmPlanDraft", "humanRejectPlanDraft", "reviewArrivalInterpretation"]);
 
 type ParsedInput = { ok: true; input: Record<string, unknown> } | { ok: false; result: ToolResult };
 
@@ -35,6 +35,7 @@ type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
+const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
 
 const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string; answerKind: string; fieldPaths: string[]; choices: string[]; reason: string } => {
   const interpretation = orientation.order.interpretation;
@@ -147,6 +148,22 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
     requiresHuman: true, exactQuestion: orientation.order.pendingClarification.prompt, targetId: orientation.order.orderId, authorityPresent: false,
   };
   const interpretation = orientation.order.interpretation;
+  if (orientation.order.status === "interpretation_confirmed" && interpretation && orientation.interpretationIsCurrent) {
+    const profileId = interpretation.inferredFamily && builtInArrivalFamilies.has(interpretation.inferredFamily) ? interpretation.inferredFamily : null;
+    return {
+      actionVersion: "finite-next-action.v1",
+      stage: profileId ? "arrival_construction_ready" : "arrival_construction_family_required",
+      reason: profileId ? "The human reviewed this exact interpretation. Codex can now load the compiler contract and construct a non-authoritative plan draft." : "The human reviewed the interpretation, but Codex must select a supported compiler route before constructing the plan.",
+      nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities",
+      knownArgs: profileId ? { profileId } : {},
+      derivedArgs: [{ argument: "profileId", source: "reviewed_interpretation", provenance: { interpretationBasedOnVersion: orientation.interpretationBasedOnVersion } }],
+      missingInputs: [],
+      requiresHuman: false,
+      exactQuestion: null,
+      targetId: orientation.order.orderId,
+      authorityPresent: false,
+    };
+  }
   if (interpretation && orientation.interpretationIsCurrent && interpretation.complete) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_interpretation_ready", reason: "Codex's source-separated interpretation is current and ready for human review; it is not accepted plan truth.",
     nextTool: null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [],
@@ -204,6 +221,14 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
       { menuItemId: "arrival_supply_remaining_gaps", rank: 2, kind: "human_decision", title: "Give me all the missing details together", offer: orientation.missing.length ? orientation.missing.join(" · ") : "Add the context that would resolve the current contradiction.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "detail" }, missingInputs: [{ argument: "payload", source: "human", reason: "These facts cannot be inferred safely." }], tradeoffs: ["More effort now, fewer pauses later"], evidence: { status: "not_required", refs: [] } },
       { menuItemId: "arrival_revise_brief", rank: 3, kind: "human_decision", title: "Revise the outcome or finite limits", offer: "Correct the brief if the gaps reveal that the desired outcome, deadline, or limit should change.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "correction" }, missingInputs: [{ argument: "payload", source: "human", reason: "Only the human can revise the order." }], tradeoffs: ["The interpretation will be rebuilt from the new human state"], evidence: { status: "not_required", refs: [] } },
     ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
+  }
+  if (orientation?.order.status === "interpretation_confirmed" && orientation.order.interpretation && orientation.interpretationIsCurrent) {
+    const profileId = orientation.order.interpretation.inferredFamily && builtInArrivalFamilies.has(orientation.order.interpretation.inferredFamily) ? orientation.order.interpretation.inferredFamily : null;
+    return { menuVersion: "finite-chef-menu.v1", basis, items: [
+      { menuItemId: "arrival_compile_reviewed_brief", rank: 1, kind: "operator_action", title: "Build from the reviewed brief", offer: "Load the exact compiler contract, then turn the reviewed interpretation into typed construction inputs.", status: "ready", viability: "not_yet_tested", nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities", knownArgs: profileId ? { profileId } : {}, missingInputs: [], tradeoffs: ["Construction remains non-authoritative until a compiled draft is separately confirmed"], evidence: { status: "available", refs: [] } },
+      { menuItemId: "arrival_research_dependencies", rank: 2, kind: "suggested_route", title: "Research unresolved dependencies", offer: "Use the saved research queue for dates, transport and evidence without turning results into human facts.", status: "research_required", viability: "not_yet_tested", nextTool: "finite_get_evidence_policy", knownArgs: {}, missingInputs: [], tradeoffs: ["Live evidence may narrow the plan before drafting"], evidence: { status: "required", refs: [] } },
+      { menuItemId: "arrival_preserve_activation_boundary", rank: 3, kind: "operator_action", title: "Keep activation separate", offer: "Construct and validate first; return the exact compiled draft to the Site for a later human activation decision.", status: "blocked", viability: "not_yet_tested", nextTool: null, knownArgs: {}, missingInputs: [{ argument: "compiled_draft", source: "canonical", reason: "A plan cannot be authorized before it exists." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
+    ], law: "Review releases the interpretation to plan construction. It is never plan activation authority." };
   }
   if (orientation?.order.interpretation?.complete && orientation.interpretationIsCurrent) {
     return { menuVersion: "finite-chef-menu.v1", basis, items: [

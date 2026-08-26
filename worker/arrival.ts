@@ -44,7 +44,7 @@ interface ArrivalEventRow {
 }
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
-const activeStatuses: ArrivalStatus[] = ["waiting_for_codex", "codex_reviewing", "clarification_required", "proposed_plan_ready", "awaiting_human_authority"];
+const activeStatuses: ArrivalStatus[] = ["waiting_for_codex", "codex_reviewing", "clarification_required", "proposed_plan_ready", "interpretation_confirmed", "awaiting_human_authority"];
 const sourceSurfaces = new Set<ArrivalSourceSurface>(["site", "codex", "inline"]);
 const inputKinds = new Set<ArrivalInputKind>(["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"]);
 const answerKinds = new Set<ArrivalClarification["answerKind"]>(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
@@ -144,6 +144,7 @@ const nextInstruction = (order: ArrivalOrder, unprocessed: number): string => {
   if (unprocessed > 0) return `Process ${unprocessed} human-supplied update${unprocessed === 1 ? "" : "s"}, then checkpoint exact order version ${order.version} before staging operator work.`;
   if (order.status === "clarification_required") return "Wait for the human answer; do not infer it or treat the staged question as accepted truth.";
   if (order.status === "proposed_plan_ready") return "Present the proposed plan on the Site for human review. Codex cannot supply human authority.";
+  if (order.status === "interpretation_confirmed") return "The human reviewed this exact interpretation. Begin plan construction from its profile blueprint; this review is not plan activation authority.";
   return "Continue from this exact order version. Re-open before staging after any delay or parallel edit.";
 };
 
@@ -331,6 +332,24 @@ const stageInterpretation = async (db: D1Database, scopeId: string, order: Arriv
   return mutateOrder(db, scopeId, order, expectedVersion, { interpretation, pendingClarification: null, status: interpretation.complete ? "proposed_plan_ready" : "codex_reviewing", lastOperatorCheckpoint: expectedVersion }, { eventType: "interpretation_staged", actor: "codex", sourceSurface: "codex", payload: { interpretation } }, "ARRIVAL_INTERPRETATION_STAGED");
 };
 
+const reviewInterpretation = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const expectedChecksum = String(body.expectedChecksum ?? "");
+  const sourceSurface = String(body.sourceSurface ?? "site") as ArrivalSourceSurface;
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (!/^[a-f0-9]{64}$/.test(expectedChecksum)) return errorResponse(422, "ARRIVAL_CHECKSUM_INVALID", "An exact arrival checksum is required.");
+  if (!(["site", "inline"] as ArrivalSourceSurface[]).includes(sourceSurface)) return errorResponse(403, "HUMAN_REVIEW_SURFACE_REQUIRED", "Interpretation review must come from the human Site surface.");
+  if (order.version !== expectedVersion || order.checksum !== expectedChecksum) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The interpretation changed before it was reviewed.", currentVersion: order.version, currentChecksum: order.checksum, next: "Reload the current interpretation before reviewing it." }, 409);
+  if (!order.interpretation?.complete || order.status !== "proposed_plan_ready") return openedResponse(db, scopeId, order, "ARRIVAL_INTERPRETATION_NOT_REVIEWABLE", undefined, { ok: false, message: "Only a complete current interpretation can be confirmed for construction." }, 409);
+  const interpretationHash = await sha256(order.interpretation);
+  return mutateOrder(db, scopeId, order, expectedVersion, { status: "interpretation_confirmed" }, {
+    eventType: "interpretation_reviewed",
+    actor: "human",
+    sourceSurface,
+    payload: { decision: "confirm_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
+  }, "ARRIVAL_INTERPRETATION_REVIEWED");
+};
+
 const listOrders = async (db: D1Database, scopeId: string): Promise<Response> => {
   const placeholders = activeStatuses.map(() => "?").join(", ");
   const { results } = await db.prepare(`SELECT order_id, version, status, raw_outcome, updated_at, packet_checksum FROM arrival_orders WHERE scope_id = ? AND status IN (${placeholders}) ORDER BY updated_at DESC LIMIT 50`)
@@ -369,6 +388,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);
     if (operation === "clarification") return stageClarification(db, scopeId, order, body);
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);
+    if (operation === "review") return reviewInterpretation(db, scopeId, order, body);
     return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
   } catch (error) {
     const code = error instanceof Error ? error.message : "ARRIVAL_SERVICE_FAILED";

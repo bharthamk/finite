@@ -2,7 +2,7 @@ import { clone, sha256 } from "./crypto.js";
 import type { ToolResult } from "./types.js";
 
 export type ArrivalSourceSurface = "site" | "codex" | "inline";
-export type ArrivalStatus = "waiting_for_codex" | "codex_reviewing" | "clarification_required" | "proposed_plan_ready" | "awaiting_human_authority" | "accepted" | "closed";
+export type ArrivalStatus = "waiting_for_codex" | "codex_reviewing" | "clarification_required" | "proposed_plan_ready" | "interpretation_confirmed" | "awaiting_human_authority" | "accepted" | "closed";
 export type ArrivalInputKind = "detail" | "constraint" | "preference" | "commitment" | "answer" | "evidence_reference" | "correction";
 
 export interface ArrivalInput {
@@ -63,7 +63,7 @@ export interface ArrivalEvent {
   eventId: string;
   orderId: string;
   version: number;
-  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged";
+  eventType: "human_order_created" | "human_input_added" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "interpretation_reviewed";
   actor: "human" | "codex";
   sourceSurface: ArrivalSourceSurface;
   payload: Record<string, unknown>;
@@ -107,6 +107,7 @@ export interface ArrivalRepository {
   checkpoint(input: { orderId: string; expectedVersion: number }): Promise<ArrivalResult>;
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }): Promise<ArrivalResult>;
   stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }): Promise<ArrivalResult>;
+  reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }): Promise<ArrivalResult>;
 }
 
 const requestJson = async (url: string, init?: RequestInit): Promise<ArrivalResult> => {
@@ -144,6 +145,9 @@ export class HttpArrivalRepository implements ArrivalRepository {
   stageInterpretation(input: Parameters<ArrivalRepository["stageInterpretation"]>[0]): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/interpretation`, { method: "POST", body: JSON.stringify(input) });
   }
+  reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input) });
+  }
 }
 
 const humanEventTypes = new Set<ArrivalEvent["eventType"]>(["human_order_created", "human_input_added"]);
@@ -152,6 +156,7 @@ const nextInstruction = (order: ArrivalOrder, unprocessed: number): string => {
   if (unprocessed > 0) return `Process ${unprocessed} human-supplied update${unprocessed === 1 ? "" : "s"}, then checkpoint exact order version ${order.version} before staging operator work.`;
   if (order.status === "clarification_required") return "Wait for the human answer; do not infer it or treat the staged question as accepted truth.";
   if (order.status === "proposed_plan_ready") return "Present the proposed plan on the Site for human review. Codex cannot supply human authority.";
+  if (order.status === "interpretation_confirmed") return "The human reviewed this exact interpretation. Begin plan construction from its profile blueprint; this review is not plan activation authority.";
   return "Continue from the exact order version shown; re-open before staging if any delay or parallel edit is possible.";
 };
 
@@ -220,7 +225,12 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     const next: ArrivalOrder = { ...base, checksum: await orderChecksum(base) };
     this.orders.set(next.orderId, next);
     await this.appendEvent(next, { ...event, orderId: next.orderId, version: next.version, createdAt });
-    return this.result(event.eventType === "operator_checkpointed" ? "ARRIVAL_CHECKPOINTED" : event.eventType === "clarification_staged" ? "ARRIVAL_CLARIFICATION_STAGED" : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED" : "ARRIVAL_INPUT_APPENDED", next);
+    const code = event.eventType === "operator_checkpointed" ? "ARRIVAL_CHECKPOINTED"
+      : event.eventType === "clarification_staged" ? "ARRIVAL_CLARIFICATION_STAGED"
+        : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED"
+          : event.eventType === "interpretation_reviewed" ? "ARRIVAL_INTERPRETATION_REVIEWED"
+            : "ARRIVAL_INPUT_APPENDED";
+    return this.result(code, next);
   }
 
   async create(input: Parameters<ArrivalRepository["create"]>[0]): Promise<ArrivalResult> {
@@ -297,5 +307,19 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       stagedAt,
     };
     return this.replace(order, input.expectedVersion, { interpretation, pendingClarification: null, status: interpretation.complete ? "proposed_plan_ready" : "codex_reviewing", lastOperatorCheckpoint: input.expectedVersion }, { eventType: "interpretation_staged", actor: "codex", sourceSurface: "codex", payload: { interpretation } });
+  }
+
+  async reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0]): Promise<ArrivalResult> {
+    const order = this.orders.get(input.orderId);
+    if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+    if (order.version !== input.expectedVersion || order.checksum !== input.expectedChecksum) return this.conflict(order);
+    if (!order.interpretation?.complete || order.status !== "proposed_plan_ready") return { ok: false, code: "ARRIVAL_INTERPRETATION_NOT_REVIEWABLE", acceptedStateChanged: false };
+    const interpretationHash = await sha256(order.interpretation);
+    return this.replace(order, input.expectedVersion, { status: "interpretation_confirmed" }, {
+      eventType: "interpretation_reviewed",
+      actor: "human",
+      sourceSurface: input.sourceSurface,
+      payload: { decision: "confirm_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
+    });
   }
 }

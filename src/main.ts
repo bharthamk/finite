@@ -361,6 +361,7 @@ const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; det
   if (order.status === "codex_reviewing") return { label: "Codex reviewing", title: "The operator has checkpointed your latest order.", detail: "You may still add or correct facts. Any change creates a new order version and stale Codex work will be refused." };
   if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can keep cooking.", detail: "Your answer is appended as human-supplied input. Codex cannot fill it in for you." };
   if (order.status === "proposed_plan_ready") return { label: "Proposed plan ready", title: "Codex has staged its interpretation for your review.", detail: "This is still a proposal. Accepted plan truth changes only through an exact human confirmation on the Site." };
+  if (order.status === "interpretation_confirmed") return { label: "Brief confirmed", title: "Codex can now construct the plan.", detail: "You confirmed what Codex understood. This review does not authorize plan activation or any external action." };
   if (order.status === "awaiting_human_authority") return { label: "Approval needed", title: "One exact plan is waiting for your authority.", detail: "Review the proposed outcome here. Codex cannot press the approval control." };
   return { label: order.status.replaceAll("_", " "), title: "This arrival is complete.", detail: "Its immutable plan and receipt remain available in the kitchen." };
 };
@@ -430,6 +431,11 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
           </div>
         </section>` : ""}
+        ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
+          <div><p class="eyebrow">Human review boundary</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p>Confirming releases this exact interpretation to Codex for plan construction. It does not activate a plan, spend money, make a booking, or authorize an external action.</p></div>
+          <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
+          <small>Need a change? Add a correction below instead; Finite will invalidate this proposal automatically.</small>
+        </section>` : ""}
         ${renderPlanDraft()}
         <section class="arrival-continuity">
           <div><p class="eyebrow">Keep shaping the order</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
@@ -489,11 +495,29 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   await render();
 };
 
+const confirmArrivalInterpretation = async (): Promise<void> => {
+  const order = currentArrival();
+  if (!order || order.status !== "proposed_plan_ready" || busy) return;
+  busy = true;
+  announce("Confirming the exact interpretation for plan construction…");
+  await render();
+  arrivalResult = await arrivalRepository.reviewInterpretation({
+    orderId: order.orderId,
+    expectedVersion: order.version,
+    expectedChecksum: order.checksum,
+    sourceSurface: modelContext ? "inline" : "site",
+  });
+  busy = false;
+  announce(arrivalResult.ok ? "Brief confirmed. Codex may construct a plan, but no plan is activated yet." : `The brief was not confirmed: ${arrivalResult.code}`);
+  await render();
+};
+
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-arrival-interpretation']")?.addEventListener("click", () => { void confirmArrivalInterpretation(); });
   root?.querySelectorAll<HTMLButtonElement>("[data-arrival-example]").forEach((button) => button.addEventListener("click", () => {
     const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='rawOutcome']");
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }

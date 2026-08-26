@@ -63,6 +63,34 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
   assert.equal(staged.orientation.interpretationIsCurrent, true);
   assert.equal(staged.orientation.latestHumanInputVersion, 3);
   assert.equal(staged.acceptedStateChanged, false);
+
+  const reviewed = await arrivals.reviewInterpretation({
+    orderId: staged.order.orderId,
+    expectedVersion: staged.order.version,
+    expectedChecksum: staged.order.checksum,
+    sourceSurface: "site",
+  });
+  assert.equal(reviewed.code, "ARRIVAL_INTERPRETATION_REVIEWED");
+  assert.equal(reviewed.order.status, "interpretation_confirmed");
+  assert.equal(reviewed.order.version, 6);
+  assert.equal(reviewed.orientation.interpretationIsCurrent, true);
+  assert.equal(reviewed.orientation.delta.at(-1).eventType, "interpretation_reviewed");
+  assert.equal(reviewed.orientation.delta.at(-1).payload.decision, "confirm_for_construction");
+  assert.equal(reviewed.orientation.delta.at(-1).payload.reviewedOrderChecksum, staged.order.checksum);
+  assert.equal(reviewed.acceptedStateChanged, false);
+
+  const staleReview = await arrivals.reviewInterpretation({
+    orderId: staged.order.orderId,
+    expectedVersion: staged.order.version,
+    expectedChecksum: staged.order.checksum,
+    sourceSurface: "site",
+  });
+  assert.equal(staleReview.code, "ORDER_VERSION_CONFLICT");
+  assert.equal(staleReview.acceptedStateChanged, false);
+
+  const corrected = await arrivals.appendInput({ orderId: reviewed.order.orderId, expectedVersion: reviewed.order.version, kind: "correction", payload: { text: "Make the trip four weeks." }, sourceSurface: "site" });
+  assert.equal(corrected.order.status, "waiting_for_codex");
+  assert.equal(corrected.orientation.interpretationIsCurrent, false);
 });
 
 test("Codex-first, Site-later preserves a staged question and treats the later Site answer as new human input", async () => {
@@ -107,6 +135,7 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const inventory = await adapter.register();
   assert.equal(inventory.length, 47);
   for (const name of ["finite_enter_kitchen", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_plan_interpretation"]) assert(host.tools.has(name));
+  assert.equal(host.tools.has("finite_review_arrival_interpretation"), false);
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
   assert.equal(created.order.status, "waiting_for_codex");
