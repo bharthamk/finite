@@ -79,6 +79,9 @@ test("production WebMCP responses are bounded, content-addressed, and recoverabl
   assert(JSON.stringify(entered).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
   assert.equal(entered.identity.planId, runtime.kernel.profile.planId);
   assert.equal(entered.nextAction.stage, "menu_ready");
+  assert.equal(typeof entered.identity.profileHash, "string");
+  assert.equal(Object.hasOwn(entered.detail, "availablePaths"), false);
+  assert.equal(Object.hasOwn(entered.detail, "pathCount"), false);
   assert.match(entered.detail.resultRef, /^[a-f0-9]{64}$/);
   assert(entered.detail.totalCharacters > WEBMCP_OUTPUT_CHARACTER_BUDGET);
   assert.equal(entered.detail.format, "semantic_paths");
@@ -150,10 +153,17 @@ test("an in-flight host cancellation reaches arrival I/O and forces canonical re
   class AbortAwareArrival extends MemoryArrivalRepository {
     openCalls = 0;
     signalSeen = false;
+    started;
+    resolveStarted;
+    constructor() {
+      super();
+      this.started = new Promise((resolve) => { this.resolveStarted = resolve; });
+    }
     async open(input = {}, context = {}) {
       this.openCalls += 1;
       if (!context.signal) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
       this.signalSeen = true;
+      this.resolveStarted();
       return new Promise((resolve, reject) => {
         if (context.signal.aborted) return reject(new DOMException("Interrupted", "AbortError"));
         context.signal.addEventListener("abort", () => reject(new DOMException("Interrupted", "AbortError")), { once: true });
@@ -167,7 +177,7 @@ test("an in-flight host cancellation reaches arrival I/O and forces canonical re
   await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrival).useBoundedOutputs().register();
   const controller = new AbortController();
   const pending = host.execute("finite_enter_kitchen", { entryIntent: "continue_current" }, { signal: controller.signal });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await arrival.started;
   controller.abort("operator stopped");
   const result = await pending;
   assert.equal(result.code, "TOOL_CANCELLED_OUTCOME_UNKNOWN");

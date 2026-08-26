@@ -959,7 +959,7 @@ export class FinitePlanWebMCPAdapter {
     return this;
   }
 
-  private async storeFullResult(toolName: string, result: ToolResult): Promise<{ resultRef: string; fullHash: string; totalCharacters: number; availablePaths: string[]; pathCount: number }> {
+  private async storeFullResult(toolName: string, result: ToolResult): Promise<{ resultRef: string; fullHash: string; totalCharacters: number }> {
     const serialized = JSON.stringify(result);
     const fullHash = await sha256(serialized);
     const proof = record(result.operationProof);
@@ -968,8 +968,7 @@ export class FinitePlanWebMCPAdapter {
     this.resultVault.delete(resultRef);
     this.resultVault.set(resultRef, { result, serialized, fullHash, toolName, paths });
     while (this.resultVault.size > WEBMCP_RESULT_VAULT_LIMIT) this.resultVault.delete(this.resultVault.keys().next().value as string);
-    const availablePaths = Object.keys(result).slice(0, 12).map((key) => `/${escapePointerSegment(key)}`);
-    return { resultRef, fullHash, totalCharacters: serialized.length, availablePaths, pathCount: paths.length };
+    return { resultRef, fullHash, totalCharacters: serialized.length };
   }
 
   private async boundedResult(toolName: string, result: ToolResult): Promise<ToolResult> {

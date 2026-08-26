@@ -49,4 +49,10 @@ The complete production suite passes **126/126** tests. The focused WebMCP quali
 - interrupted accepted-truth rollback with unknown remote outcome; and
 - in-flight construction cancellation without work resurrection.
 
-TypeScript library compilation passes. The release target is `semantic-recovery-v52`; deployed native proof is the next gate.
+TypeScript library compilation and the production build pass.
+
+## Live correction before acceptance
+
+Owner-private Sites v52 proved the native semantic registry and `finite_read_result` schema, but its first kitchen call exposed a sufficiency regression: twelve advertised root paths enlarged the compact ticket enough to trigger the emergency fallback. The response remained only 933 characters and safe, but it omitted canonical identity and the exact human question. v52 is therefore deployment evidence, not an accepted operator release.
+
+The v53 correction removes path discovery from the service ticket—`finite_read_result` owns the manifest—and adds explicit regression checks that the compact result retains identity and the route packet. The release target is `semantic-recovery-v53`; a fresh native entry and semantic selection are required before this tranche is accepted live.
