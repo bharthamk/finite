@@ -1,5 +1,6 @@
 import { clone, makeId, sha256 } from "./crypto.js";
 import { AcceptedTruthRepositoryError, type AcceptedTruthRepository, type OperatorSession } from "./accepted-truth.js";
+import { ConstructionPacketRepositoryError, type ConstructionPacketRepository } from "./construction-packet.js";
 import { buildChefMenu, type KitchenRoute } from "./chef-menu.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
@@ -61,6 +62,7 @@ export class FinitePlanRuntime {
     catalogEntries: CompiledCatalogEntry[] = [],
     private readonly now: () => Date = () => new Date(),
     private readonly acceptedRepository?: AcceptedTruthRepository,
+    private readonly constructionRepository?: ConstructionPacketRepository,
   ) {
     for (const profile of profiles.values()) this.plans.set(profile.planId, { profile, evidenceRecords: [] });
     for (const entry of catalogEntries) this.plans.set(entry.profile.planId, { profile: entry.profile, evidenceRecords: clone(entry.evidenceRecords), ...(entry.lineage ? { lineage: clone(entry.lineage) } : {}) });
@@ -73,6 +75,29 @@ export class FinitePlanRuntime {
 
   async hydrateAcceptedTruth(): Promise<ToolResult> {
     return this.kernel.hydrateAcceptedTruth();
+  }
+
+  async hydrateConstructionPacket(): Promise<ToolResult> {
+    if (!this.constructionRepository) return { ok: true, code: "CONSTRUCTION_PACKET_LOCAL_ONLY", acceptedStateChanged: false };
+    try {
+      const remote = await this.constructionRepository.load();
+      if (remote) {
+        try { this.catalogStore?.saveConstructionPacket(remote); } catch { /* remote packet remains authoritative */ }
+        return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_HYDRATED", packet: this.constructionPacketSummary(remote), acceptedStateChanged: false };
+      }
+      const local = this.catalogStore?.loadConstructionPacket() ?? null;
+      if (!local) return { ok: true, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+      const adopted = await this.constructionRepository.save(local);
+      try { this.catalogStore?.saveConstructionPacket(adopted); } catch { /* remote packet remains authoritative */ }
+      return { ok: true, code: "CONSTRUCTION_PACKET_REMOTE_ADOPTED", packet: this.constructionPacketSummary(adopted), acceptedStateChanged: false };
+    } catch (error) {
+      const code = error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_PACKET_REMOTE_HYDRATION_FAILED";
+      if (["CONSTRUCTION_ARRIVAL_BINDING_REQUIRED", "CONSTRUCTION_ARRIVAL_STALE", "CONSTRUCTION_PACKET_BASE_STALE", "CONSTRUCTION_PACKET_INTEGRITY_FAILED", "CONSTRUCTION_PACKET_CLEARED", "CONSTRUCTION_PACKET_TOMBSTONED"].includes(code)) {
+        try { this.catalogStore?.clearConstructionPacket(); } catch { /* local stale cache remains non-authoritative */ }
+      }
+      if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") return { ok: true, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+      return { ok: false, code, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "Do not expose local construction as current until the authenticated server packet is reconciled." };
+    }
   }
 
   async saveOperatorSession({ idempotencyKey, kind, payload, ttlSeconds }: { idempotencyKey: string; kind: OperatorSession["kind"]; payload: Record<string, unknown>; ttlSeconds?: number }): Promise<ToolResult> {
@@ -124,8 +149,11 @@ export class FinitePlanRuntime {
     };
     const checksum = await sha256(content);
     const packet = { ...content, packetId: `construction_${checksum.slice(0, 16)}`, checksum } as PlanConstructionPacket;
-    this.catalogStore.saveConstructionPacket(packet);
-    return clone(packet);
+    const durable = this.constructionRepository ? await this.constructionRepository.save(packet) : packet;
+    if (this.constructionRepository) {
+      try { this.catalogStore.saveConstructionPacket(durable); } catch { /* authenticated server state remains authoritative */ }
+    } else this.catalogStore.saveConstructionPacket(durable);
+    return clone(durable);
   }
 
   private constructionPacketSummary(packet: PlanConstructionPacket): Record<string, unknown> {
@@ -152,16 +180,34 @@ export class FinitePlanRuntime {
     };
   }
 
-  private clearMatchingConstructionDraft(draftId: string): boolean {
-    const packet = this.catalogStore?.loadConstructionPacket();
-    if (!packet) return true;
-    if (packet.kind !== "draft" || packet.payload.draftId !== draftId) return false;
+  private async clearMatchingConstructionDraft(draftId: string): Promise<boolean> {
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified) return verified.code === "CONSTRUCTION_PACKET_NOT_FOUND";
+    if (verified.kind !== "draft" || verified.payload.draftId !== draftId) return false;
+    if (this.constructionRepository) await this.constructionRepository.clear(verified.packetId);
     this.catalogStore?.clearConstructionPacket();
     return true;
   }
 
   private async readVerifiedConstructionPacket(): Promise<PlanConstructionPacket | ToolResult> {
-    const packet = this.catalogStore?.loadConstructionPacket();
+    let packet: PlanConstructionPacket | null = null;
+    if (this.constructionRepository) {
+      try {
+        packet = await this.constructionRepository.load();
+        if (packet) {
+          try { this.catalogStore?.saveConstructionPacket(packet); } catch { /* remote packet remains authoritative */ }
+        } else {
+          try { this.catalogStore?.clearConstructionPacket(); } catch { /* stale cache is ignored below */ }
+        }
+      } catch (error) {
+        const code = error instanceof ConstructionPacketRepositoryError ? error.code : "CONSTRUCTION_PACKET_REMOTE_READ_FAILED";
+        if (code === "CONSTRUCTION_PACKET_CLEARED" || code === "CONSTRUCTION_PACKET_TOMBSTONED") {
+          try { this.catalogStore?.clearConstructionPacket(); } catch { /* remote tombstone remains authoritative */ }
+          return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+        }
+        return { ok: false, code, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+      }
+    } else packet = this.catalogStore?.loadConstructionPacket() ?? null;
     if (!packet) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
     const checksum = await sha256(constructionPacketContent(packet));
     if (checksum !== packet.checksum || packet.packetId !== `construction_${checksum.slice(0, 16)}`) return { ok: false, code: "CONSTRUCTION_PACKET_INTEGRITY_FAILED", packetId: packet.packetId, acceptedStateChanged: false, next: "Discard the damaged packet; do not infer or restore construction work." };
@@ -231,9 +277,13 @@ export class FinitePlanRuntime {
   }
 
   async discardConstructionPacket({ packetId }: { packetId: string }): Promise<ToolResult> {
-    const packet = this.catalogStore?.loadConstructionPacket();
-    if (!packet || packet.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
-    try { this.catalogStore?.clearConstructionPacket(); }
+    const verified = await this.readVerifiedConstructionPacket();
+    if ("ok" in verified || verified.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
+    const packet = verified;
+    try {
+      if (this.constructionRepository) await this.constructionRepository.clear(packetId);
+      this.catalogStore?.clearConstructionPacket();
+    }
     catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false }; }
     if (packet.kind === "draft" && this.pendingPlanDraft?.draftId === packet.payload.draftId) {
       this.pendingPlanDraft = null;
@@ -797,13 +847,13 @@ export class FinitePlanRuntime {
     return { ok: true, code: "HUMAN_PLAN_ACTIVATION_CONFIRMED", confirmation: clone(confirmation), acceptedStateChanged: false, next: "Codex may now activate only this exact compiled draft." };
   }
 
-  humanRejectPlanDraft({ draftId, reason }: { draftId: string; reason: string }): ToolResult {
+  async humanRejectPlanDraft({ draftId, reason }: { draftId: string; reason: string }): Promise<ToolResult> {
     const draft = this.pendingPlanDraft;
     if (!draft || draft.draftId !== draftId) return { ok: false, code: "PLAN_DRAFT_NOT_FOUND", acceptedStateChanged: false };
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
     let constructionPacketCleared = false;
-    try { constructionPacketCleared = this.clearMatchingConstructionDraft(draftId); }
+    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId); }
     catch (error) { return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", draftId, message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The in-memory draft was returned, but durable construction cleanup must be retried explicitly." }; }
     return { ok: true, code: "HUMAN_PLAN_DRAFT_REJECTED", draftId, reason: String(reason).slice(0, 500), constructionPacketCleared, acceptedStateChanged: false, next: constructionPacketCleared ? "Codex may read the active catalog and stage a revised complete draft." : "The exact draft was returned; a different durable construction packet remains available." };
   }
@@ -883,7 +933,7 @@ export class FinitePlanRuntime {
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
     let constructionPacketCleared = true;
-    try { constructionPacketCleared = this.clearMatchingConstructionDraft(draftId); } catch { constructionPacketCleared = false; }
+    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId); } catch { constructionPacketCleared = false; }
     return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), constructionPacketCleared, acceptedStateChanged: true, next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another." };
   }
 

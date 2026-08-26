@@ -5,6 +5,7 @@ import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
+import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
@@ -320,10 +321,12 @@ const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" |
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const acceptedRepository = new HttpAcceptedTruthRepository();
+const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
 let arrivalResult: ArrivalResult = await arrivalRepository.open();
-const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository);
+const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 await runtime.hydrateAcceptedTruth();
+await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
@@ -966,7 +969,7 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
 };
 
 const rejectPlanDraft = async (draftId: string): Promise<void> => {
-  const result = runtime.humanRejectPlanDraft({ draftId, reason: "Human returned the compiled plan from the consumption surface." });
+  const result = await runtime.humanRejectPlanDraft({ draftId, reason: "Human returned the compiled plan from the consumption surface." });
   announce(result.ok ? "Plan draft returned. The active plan is unchanged." : `The plan draft was not returned: ${result.code}`);
   await render();
 };

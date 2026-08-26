@@ -217,3 +217,21 @@ export const arrivalEvents = sqliteTable("arrival_events", {
   uniqueIndex("idx_arrival_events_scope_event").on(table.scopeId, table.eventId),
   index("idx_arrival_events_scope_order_version").on(table.scopeId, table.orderId, table.version),
 ]);
+
+export const constructionPackets = sqliteTable("construction_packets", {
+  scopeId: text("scope_id").primaryKey(),
+  packetId: text("packet_id").notNull(),
+  packetJson: text("packet_json").notNull(),
+  checksum: text("checksum").notNull(),
+  basePlanId: text("base_plan_id").notNull(),
+  baseProfileHash: text("base_profile_hash").notNull(),
+  baseRevision: integer("base_revision").notNull(),
+  kind: text("kind").notNull(),
+  sourceOrderId: text("source_order_id"),
+  sourceOrderVersion: integer("source_order_version"),
+  sourceOrderChecksum: text("source_order_checksum"),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  clearedAt: text("cleared_at"),
+  updatedAt: text("updated_at").notNull(),
+});

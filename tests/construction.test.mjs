@@ -4,6 +4,9 @@ import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test
 import { compileBuiltInProfiles, getProfileDefinition } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter, humanOnlyActions } from "../dist-test/src/webmcp.js";
+import { MemoryConstructionPacketRepository } from "../dist-test/src/construction-packet.js";
+import { sha256 } from "../dist-test/src/crypto.js";
+import { constructionPacketIntegrityIssues } from "../dist-test/worker/construction-packet.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -162,4 +165,84 @@ test("storage failure refuses staged durability and WebMCP exposes continuity wi
   assert.equal(inspected.packet.packetId, assessed.constructionPacket.packetId);
   assert.equal((await host.execute("finite_resume_construction_packet", {})).code, "CONSTRUCTION_INTAKE_RESUMED");
   assert.equal((await host.execute("finite_discard_construction_packet", { packetId: inspected.packet.packetId })).code, "CONSTRUCTION_PACKET_DISCARDED");
+});
+
+test("an authenticated construction packet follows the consumer across browser surfaces without carrying authority", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const remote = new MemoryConstructionPacketRepository();
+  const firstStorage = new MemoryStorage();
+  const first = new FinitePlanRuntime(
+    profiles,
+    new PlanSnapshotStore(firstStorage),
+    "travel",
+    new PlanCatalogStore(firstStorage),
+    [],
+    () => new Date("2026-08-26T18:00:00.000Z"),
+  );
+  const assessed = await first.assessPlanIntake({
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_cross_surface_trip",
+    name: "Cross-surface Europe trip",
+    brief: "Build a one-month Europe planning shell.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [],
+    locks: ["total_budget"],
+    preferenceLabels: ["preserve_route_flexibility"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "One-month working estimate.", sourcePaths: ["reviewed_interpretation"] } },
+      booked_segment_days: { days: { value: 0, basis: "No confirmed bookings are recorded.", sourcePaths: ["reviewed_interpretation"] } },
+    },
+    stages: [{ stageId: "europe", label: "Europe", marker: "Open", status: "planned" }],
+  });
+  const staged = await first.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+
+  const migratingFirstSurface = new FinitePlanRuntime(
+    profiles,
+    new PlanSnapshotStore(firstStorage),
+    "travel",
+    new PlanCatalogStore(firstStorage),
+    [],
+    () => new Date("2026-08-26T18:00:30.000Z"),
+    undefined,
+    remote,
+  );
+  assert.equal((await migratingFirstSurface.hydrateConstructionPacket()).code, "CONSTRUCTION_PACKET_REMOTE_ADOPTED");
+
+  const secondStorage = new MemoryStorage();
+  const second = new FinitePlanRuntime(
+    profiles,
+    new PlanSnapshotStore(secondStorage),
+    "travel",
+    new PlanCatalogStore(secondStorage),
+    [],
+    () => new Date("2026-08-26T18:01:00.000Z"),
+    undefined,
+    remote,
+  );
+  assert.equal((await second.hydrateConstructionPacket()).code, "CONSTRUCTION_PACKET_REMOTE_HYDRATED");
+  const resumed = await second.resumeConstructionPacket();
+  assert.equal(resumed.code, "CONSTRUCTION_DRAFT_RESUMED");
+  assert.equal(resumed.draft.draftId, staged.draft.draftId);
+  assert.equal(second.planActivationConfirmation, null);
+  assert.equal(JSON.stringify(secondStorage.getItem("finite-plan.construction.v1")).includes("confirmationId"), false);
+
+  assert.equal((await second.humanRejectPlanDraft({ draftId: staged.draft.draftId, reason: "Return for revision" })).code, "HUMAN_PLAN_DRAFT_REJECTED");
+  assert.equal((await migratingFirstSurface.hydrateConstructionPacket()).code, "CONSTRUCTION_PACKET_NOT_FOUND");
+  assert.equal((await migratingFirstSurface.getConstructionPacket()).code, "CONSTRUCTION_PACKET_NOT_FOUND");
+});
+
+test("server construction validation accepts exact work and refuses embedded human authority", async () => {
+  const { runtime, catalogStore } = await setup();
+  const staged = await runtime.stagePlanDraft(newTravel("plan_server_validated_work"));
+  const packet = catalogStore.loadConstructionPacket();
+  assert.deepEqual(await constructionPacketIntegrityIssues(packet), []);
+
+  const authorityBearing = structuredClone(packet);
+  authorityBearing.payload.confirmationId = "must_not_cross_surfaces";
+  const { packetId: _packetId, checksum: _checksum, ...content } = authorityBearing;
+  authorityBearing.checksum = await sha256(content);
+  authorityBearing.packetId = `construction_${authorityBearing.checksum.slice(0, 16)}`;
+  assert((await constructionPacketIntegrityIssues(authorityBearing)).some((issue) => issue.includes("human authority field is forbidden")));
+  assert.equal(staged.acceptedStateChanged, false);
 });
