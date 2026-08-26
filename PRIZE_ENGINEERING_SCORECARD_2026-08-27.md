@@ -14,9 +14,9 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 
 | Gate | Target | Current proof | State |
 |---|---:|---|---|
-| Fresh-task orientation | Correct route in one kitchen call, no human re-explanation | `finite_enter_kitchen`; handoff and chef-menu suites | Closed locally |
+| Fresh-task orientation | Correct route in one kitchen call, no human re-explanation | `finite_enter_kitchen`; v53 native returned-draft receipt | Closed live for current route |
 | First-result context | At most 1,500 serialized characters | `tests/webmcp-quality.test.mjs` | Closed locally |
-| On-demand detail | Content-addressed, exact semantic selection with no truncated values | `finite_read_result`; quality suite | Closed locally |
+| On-demand detail | Content-addressed, exact semantic selection with no truncated values | `finite_read_result`; v53 live manifest/selection/refusal receipt | Closed live |
 | Discovery size | At most 20 advertised tools on every route | Quality and adapter suites | Closed locally |
 | Metadata quality | Names ≤30 chars; tool descriptions ≤500; parameter descriptions ≤150 and non-empty | Quality suite over every tool group | Closed locally |
 | Human authority | No approval/confirmation creator in WebMCP | Authority, intake, evidence, arrival, reality suites | Closed locally |
@@ -26,8 +26,8 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Adaptability | One grammar produces materially different travel, renovation and event plans | Profile, surface and 12-journey endurance suites | Closed locally |
 | Human irrationality | Preference reversals, sunk-cost pressure, silence, disagreement and scope shocks remain explicit | 54-point failure audit and endurance suite | Closed locally |
 | External reality | Research/quote/hold/book/pay/verify remain distinct; planning never claims execution | Reality-execution suite | Closed locally |
-| Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally |
-| Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v50 inline-Codex entry and verified detail-page receipt | Closed for orientation; full-family journeys open |
+| Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally; host-signal live injection unavailable |
+| Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v53 entry, semantic manifest, exact selection and oversized-field refusal | Closed for current route; full-family journeys open |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 
@@ -50,7 +50,9 @@ The entry response was approximately thirteen times the target. That caused clie
 
 Production now returns a compact service ticket and stores the complete deterministic result behind an ephemeral content-addressed reference. `finite_read_result` returns a bounded manifest or exact hash-bound JSON Pointer selections. It refuses an oversized semantic value and advertises narrower descendants instead of returning syntactically broken fragments. `finite_open_kitchen` and `finite_get_chef_menu` remain implementation operations but are no longer permanently advertised; `finite_enter_kitchen` is the single orientation contract.
 
-The first deployed inline-Codex trial returned `finite_enter_kitchen` in 1,470 serialized characters, selected the exact returned-draft human boundary without a redundant state read, preserved travel plan revision 3, exposed no authority, and performed no accepted-state mutation. A deliberate `finite_read_result` call returned a 1,352-character verified page for the 23,011-character complete result. The follow-on v51 source closes the bootstrap metadata and cancellation-forwarding seam discovered by that trial.
+The first deployed inline-Codex trial returned `finite_enter_kitchen` in 1,470 serialized characters, selected the exact returned-draft human boundary without a redundant state read, preserved travel plan revision 3, exposed no authority, and performed no accepted-state mutation. The follow-on v51 source closed bootstrap metadata and cancellation forwarding.
+
+v52 then proved the semantic registry but failed the sufficiency gate: advertising path roots inside the compact ticket triggered the emergency fallback and dropped identity plus the exact human question. It was rejected. Accepted v53 returns the complete live orientation in 1,474 characters, keeps the 23,010-character deterministic result behind a content-addressed reference, returns a 256-path manifest, selects `/operatorPacket/nextAction` exactly in 1,161 characters with a selection hash, and refuses an oversized parent with narrower semantic descendants. Every live call reported `acceptedStateChanged:false`.
 
 ## Judging-dimension score
 
@@ -58,8 +60,8 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 9.0/10 | 10/10 | Complete deployed change routes across all three families and prove selective semantic detail plus route changes |
-| Execution | 8.0/10 | 9.5/10 | Live vNext deployment, adversarial browser runs, in-flight HTTP cancellation, sanitized release reproducibility |
+| WebMCP leverage | 9.2/10 | 10/10 | Complete deployed change routes across all three families and prove route changes under shocks |
+| Execution | 8.4/10 | 9.5/10 | Adversarial full journeys, route-replacement pressure, and sanitized release reproducibility |
 | Potential impact | 7.5/10 | 9/10 | Demonstrate the same operator law across three complete outcomes and show measurable human/model effort reduction |
 | Creativity and ambition | 9.0/10 | 10/10 | Make “software as the agent’s kitchen” undeniable through adaptive plan construction and real-world recovery, not narrative alone |
 
