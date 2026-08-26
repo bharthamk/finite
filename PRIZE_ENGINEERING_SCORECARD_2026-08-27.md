@@ -27,8 +27,8 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Human irrationality | Preference reversals, sunk-cost pressure, silence, disagreement and scope shocks remain explicit | 54-point failure audit and endurance suite | Closed locally |
 | External reality | Research/quote/hold/book/pay/verify remain distinct; planning never claims execution | Reality-execution suite | Closed locally |
 | Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally; host-signal live injection unavailable |
-| Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation host and route-arbitration suites | Closed locally |
-| Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | `finite_get_effort_receipt` | Closed locally; full-family live receipts open |
+| Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation suite; v54 native route transition | Closed live for current route |
+| Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 `finite_get_effort_receipt` receipt | Closed live for current route; full-family receipts open |
 | Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v53 entry, semantic manifest, exact selection and oversized-field refusal | Closed for current route; full-family journeys open |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
@@ -62,9 +62,9 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 9.2/10 | 10/10 | Complete deployed change routes across all three families and prove route changes under shocks |
-| Execution | 8.4/10 | 9.5/10 | Adversarial full journeys, route-replacement pressure, and sanitized release reproducibility |
-| Potential impact | 7.5/10 | 9/10 | Demonstrate the same operator law across three complete outcomes and show measurable human/model effort reduction |
+| WebMCP leverage | 9.4/10 | 10/10 | Complete deployed change routes across all three families and prove route changes under shocks |
+| Execution | 8.7/10 | 9.5/10 | Adversarial full journeys, multi-surface concurrency, and sanitized release reproducibility |
+| Potential impact | 7.8/10 | 9/10 | Demonstrate the same operator law across three complete outcomes and compare live effort receipts |
 | Creativity and ambition | 9.0/10 | 10/10 | Make “software as the agent’s kitchen” undeniable through adaptive plan construction and real-world recovery, not narrative alone |
 
 ## Highest-impact open queue
