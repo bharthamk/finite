@@ -14,5 +14,5 @@
     "types": [],
     "skipLibCheck": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "worker", "db", "vite.config.ts", "drizzle.config.ts"]
 }

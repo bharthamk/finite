@@ -1,4 +1,10 @@
 import { clone, makeId, sha256 } from "./crypto.js";
+import {
+  AcceptedTruthRepositoryError,
+  createAcceptedTruthEnvelope,
+  snapshotIntegrityIssues,
+  type AcceptedTruthRepository,
+} from "./accepted-truth.js";
 import type {
   Allocation,
   Candidate,
@@ -115,15 +121,27 @@ export class FinitePlanKernel {
   private readonly optionIdempotency = new Map<string, Receipt>();
   private readonly correctionIdempotency = new Map<string, Receipt>();
   private readonly preferenceIdempotency = new Map<string, Receipt>();
+  private acceptedSnapshotHash: string | null = null;
+  private acceptedTruthStatus: "local" | "uninitialized" | "ready" | "unavailable";
 
-  constructor(profile: CompiledProfile, private readonly store?: PlanSnapshotStore, initialEvidence: EvidenceRecord[] = []) {
+  constructor(
+    profile: CompiledProfile,
+    private readonly store?: PlanSnapshotStore,
+    initialEvidence: EvidenceRecord[] = [],
+    private readonly acceptedRepository?: AcceptedTruthRepository,
+  ) {
     this.profile = profile;
+    this.acceptedTruthStatus = acceptedRepository ? "uninitialized" : "local";
     this.accepted = clone(profile.accepted);
     this.preferenceWeights = clone(profile.preferenceWeights);
     this.entities = clone(profile.entities);
     for (const evidence of initialEvidence) this.evidence.set(evidence.evidenceId, clone(evidence));
     const snapshot = store?.load(profile.planId, profile.profileHash, profile.profileId);
     if (snapshot) this.restore(snapshot);
+  }
+
+  get acceptedTruth(): { mode: "local" | "remote"; status: "local" | "uninitialized" | "ready" | "unavailable"; snapshotHash: string | null } {
+    return { mode: this.acceptedRepository ? "remote" : "local", status: this.acceptedTruthStatus, snapshotHash: this.acceptedSnapshotHash };
   }
 
   private restore(snapshot: PlanSnapshot): void {
@@ -143,6 +161,58 @@ export class FinitePlanKernel {
       if (receipt.receiptType === "plan_option") this.optionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "actual_correction") this.correctionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "preference_change") this.preferenceIdempotency.set(receipt.idempotencyKey, receipt);
+    }
+  }
+
+  private replaceAcceptedSnapshot(snapshot: PlanSnapshot): void {
+    this.events.splice(0);
+    this.correctionEvents.splice(0);
+    this.preferenceEvents.splice(0);
+    this.feedback.splice(0);
+    this.receipts.splice(0);
+    this.candidates.clear();
+    this.optionIdempotency.clear();
+    this.correctionIdempotency.clear();
+    this.preferenceIdempotency.clear();
+    this.activeEventId = null;
+    this.stagedCandidate = null;
+    this.approval = null;
+    this.pendingCorrection = null;
+    this.correctionConfirmation = null;
+    this.pendingPreferenceChange = null;
+    this.preferenceConfirmation = null;
+    this.restore(snapshot);
+  }
+
+  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt): Promise<ToolResult> {
+    if (!this.acceptedRepository) return { ok: true, code: "LOCAL_ACCEPTED_TRUTH", acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
+    const localIssues = await snapshotIntegrityIssues(this.profile, this.snapshot());
+    if (localIssues.length) {
+      this.acceptedTruthStatus = "unavailable";
+      return { ok: false, code: "LOCAL_ACCEPTED_TRUTH_INTEGRITY_FAILED", issues: localIssues, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
+    }
+    try {
+      const result = await this.acceptedRepository.initialize(this.snapshot(), activationReceipt);
+      const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
+      const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
+      if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
+      if (issues.length) throw new AcceptedTruthRepositoryError("REMOTE_ACCEPTED_TRUTH_INTEGRITY_FAILED", "Durable accepted truth failed client verification.", { issues });
+      this.replaceAcceptedSnapshot(result.envelope.snapshot);
+      this.acceptedSnapshotHash = result.envelope.snapshotHash;
+      this.acceptedTruthStatus = "ready";
+      try { this.store?.save(this.snapshot()); } catch { /* D1 remains authoritative; browser cache is best effort. */ }
+      return { ok: true, code: result.code, revision: this.revision, replay: result.replay, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
+    } catch (error) {
+      this.acceptedTruthStatus = "unavailable";
+      return {
+        ok: false,
+        code: error instanceof AcceptedTruthRepositoryError ? error.code : "ACCEPTED_TRUTH_HYDRATION_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+        acceptedTruth: this.acceptedTruth,
+        acceptedStateChanged: false,
+        retryable: true,
+        next: "Accepted truth is unavailable. Do not perform consequential writes until the exact plan is hydrated again.",
+      };
     }
   }
 
@@ -227,7 +297,48 @@ export class FinitePlanKernel {
     for (const [key, receipt] of checkpoint.preferenceIdempotency) this.preferenceIdempotency.set(key, clone(receipt));
   }
 
-  private persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"]): ToolResult | null {
+  private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt): Promise<ToolResult | null> {
+    if (this.acceptedRepository) {
+      try {
+        if (this.acceptedTruthStatus !== "ready" || !this.acceptedSnapshotHash) throw new AcceptedTruthRepositoryError("ACCEPTED_TRUTH_NOT_READY", "Durable accepted truth has not been hydrated.");
+        const result = await this.acceptedRepository.commit({
+          expectedRevision: receipt.fromRevision,
+          previousSnapshotHash: this.acceptedSnapshotHash,
+          snapshot: this.snapshot(),
+          receipt,
+        });
+        const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
+        const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
+        if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
+        if (issues.length) throw new AcceptedTruthRepositoryError("REMOTE_ACCEPTED_TRUTH_INTEGRITY_FAILED", "Committed accepted truth failed client verification.", { issues });
+        this.replaceAcceptedSnapshot(result.envelope.snapshot);
+        this.acceptedSnapshotHash = result.envelope.snapshotHash;
+        this.acceptedTruthStatus = "ready";
+        try { this.store?.save(this.snapshot()); } catch { /* D1 remains authoritative; browser cache is best effort. */ }
+        return null;
+      } catch (error) {
+        this.restoreCheckpoint(checkpoint);
+        const code = error instanceof AcceptedTruthRepositoryError && error.code === "ACCEPTED_REVISION_CONFLICT"
+          ? "ACCEPTED_STATE_CONFLICT"
+          : error instanceof AcceptedTruthRepositoryError && error.code === "ACCEPTED_TRUTH_NOT_READY"
+            ? "ACCEPTED_TRUTH_NOT_READY"
+            : "ACCEPTED_STATE_STORAGE_FAILED";
+        return {
+          ok: false,
+          code,
+          repositoryCode: error instanceof AcceptedTruthRepositoryError ? error.code : null,
+          mutation,
+          message: error instanceof Error ? error.message : String(error),
+          activePlanId: this.profile.planId,
+          activeRevision: this.revision,
+          acceptedStateChanged: false,
+          retryable: true,
+          next: code === "ACCEPTED_STATE_CONFLICT"
+            ? "Durable truth advanced elsewhere. Rehydrate, rebuild the route from current truth, and obtain fresh human authority."
+            : "Durable truth did not safely advance. Repair or rehydrate storage, then retry the exact confirmed command with the same idempotency key.",
+        };
+      }
+    }
     try {
       this.persist();
       return null;
@@ -723,7 +834,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "plan_option");
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_option", receipt);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "OPTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -776,7 +887,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("preference_change", fromRevision, idempotencyKey, { preferenceEvent: event, acceptedPreferenceWeights: clone(this.preferenceWeights) });
     this.preferenceIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "preference_change");
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "preference_change", receipt);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -829,7 +940,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("actual_correction", fromRevision, idempotencyKey, { correctionEvent: event, accepted: clone(this.accepted) });
     this.correctionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = this.persistAcceptedOrRollback(checkpoint, "actual_correction");
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "actual_correction", receipt);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "ACTUAL_CORRECTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -860,7 +971,9 @@ export class FinitePlanKernel {
   }
 
   private async makeReceipt(receiptType: Receipt["receiptType"], fromRevision: number, idempotencyKey: string, payload: Record<string, unknown>): Promise<Receipt> {
-    const base = { receiptId: makeId("receipt"), receiptType, idempotencyKey, planId: this.profile.planId, fromRevision, toRevision: this.revision, payload: clone(payload) };
+    const identity = { receiptType, idempotencyKey, planId: this.profile.planId, fromRevision, toRevision: this.revision, payload: clone(payload) };
+    const receiptIdentity = await sha256(identity);
+    const base = { receiptId: `receipt_${receiptIdentity.slice(0, 16)}`, ...identity };
     const receipt: Receipt = { ...base, replayChecksum: await sha256(base) };
     this.receipts.push(receipt);
     return receipt;

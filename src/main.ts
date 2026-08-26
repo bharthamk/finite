@@ -4,6 +4,7 @@ import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter } from "./webmcp.js";
+import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const announcer = document.querySelector<HTMLElement>("#announcer");
@@ -18,7 +19,8 @@ const savedProfile = localStorage.getItem("finite-plan.surface.active-profile");
 const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
-const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries);
+const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), new HttpAcceptedTruthRepository());
+await runtime.hydrateAcceptedTruth();
 await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
@@ -235,7 +237,21 @@ const approveAndApply = async (): Promise<void> => {
 
 const switchProfile = async (profileId: ProfileId): Promise<void> => {
   if (profileId === runtime.kernel.profile.profileId || busy) return;
-  busy = true; announce(""); runtime.switchProfile(profileId); localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId); await adapter?.refreshContextualTools(); await seedDecision(); busy = false; await render(); window.scrollTo({ top: 0, behavior: "smooth" });
+  busy = true;
+  announce("");
+  const result = await runtime.switchProfilePersisted(profileId);
+  if (!result.ok) {
+    busy = false;
+    announce(`That plan could not be opened safely: ${result.code}`);
+    await render();
+    return;
+  }
+  localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  await adapter?.refreshContextualTools();
+  await seedDecision();
+  busy = false;
+  await render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {

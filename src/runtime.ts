@@ -1,4 +1,5 @@
 import { clone, makeId, sha256 } from "./crypto.js";
+import type { AcceptedTruthRepository } from "./accepted-truth.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
@@ -57,6 +58,7 @@ export class FinitePlanRuntime {
     private readonly catalogStore?: PlanCatalogStore,
     catalogEntries: CompiledCatalogEntry[] = [],
     private readonly now: () => Date = () => new Date(),
+    private readonly acceptedRepository?: AcceptedTruthRepository,
   ) {
     for (const profile of profiles.values()) this.plans.set(profile.planId, { profile, evidenceRecords: [] });
     for (const entry of catalogEntries) this.plans.set(entry.profile.planId, { profile: entry.profile, evidenceRecords: clone(entry.evidenceRecords), ...(entry.lineage ? { lineage: clone(entry.lineage) } : {}) });
@@ -64,7 +66,11 @@ export class FinitePlanRuntime {
     const builtIn = profiles.get(initialPlanOrProfile as ProfileId);
     const entry = this.plans.get(initialPlanOrProfile) ?? (builtIn ? this.plans.get(builtIn.planId) : undefined);
     if (!entry) throw new Error(`Missing compiled plan or profile: ${initialPlanOrProfile}`);
-    this.kernel = new FinitePlanKernel(entry.profile, store, entry.evidenceRecords);
+    this.kernel = new FinitePlanKernel(entry.profile, store, entry.evidenceRecords, acceptedRepository);
+  }
+
+  async hydrateAcceptedTruth(): Promise<ToolResult> {
+    return this.kernel.hydrateAcceptedTruth();
   }
 
   private async persistConstructionPacket(kind: PlanConstructionPacket["kind"], payload: PlanConstructionPacket["payload"]): Promise<PlanConstructionPacket | null> {
@@ -276,6 +282,7 @@ export class FinitePlanRuntime {
         authorityPersistedAcrossReload: false,
         law: "Codex may prepare and apply exact human-authorized work; only the human surface may create approval or confirmation.",
       },
+      persistence: clone(this.kernel.acceptedTruth),
     };
     const briefHash = await sha256(briefBase);
     return {
@@ -654,7 +661,7 @@ export class FinitePlanRuntime {
 
     const fromPlanId = this.kernel.profile.planId;
     const priorKernel = this.kernel;
-    const newKernel = new FinitePlanKernel(draft.profile, this.store, draft.evidenceRecords);
+    const newKernel = new FinitePlanKernel(draft.profile, this.store, draft.evidenceRecords, this.acceptedRepository);
     const receiptBase = {
       idempotencyKey,
       fromPlanId,
@@ -675,8 +682,18 @@ export class FinitePlanRuntime {
       diffHash: draft.amendment?.diffHash ?? null,
       activationReceiptId: receipt.receiptId,
     };
+    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt);
+    if (!remoteInitialization.ok) return {
+      ok: false,
+      code: "PLAN_ACTIVATION_DURABLE_TRUTH_FAILED",
+      repositoryCode: remoteInitialization.code,
+      message: remoteInitialization.message,
+      acceptedStateChanged: false,
+      activePlanId: priorKernel.profile.planId,
+      next: "The prior plan remains active. Restore accepted-truth storage and retry the exact human-confirmed activation with the same idempotency key.",
+    };
     try {
-      priorKernel.persist();
+      try { priorKernel.persist(); } catch { /* accepted repository remains authoritative */ }
       newKernel.persist();
       this.catalogStore.save(profileDefinition(draft.profile), draft.evidenceRecords, lineage);
       this.catalogStore.saveActivationReceipt(receipt);
@@ -703,7 +720,7 @@ export class FinitePlanRuntime {
     if (planId === this.kernel.profile.planId) return { ok: true, code: "PLAN_ALREADY_ACTIVE", planId, acceptedStateChanged: false };
     const invalidatedCandidateId = this.kernel.stagedCandidate?.candidateId ?? null;
     this.kernel.persist();
-    this.kernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords);
+    this.kernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords, this.acceptedRepository);
     return {
       ok: true,
       code: "PLAN_SWITCHED",
@@ -716,6 +733,39 @@ export class FinitePlanRuntime {
       acceptedStateChanged: false,
       next: "Rediscover tools and read identity, constraints, and pending selectors.",
     };
+  }
+
+  async switchPlanPersisted(planId: string): Promise<ToolResult> {
+    const entry = this.plans.get(planId);
+    if (!entry) return { ok: false, code: "PLAN_NOT_FOUND", planId, acceptedStateChanged: false };
+    if (planId === this.kernel.profile.planId) return { ok: true, code: "PLAN_ALREADY_ACTIVE", planId, acceptedStateChanged: false };
+    const invalidatedCandidateId = this.kernel.stagedCandidate?.candidateId ?? null;
+    const nextKernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords, this.acceptedRepository);
+    const hydrated = await nextKernel.hydrateAcceptedTruth();
+    if (!hydrated.ok) return { ok: false, code: "PLAN_SWITCH_DURABLE_TRUTH_UNAVAILABLE", repositoryCode: hydrated.code, planId, acceptedStateChanged: false, next: "Keep the current plan active until the target plan's accepted truth can be verified." };
+    try { this.kernel.persist(); } catch { /* accepted repository remains authoritative */ }
+    this.kernel = nextKernel;
+    return {
+      ok: true,
+      code: "PLAN_SWITCHED",
+      profileId: entry.profile.profileId,
+      planId,
+      profileHash: entry.profile.profileHash,
+      revision: this.kernel.revision,
+      contextualCapabilities: [...entry.profile.contextualCapabilities],
+      invalidatedCandidateId,
+      acceptedStateChanged: false,
+      next: "Rediscover tools and read identity, constraints, and pending selectors.",
+    };
+  }
+
+  async switchProfilePersisted(profileId: ProfileId): Promise<ToolResult> {
+    const profile = this.profiles.get(profileId);
+    if (!profile) return { ok: false, code: "PROFILE_NOT_FOUND", acceptedStateChanged: false };
+    const result = await this.switchPlanPersisted(profile.planId);
+    if (result.code === "PLAN_SWITCHED") return { ...result, code: "PROFILE_SWITCHED" };
+    if (result.code === "PLAN_ALREADY_ACTIVE") return { ...result, code: "PROFILE_ALREADY_ACTIVE", profileId };
+    return result;
   }
 
   switchProfile(profileId: ProfileId): ToolResult {
@@ -733,7 +783,7 @@ export class FinitePlanRuntime {
     this.planActivationConfirmation = null;
     this.store.clear(this.kernel.profile.planId);
     const entry = this.plans.get(this.kernel.profile.planId)!;
-    this.kernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords);
+    this.kernel = new FinitePlanKernel(entry.profile, this.store, entry.evidenceRecords, this.acceptedRepository);
   }
 }
 
