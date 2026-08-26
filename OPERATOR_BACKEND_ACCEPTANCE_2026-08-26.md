@@ -107,6 +107,9 @@ could leave the visible accepted state ahead of the durable snapshot.
 
 ## Persistence ruling
 
+> Superseded by the implemented Phase 2 receipt in
+> `ACCEPTED_TRUTH_D1_ACCEPTANCE_2026-08-26.md`.
+
 Temporary intake and draft packets remain device-local because they are
 non-authoritative mise en place. Human authority remains memory-only because a
 reload must destroy it.

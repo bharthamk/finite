@@ -27,10 +27,12 @@ The product is not a travel planner or a generic budgeting dashboard. One finite
 - A persistent multi-plan catalog keyed by actual `planId`, including compiled custom plans, bound actual evidence, legacy snapshot fallback, switching, contextual-tool replacement, and reload-safe activation receipts.
 - Human-only approval and confirmation creators, structurally excluded from WebMCP.
 - Failure-atomic accepted-state persistence: option, actual-correction, and preference commits restore memory, pending work, authority, receipts, and idempotency maps if the snapshot write fails, then permit exact retry.
-- Accepted-state persistence with reload-safe receipt idempotency.
+- Transactional D1 accepted truth: plan heads, immutable revision snapshots, receipts, domain events, and accepted evidence commit behind an async repository boundary with optimistic concurrency and deterministic retry identity.
+- Cross-browser restore from D1 with client-side profile, finite-total, receipt, evidence, lineage, and snapshot-hash verification; browser snapshots are now only a best-effort cache when the remote repository is present.
+- Owner-private tenancy is explicit as `owner-private-v1`; the deployment must not be shared until authenticated user scoping replaces that single-owner boundary.
 - 31 stable WebMCP tools plus three profile-contextual tools, dynamically replaced on plan switch.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
-- A Cloudflare Worker-compatible pass-through deployment shell; there is no backend model or application-owned agent.
+- A Cloudflare Worker accepted-truth API and inspected Drizzle/D1 migration; there is no backend model or application-owned agent.
 
 ## Run
 
@@ -53,7 +55,7 @@ The deployed owner-private build is [Finite](https://finite-plan-kitchen.bhartha
 3. The application validates and stages one exact option.
 4. The human sees the decision packet and approves that exact result.
 5. The application atomically applies the approved option and emits a receipt.
-6. Accepted truth and replay protection survive reload; volatile staging and authority do not.
+6. Accepted truth and replay protection survive browser-empty reload from D1; volatile staging and authority do not.
 
 Plan creation uses the same authority law: Codex stages a complete compiled plan,
 the human confirms the exact hashes on the consumption surface, and Codex invokes
@@ -78,6 +80,9 @@ Chrome-native self-invocation proves the browser protocol and page contract. It 
 - `src/profiles.ts` — profile and surface definitions plus compiler validation.
 - `src/surface.ts` — safe surface grammar, manifest compiler, bindings, and hashes.
 - `src/kernel.ts` — deterministic state machine and authority-gated transactions.
+- `src/accepted-truth.ts` — async accepted-truth repository contract, integrity verification, HTTP adapter, and in-memory concurrency test adapter.
+- `worker/accepted-truth.ts` — same-origin D1 API, optimistic-concurrency commit, deterministic replay, and transactional revision/event/receipt/evidence persistence.
+- `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
 - `src/persistence.ts` — accepted snapshot, plan catalog, evidence bundle, and activation-receipt storage.
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
 - `src/webmcp.ts` — native host adapter and tool registry.

@@ -241,9 +241,9 @@ Persistence is divided by truth class:
 
 | State | Current correct home | Target home |
 | --- | --- | --- |
-| Accepted plan snapshots and receipts | device-local prototype | D1 transactional records |
-| Immutable plan definitions and lineage | device-local prototype | D1 transactional records |
-| Accepted evidence metadata/content | accepted snapshot/catalog | D1; R2 only for future source files |
+| Accepted plan snapshots and receipts | D1 transactional records | D1 transactional records |
+| Immutable plan definitions and lineage | catalog remains device-local; accepted activation head is D1-initialized | D1 catalog transaction after authenticated tenancy is designed |
+| Accepted evidence metadata/content | D1 records referenced by accepted snapshots | D1; R2 only for future source files |
 | Incomplete intake/draft | seven-day device-local packet | remain local unless cross-device continuation is explicitly required |
 | Human approval/confirmation | memory only | memory or short-lived identity-bound challenge; never durable authority |
 | Active projection preference | device local | device local |
@@ -435,20 +435,22 @@ adapter, not only the in-memory test adapter.
 - Applied results explain what changed, what stayed fixed, and the remaining
   room to move.
 
-## 8. Immediate implementation decision
+## 8. Implementation decision and current phase
 
-Proceed with Phase 1 now.
+Phase 1 and Phase 2 are complete.
 
-This is the highest-leverage slice because it improves all three existing
-families before broadening semantics or adding infrastructure. It gives Codex a
-real control-plane entry point, makes every kitchen action auditable, and closes
-the most serious current backend hazard: a failed local save leaving in-memory
-accepted truth ahead of durable truth.
+Accepted truth now crosses an async repository port into one D1 batch for the
+head compare-and-swap, immutable revision, receipt, domain event, accepted
+evidence, and optional operation record. Receipt identity is deterministic, so
+a response lost after commit can replay the same request. A browser-empty
+runtime rehydrates from D1 and independently verifies the profile, finite total,
+receipt/evidence hashes, revision lineage, actual ledger, and snapshot hash.
 
-D1 is the correct target for accepted production truth, but it should follow
-the repository/transaction boundary rather than be wired directly into domain
-methods. Temporary construction packets remain device-local by design. Human
-authority remains volatile by design.
+The current deployment is deliberately single-owner. Its scope is
+`owner-private-v1`, backed by owner-only Sites access. It must not be shared or
+treated as multi-tenant until authenticated user scoping is part of every key,
+query, idempotency record, and authorization decision. Temporary construction
+packets remain device-local and human authority remains volatile.
 
 ## 9. Phase 1 definition of done
 
@@ -467,3 +469,23 @@ authority remains volatile by design.
    and WebMCP suites remain green.
 8. The exact validated source is deployed owner-private; project truth and
    traces name the proof. Submission artifacts remain untouched.
+
+## 10. Phase 2 completion receipt
+
+1. Drizzle produced an inspected migration for seven D1 tables and all query
+   indexes; the packaged migration includes `PRAGMA optimize`.
+2. The remote repository initializes or restores exact accepted truth and
+   refuses profile-hash drift.
+3. One D1 batch owns head compare-and-swap, immutable revision, receipt, domain
+   event, and accepted evidence records.
+4. Competing revision-N operators produce exactly one winner; the loser restores
+   its full approved checkpoint and must rehydrate before rebuilding.
+5. A response lost after the durable commit retries with the same deterministic
+   receipt and receives repository replay rather than a second transition.
+6. Tampered durable envelopes fail client verification before consequential
+   work.
+7. Travel, renovation, and event each commit live revision 1 → 2 and restore
+   revision 2 from an empty browser store.
+8. The exact source and migration are deployed owner-private as Sites version
+   11; live D1 inspection shows three revision-2 heads, six immutable revisions,
+   three receipts, three domain events, and accepted evidence rows.
