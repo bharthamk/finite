@@ -65,6 +65,8 @@ const purgeDemoScope = async (db: D1Database, scopeId: string): Promise<void> =>
   const confirmedDemo = await db.prepare("SELECT scope_id FROM demo_sessions WHERE scope_id = ?").bind(scopeId).first();
   if (!confirmedDemo) return;
   await db.batch([
+    db.prepare("DELETE FROM arrival_events WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM arrival_orders WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM challenge_consumptions WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM authority_challenges WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM operator_sessions WHERE scope_id = ?").bind(scopeId),

@@ -100,6 +100,8 @@ test("ending or expiring a demo destroys its tenant namespace and bearer cookie"
   assert.match(ended.headers.get("set-cookie"), /Max-Age=0/);
   assert.equal(db.demos.size, 0);
   assert.equal(db.tenants.size, 0);
+  assert.equal(db.statements.some(({ query }) => query === "DELETE FROM arrival_events WHERE scope_id = ?"), true);
+  assert.equal(db.statements.some(({ query }) => query === "DELETE FROM arrival_orders WHERE scope_id = ?"), true);
 
   const after = await handleAuthRequest(new Request("https://finite.example/api/auth/session", { headers: { cookie } }), db);
   assert.equal((await after.json()).code, "SIGNED_OUT");
