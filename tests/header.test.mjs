@@ -98,3 +98,22 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   assert.match(source, /Same plan\. Same saved starting point\./);
   assert.match(source, /Codex works through the plan\./);
 });
+
+test("arrival shows the complete human starting point without protocol language or overlay-prone disclosure sizing", () => {
+  for (const field of ["What needs to happen", "When", "What is limited", "Must not change", "Useful reference"]) {
+    assert.match(source, new RegExp(field));
+  }
+  assert.match(source, /order\.structured\.deadline/);
+  assert.match(source, /order\.structured\.finiteLimit/);
+  assert.match(source, /order\.structured\.hardConstraint/);
+  assert.match(source, /order\.attachments\.flatMap/);
+  assert.match(source, /See everything you originally shared/);
+  for (const phrase of [
+    "Original request · version", "New facts create a fresh version", "New facts are append-only",
+    "invalidates stale staging", "checkpointed your latest update", "Request v", "Request · version",
+    "Codex interpretation / not human fact", "planning grammar", "invalidate this proposal automatically",
+  ]) assert.doesNotMatch(source, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  assert.match(styles, /\.arrival-order-head \{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.doesNotMatch(styles, /\.arrival-order-source summary \{[^}]*min-height:100%/);
+  assert.match(styles, /\.arrival-order-source__content p \{[^}]*overflow-wrap:anywhere/);
+});

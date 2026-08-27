@@ -147,7 +147,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
 
         <section class="adaptation-story" id="surfaces" aria-labelledby="surfaces_title">
           <div class="public-section-head">
-            <p class="eyebrow">One planning grammar, three human outcomes</p>
+            <p class="eyebrow">One adaptable system, three human outcomes</p>
             <h2 id="surfaces_title">The plan changes shape with the work.</h2>
             <p>Finite is not one dashboard with different labels. Time, measures, actions and the decision itself adapt to what must survive.</p>
           </div>
@@ -808,9 +808,9 @@ const renderCodexHandoffDialog = (): string => {
       </div>
       <dl class="codex-handoff-boundary">
         <div><dt>Finite site</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
-        <div><dt>Request receipt</dt><dd>${order ? `Version ${order.version} · ${escapeHtml(order.checksum.slice(0, 12))}…` : "No request yet"}</dd></div>
-        <div><dt>Copied</dt><dd>Directions only</dd></div>
-        <div><dt>Not copied</dt><dd>Credentials, plan contents, authority</dd></div>
+        <div><dt>Your plan</dt><dd>${order ? "Your saved starting point and additions" : "No starting point yet"}</dd></div>
+        <div><dt>Copied</dt><dd>Directions for opening this plan</dd></div>
+        <div><dt>Stays private</dt><dd>Your sign-in details and approval controls</dd></div>
       </dl>
     </form>
   </dialog>`;
@@ -1001,16 +1001,38 @@ const bindPlanShareInteractions = (): void => {
   if (shareDialogMode !== "closed" && dialog && !dialog.open) dialog.showModal();
 };
 
+const originalRequestText = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+};
+
+const renderOriginalRequest = (order: ArrivalOrder): string => {
+  const fields = [
+    { label: "What needs to happen", value: order.rawOutcome },
+    { label: "When", value: order.structured.deadline },
+    { label: "What is limited", value: order.structured.finiteLimit },
+    { label: "Must not change", value: order.structured.hardConstraint },
+  ].map((field) => ({ ...field, value: originalRequestText(field.value) })).filter((field) => field.value);
+  const references = order.attachments.flatMap((attachment, index) => {
+    const value = typeof attachment === "object" && attachment !== null
+      ? originalRequestText((attachment as Record<string, unknown>).value)
+      : originalRequestText(attachment);
+    return value ? [{ label: `Useful reference${order.attachments.length > 1 ? ` ${index + 1}` : ""}`, value }] : [];
+  });
+  return `<div class="arrival-order-source__content">${[...fields, ...references].map((field) => `<div><span>${escapeHtml(field.label)}</span><p>${escapeHtml(field.value)}</p></div>`).join("")}</div>`;
+};
+
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
   if (order.status === "waiting_for_codex") return modelContext
-    ? { label: "Saved · ready for Codex", title: "Your starting point is safe. Codex has not processed the latest version yet.", detail: "You can keep adding details here. When Codex opens it, it receives the full brief and every change since its last checkpoint." }
-    : { label: "Saved · waiting for Codex", title: "Your starting point is safe. Nothing is pretending to process in the background.", detail: "Open Codex when you are ready and ask it to open your Finite plan. It will receive this exact version and every saved detail." };
-  if (order.status === "codex_reviewing") return { label: "Codex reviewing", title: "Codex has checkpointed your latest update.", detail: "You may still add or correct facts. Any change creates a new version and stale work will be refused." };
-  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can continue.", detail: "Your answer is saved as information from you. Codex cannot fill it in for you." };
-  if (order.status === "proposed_plan_ready") return { label: "Proposed plan ready", title: "Codex has staged its interpretation for your review.", detail: "This is still a proposal. Accepted plan truth changes only through an exact human confirmation on the Site." };
-  if (order.status === "interpretation_confirmed") return { label: "Brief confirmed", title: "Codex can now construct the plan.", detail: "You confirmed what Codex understood. This review does not authorize plan activation or any external action." };
-  if (order.status === "awaiting_human_authority") return { label: "Approval needed", title: "One exact plan is waiting for your authority.", detail: "Review the proposed outcome here. Codex cannot press the approval control." };
-  return { label: order.status.replaceAll("_", " "), title: "This request is complete.", detail: "Its plan and receipt remain available in Finite." };
+    ? { label: "Saved · ready for Codex", title: "Your starting point is saved.", detail: "Add anything else whenever you like. Codex will work from everything you have shared." }
+    : { label: "Saved · ready for Codex", title: "Your starting point is saved.", detail: "Open Codex when you are ready and ask it to continue this plan. It will work from everything you have shared." };
+  if (order.status === "codex_reviewing") return { label: "Codex is working", title: "Codex is working through what you shared.", detail: "You can still add or correct something. Codex will use your newest information before proposing a plan." };
+  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can continue.", detail: "Only you can answer this. Finite will add your answer to the plan." };
+  if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: "Codex has turned your request into a brief.", detail: "Check it below. Nothing becomes your plan until you approve it." };
+  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: "Codex can now build the plan.", detail: "You approved the brief, not any booking, purchase, or outside action." };
+  if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
+  return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
 
 const renderArrival = (manifest: SurfaceManifest): void => {
@@ -1067,22 +1089,22 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         <section class="arrival-order-head" aria-label="Arrival status">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
           <details class="arrival-order-source">
-            <summary><span>Original request · version ${order.version}</span><strong>View what you asked Finite to make happen</strong></summary>
-            <p>${escapeHtml(order.rawOutcome)}</p>
+            <summary><span>Your starting point</span><strong>See everything you originally shared</strong></summary>
+            ${renderOriginalRequest(order)}
           </details>
-          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div><small>Request v${order.version}</small></aside>
+          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
-        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer is saved as human input. Codex cannot fill it in for you.</small></section>` : ""}
+        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. Codex will not guess it for you.</small></section>` : ""}
         ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
-          <div><p class="eyebrow">Your brief / ready for review</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Confirming releases this exact brief to Codex for plan construction. It does not activate a plan, spend money, make a booking, or authorize an external action.</p></div>
+          <div><p class="eyebrow">Your brief / ready for review</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. Codex will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
           <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
-          <small>Need a change? Open “Add or correct something” below. Finite will invalidate this proposal automatically.</small>
+          <small>Need a change? Open “Add or correct something” below.</small>
         </section>` : ""}
         ${interpretation ? `<details class="arrival-interpretation">
-          <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex interpretation / not human fact</p><h2>Review assumptions and source details</h2></div><span>${interpretation.complete ? "Complete proposal" : "Work in progress"}</span></summary>
+          <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex’s working interpretation</p><h2>Review what Codex understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
           <div class="arrival-interpretation__grid">
-            <article class="arrival-interpretation__family"><span>Working shape</span><strong>${escapeHtml(humanLabel(interpretation.inferredFamily ?? "Still being inferred"))}</strong><p>Codex selected this planning grammar. You can correct it before anything becomes accepted.</p></article>
+            <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(humanLabel(interpretation.inferredFamily ?? "Still being worked out"))}</strong><p>This is Codex’s suggestion. Correct it before you approve the brief if it does not fit.</p></article>
             <article><span>What I’m working from</span>${renderHumanValue(interpretation.known)}</article>
             <article><span>What Codex currently thinks</span>${renderHumanValue(interpretation.inferred)}<p class="interpretation-note">These are working assumptions, not facts you supplied.</p></article>
             <article><span>What I still need</span>${renderTextList(interpretation.missing, "Nothing currently blocking")}</article>
@@ -1092,8 +1114,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         </details>` : ""}
         ${renderPlanDraft()}
         <details class="arrival-continuity">
-          <summary><span>Request controls</span><strong>Add or correct something</strong><small>New facts create a fresh version and invalidate stale work.</small></summary>
-          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
+          <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
+          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>Use this whenever something changes or you remember another detail. Codex will work from the newest information you have given.</p></div>
             <form data-arrival-form="append">
               <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
               <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
@@ -1105,7 +1127,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>You define the outcome. Codex works through the plan. Finite keeps every change exact.</p><span>${order ? `Request · version ${order.version}` : "No request waiting · accepted plans remain available"}</span></footer>
+    <footer><p>You define the outcome. Codex works through the plan. Finite keeps it together as things change.</p><span>${order ? "Your starting point is saved" : "No request waiting · your plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
@@ -1123,7 +1145,7 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   const rawOutcome = String(data.get("rawOutcome") ?? "").trim();
   if (!rawOutcome) return;
   busy = true;
-  announce("Saving your exact request…");
+  announce("Saving your starting point…");
   await render();
   const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
   const evidence = String(data.get("evidence") ?? "").trim();
@@ -1141,7 +1163,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   const value = String(data.get(answer ? "answer" : "detail") ?? "").trim();
   if (!value) return;
   busy = true;
-  announce("Adding your update to the exact request…");
+  announce("Adding your update…");
   await render();
   arrivalResult = await arrivalRepository.appendInput({
     orderId: order.orderId,
@@ -1151,7 +1173,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
-  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex must re-open the new request version." : "Your update is saved. Any stale Codex work will now be refused.") : `The update was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex will use it when continuing the plan." : "Your update is saved. Codex will work from your newest information.") : `The update was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1159,7 +1181,7 @@ const confirmArrivalInterpretation = async (): Promise<void> => {
   const order = currentArrival();
   if (!order || order.status !== "proposed_plan_ready" || busy) return;
   busy = true;
-  announce("Confirming the exact interpretation for plan construction…");
+  announce("Approving the brief…");
   await render();
   arrivalResult = await arrivalRepository.reviewInterpretation({
     orderId: order.orderId,
@@ -1624,7 +1646,7 @@ const renderPlanDraft = (): string => {
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
   if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Plan update queued">
     <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous draft is no longer confirmable.</h2></div>
-    <div class="approval-copy"><p>Request v${orientation.exactOrderVersion} has newer information. Codex must reconcile that exact version and compile a replacement before you can confirm anything.</p><div><span>Current request</span><strong>v${orientation.exactOrderVersion}</strong></div><div><span>Prior draft</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}… · stale</strong></div></div>
+    <div class="approval-copy"><p>You added something after this draft was made. Codex needs to prepare a new draft using your latest information before you can approve it.</p></div>
   </section>`;
   const confirmation = runtime.planActivationConfirmation;
   const confirmed = confirmation?.draftId === draft.draftId;
@@ -1783,7 +1805,7 @@ const openPlan = async (planId: string): Promise<void> => {
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {
   if (!pendingDraftMatchesArrival()) {
-    announce("That draft is stale because your request changed. Codex must compile a replacement from the latest version.");
+    announce("That draft was made before your latest update. Codex needs to prepare a new one first.");
     await render();
     return;
   }

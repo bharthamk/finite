@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "new-plan-consumer-language-v71",
+  build: "complete-request-plain-copy-v72",
 } as const;
