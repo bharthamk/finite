@@ -468,14 +468,14 @@ await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
 const planDisplayNames = new Map<string, string>();
 const refreshPlanDisplayNames = async (): Promise<void> => {
-  const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string }>;
+  const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string; title: string }>;
   await Promise.all(plans.map(async (plan) => {
     try {
       const envelope = await acceptedRepository.load(plan.planId, plan.profileHash);
       const receipts = envelope?.snapshot.receipts ?? [];
       if (envelope && envelope.revision > 0) persistedPlanIds.add(plan.planId);
-      planDisplayNames.set(plan.planId, projectAcceptedPlanCopyFromReceipts(plan.name, receipts));
-    } catch { planDisplayNames.set(plan.planId, plan.name); }
+      planDisplayNames.set(plan.planId, projectAcceptedPlanCopyFromReceipts(plan.title, receipts));
+    } catch { planDisplayNames.set(plan.planId, plan.title); }
   }));
 };
 await refreshPlanDisplayNames();
@@ -687,7 +687,7 @@ const bindFollowCodexInteractions = (): void => {
   });
 };
 
-type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string; name: string; active: boolean; supersededBy: string | null };
+type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string; name: string; title: string; active: boolean; supersededBy: string | null };
 const newPlanChoice = "__new_plan__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {

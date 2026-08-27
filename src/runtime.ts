@@ -555,6 +555,7 @@ export class FinitePlanRuntime {
         planId: profile.planId,
         profileId: profile.profileId,
         name: profile.name,
+        title: profile.surface.hero.title,
         profileHash: profile.profileHash,
         active: profile.planId === this.kernel.profile.planId,
         lineage: lineage ? clone(lineage) : { activationKind: "built_in", supersedesPlanId: null, supersedesProfileHash: null, diffHash: null, activationReceiptId: null },

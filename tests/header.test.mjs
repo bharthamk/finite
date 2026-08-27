@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const webmcp = readFileSync(new URL("../src/webmcp.ts", import.meta.url), "utf8");
+const runtimeSource = readFileSync(new URL("../src/runtime.ts", import.meta.url), "utf8");
 const handoffSource = readFileSync(new URL("../src/codex-handoff.ts", import.meta.url), "utf8");
 const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSync(new URL(`../worker/${name}.ts`, import.meta.url), "utf8")).join("\n");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -71,6 +72,8 @@ test("account and destructive actions live in a labelled account menu", () => {
 test("the header plan dropdown creates and opens plans from every private product surface", () => {
   assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 3);
   assert.match(source, /runtime\.listPlans\(\)\.plans/);
+  assert.match(runtimeSource, /title: profile\.surface\.hero\.title/);
+  assert.match(source, /projectAcceptedPlanCopyFromReceipts\(plan\.title, receipts\)/);
   assert.match(source, /const persistedPlanIds = new Set\(catalogEntries\.map/);
   assert.match(source, /filter\(\(plan\) => persistedPlanIds\.has\(plan\.planId\) \|\| \(surface === "plan" && plan\.active\)\)/);
   assert.match(source, /filter\(\(plan\) => persistedPlanIds\.has\(plan\.planId\)\)/);
