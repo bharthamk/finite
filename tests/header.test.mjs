@@ -203,3 +203,20 @@ test("Follow Codex is a human-controlled top-bar permission with bounded accessi
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.follow-codex-toggle\[aria-pressed="true"\]/);
 });
+
+test("pending plan review leads with the actual plan and hides internal proof language", () => {
+  assert.match(source, /Your plan is ready/);
+  assert.match(source, /draft-review__summary/);
+  assert.match(source, /The plan/);
+  assert.match(source, /What happens next/);
+  assert.match(source, /What it protects/);
+  assert.match(source, /Things you can decide later/);
+  assert.match(source, /surface\.stages\.map/);
+  assert.match(source, /Approve this plan/);
+  for (const phrase of [
+    "Profile proof", "Draft proof", "Packet proof", "New Finite plan",
+    "operating profile", "Confirming authorizes only this exact packet",
+  ]) assert.doesNotMatch(source, new RegExp(phrase, "i"));
+  assert.match(styles, /\.draft-review__stages/);
+  assert.match(styles, /\.draft-review__summary/);
+});

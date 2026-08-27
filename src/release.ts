@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "share-preview-workspace-v82",
+  build: "human-plan-review-v83",
 } as const;

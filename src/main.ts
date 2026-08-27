@@ -2,7 +2,7 @@ import { compileBuiltInProfiles } from "./profiles.js";
 import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
-import type { Candidate, PlanLifecycleStatus, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
+import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository } from "./construction-packet.js";
@@ -1751,6 +1751,49 @@ const renderHumanRealityControl = (): string => {
   return "";
 };
 
+const humanPlanLabel = (value: string): string => {
+  const label = value.replaceAll("_", " ").trim();
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : "";
+};
+
+const renderPlanDraftContent = (profile: ProfileDefinition): string => {
+  const { accepted, surface } = profile;
+  const guestCount = profile.entities.guest_headcount?.values.count;
+  const committedMinor = accepted.spentMinor + accepted.committedMinor;
+  const allocationAssumptions = (surface.assumptions ?? []).filter((assumption) => assumption.path.startsWith("allocation."));
+  const otherAssumptions = (surface.assumptions ?? []).filter((assumption) => !assumption.path.startsWith("allocation."));
+  const openDependencies = (surface.dependencies ?? []).filter((dependency) => dependency.status === "open");
+  const stillOpen = [
+    ...(allocationAssumptions.length
+      ? [committedMinor === 0 && accepted.forecastMinor === 0
+        ? `No costs have been added yet. The full ${money(accepted.bufferMinor)} remains available until purchases are added.`
+        : `${money(accepted.bufferMinor)} is still available after recorded costs and forecasts.`]
+      : []),
+    ...otherAssumptions.map((assumption) => assumption.path === "entityValues.venue.capacity"
+      ? `Plan for space for ${assumption.value} people. The location can be decided later.`
+      : assumption.basis),
+    ...openDependencies.map((dependency) => dependency.detail || dependency.title),
+  ];
+  const protections = [...profile.locks, ...profile.preferenceLabels]
+    .map(humanPlanLabel)
+    .filter((label, index, labels) => label && labels.indexOf(label) === index);
+
+  return `<div class="draft-review__content">
+    <dl class="draft-review__summary" aria-label="Plan at a glance">
+      <div><dt>Total limit</dt><dd>${money(accepted.totalBudgetMinor)}</dd></div>
+      ${Number.isFinite(guestCount) ? `<div><dt>Guests</dt><dd>${escapeHtml(guestCount)}</dd></div>` : ""}
+      <div><dt>Already committed</dt><dd>${money(committedMinor)}</dd></div>
+      <div><dt>Available to plan</dt><dd>${money(accepted.bufferMinor)}</dd></div>
+    </dl>
+    <section class="draft-review__section draft-review__plan" aria-labelledby="draft_plan_steps">
+      <div class="draft-review__section-heading"><p class="eyebrow">The plan</p><h3 id="draft_plan_steps">What happens next</h3></div>
+      <ol class="draft-review__stages">${surface.stages.map((stage) => `<li><span class="draft-review__marker">${escapeHtml(stage.marker)}</span><div><strong>${escapeHtml(stage.label)}</strong><p>${escapeHtml(stage.detail)}</p></div><small>${escapeHtml(humanPlanLabel(stage.status))}</small></li>`).join("")}</ol>
+    </section>
+    ${protections.length ? `<section class="draft-review__section" aria-labelledby="draft_plan_protects"><div class="draft-review__section-heading"><p class="eyebrow">What it protects</p><h3 id="draft_plan_protects">The things that should stay true</h3></div><ul class="draft-review__chips">${protections.map((label) => `<li>${escapeHtml(label)}</li>`).join("")}</ul></section>` : ""}
+    ${stillOpen.length ? `<section class="draft-review__section" aria-labelledby="draft_plan_open"><div class="draft-review__section-heading"><p class="eyebrow">Still open</p><h3 id="draft_plan_open">Things you can decide later</h3></div><ul class="draft-review__open-list">${stillOpen.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
+  </div>`;
+};
+
 const renderPlanDraft = (): string => {
   const draft = runtime.pendingPlanDraft;
   const returned = runtime.returnedConstructionReview;
@@ -1758,16 +1801,16 @@ const renderPlanDraft = (): string => {
   if (!draft && returned && returned.packet.kind === "draft") {
     const profile = returned.packet.payload.profile;
     const feedback = returned.feedbackRequired ? `<form class="draft-return-form" data-plan-return="legacy" data-packet="${escapeHtml(returned.packetId)}">
-      <div><p class="eyebrow">Help Codex revise it</p><h3>What wasn’t right about this draft?</h3><p>Your answer changes the next draft, not the confirmed brief or accepted plan.</p></div>
+      <div><p class="eyebrow">Help ${escapeHtml(agenticName())} revise it</p><h3>What wasn’t right about this plan?</h3><p>Your answer will shape the next version.</p></div>
       <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
       <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="For example: this feels like a budget shell, not the living trip plan I expected."></textarea></label>
       <button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button>
     </form>` : `<div class="draft-returned-copy"><span>Changes requested</span><strong>${escapeHtml(returned.reasonCode?.replaceAll("_", " ") ?? "Revision requested")}</strong><p>${escapeHtml(returned.message)}</p><button class="button" type="button" data-action="open-codex-handoff">Hand off this revision to Codex</button></div>`;
-    return `<section class="zone zone--approval_panel plan-intake plan-intake--returned" aria-label="Returned plan draft">
-      <div class="zone__heading"><p class="eyebrow">Draft returned / accepted plan unchanged</p><h2>${escapeHtml(profile.name)}</h2></div>
-      <div class="approval-copy"><p>The rejected draft remains visible as revision context. It cannot be confirmed or activated.</p><div><span>Packet proof</span><strong>${escapeHtml(returned.packet.checksum.slice(0, 16))}…</strong></div><div><span>Draft proof</span><strong>${escapeHtml(returned.packet.payload.contentHash.slice(0, 16))}…</strong></div></div>
+    return `<section class="zone zone--approval_panel plan-intake plan-intake--returned draft-review" aria-label="Plan changes requested">
+      <div class="zone__heading"><p class="eyebrow">Changes requested</p><h2>${escapeHtml(profile.name)}</h2><p class="draft-review__lede">Here is the plan you sent back. It will stay here while ${escapeHtml(agenticName())} prepares the next version.</p></div>
+      ${renderPlanDraftContent(profile)}
       ${feedback}
-      <details class="draft-discard"><summary>Start over instead</summary><p>Discard the returned draft and begin again from the unchanged reviewed brief.</p><button class="text-button" type="button" data-action="discard-returned-draft" data-packet="${escapeHtml(returned.packetId)}">Discard this draft entirely</button></details>
+      <details class="draft-discard"><summary>Start over instead</summary><p>Discard this version and begin again from what you originally asked for.</p><button class="text-button" type="button" data-action="discard-returned-draft" data-packet="${escapeHtml(returned.packetId)}">Discard this plan</button></details>
     </section>`;
   }
   if (!draft) return "";
@@ -1792,25 +1835,19 @@ const renderPlanDraft = (): string => {
   const confirmation = runtime.planActivationConfirmation;
   const confirmed = confirmation?.draftId === draft.draftId;
   const amendment = draft.amendment;
-  const dependencies = draft.profile.surface.dependencies ?? [];
-  const assumptions = draft.profile.surface.assumptions ?? [];
-  return `<section class="zone zone--approval_panel plan-intake" aria-label="New plan activation">
-    <div class="zone__heading"><p class="eyebrow">New Finite plan</p><h2>${escapeHtml(draft.profile.name)}</h2></div>
-    <div class="approval-copy">
-      <p>Codex compiled a complete <strong>${escapeHtml(draft.profile.profileId)}</strong> operating profile${amendment ? ` that supersedes <strong>${escapeHtml(amendment.supersedesPlanId)}</strong>` : ""}. Confirming authorizes only this exact packet; it does not activate the plan.</p>
-      <div><span>Profile proof</span><strong>${escapeHtml(draft.profile.profileHash.slice(0, 16))}…</strong></div>
-      <div><span>Draft proof</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}…</strong></div>
-      ${dependencies.length ? `<details><summary>Open planning dependencies (${dependencies.filter((dependency) => dependency.status === "open").length})</summary><ul>${dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong> · ${escapeHtml(dependency.kind.replaceAll("_", " "))} · ${escapeHtml(dependency.status)}</li>`).join("")}</ul></details>` : ""}
-      ${assumptions.length ? `<details><summary>Working assumptions (${assumptions.length})</summary><ul>${assumptions.map((assumption) => `<li><strong>${escapeHtml(assumption.path)}</strong>: ${escapeHtml(String(assumption.value))} · ${escapeHtml(assumption.basis)}</li>`).join("")}</ul></details>` : ""}
+  return `<section class="zone zone--approval_panel plan-intake draft-review" aria-label="Review new plan">
+    <div class="zone__heading"><p class="eyebrow">Your plan is ready</p><h2>${escapeHtml(draft.profile.name)}</h2><p class="draft-review__lede">${escapeHtml(draft.profile.surface.hero.brief)}</p></div>
+    ${renderPlanDraftContent(draft.profile)}
+    <div class="draft-review__actions">
       ${revisionReceipt}
-      ${amendment ? `<div><span>Amendment proof</span><strong>${escapeHtml(amendment.diffHash.slice(0, 16))}…</strong></div><p class="quiet">Changed: ${escapeHtml(amendment.diff.changedSections.join(", "))}</p>` : ""}
+      ${amendment ? `<p class="draft-review__amendment">This is an updated version of your plan. Changed: ${escapeHtml(amendment.diff.changedSections.map(humanPlanLabel).join(", "))}.</p>` : ""}
       ${confirmed
-        ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`
-        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact plan</button>`}
+        ? `<p class="draft-review__approved">Plan approved. ${escapeHtml(agenticName())} can now put it into action.</p>`
+        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Approve this plan</button>`}
       ${draftReturnFormOpen ? `<form class="draft-return-form" data-plan-return="current" data-draft="${escapeHtml(draft.draftId)}">
-        <div><p class="eyebrow">Return for revision</p><h3>What wasn’t right about this draft?</h3><p>The draft stays visible while you explain. This does not change the confirmed brief or accepted plan.</p></div>
+        <div><p class="eyebrow">Request changes</p><h3>What should be different?</h3><p>The plan will stay here while you explain what you want changed.</p></div>
         <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
-        <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="Say what you expected to receive instead."></textarea></label>
+        <label><span>Tell ${escapeHtml(agenticName())} what should change</span><textarea name="reason" required maxlength="1000" placeholder="Say what you expected to receive instead."></textarea></label>
         <div class="draft-return-actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button><button class="text-button" type="button" data-action="cancel-plan-return">Keep reviewing</button></div>
       </form>` : `<button class="text-button" data-action="open-plan-return" data-draft="${escapeHtml(draft.draftId)}">Request changes</button>`}
     </div>
