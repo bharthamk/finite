@@ -5,7 +5,9 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
-const logo = readFileSync(new URL("../public/finite-mark.svg", import.meta.url), "utf8");
+const identityNotes = readFileSync(new URL("../design/identity/README.md", import.meta.url), "utf8");
+const wordmark = readFileSync(new URL("../public/finite-wordmark.png", import.meta.url));
+const mark = readFileSync(new URL("../public/finite-mark.png", import.meta.url));
 
 test("the product header contains actions instead of unexplained internal state", () => {
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
@@ -16,15 +18,18 @@ test("the product header contains actions instead of unexplained internal state"
   assert.match(source, /<details class="account-menu">/);
 });
 
-test("every product surface uses the accepted reroute-f identity", () => {
+test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
-  assert.match(source, /src="\/finite-mark\.svg"/);
+  assert.match(source, /src="\/finite-wordmark\.png"/);
   assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 5);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
-  assert.match(logo, /<circle cx="17" cy="41" r="7" fill="#f05232"\/>/);
-  assert.doesNotMatch(logo, /<circle cx="32" cy="41"/);
+  assert.match(identityNotes, /exact ImageGen concept accepted by Benji/);
+  assert.match(identityNotes, /does not redraw or reinterpret the logo/);
+  assert.ok(wordmark.byteLength > 4_000);
+  assert.ok(mark.byteLength > 4_000);
+  assert.match(shell, /href="\/finite-mark\.png" type="image\/png"/);
 });
 
 test("account and destructive actions live in a labelled account menu", () => {

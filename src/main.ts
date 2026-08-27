@@ -48,7 +48,7 @@ const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
   return response.json() as Promise<FiniteAuthStatus>;
 };
 
-const renderBrand = (): string => `<a class="brand" href="#main" aria-label="Finite home"><img src="/finite-mark.svg" width="26" height="33" alt=""><span>inite</span></a>`;
+const renderBrand = (): string => `<a class="brand" href="#main" aria-label="Finite home"><img src="/finite-wordmark.png" width="98" height="30" alt=""></a>`;
 const shareRepository = new HttpPlanShareRepository();
 const escapePublicHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
