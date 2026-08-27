@@ -40,7 +40,9 @@ const projectNumberCopy = (text: string, before: number, after: number): string 
   return projected;
 };
 
-const acceptedCopyChanges = (kernel: FinitePlanKernel): AcceptedCopyChange[] => kernel.receipts
+type AcceptedCopyReceipt = { receiptType: string; payload: Record<string, unknown> };
+
+const acceptedCopyChangesFromReceipts = (receipts: AcceptedCopyReceipt[]): AcceptedCopyChange[] => receipts
   .filter((receipt) => receipt.receiptType === "plan_fact_change")
   .flatMap((receipt) => {
     const change = receipt.payload.planFactChange;
@@ -54,10 +56,12 @@ const acceptedCopyChanges = (kernel: FinitePlanKernel): AcceptedCopyChange[] => 
     });
   });
 
-export const projectAcceptedPlanCopy = (text: string, kernel: FinitePlanKernel): string => acceptedCopyChanges(kernel)
+export const projectAcceptedPlanCopyFromReceipts = (text: string, receipts: AcceptedCopyReceipt[]): string => acceptedCopyChangesFromReceipts(receipts)
   .reduce((projected, change) => change.factId === "allocations.forecastMinor" ? projected : change.format === "money"
     ? projectMoneyCopy(projected, change.before, change.after)
     : projectNumberCopy(projected, change.before, change.after), text);
+
+export const projectAcceptedPlanCopy = (text: string, kernel: FinitePlanKernel): string => projectAcceptedPlanCopyFromReceipts(text, kernel.receipts);
 
 const supportedComponents = new Set<SurfaceComponentType>([
   "finite_summary", "pressure_meter", "timeline_lane", "phase_lane", "run_of_show", "entity_table",

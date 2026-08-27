@@ -1,9 +1,12 @@
 export type PlanShareMode = "live" | "frozen";
-export type PlanShareSection = "overview" | "allocation" | "measures" | "stages" | "changes";
+export type PlanShareSection = "overview" | "allocation" | "measures" | "stages" | "changes" | "outcome" | "progress" | "decisions" | "references";
 
 export interface PublicPlanMeasure { label: string; format: string; value: string | number }
 export interface PublicPlanStage { label: string; detail: string; marker: string; status: string }
 export interface PublicPlanChange { title: string; revision: number }
+export interface PublicPlanProgressItem { label: string; contextLabel: string | null; status: string }
+export interface PublicPlanDecision { kind: string; contextLabel: string | null; message: string }
+export interface PublicPlanReference { kind: string; label: string; contextLabel: string | null; value: string | null }
 
 export interface PublicPlanProjection {
   publicationVersion: "finite-plan-publication.v1";
@@ -28,6 +31,10 @@ export interface PublicPlanProjection {
     measures?: PublicPlanMeasure[];
     stages?: PublicPlanStage[];
     changes?: PublicPlanChange[];
+    outcome?: { note: string; completedAt: string | null; actualSpendMinor: number | null };
+    progress?: { done: number; total: number; items: PublicPlanProgressItem[] };
+    decisions?: PublicPlanDecision[];
+    references?: PublicPlanReference[];
   };
 }
 

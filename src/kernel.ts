@@ -72,6 +72,7 @@ interface PendingLifecycleChange {
   before: PlanLifecycleStatus;
   after: PlanLifecycleStatus;
   reason: string;
+  actualSpendMinor: number | null;
   contentHash: string;
 }
 
@@ -1192,11 +1193,14 @@ export class FinitePlanKernel {
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
-  async stagePlanLifecycle({ status, reason, expectedRevision }: { status: PlanLifecycleStatus; reason: string; expectedRevision: number }): Promise<ToolResult> {
+  async stagePlanLifecycle({ status, reason, actualSpendMinor, expectedRevision }: { status: PlanLifecycleStatus; reason: string; actualSpendMinor?: number | null; expectedRevision: number }): Promise<ToolResult> {
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     if (!["active", "paused", "completed", "abandoned"].includes(status) || typeof reason !== "string" || !reason.trim() || reason.length > 1000) return { ok: false, code: "INVALID_PLAN_LIFECYCLE_CHANGE", acceptedStateChanged: false };
-    if (status === this.lifecycleStatus) return { ok: false, code: "PLAN_LIFECYCLE_UNCHANGED", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false };
-    const base = { lifecycleChangeId: makeId("lifecycle_change"), baseRevision: this.revision, before: this.lifecycleStatus, after: status, reason: reason.trim() };
+    if (actualSpendMinor !== undefined && actualSpendMinor !== null && (!Number.isSafeInteger(actualSpendMinor) || actualSpendMinor < 0)) return { ok: false, code: "INVALID_PLAN_LIFECYCLE_CHANGE", acceptedStateChanged: false };
+    const recordedActual = [...this.lifecycleEvents].reverse().find((event) => event.actualSpendMinor !== undefined)?.actualSpendMinor ?? null;
+    const recordingCompletedActual = status === "completed" && this.lifecycleStatus === "completed" && actualSpendMinor !== undefined && actualSpendMinor !== recordedActual;
+    if (status === this.lifecycleStatus && !recordingCompletedActual) return { ok: false, code: "PLAN_LIFECYCLE_UNCHANGED", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false };
+    const base = { lifecycleChangeId: makeId("lifecycle_change"), baseRevision: this.revision, before: this.lifecycleStatus, after: status, reason: reason.trim(), actualSpendMinor: actualSpendMinor ?? null };
     this.pendingLifecycleChange = { ...base, contentHash: await sha256(base) };
     this.lifecycleConfirmation = null;
     return { ok: true, code: "PLAN_LIFECYCLE_STAGED", lifecycleChange: clone(this.pendingLifecycleChange), acceptedStateChanged: false };
@@ -1226,7 +1230,7 @@ export class FinitePlanKernel {
     const fromRevision = this.revision;
     this.lifecycleStatus = pending.after;
     this.revision += 1;
-    const event: PlanLifecycleEvent = { eventType: "plan_lifecycle", lifecycleChangeId, before: pending.before, after: pending.after, reason: pending.reason, contentHash: pending.contentHash, confirmationId, fromRevision, toRevision: this.revision };
+    const event: PlanLifecycleEvent = { eventType: "plan_lifecycle", lifecycleChangeId, before: pending.before, after: pending.after, reason: pending.reason, contentHash: pending.contentHash, confirmationId, fromRevision, toRevision: this.revision, occurredAt: new Date().toISOString(), actualSpendMinor: pending.actualSpendMinor };
     this.lifecycleEvents.push(event);
     const receipt = await this.makeReceipt("plan_lifecycle", fromRevision, idempotencyKey, { lifecycleEvent: event, lifecycle: { status: this.lifecycleStatus } });
     this.lifecycleIdempotency.set(idempotencyKey, receipt);

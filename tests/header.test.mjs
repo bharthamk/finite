@@ -81,6 +81,9 @@ test("the header plan dropdown creates and opens plans from every private produc
   assert.match(source, /const currentArrival = \(\): ArrivalOrder \| null => !newPlanDraftMode/);
   assert.match(source, /const openPlan = async \(planId: string\): Promise<void> => \{\s*if \(!planId \|\| busy\) return;\s*newPlanDraftMode = false;\s*forceArrivalSurface = false;/);
   assert.match(source, /runtime\.switchPlanPersisted\(planId, \{ expectedCurrentPlanId:/);
+  assert.match(source, /Promise\.all\(\[planInputRepository\.list\(\{ planId \}\), planWorkRepository\.list\(planId\)\]\)/);
+  assert.match(source, /item\.planId !== planId/);
+  assert.match(source, /Your current plan is unchanged\./);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /target\.searchParams\.delete\("kitchen"\)/);
   assert.doesNotMatch(source, /aria-label="Demonstration plan"/);

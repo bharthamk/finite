@@ -17,20 +17,20 @@ test("plan notes and links accept useful references but refuse unsafe URLs", () 
 
 test("Managing exposes checkboxes and section-bound attachments without engineering copy", async () => {
   const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
-  assert.match(source, /<h2>To do<\/h2>/);
+  assert.match(source, /Plan-stage tasks are ticked off in the timeline below\./);
   assert.match(source, /data-action="toggle-checklist"/);
   assert.match(source, /Files &amp; links/);
   assert.match(source, /data-attachment-context/);
   assert.match(source, /Files, pictures, links or notes/);
   assert.match(source, /checklistForStage/);
   assert.match(source, /Everything is ticked off\./);
-  assert.match(source, /data-action="reopen-stage"/);
+  assert.match(source, /class="stage__check"/);
   assert.match(source, /Did this plan reach its outcome\?/);
   assert.match(source, /Finish this plan/);
   assert.match(source, /Pause or stop this plan/);
   assert.match(source, /applyConfirmedPlanLifecycle/);
   assert.match(source, /This plan is finished\./);
-  assert.match(source, /form\.hasAttribute\("data-plan-complete"\)/);
+  assert.match(source, /form\.hasAttribute\("data-plan-complete"\) \|\| recordActual/);
   assert.match(source, /Finishing this plan…/);
   assert.doesNotMatch(source, /const returnPlanDraft[\s\S]{0,500}status === "completed"/);
   assert.match(source, /renderWrapUpSurface/);

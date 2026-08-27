@@ -85,14 +85,21 @@ test("plan lifecycle conclusion is human-confirmed, receipted, reload-safe, and 
   assert.equal(applied.code, "PLAN_LIFECYCLE_APPLIED");
   assert.equal(kernel.lifecycleStatus, "completed");
   assert.equal(kernel.revision, 2);
+  assert.equal(typeof kernel.lifecycleEvents[0].occurredAt, "string");
+  assert.equal(kernel.lifecycleEvents[0].actualSpendMinor, null);
   assert.equal(kernel.recordChangeEvent({ type: "late_change", title: "One more idea", costDeltaMinor: 0, minimumBufferMinor: 0, expectedRevision: 2 }).code, "PLAN_NOT_ACTIVE");
   const reloaded = new FinitePlanKernel(profile, store);
   assert.equal(reloaded.lifecycleStatus, "completed");
   assert.equal(reloaded.lifecycleEvents.length, 1);
   assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: staged.lifecycleChange.lifecycleChangeId, confirmationId: confirmation.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "lifecycle-complete-0001" })).code, "IDEMPOTENT_REPLAY");
-  const reopen = await reloaded.stagePlanLifecycle({ status: "active", reason: "A delayed refund still needs handling.", expectedRevision: 2 });
+  const recordActual = await reloaded.stagePlanLifecycle({ status: "completed", reason: "Actual spend recorded after completion.", actualSpendMinor: 612_345, expectedRevision: 2 });
+  assert.equal(recordActual.code, "PLAN_LIFECYCLE_STAGED");
+  const actualConfirmation = reloaded.humanConfirmPlanLifecycle({ lifecycleChangeId: recordActual.lifecycleChange.lifecycleChangeId });
+  assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: recordActual.lifecycleChange.lifecycleChangeId, confirmationId: actualConfirmation.confirmation.confirmationId, expectedRevision: 2, idempotencyKey: "lifecycle-actual-0001" })).code, "PLAN_LIFECYCLE_APPLIED");
+  assert.equal(reloaded.lifecycleEvents.at(-1).actualSpendMinor, 612_345);
+  const reopen = await reloaded.stagePlanLifecycle({ status: "active", reason: "A delayed refund still needs handling.", expectedRevision: 3 });
   const reopenConfirmation = reloaded.humanConfirmPlanLifecycle({ lifecycleChangeId: reopen.lifecycleChange.lifecycleChangeId });
-  assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: reopen.lifecycleChange.lifecycleChangeId, confirmationId: reopenConfirmation.confirmation.confirmationId, expectedRevision: 2, idempotencyKey: "lifecycle-reopen-0001" })).code, "PLAN_LIFECYCLE_APPLIED");
+  assert.equal((await reloaded.applyConfirmedPlanLifecycle({ lifecycleChangeId: reopen.lifecycleChange.lifecycleChangeId, confirmationId: reopenConfirmation.confirmation.confirmationId, expectedRevision: 3, idempotencyKey: "lifecycle-reopen-0001" })).code, "PLAN_LIFECYCLE_APPLIED");
   assert.equal(reloaded.lifecycleStatus, "active");
 });
 

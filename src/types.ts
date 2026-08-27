@@ -536,6 +536,8 @@ export interface PlanLifecycleEvent {
   confirmationId: string;
   fromRevision: number;
   toRevision: number;
+  occurredAt?: string;
+  actualSpendMinor?: number | null;
 }
 
 export interface Receipt {

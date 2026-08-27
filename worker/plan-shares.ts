@@ -1,8 +1,9 @@
 import { authSha256, principalStorageScope, resolveRequestPrincipal } from "./auth.js";
 import type { D1Database } from "./accepted-truth.js";
+import { projectAcceptedPlanCopyFromReceipts } from "../src/surface.js";
 
 type JsonRecord = Record<string, unknown>;
-export type ShareSection = "overview" | "allocation" | "measures" | "stages" | "changes";
+export type ShareSection = "overview" | "allocation" | "measures" | "stages" | "changes" | "outcome" | "progress" | "decisions" | "references";
 
 interface ShareRow {
   share_id: string;
@@ -16,13 +17,14 @@ interface ShareRow {
 }
 
 interface PlanProjectionRow extends ShareRow {
+  scope_id: string;
   revision: number;
   updated_at: string;
   snapshot_json: string;
   definition_json: string;
 }
 
-const allowedSections = new Set<ShareSection>(["overview", "allocation", "measures", "stages", "changes"]);
+const allowedSections = new Set<ShareSection>(["overview", "allocation", "measures", "stages", "changes", "outcome", "progress", "decisions", "references"]);
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const response = (status: number, body: JsonRecord): Response => new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 const errorResponse = (status: number, code: string, message: string): Response => response(status, { ok: false, code, message });
@@ -70,22 +72,24 @@ const readValue = (snapshot: JsonRecord, binding: JsonRecord): string | number |
   return typeof value === "number" || typeof value === "string" ? value : null;
 };
 
-const sanitizeProjection = (row: PlanProjectionRow, sections: ShareSection[], mode: "live" | "frozen"): JsonRecord => {
+const sanitizeProjection = async (db: D1Database, scopeId: string, row: PlanProjectionRow, sections: ShareSection[], mode: "live" | "frozen"): Promise<JsonRecord> => {
   const snapshot = asRecord(JSON.parse(row.snapshot_json));
   const definition = asRecord(JSON.parse(row.definition_json));
   const surface = asRecord(definition.surface);
   const hero = asRecord(surface.hero);
   const lifecycle = asRecord(snapshot.lifecycle);
+  const receipts = Array.isArray(snapshot.receipts) ? snapshot.receipts.map(asRecord).filter((receipt) => typeof receipt.receiptType === "string" && receipt.payload && typeof receipt.payload === "object") as Array<{ receiptType: string; payload: Record<string, unknown> }> : [];
+  const projectCopy = (value: unknown, fallback = ""): string => projectAcceptedPlanCopyFromReceipts(typeof value === "string" ? value : fallback, receipts);
   const plan: JsonRecord = {
-    name: typeof definition.name === "string" ? definition.name : "Shared Finite plan",
+    name: projectCopy(definition.name, "Shared Finite plan"),
     family: typeof definition.profileId === "string" ? definition.profileId : "plan",
     revision: row.revision,
     status: typeof lifecycle.status === "string" ? lifecycle.status : "active",
     updatedAt: row.updated_at,
   };
   if (sections.includes("overview")) Object.assign(plan, {
-    headline: typeof hero.title === "string" ? hero.title : "A shared Finite plan",
-    brief: typeof hero.brief === "string" ? hero.brief : "",
+    headline: projectCopy(hero.title, "A shared Finite plan"),
+    brief: projectCopy(hero.brief),
     eyebrow: typeof hero.eyebrow === "string" ? hero.eyebrow : "",
   });
   if (sections.includes("allocation")) plan.allocation = asRecord(snapshot.accepted);
@@ -98,9 +102,13 @@ const sanitizeProjection = (row: PlanProjectionRow, sections: ShareSection[], mo
   }
   if (sections.includes("stages")) {
     const stages = Array.isArray(surface.stages) ? surface.stages : [];
+    const checklist = await db.prepare("SELECT source_ref, status FROM plan_checklist_items WHERE scope_id = ? AND plan_id = ?").bind(scopeId, row.plan_id).all<{ source_ref: string | null; status: string }>();
+    const statusBySource = new Map(checklist.results.map((item) => [item.source_ref, item.status]));
     plan.stages = stages.slice(0, 12).map((item) => {
       const stage = asRecord(item);
-      return { label: String(stage.label ?? "Stage"), detail: String(stage.detail ?? ""), marker: String(stage.marker ?? ""), status: String(stage.status ?? "planned") };
+      const stageId = String(stage.stageId ?? "");
+      const acceptedStatus = statusBySource.get(`stage:${stageId}`);
+      return { label: projectCopy(stage.label, "Stage"), detail: projectCopy(stage.detail), marker: projectCopy(stage.marker), status: lifecycle.status === "completed" || acceptedStatus === "done" ? "done" : String(stage.status ?? "planned") };
     });
   }
   if (sections.includes("changes")) {
@@ -110,11 +118,34 @@ const sanitizeProjection = (row: PlanProjectionRow, sections: ShareSection[], mo
       return { title: String(event.title ?? "Accepted plan change"), revision: Number(event.baseRevision ?? 0) + 1 };
     });
   }
+  if (sections.includes("outcome")) {
+    const lifecycleEvents = Array.isArray(snapshot.lifecycleEvents) ? snapshot.lifecycleEvents.map(asRecord) : [];
+    const completion = [...lifecycleEvents].reverse().find((event) => event.after === "completed" && event.before !== "completed");
+    const recordedActual = [...lifecycleEvents].reverse().find((event) => typeof event.actualSpendMinor === "number");
+    plan.outcome = completion ? {
+      note: String(completion.reason ?? "The planned outcome happened."),
+      completedAt: typeof completion.occurredAt === "string" ? completion.occurredAt : row.updated_at,
+      actualSpendMinor: typeof recordedActual?.actualSpendMinor === "number" ? recordedActual.actualSpendMinor : null,
+    } : null;
+  }
+  if (sections.includes("progress")) {
+    const result = await db.prepare("SELECT label, context_label, status FROM plan_checklist_items WHERE scope_id = ? AND plan_id = ? ORDER BY position, created_at").bind(scopeId, row.plan_id).all<{ label: string; context_label: string | null; status: string }>();
+    const items = result.results.slice(0, 30).map((item) => ({ label: item.label, contextLabel: item.context_label, status: item.status }));
+    plan.progress = { done: items.filter((item) => item.status === "done").length, total: items.length, items };
+  }
+  if (sections.includes("decisions")) {
+    const result = await db.prepare("SELECT kind, context_label, message FROM plan_inputs WHERE scope_id = ? AND plan_id = ? AND handling_mode = 'direct' ORDER BY created_at").bind(scopeId, row.plan_id).all<{ kind: string; context_label: string | null; message: string }>();
+    plan.decisions = result.results.slice(0, 30).map((item) => ({ kind: item.kind, contextLabel: item.context_label, message: item.message }));
+  }
+  if (sections.includes("references")) {
+    const result = await db.prepare("SELECT kind, label, context_label, note_text, link_url, file_name FROM plan_attachments WHERE scope_id = ? AND plan_id = ? AND status = 'active' ORDER BY created_at").bind(scopeId, row.plan_id).all<{ kind: string; label: string; context_label: string | null; note_text: string | null; link_url: string | null; file_name: string | null }>();
+    plan.references = result.results.slice(0, 30).map((item) => ({ kind: item.kind, label: item.label, contextLabel: item.context_label, value: item.kind === "note" ? item.note_text : item.kind === "link" ? item.link_url : item.file_name }));
+  }
   return { publicationVersion: "finite-plan-publication.v1", mode, sections, plan };
 };
 
 const loadPlanRow = async (db: D1Database, scopeId: string, planId: string): Promise<PlanProjectionRow | null> => db.prepare(`
-  SELECT '' AS share_id, h.plan_id, '' AS mode, '[]' AS sections_json, NULL AS frozen_projection_json,
+  SELECT h.scope_id, '' AS share_id, h.plan_id, '' AS mode, '[]' AS sections_json, NULL AS frozen_projection_json,
          '' AS label, '' AS created_at, NULL AS revoked_at, h.revision, h.updated_at,
          r.snapshot_json, c.definition_json
     FROM plan_heads h
@@ -142,7 +173,7 @@ const previewShare = async (request: Request, db: D1Database, scopeId: string): 
   if (!validPlanId(body.planId) || !sections || (body.mode !== "live" && body.mode !== "frozen")) return errorResponse(422, "PUBLICATION_SELECTION_INVALID", "Choose one accepted plan, a publication mode, and at least the overview section.");
   const row = await loadPlanRow(db, scopeId, body.planId);
   if (!row) return errorResponse(404, "PLAN_NOT_FOUND", "Only a durable accepted plan can be published.");
-  return response(200, { ok: true, code: "PLAN_PUBLICATION_PREVIEW", publication: sanitizeProjection(row, sections, body.mode) });
+  return response(200, { ok: true, code: "PLAN_PUBLICATION_PREVIEW", publication: await sanitizeProjection(db, scopeId, row, sections, body.mode) });
 };
 
 const createShare = async (request: Request, db: D1Database, scopeId: string): Promise<Response> => {
@@ -157,7 +188,7 @@ const createShare = async (request: Request, db: D1Database, scopeId: string): P
   const tokenHash = await authSha256({ shareToken: token });
   const shareId = `share_${tokenHash.slice(0, 16)}`;
   const createdAt = new Date().toISOString();
-  const frozenProjection = mode === "frozen" ? JSON.stringify(sanitizeProjection(row, sections, mode)) : null;
+  const frozenProjection = mode === "frozen" ? JSON.stringify(await sanitizeProjection(db, scopeId, row, sections, mode)) : null;
   await db.batch([db.prepare("INSERT INTO plan_shares (scope_id, share_id, token_hash, plan_id, mode, sections_json, frozen_projection_json, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)")
     .bind(scopeId, shareId, tokenHash, body.planId, mode, JSON.stringify(sections), frozenProjection, label, createdAt)]);
   return response(201, {
@@ -181,7 +212,7 @@ const loadPublicShare = async (token: string, db: D1Database): Promise<Response>
   if (!/^[a-zA-Z0-9_-]{43}$/.test(token)) return errorResponse(404, "PUBLICATION_NOT_FOUND", "This shared page is not available.");
   const tokenHash = await authSha256({ shareToken: token });
   const row = await db.prepare(`
-    SELECT s.share_id, s.plan_id, s.mode, s.sections_json, s.frozen_projection_json, s.label,
+    SELECT s.scope_id, s.share_id, s.plan_id, s.mode, s.sections_json, s.frozen_projection_json, s.label,
            s.created_at, s.revoked_at, h.revision, h.updated_at, r.snapshot_json, c.definition_json
       FROM plan_shares s
       JOIN plan_heads h ON h.scope_id = s.scope_id AND h.plan_id = s.plan_id
@@ -193,7 +224,7 @@ const loadPublicShare = async (token: string, db: D1Database): Promise<Response>
   if (row.revoked_at) return errorResponse(410, "PUBLICATION_REVOKED", "The owner has stopped sharing this page.");
   const sections = selectedSections(JSON.parse(row.sections_json));
   if (!sections || (row.mode !== "live" && row.mode !== "frozen")) return errorResponse(500, "PUBLICATION_INVALID", "This shared page cannot be read safely.");
-  const publication = row.mode === "frozen" && row.frozen_projection_json ? JSON.parse(row.frozen_projection_json) as JsonRecord : sanitizeProjection(row, sections, "live");
+  const publication = row.mode === "frozen" && row.frozen_projection_json ? JSON.parse(row.frozen_projection_json) as JsonRecord : await sanitizeProjection(db, row.scope_id, row, sections, "live");
   return response(200, { ok: true, code: "PLAN_PUBLICATION", label: row.label, publishedAt: row.created_at, publication });
 };
 

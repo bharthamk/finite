@@ -1,7 +1,7 @@
 import { compileBuiltInProfiles } from "./profiles.js";
 import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
-import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
+import { compileSurfaceManifest, projectAcceptedPlanCopy, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
@@ -74,6 +74,7 @@ const publicMeasure = (value: string | number, format: string): string => {
 const renderPublicProjection = (projection: PublicPlanProjection, compact = false): string => {
   const plan = projection.plan;
   const allocation = plan.allocation;
+  const outcome = plan.outcome;
   return `<article class="published-plan${compact ? " published-plan--preview" : ""}" data-publication-mode="${projection.mode}">
     <header class="published-plan__hero">
       <p class="eyebrow">${escapePublicHtml(plan.eyebrow || `${plan.family} plan`)}</p>
@@ -85,6 +86,10 @@ const renderPublicProjection = (projection: PublicPlanProjection, compact = fals
     ${plan.measures?.length ? `<section class="published-plan__measures" aria-labelledby="published_measures"><h2 id="published_measures">Key measures</h2><dl>${plan.measures.map((measure) => `<div><dt>${escapePublicHtml(measure.label)}</dt><dd>${escapePublicHtml(publicMeasure(measure.value, measure.format))}</dd></div>`).join("")}</dl></section>` : ""}
     ${plan.stages?.length ? `<section class="published-plan__stages" aria-labelledby="published_stages"><h2 id="published_stages">Plan stages</h2><ol>${plan.stages.map((stage) => `<li data-stage-status="${escapePublicHtml(stage.status)}"><span>${escapePublicHtml(stage.marker)}</span><div><strong>${escapePublicHtml(stage.label)}</strong><p>${escapePublicHtml(stage.detail)}</p></div><small>${escapePublicHtml(stage.status)}</small></li>`).join("")}</ol></section>` : ""}
     ${plan.changes?.length ? `<section class="published-plan__changes" aria-labelledby="published_changes"><h2 id="published_changes">Recent accepted changes</h2><ol>${plan.changes.map((change) => `<li><span>Revision ${change.revision}</span><strong>${escapePublicHtml(change.title)}</strong></li>`).join("")}</ol></section>` : ""}
+    ${outcome ? `<section class="published-plan__outcome"><h2>What happened</h2><blockquote>${escapePublicHtml(outcome.note)}</blockquote><dl><div><dt>Completed</dt><dd>${outcome.completedAt ? escapePublicHtml(new Date(outcome.completedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })) : "Not recorded"}</dd></div><div><dt>Actual spend</dt><dd>${outcome.actualSpendMinor === null ? "Not recorded" : publicMoney(outcome.actualSpendMinor)}</dd></div></dl></section>` : ""}
+    ${plan.progress ? `<section class="published-plan__progress"><h2>Progress · ${plan.progress.done} of ${plan.progress.total}</h2>${plan.progress.items.length ? `<ul>${plan.progress.items.map((item) => `<li><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapePublicHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapePublicHtml(item.contextLabel)}</small>` : ""}</div></li>`).join("")}</ul>` : ""}</section>` : ""}
+    ${plan.decisions?.length ? `<section class="published-plan__record"><h2>Decisions and updates</h2>${plan.decisions.map((item) => `<article><span>${escapePublicHtml(item.kind)}${item.contextLabel ? ` · ${escapePublicHtml(item.contextLabel)}` : ""}</span><p>${escapePublicHtml(item.message)}</p></article>`).join("")}</section>` : ""}
+    ${plan.references?.length ? `<section class="published-plan__references"><h2>References</h2><ul>${plan.references.map((item) => `<li><strong>${escapePublicHtml(item.label)}</strong><span>${escapePublicHtml(item.kind)}${item.contextLabel ? ` · ${escapePublicHtml(item.contextLabel)}` : ""}</span>${item.value ? `<p>${escapePublicHtml(item.value)}</p>` : ""}</li>`).join("")}</ul></section>` : ""}
   </article>`;
 };
 
@@ -674,7 +679,7 @@ const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): 
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
-  return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan">
+  return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan" ${busy ? "disabled" : ""}>
     ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
     <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
     ${current.length ? `<optgroup label="Current plans">${options(current)}</optgroup>` : ""}
@@ -702,7 +707,7 @@ const renderLifecycleRail = (current: FiniteLifecycleStage): string => {
       const state = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
       return `<li class="plan-lifecycle__step is-${state}${stage.id === "managing" ? " is-core" : ""}" ${state === "current" ? 'aria-current="step"' : ""}>
         <span class="plan-lifecycle__marker" aria-hidden="true">${state === "complete" ? "✓" : index + 1}</span>
-        <span class="plan-lifecycle__copy"><strong>${stage.label}</strong><small>${stage.detail}${stage.id === "managing" ? " · core" : ""}</small></span>
+        <span class="plan-lifecycle__copy"><strong>${stage.label}</strong><small>${current === "wrapping" && stage.id === "wrapping" && runtime.kernel.lifecycleStatus === "completed" ? "Outcome summary" : current === "wrapping" && stage.id === "wrapping" && runtime.kernel.lifecycleStatus === "abandoned" ? "Plan closed" : stage.detail}${stage.id === "managing" ? " · core" : ""}</small></span>
       </li>`;
     }).join("")}</ol>
   </nav>`;
@@ -715,6 +720,10 @@ const shareSectionOptions: Array<{ id: PlanShareSection; name: string; descripti
   { id: "measures", name: "Key measures", description: "The plan’s primary dates, counts or operating measures." },
   { id: "stages", name: "Timeline or stages", description: "The current plan shape and stage status." },
   { id: "changes", name: "Recent changes", description: "Titles of the five latest accepted plan changes." },
+  { id: "outcome", name: "Outcome", description: "Closing note, completion time and recorded actual spend." },
+  { id: "progress", name: "Progress", description: "What was finished and what remained open." },
+  { id: "decisions", name: "Decisions", description: "Decisions and updates saved directly to the plan." },
+  { id: "references", name: "References", description: "Selected file names, notes and links—not private uploads." },
 ];
 
 const renderPlanShareDialog = (): string => {
@@ -845,7 +854,7 @@ const renderThemeSettingsDialog = (): string => {
       <form data-skin-custom-form>
         <input type="hidden" name="skinId" value="${editingSkin ? escapeHtml(skinDraft.skinId) : ""}">
         <div class="theme-maker__identity"><label><span>Name</span><input name="name" required maxlength="60" value="${editingSkin ? escapeHtml(skinDraft.name) : ""}" placeholder="Calm studio"></label><label><span>Description</span><input name="description" required maxlength="160" value="${editingSkin ? escapeHtml(skinDraft.description) : ""}" placeholder="A quiet, spacious working surface."></label></div>
-        <div class="skin-trait-grid">${skinTraitKeys.map((key) => `<label><span>${escapeHtml(skinTraitLabel(key))}</span><select name="${key}">${skinTraitOptions[key].map((value) => `<option value="${value}" ${skinDraft.recipe[key] === value ? "selected" : ""}>${escapeHtml(skinTraitLabel(value))}</option>`).join("")}</select></label>`).join("")}</div>
+        <div class="skin-trait-grid">${skinTraitKeys.map((key) => `<label><span>${escapeHtml(skinTraitLabel(key))}</span><select name="${key}" aria-label="${escapeHtml(skinTraitLabel(key))}">${skinTraitOptions[key].map((value) => `<option value="${value}" ${skinDraft.recipe[key] === value ? "selected" : ""}>${escapeHtml(skinTraitLabel(value))}</option>`).join("")}</select></label>`).join("")}</div>
         <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editingSkin ? "Save and use changes" : "Save and use custom skin"}</button>${editingSkin ? `<button class="text-button" type="button" data-action="new-custom-skin">Make another instead</button>` : ""}</div>
         <p class="theme-maker__boundary">Skin recipes use validated choices only. They cannot contain CSS, selectors, markup, scripts, URLs, fonts or assets.</p>
       </form>
@@ -857,7 +866,7 @@ const renderThemeSettingsDialog = (): string => {
         <input type="hidden" name="themeId" value="${editing ? escapeHtml(draft.themeId) : ""}">
         <div class="theme-maker__identity">
           <label><span>Name</span><input name="name" required maxlength="60" value="${editing ? escapeHtml(draft.name) : ""}" placeholder="Quiet studio"></label>
-          <label><span>Mode</span><select name="mode"><option value="light" ${draft.mode === "light" ? "selected" : ""}>Light</option><option value="dark" ${draft.mode === "dark" ? "selected" : ""}>Dark</option></select></label>
+          <label><span>Mode</span><select name="mode" aria-label="Palette mode"><option value="light" ${draft.mode === "light" ? "selected" : ""}>Light</option><option value="dark" ${draft.mode === "dark" ? "selected" : ""}>Dark</option></select></label>
         </div>
         <div class="theme-token-grid">${themeCoreTokenKeys.map((key) => `<label><span>${escapeHtml(key.replace(/([A-Z])/g, " $1"))}</span><input type="color" name="${key}" value="${core[key]}"><code>${core[key]}</code></label>`).join("")}</div>
         <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editing ? "Save and use changes" : "Save and use custom palette"}</button>${editing ? `<button class="text-button" type="button" data-action="new-custom-theme">Make another instead</button>` : ""}</div>
@@ -962,20 +971,15 @@ const renderCodexHandoffDialog = (): string => {
   return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
     <form method="dialog" class="codex-handoff-sheet">
       <header>
-        <div><p class="eyebrow">Operator handoff / no account connection</p><h2 id="codex_handoff_title">${escapeHtml(handoff.title)}</h2></div>
+        <div><p class="eyebrow">Continue in ${escapeHtml(agenticName())}</p><h2 id="codex_handoff_title">${escapeHtml(handoff.title)}</h2></div>
         <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
       <p class="codex-handoff-lede">${escapeHtml(handoff.detail)}</p>
-      <ol class="codex-handoff-steps">
-        <li><span>01</span><p>Open your Codex task for ${escapeHtml(agenticName())}.</p></li>
-        <li><span>02</span><p>Paste the introduction below.</p></li>
-        <li><span>03</span><p>${escapeHtml(agenticName())} opens Finite and reads the live plan.</p></li>
-      </ol>
-      <label class="codex-handoff-prompt"><span>What ${escapeHtml(agenticName())} receives</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label>
       <div class="codex-handoff-actions">
-        <button type="button" class="button" data-action="copy-codex-handoff">Copy handoff prompt</button>
-        <p data-codex-handoff-status>Nothing has been sent to ${escapeHtml(agenticName())} yet.</p>
+        <button type="button" class="button" data-action="copy-codex-handoff">Copy and continue in ${escapeHtml(agenticName())}</button>
+        <p data-codex-handoff-status>Copy this once, then paste it into your ${escapeHtml(agenticName())} task.</p>
       </div>
+      <details class="codex-handoff-advanced"><summary>What will be copied?</summary><label class="codex-handoff-prompt"><span>Finite plan handoff</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
     </form>
   </dialog>`;
 };
@@ -991,8 +995,8 @@ const bindCodexHandoffInteractions = (): void => {
     try {
       await navigator.clipboard.writeText(prompt);
       button.textContent = `Copied — open ${agenticName()}`;
-      if (status) status.textContent = `Copied. Nothing has been sent or connected; paste it into Codex for ${agenticName()} when you are ready.`;
-      announce(`${agenticName()} handoff copied. Nothing has been sent yet.`);
+      if (status) status.textContent = `Copied. Paste it into your ${agenticName()} task to continue.`;
+      announce(`${agenticName()} handoff copied.`);
     } catch {
       const textarea = root.querySelector<HTMLTextAreaElement>("[data-codex-handoff-prompt]");
       textarea?.focus();
@@ -1016,7 +1020,8 @@ const openPlanShareDialog = async (): Promise<void> => {
   shareError = "";
   newPublicationUrl = "";
   const completed = runtime.kernel.lifecycleStatus === "completed";
-  shareDraft = { label: `${runtime.kernel.profile.name} ${completed ? "summary" : "update"}`, mode: completed ? "frozen" : "live", sections: completed ? ["overview", "allocation", "measures", "stages", "changes"] : ["overview"] };
+  const currentPlanName = projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel);
+  shareDraft = { label: `${currentPlanName} ${completed ? "summary" : "update"}`, mode: completed ? "frozen" : "live", sections: completed ? ["overview", "allocation", "measures", "stages", "changes"] : ["overview"] };
   sharePreview = null;
   sharePreviewKey = "";
   await render();
@@ -1245,7 +1250,6 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <p class="eyebrow">Start with the outcome</p>
             <h1 id="arrival_title">What are you trying to make <em>happen?</em></h1>
             <p class="arrival-compose__lede">Tell Finite in your own language. One sentence is enough. You do not need to choose a plan type, build a dashboard, or know every detail yet.</p>
-            <p class="arrival-compose__promise"><span>Your words stay intact.</span> ${escapeHtml(agenticName())} interprets them later; Finite does not pretend the work has already started.</p>
           </div>
           <form class="arrival-order" data-arrival-form="create">
             <div class="arrival-order__head"><p class="eyebrow">Your starting point</p><span>Only this is required</span></div>
@@ -1266,7 +1270,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
               </div>
             </details>
-            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button><p>Saved first. Interpreted only when ${escapeHtml(agenticName())} opens it.</p></div>
+            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button></div>
           </form>
           <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with ${escapeHtml(agenticName())}</strong><small>Same plan. Same saved starting point.</small></button>
         </section>
@@ -1284,7 +1288,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Use ${escapeHtml(agenticName())} to continue</button>
           </section>` : ""}
           ${planDraftMarkup}
-          ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup ? `<aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>` : ""}
+          ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup ? `<section class="arrival-state arrival-state--action"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div>${order.status === "waiting_for_codex" ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Continue in ${escapeHtml(agenticName())}</button>` : ""}</section>` : ""}
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         <details class="arrival-order-source">
@@ -1305,9 +1309,9 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           </details>` : `<div class="arrival-working-grid__placeholder" aria-hidden="true"></div>`}
           <details class="arrival-continuity">
             <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
-            <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something ${escapeHtml(agenticName())} must know.</h2><p>Use this whenever something changes or you remember another detail. ${escapeHtml(agenticName())} will work from the newest information you have given.</p></div>
+            <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add information to this plan.</h2><p>Use this whenever something changes or you remember another detail.</p></div>
               <form data-arrival-form="append">
-                <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
+                <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Link or reference</option></select></label>
                 <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
                 <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to request</button>
               </form>
@@ -1749,12 +1753,12 @@ const renderAttachmentItems = (items: PlanAttachment[], compact = false): string
 };
 
 const renderPlanWork = (): string => {
-  const open = checklistItems.filter((item) => item.status === "open");
   const done = checklistItems.filter((item) => item.status === "done");
+  const custom = checklistItems.filter((item) => item.origin !== "adaptive");
   return `<section class="plan-work" id="plan_work" aria-label="Plan progress and attachments">
     <article class="plan-work__checklist">
-      <header><div><p class="eyebrow">Progress</p><h2>To do</h2></div><span>${done.length}/${checklistItems.length} done</span></header>
-      <div class="checklist-items">${[...open, ...done].map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>
+      <header><div><p class="eyebrow">Progress</p><h2>${done.length} of ${checklistItems.length} done</h2><small>Plan-stage tasks are ticked off in the timeline below.</small></div></header>
+      ${custom.length ? `<div class="checklist-items">${custom.sort((a, b) => Number(a.status === "done") - Number(b.status === "done")).map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>` : ""}
       <form class="checklist-add" data-checklist-add><label><span class="sr-only">Add something to do</span><input name="label" type="text" maxlength="240" placeholder="Add something to do…" required></label><button type="submit" ${planWorkBusy ? "disabled" : ""}>Add</button></form>
     </article>
     <article class="plan-work__attachments">
@@ -1798,7 +1802,7 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       <li class="stage stage--${escapeHtml(completed ? "complete" : stage.status)}">
         <span class="stage__marker">${escapeHtml(completed ? "Done" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(completed ? "done" : decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}${completed && checklist ? `<button type="button" data-action="reopen-stage" data-checklist-id="${escapeHtml(checklist.itemId)}">Reopen</button>` : ""}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
+        <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""}><span>${completed ? "Done" : "Mark done"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
     }).join("")}
@@ -2127,9 +2131,11 @@ const renderWrapUpAttachments = (): string => `<div class="wrap-up-references">$
 
 const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
   const kernel = runtime.kernel;
-  const completion = [...kernel.lifecycleEvents].reverse().find((event) => event.after === "completed") ?? null;
+  const completion = [...kernel.lifecycleEvents].reverse().find((event) => event.after === "completed" && event.before !== "completed") ?? null;
+  const recordedActual = [...kernel.lifecycleEvents].reverse().find((event) => event.actualSpendMinor !== undefined) ?? null;
   const facts = currentEditablePlanFacts();
   const done = checklistItems.filter((item) => item.status === "done");
+  const customChecklist = checklistItems.filter((item) => item.origin !== "adaptive");
   const directInputs = planInputs.filter((item) => item.mode === "direct");
   const recordInputs = directInputs.filter((item) => item.section !== "timeline");
   const actualsState = kernel.getState(["actuals"]).state as { actuals?: Array<{ label: string; currentAmountMinor: number }> };
@@ -2150,23 +2156,24 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
       <header class="wrap-up-hero">
         <div class="wrap-up-hero__status"><p class="eyebrow">Wrapping up</p><span>Completed</span></div>
         <div class="wrap-up-hero__copy"><h1>${escapeHtml(manifest.title)}</h1><p>${escapeHtml(manifest.brief)}</p></div>
-        <blockquote><span>What happened</span><p>${escapeHtml(completion?.reason ?? "The planned outcome happened.")}</p></blockquote>
+        <blockquote><span>What happened</span><p>${escapeHtml(completion?.reason ?? "The planned outcome happened.")}</p>${completion?.occurredAt ? `<small>Completed ${escapeHtml(new Date(completion.occurredAt).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }))}</small>` : ""}</blockquote>
       </header>
 
       <section class="wrap-up-section" aria-labelledby="wrap_facts_title">
         <header><div><p class="eyebrow">Final position</p><h2 id="wrap_facts_title">The plan at finish</h2></div><span>Revision ${kernel.revision}</span></header>
         <div class="wrap-up-facts">
           ${facts.map((fact) => `<div><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(formatPlanFactValue(fact))}</strong></div>`).join("")}
-          <div><span>Spent</span><strong>${money(kernel.accepted.spentMinor)}</strong></div>
+          <div><span>Planned as spent</span><strong>${money(kernel.accepted.spentMinor)}</strong></div>
           <div><span>Committed</span><strong>${money(kernel.accepted.committedMinor)}</strong></div>
           <div class="is-available"><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
+          <div class="is-actual"><span>Actual spend</span><strong>${recordedActual?.actualSpendMinor === undefined || recordedActual.actualSpendMinor === null ? "Not recorded" : money(recordedActual.actualSpendMinor)}</strong></div>
         </div>
         ${actuals.length ? `<div class="wrap-up-actuals"><h3>Actual and forecast</h3>${actuals.map((actual) => `<div><span>${escapeHtml(actual.label)}</span><strong>${money(actual.currentAmountMinor)}</strong></div>`).join("")}</div>` : ""}
       </section>
 
       <section class="wrap-up-section" aria-labelledby="wrap_progress_title">
         <header><div><p class="eyebrow">Progress</p><h2 id="wrap_progress_title">${done.length} of ${checklistItems.length} items finished</h2></div><span>${checklistItems.length && done.length === checklistItems.length ? "All done" : `${checklistItems.length - done.length} left open`}</span></header>
-        <ul class="wrap-up-checklist">${checklistItems.map((item) => `<li class="${item.status === "done" ? "is-done" : "is-open"}"><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</div><em>${item.status === "done" ? "Done" : "Not completed"}</em></li>`).join("")}</ul>
+        ${customChecklist.length ? `<h3>Other tasks</h3><ul class="wrap-up-checklist">${customChecklist.map((item) => `<li class="${item.status === "done" ? "is-done" : "is-open"}"><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</div><em>${item.status === "done" ? "Done" : "Not completed"}</em></li>`).join("")}</ul>` : ""}
       </section>
 
       <section class="wrap-up-section" aria-labelledby="wrap_journey_title">
@@ -2186,7 +2193,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
 
       ${planAttachments.length ? `<section class="wrap-up-section" aria-labelledby="wrap_refs_title"><header><div><p class="eyebrow">Kept with this plan</p><h2 id="wrap_refs_title">Files, links and notes</h2></div><span>${planAttachments.length}</span></header>${renderWrapUpAttachments()}</section>` : ""}
 
-      ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
+      ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share" data-share-context="plan">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><form class="wrap-up-actual-form" data-plan-lifecycle data-record-actual><input type="hidden" name="status" value="completed"><label><span>${recordedActual ? "Change actual spend" : "Record actual spend"}</span><div class="plan-fact-input"><span aria-hidden="true">$</span><input name="actualSpend" type="number" inputmode="decimal" min="0" step="0.01" ${recordedActual?.actualSpendMinor !== undefined && recordedActual.actualSpendMinor !== null ? `value="${recordedActual.actualSpendMinor / 100}"` : ""} required></div></label><input type="hidden" name="reason" value="Actual spend recorded after completion."><button class="button button--secondary" type="submit">Save actual</button></form><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
     </main>
     <footer><p>This summary comes from the plan you completed.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderPlanShareDialog()}
@@ -2274,12 +2281,13 @@ async function render(): Promise<SurfaceManifest> {
   if (message && !reconciledMessage.message) announcer!.textContent = "";
   message = reconciledMessage.message;
   messageScope = reconciledMessage.scope;
-  const manifest = await compileSurfaceManifest(kernel.profile, kernel);
   const params = new URLSearchParams(location.search);
+  const manifestPromise = compileSurfaceManifest(kernel.profile, kernel);
   if (params.get("settings") === "1") {
     renderSettings();
-    return manifest;
+    return manifestPromise;
   }
+  const manifest = await manifestPromise;
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode: params.get("lab") === "1",
     kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
@@ -2372,19 +2380,38 @@ const openPlan = async (planId: string): Promise<void> => {
   forceArrivalSurface = false;
   busy = true;
   announce("");
-  const result = await runtime.switchPlanPersisted(planId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
-  if (!result.ok) {
+  await render();
+  let targetInputs: PlanInputRecord[];
+  let targetChecklist: ChecklistItem[];
+  let targetAttachments: PlanAttachment[];
+  try {
+    const [inputsResult, workResult] = await Promise.all([planInputRepository.list({ planId }), planWorkRepository.list(planId)]);
+    if (!inputsResult.ok || !workResult.ok || inputsResult.inputs.some((item) => item.planId !== planId) || workResult.checklist.some((item) => item.planId !== planId) || workResult.attachments.some((item) => item.planId !== planId)) throw new Error("PLAN_SCOPE_UNAVAILABLE");
+    targetInputs = inputsResult.inputs;
+    targetChecklist = workResult.checklist;
+    targetAttachments = workResult.attachments;
+  } catch {
     busy = false;
-    announce(`That plan could not be opened safely: ${result.code}`);
+    announce("That plan could not be opened just now. Your current plan is unchanged.");
     await render();
     return;
   }
+  const result = await runtime.switchPlanPersisted(planId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
+  if (!result.ok) {
+    busy = false;
+    announce("That plan could not be opened just now. Your current plan is unchanged.");
+    await render();
+    return;
+  }
+  planInputs = targetInputs;
+  checklistItems = targetChecklist;
+  planAttachments = targetAttachments;
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (result.code === "PLAN_SWITCHED") {
     await adapter?.refreshContextualTools();
     if (labMode) await seedDecision();
   }
-  await refreshPlanInputs();
+  try { await syncAdaptiveChecklist(); await refreshPlanWork(); } catch { /* The verified target plan remains usable without a checklist refresh. */ }
   const target = new URL(location.href);
   target.searchParams.delete("kitchen");
   target.searchParams.set("plan", "1");
@@ -2510,22 +2537,25 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
   const data = new FormData(form);
   const status = String(data.get("status") ?? "") as PlanLifecycleStatus;
   const reason = String(data.get("reason") ?? "").trim() || (status === "completed" ? "The planned outcome happened." : "");
+  const actualSpendValue = String(data.get("actualSpend") ?? "").trim();
+  const actualSpendMinor = actualSpendValue ? Math.round(Number(actualSpendValue) * 100) : undefined;
   if (!status || !reason) return;
-  const finishNow = form.hasAttribute("data-plan-complete") && status === "completed";
+  const recordActual = form.hasAttribute("data-record-actual") && status === "completed";
+  const finishNow = (form.hasAttribute("data-plan-complete") || recordActual) && status === "completed";
   const revision = runtime.kernel.revision;
   if (finishNow) {
     busy = true;
     announce("Finishing this plan…");
     await render();
   }
-  const result = await runtime.kernel.stagePlanLifecycle({ status, reason, expectedRevision: runtime.kernel.revision });
+  const result = await runtime.kernel.stagePlanLifecycle({ status, reason, ...(actualSpendMinor === undefined ? {} : { actualSpendMinor }), expectedRevision: runtime.kernel.revision });
   if (finishNow) {
     const pending = result.ok ? runtime.kernel.pendingLifecycleChange : null;
     const confirmed = pending ? runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId }) : result;
     const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
     const applied = pending && confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-lifecycle-site-${crypto.randomUUID()}` }) : confirmed;
     busy = false;
-    announce(applied.ok ? "Plan finished." : `The plan could not be finished: ${applied.code}`);
+    announce(applied.ok ? (recordActual ? "Actual spend saved." : "Plan finished.") : (recordActual ? "The actual spend could not be saved." : "The plan could not be finished."));
     if (applied.ok) await adapter?.refreshContextualTools();
     await render();
     return;

@@ -11,9 +11,9 @@ class Statement {
 
 const definition = {
   profileId: "travel",
-  name: "Europe, reworked",
+  name: "Europe, 18 days",
   surface: {
-    hero: { eyebrow: "18 days · Europe", title: "More Paris, without losing the trip.", brief: "Add three nights while protecting the fixed flights." },
+    hero: { eyebrow: "18 days · Europe", title: "More Paris, without losing the trip.", brief: "Protect the fixed flights across 18 days." },
     primaryMeasures: [
       { label: "Trip length", selector: "entities", path: ["trip_days", "values", "days"], format: "days" },
       { label: "Remaining room", selector: "allocations", path: ["bufferMinor"], format: "money" },
@@ -33,13 +33,16 @@ const snapshot = (revision = 3, bufferMinor = 50_000) => ({
     { title: "Paris extended", baseRevision: 1, evidenceRefs: ["private-evidence"] },
     { title: "Amsterdam rebalanced", baseRevision: 2, evidenceRefs: ["private-evidence-2"] },
   ],
-  receipts: [{ receiptId: "private-receipt" }],
+  receipts: revision === 4 ? [{ receiptType: "plan_fact_change", payload: { planFactChange: { changes: [{ factId: "entities.trip_days.values.days", format: "days", before: 18, after: 20 }] } } }] : [{ receiptId: "private-receipt" }],
   evidenceRecords: [{ content: "private evidence" }],
 });
 
 class ShareDb {
   shares = [];
-  plan = { revision: 3, updated_at: "2026-08-27T10:00:00.000Z", snapshot_json: JSON.stringify(snapshot()), definition_json: JSON.stringify(definition) };
+  checklist = [];
+  inputs = [];
+  attachments = [];
+  plan = { scope_id: "acct_owner", revision: 3, updated_at: "2026-08-27T10:00:00.000Z", snapshot_json: JSON.stringify(snapshot()), definition_json: JSON.stringify(definition) };
   prepare(query) { return new Statement(this, query); }
   async first(query, values) {
     if (query.includes("FROM plan_heads h") || query.includes("JOIN plan_heads h")) {
@@ -53,6 +56,9 @@ class ShareDb {
   }
   async all(query, values) {
     if (query.includes("FROM plan_shares WHERE scope_id = ? AND plan_id = ?")) return { results: this.shares.filter((item) => item.scope_id === values[0] && item.plan_id === values[1]).reverse() };
+    if (query.includes("FROM plan_checklist_items")) return { results: this.checklist };
+    if (query.includes("FROM plan_inputs")) return { results: this.inputs };
+    if (query.includes("FROM plan_attachments")) return { results: this.attachments };
     return { results: [] };
   }
   async batch(statements) {
@@ -114,12 +120,37 @@ test("a live page tracks only its selected fields and revocation closes the plat
   const body = await published.json();
   assert.equal(body.publication.plan.revision, 4);
   assert.equal(body.publication.plan.measures[0].value, 20);
+  assert.equal(body.publication.plan.name, "Europe, 20 days");
+  assert.equal(body.publication.plan.brief, "Protect the fixed flights across 20 days.");
   assert.equal("allocation" in body.publication.plan, false);
   const revoked = await handlePlanShareRequest(new Request(`https://finite.example/api/plan-shares/${createdBody.publication.shareId}`, { method: "DELETE", headers: ownerHeaders }), db);
   assert.equal((await revoked.json()).code, "PLAN_PUBLICATION_REVOKED");
   const closed = await handlePlanShareRequest(new Request(`https://finite.example/api/publications/${token}`), db);
   assert.equal(closed.status, 410);
   assert.equal((await closed.json()).code, "PUBLICATION_REVOKED");
+});
+
+test("a completed projection shares canonical outcome, progress, decisions and references only when selected", async () => {
+  const db = new ShareDb();
+  db.checklist = [
+    { source_ref: "stage:", label: "Flights fixed", context_label: "London", status: "done" },
+    { source_ref: "custom:1", label: "Send the photos", context_label: null, status: "open" },
+  ];
+  db.inputs = [{ kind: "decision", context_label: "Paris", message: "Stay near the station." }];
+  db.attachments = [{ kind: "note", label: "Door code", context_label: null, note_text: "Ask Sam", link_url: null, file_name: null }];
+  const completed = snapshot(4, 30_000);
+  completed.lifecycle = { status: "completed" };
+  completed.lifecycleEvents = [{ before: "active", after: "completed", reason: "Everyone got home safely.", occurredAt: "2026-08-28T09:30:00.000Z", actualSpendMinor: 612_345 }];
+  db.plan = { ...db.plan, revision: 4, updated_at: "2026-08-28T09:30:00.000Z", snapshot_json: JSON.stringify(completed) };
+  const preview = await handlePlanShareRequest(new Request("https://finite.example/api/plan-shares/preview", { method: "POST", headers: ownerHeaders, body: JSON.stringify({ planId: "plan_europe", mode: "frozen", sections: ["overview", "stages", "outcome", "progress", "decisions", "references"] }) }), db);
+  const body = await preview.json();
+  assert.equal(body.publication.plan.name, "Europe, 20 days");
+  assert.equal(body.publication.plan.stages.every((stage) => stage.status === "done"), true);
+  assert.equal(body.publication.plan.outcome.note, "Everyone got home safely.");
+  assert.equal(body.publication.plan.outcome.actualSpendMinor, 612_345);
+  assert.deepEqual(body.publication.plan.progress, { done: 1, total: 2, items: [{ label: "Flights fixed", contextLabel: "London", status: "done" }, { label: "Send the photos", contextLabel: null, status: "open" }] });
+  assert.equal(body.publication.plan.decisions[0].message, "Stay near the station.");
+  assert.equal(body.publication.plan.references[0].value, "Ask Sam");
 });
 
 test("publishing is account-only, same-origin, and refuses unapproved or malformed selections", async () => {
