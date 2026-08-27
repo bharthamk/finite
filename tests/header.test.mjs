@@ -118,9 +118,12 @@ test("arrival shows the complete human starting point without protocol language 
   assert.match(styles, /\.arrival-order-source__content p \{[^}]*overflow-wrap:anywhere/);
 });
 
-test("human writing fields inherit native Australian-English spellcheck while control text opts out", () => {
-  assert.match(shell, /<html lang="en-AU">/);
+test("human writing fields use the browser language for native spellcheck while control text opts out", () => {
+  assert.match(shell, /<html lang="en">/);
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true"><\/div>/);
+  assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
+  assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
+  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 2);
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });

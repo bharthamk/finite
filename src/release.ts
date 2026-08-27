@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "native-writing-assistance-v73",
+  build: "browser-language-spellcheck-v74",
 } as const;

@@ -22,6 +22,11 @@ document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribu
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
 const surfaceRoot = root;
+const browserWritingLanguage = navigator.languages.find((language) => language.trim()) ?? navigator.language ?? "en";
+const enableNativeWritingAssistance = (): void => {
+  root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("textarea:not([readonly]):not([spellcheck='false']), input:not([type]):not([readonly]):not([spellcheck='false']), input[type='text']:not([readonly]):not([spellcheck='false'])")
+    .forEach((field) => { field.spellcheck = true; field.lang = browserWritingLanguage; });
+};
 const webmcpReadiness: FiniteWebMCPReadiness = window.finiteWebMCPReadiness ?? { state: "initializing" };
 window.finiteWebMCPReadiness = webmcpReadiness;
 
@@ -1132,6 +1137,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
+  enableNativeWritingAssistance();
   bindArrivalInteractions();
 };
 
@@ -1751,6 +1757,7 @@ async function render(): Promise<SurfaceManifest> {
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
+  enableNativeWritingAssistance();
   bindInteractions();
   return manifest;
 }
