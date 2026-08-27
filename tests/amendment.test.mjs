@@ -26,7 +26,7 @@ const applyLiveTruth = async (runtime) => {
   const correction = await runtime.kernel.stageActualCorrection({ actualId: "actual_travel_food", correctedAmountMinor: 45_000, reason: "Duplicate line", evidenceRef: "evidence_actual", expectedRevision: 1 });
   const correctionConfirmation = runtime.kernel.humanConfirmActualCorrection({ correctionId: correction.correction.correctionId });
   assert.equal((await runtime.kernel.applyConfirmedActualCorrection({ correctionId: correction.correction.correctionId, confirmationId: correctionConfirmation.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "amendment-correction-0001" })).code, "ACTUAL_CORRECTION_APPLIED");
-  const feedback = runtime.kernel.recordConsumerFeedback({ message: "Comfort is now decisive", kind: "taste" });
+  const feedback = runtime.kernel.recordConsumerFeedback({ message: "Comfort is now decisive", kind: "taste", expectedRevision: 2 });
   const preference = await runtime.kernel.stagePreferenceChange({ feedbackId: feedback.feedback.feedbackId, changes: { comfort: 98 }, expectedRevision: 2 });
   const preferenceConfirmation = runtime.kernel.humanConfirmPreferenceChange({ preferenceChangeId: preference.preferenceChange.preferenceChangeId });
   assert.equal((await runtime.kernel.applyConfirmedPreferenceChange({ preferenceChangeId: preference.preferenceChange.preferenceChangeId, confirmationId: preferenceConfirmation.confirmation.confirmationId, expectedRevision: 2, idempotencyKey: "amendment-preference-0001" })).code, "PREFERENCE_CHANGE_APPLIED");

@@ -8,6 +8,7 @@
     "build:lib": "tsc -p tsconfig.lib.json",
     "build": "npm run typecheck && vite build",
     "test": "npm run build:lib && node --test tests/*.test.mjs",
+    "db:local:migrate": "WRANGLER_WRITE_LOGS=0 wrangler d1 migrations apply finite-local --local --config wrangler.local.jsonc",
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1"
   },

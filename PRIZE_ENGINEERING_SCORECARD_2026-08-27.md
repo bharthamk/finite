@@ -17,7 +17,7 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Fresh-task orientation | Correct route in one kitchen call, no human re-explanation | `finite_enter_kitchen`; v53 native returned-draft receipt | Closed live for current route |
 | First-result context | At most 1,500 serialized characters | `tests/webmcp-quality.test.mjs` | Closed locally |
 | On-demand detail | Content-addressed, exact semantic selection with no truncated values | `finite_read_result`; v53 live manifest/selection/refusal receipt | Closed live |
-| Discovery size | At most 20 advertised tools on every route | Quality and adapter suites | Closed locally |
+| Discovery size | Fixed native inventory that cannot grow across document-lifetime route churn | Seven-tool dispatcher; 28-switch native endurance; quality suite | Closed natively and locally |
 | Metadata quality | Names ≤30 chars; tool descriptions ≤500; parameter descriptions ≤150 and non-empty | Quality suite over every tool group | Closed locally |
 | Human authority | No approval/confirmation creator in WebMCP | Authority, intake, evidence, arrival, reality suites | Closed locally |
 | Accepted truth | Atomic, revision-bound, remotely durable, reload-safe | Accepted-truth and operator-journey suites | Closed locally |
@@ -28,12 +28,13 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | External reality | Research/quote/hold/book/pay/verify remain distinct; planning never claims execution | Reality-execution suite | Closed locally |
 | Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally; host-signal live injection unavailable |
 | Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation suite; v54 native route transition | Closed live for current route |
-| Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 `finite_get_effort_receipt` receipt | Closed live for current route; full-family receipts open |
-| Live native proof | Current bounded contract exercised by a fresh Codex against deployed Site tools | v53 entry, semantic manifest, exact selection and oversized-field refusal | Closed for current route; full-family journeys open |
+| Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 live receipt; v55 native endurance hash `099938df…` | Closed; per-family comparison is presentation evidence, not a safety gap |
+| Live native proof | Current bounded contract exercised by Codex across the three adaptive families | v54 deployed entry plus v55 native travel/renovation/event shock-to-conclusion run | Closed for operator contract; deployed v55 read-only verification pending |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
+| Reproducible source | Clean build contract, data exclusions, dependency/license inventory, exact deployment provenance | `REPRODUCIBLE_RELEASE.md`; `THIRD_PARTY_LICENSES.md`; clean audit | Closed locally |
 
-Current regression baseline: **128/128 tests pass** after the bounded-output, semantic-recovery, cancellation, safe route-replacement, and operator-effort tranches.
+Current regression baseline: **140/140 tests pass** after the native three-family endurance, fixed document-lifetime dispatcher, cross-project construction, feedback provenance, experience-route, and state-scoped message tranches.
 
 ## Measured baseline and correction
 
@@ -50,7 +51,7 @@ Before this tranche the active catalog contained 53 tools across bounded groups.
 
 The entry response was approximately thirteen times the target. That caused client `[Object]` rendering, forced redundant reads, and spent model context on state unrelated to the immediate route.
 
-Production now returns a compact service ticket and stores the complete deterministic result behind an ephemeral content-addressed reference. `finite_read_result` returns a bounded manifest or exact hash-bound JSON Pointer selections. It refuses an oversized semantic value and advertises narrower descendants instead of returning syntactically broken fragments. `finite_open_kitchen` and `finite_get_chef_menu` remain implementation operations but are no longer permanently advertised; `finite_enter_kitchen` is the single orientation contract.
+Production now returns a compact service ticket and stores the complete deterministic result behind an ephemeral content-addressed reference. `finite_read_result` returns a bounded manifest or exact hash-bound JSON Pointer selections. It refuses an oversized semantic value and advertises narrower descendants instead of returning syntactically broken fragments. `finite_enter_kitchen` is the single orientation contract. The document permanently registers seven native tools; `finite_open_toolset` selects a bounded typed semantic action manifest and `finite_invoke` dispatches only an action currently authorized by that manifest.
 
 The first deployed inline-Codex trial returned `finite_enter_kitchen` in 1,470 serialized characters, selected the exact returned-draft human boundary without a redundant state read, preserved travel plan revision 3, exposed no authority, and performed no accepted-state mutation. The follow-on v51 source closed bootstrap metadata and cancellation forwarding.
 
@@ -62,18 +63,16 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 9.4/10 | 10/10 | Complete deployed change routes across all three families and prove route changes under shocks |
-| Execution | 8.7/10 | 9.5/10 | Adversarial full journeys, multi-surface concurrency, and sanitized release reproducibility |
-| Potential impact | 7.8/10 | 9/10 | Demonstrate the same operator law across three complete outcomes and compare live effort receipts |
-| Creativity and ambition | 9.0/10 | 10/10 | Make “software as the agent’s kitchen” undeniable through adaptive plan construction and real-world recovery, not narrative alone |
+| WebMCP leverage | 9.8/10 | 10/10 | Deploy and read-only verify the fixed seven-tool v55 contract |
+| Execution | 9.3/10 | 9.5/10 | Finish sanitized release reproducibility and judge-access proof |
+| Potential impact | 8.8/10 | 9/10 | Turn the three native family receipts into concise judge-visible evidence during the later UI pass |
+| Creativity and ambition | 9.7/10 | 10/10 | Make the adaptive surface transformation visually undeniable during the later UI pass |
 
 ## Highest-impact open queue
 
-1. Run a fresh deployed Codex journey for each family from handoff through late shock, human authority, accepted commit, lost response, reload, and lifecycle conclusion.
-2. Record the new operator-effort receipt for every full-family journey and compare calls-to-action, boundary turns, semantic reads, refusals, cancellations, route changes, and accepted mutations.
-3. Exercise signed-out demo, owner account, delayed Site edits, stale handoff hashes, same-revision drift, and two-browser optimistic concurrency on the live build.
-4. Produce a sanitized reproducible source bundle and dependency/license inventory. Public release and license selection remain an explicit owner boundary because internal RUI material must not be exposed accidentally.
-5. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
+1. Deploy the exact v55 source owner-private and verify the seven-tool registry, one-call canonical entry, marker, and zero-mutation live receipt.
+2. Preserve owner/demo, delayed-edit, stale-handoff, same-revision drift, dropped response, and two-browser concurrency as executable automated demonstrations; do not mutate the owner's live plan merely to repeat proofs already closed against D1.
+3. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
 
 ## Sources governing this scorecard
 

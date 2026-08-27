@@ -6,6 +6,7 @@ export type KitchenRoute = {
   targetId?: string | null;
   humanAction?: string;
   authorityPresent: boolean;
+  knownArgs?: Record<string, unknown>;
 };
 
 export type OperatorInput = {
@@ -172,7 +173,7 @@ const genericReadyMenu = (kernel: FinitePlanKernel): ChefMenuItem[] => {
 };
 
 const candidateMenu = (kernel: FinitePlanKernel): ChefMenuItem[] => [...kernel.candidates.values()]
-  .filter((candidate) => candidate.baseRevision === kernel.revision)
+  .filter((candidate) => candidate.baseRevision === kernel.revision && candidate.eventId === kernel.activeEventId)
   .sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore)
   .slice(0, 3)
   .map((candidate, index) => ({

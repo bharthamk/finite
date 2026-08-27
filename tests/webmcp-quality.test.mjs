@@ -20,6 +20,44 @@ class MemoryModelContext {
   }
 }
 
+class RegistrationLifecycleModelContext extends MemoryModelContext {
+  activeRegistrations = 0;
+  peakRegistrations = 0;
+  registrationCalls = 0;
+  registerTool(tool, options = {}) {
+    this.registrationCalls += 1;
+    this.activeRegistrations += 1;
+    this.peakRegistrations = Math.max(this.peakRegistrations, this.activeRegistrations);
+    let active = true;
+    options.signal?.addEventListener("abort", () => {
+      if (!active) return;
+      active = false;
+      this.activeRegistrations -= 1;
+      this.tools.delete(tool.name);
+    }, { once: true });
+    this.tools.set(tool.name, tool);
+  }
+}
+
+class DeferredUnregistrationModelContext extends MemoryModelContext {
+  activeRegistrations = 0;
+  peakRegistrations = 0;
+  registerTool(tool, options = {}) {
+    this.activeRegistrations += 1;
+    this.peakRegistrations = Math.max(this.peakRegistrations, this.activeRegistrations);
+    let active = true;
+    options.signal?.addEventListener("abort", () => {
+      setTimeout(() => {
+        if (!active) return;
+        active = false;
+        this.activeRegistrations -= 1;
+        this.tools.delete(tool.name);
+      }, 0);
+    }, { once: true });
+    this.tools.set(tool.name, tool);
+  }
+}
+
 const groups = ["arrival", "construction", "planning", "decisions", "evidence", "continuity", "plan_management"];
 
 const collectProperties = (schema, path = "") => {
@@ -56,6 +94,112 @@ test("advertised WebMCP metadata stays inside current discovery budgets", async 
       assert.equal(property.description.startsWith("Value for "), false, `${name}.${path} still has fallback metadata`);
     }
   }
+});
+
+test("disposing and hot-replacing an adapter removes every adapter-owned registration", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new RegistrationLifecycleModelContext();
+  const first = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await first.register();
+  assert(host.activeRegistrations > 0);
+  first.dispose();
+  assert.equal(host.activeRegistrations, 0);
+  assert.equal(host.tools.size, 0);
+
+  const second = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await second.register();
+  assert.equal(host.activeRegistrations, second.inventory().length);
+  second.dispose();
+  assert.equal(host.activeRegistrations, 0);
+});
+
+test("route swaps drain deferred browser unregistrations before advertising the replacement", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new DeferredUnregistrationModelContext();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await adapter.register();
+  for (const group of ["planning", "planning", "planning", "evidence", "evidence", "planning", "decisions", "decisions", "continuity", "planning"]) {
+    await host.execute("finite_open_toolset", { group });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(host.activeRegistrations, adapter.inventory().length);
+    assert(host.activeRegistrations <= 20, `${group} left ${host.activeRegistrations} active registrations`);
+  }
+  assert(host.peakRegistrations <= 20, `route transitions peaked at ${host.peakRegistrations} registrations`);
+  adapter.dispose();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(host.activeRegistrations, 0);
+});
+
+test("the production dispatcher keeps one fixed browser registry across long multi-family routes", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new RegistrationLifecycleModelContext();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).useStableDispatcher();
+  await adapter.register();
+  const fixedInventory = adapter.inventory();
+  const initialRegistrationCalls = host.registrationCalls;
+  assert(host.tools.has("finite_invoke"));
+  assert.equal(host.tools.has("finite_record_change_event"), false);
+  assert(fixedInventory.length <= 6);
+  for (let pass = 0; pass < 12; pass += 1) {
+    for (const group of groups) {
+      const opened = await host.execute("finite_open_toolset", { group });
+      assert.equal(opened.code, "TOOLSET_READY");
+      assert.equal(opened.group, group);
+      assert(opened.actionNames.length > 0);
+      assert.deepEqual(adapter.inventory(), fixedInventory);
+      assert.equal(host.registrationCalls, initialRegistrationCalls);
+      assert.equal(host.activeRegistrations, fixedInventory.length);
+    }
+  }
+  await host.execute("finite_open_toolset", { group: "planning" });
+  const state = await host.execute("finite_invoke", { action: "finite_get_plan_state", arguments: { selectors: ["identity"] } });
+  assert.equal(state.code, "PLAN_STATE");
+  assert.equal(state.dispatchedAction, "finite_get_plan_state");
+  const missing = await host.execute("finite_invoke", { action: "finite_record_change_event", arguments: { title: "No typed event may run" } });
+  assert.equal(missing.code, "INVALID_ACTION_ARGUMENTS");
+  assert(missing.issues.some((issue) => issue.path === "$/expectedRevision" && issue.code === "REQUIRED"));
+  const coerced = await host.execute("finite_invoke", { action: "finite_record_change_event", arguments: { type: "intent_change", title: "No coercion", costDeltaMinor: "1000", minimumBufferMinor: 0, expectedRevision: 1 } });
+  assert.equal(coerced.code, "INVALID_ACTION_ARGUMENTS");
+  assert(coerced.issues.some((issue) => issue.path === "$/costDeltaMinor" && issue.code === "TYPE_MISMATCH"));
+  const extra = await host.execute("finite_invoke", { action: "finite_get_plan_state", arguments: { selectors: ["identity"], approvalId: "fabricated" } });
+  assert.equal(extra.code, "INVALID_ACTION_ARGUMENTS");
+  assert(extra.issues.some((issue) => issue.path === "$/approvalId" && issue.code === "UNKNOWN_PROPERTY"));
+  const blocked = await host.execute("finite_invoke", { action: "finite_create_arrival_order", arguments: { idempotencyKey: "wrong-group-0001", rawOutcome: "Should not run" } });
+  assert.equal(blocked.code, "ACTION_NOT_AVAILABLE");
+  assert.equal(runtime.kernel.revision, 1);
+});
+
+test("an impossible option search keeps Codex in planning for a bounded fallback", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await adapter.register();
+  await host.execute("finite_open_toolset", { group: "planning" });
+  const recorded = await host.execute("finite_record_change_event", {
+    type: "unexpected_situation",
+    title: "Impossible late shock",
+    costDeltaMinor: 9_000_000,
+    daysDelta: 0,
+    minimumBufferMinor: 50_000,
+    evidenceRefs: [],
+    assumptions: [],
+    entityChanges: [],
+    expectedRevision: 1,
+  });
+  const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
+  assert.equal(compared.code, "NO_VALID_OPTION");
+  await adapter.waitForRouteSettlement();
+  const recovery = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", expectedPlanId: runtime.kernel.profile.planId, expectedPlanRevision: 1 });
+  const recoveryAction = recovery.nextAction ?? recovery.operatorPacket.nextAction;
+  assert.equal(recoveryAction.stage, "no_valid_option");
+  assert.equal(recoveryAction.requiresHuman, true);
+  assert.match(recoveryAction.exactQuestion, /What may move/);
+  assert(host.tools.has("finite_record_change_event"));
+  assert.equal(host.tools.has("finite_create_arrival_order"), false);
 });
 
 test("the page-start proxy carries semantic metadata and forwards host cancellation", async () => {

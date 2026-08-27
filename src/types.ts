@@ -552,6 +552,8 @@ export interface FeedbackEvent {
   message: string;
   kind: "adjustment" | "rejection" | "taste" | "constraint";
   stagedCandidateId: string | null;
+  baseRevision?: number;
+  attribution?: "operator_attributed_unverified" | "site_human_action";
 }
 
 export interface PlanSnapshot {

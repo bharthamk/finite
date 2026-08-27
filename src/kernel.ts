@@ -1019,17 +1019,19 @@ export class FinitePlanKernel {
     return { ok: true, code: "OPTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
-  recordConsumerFeedback({ message, kind = "adjustment" }: { message: string; kind?: FeedbackEvent["kind"] }): ToolResult {
+  recordConsumerFeedback({ message, kind = "adjustment", expectedRevision, attribution = "site_human_action" }: { message: string; kind?: FeedbackEvent["kind"]; expectedRevision: number; attribution?: FeedbackEvent["attribution"] }): ToolResult {
     if (!message) return { ok: false, code: "INPUT_REQUIRED", missing: ["message"], acceptedStateChanged: false };
-    const feedback: FeedbackEvent = { feedbackId: makeId("feedback"), message, kind, stagedCandidateId: this.stagedCandidate?.candidateId ?? null };
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const feedback: FeedbackEvent = { feedbackId: makeId("feedback"), message, kind, stagedCandidateId: this.stagedCandidate?.candidateId ?? null, baseRevision: this.revision, attribution };
     this.feedback.push(feedback);
-    return { ok: true, code: "FEEDBACK_RECORDED", feedback: clone(feedback), acceptedStateChanged: false };
+    return { ok: true, code: "FEEDBACK_RECORDED", feedback: clone(feedback), provenance: { authority: false, attribution, humanVerified: attribution === "site_human_action" }, acceptedStateChanged: false };
   }
 
   async stagePreferenceChange({ feedbackId, changes, expectedRevision }: { feedbackId: string; changes: Partial<Record<PreferenceKey, number>>; expectedRevision: number }): Promise<ToolResult> {
     if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
     const feedback = this.feedback.find((item) => item.feedbackId === feedbackId);
     if (!feedback) return { ok: false, code: "FEEDBACK_NOT_FOUND", acceptedStateChanged: false };
+    if (feedback.baseRevision !== undefined && feedback.baseRevision !== expectedRevision) return { ok: false, code: "FEEDBACK_STALE", feedbackRevision: feedback.baseRevision, currentRevision: this.revision, acceptedStateChanged: false };
     const invalid = Object.entries(changes).filter(([key, value]) => !(key in this.preferenceWeights) || !Number.isInteger(value) || value! < 0 || value! > 100);
     if (!Object.keys(changes).length || invalid.length) return { ok: false, code: "INVALID_PREFERENCE_CHANGE", invalid, acceptedStateChanged: false };
     const base = { preferenceChangeId: makeId("preference_change"), baseRevision: this.revision, feedbackId, feedbackMessage: feedback.message, before: clone(this.preferenceWeights), after: { ...clone(this.preferenceWeights), ...clone(changes) }, changes: clone(changes) };

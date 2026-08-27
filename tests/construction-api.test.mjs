@@ -142,4 +142,21 @@ test("authenticated construction API shares only the exact current arrival-bound
   const resurrected = await handleConstructionPacketRequest(new Request("https://finite.example/api/construction-packet", { method: "PUT", headers: requestHeaders, body: JSON.stringify({ packet }) }), db);
   assert.equal(resurrected.status, 409);
   assert.equal((await resurrected.json()).code, "CONSTRUCTION_PACKET_TOMBSTONED");
+
+  const nextOrderId = "arrival_next_project";
+  const nextOrderChecksum = "b".repeat(64);
+  const nextProject = structuredClone(packet);
+  nextProject.payload.sourceArrival = { orderId: nextOrderId, orderVersion: 3, orderChecksum: nextOrderChecksum };
+  nextProject.createdAt = "2026-08-26T18:41:00.000Z";
+  nextProject.expiresAt = "2026-09-02T18:41:00.000Z";
+  const { packetId: _nextPacketId, checksum: _nextChecksum, ...nextContent } = nextProject;
+  nextProject.checksum = await sha256(nextContent);
+  nextProject.packetId = `construction_${nextProject.checksum.slice(0, 16)}`;
+  db.orderId = nextOrderId;
+  db.orderVersion = 3;
+  db.orderChecksum = nextOrderChecksum;
+  const nextSaved = await handleConstructionPacketRequest(new Request("https://finite.example/api/construction-packet", { method: "PUT", headers: requestHeaders, body: JSON.stringify({ packet: nextProject }) }), db);
+  const nextSavedBody = await nextSaved.json();
+  assert.equal(nextSaved.status, 200, JSON.stringify(nextSavedBody));
+  assert.equal(nextSavedBody.code, "CONSTRUCTION_PACKET_REPLACED");
 });

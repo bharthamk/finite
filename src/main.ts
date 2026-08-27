@@ -10,6 +10,8 @@ import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
 import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
+import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
+import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -331,9 +333,10 @@ await runtime.hydrateAcceptedTruth();
 await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
+window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
-  if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT") arrivalResult = await arrivalRepository.open();
+  if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
   return {
     toolName,
@@ -343,16 +346,19 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
   };
-}, arrivalRepository, true).useBoundedOutputs() : null;
+}, arrivalRepository, true).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
   window.finiteEnterKitchen = (input, context) => adapter.enterKitchen(input, context);
   webmcpReadiness.state = "ready";
   webmcpReadiness.inventory = inventory;
 }
+const hotModule = (import.meta as ImportMeta & { hot?: { dispose(callback: () => void): void } }).hot;
+if (hotModule) hotModule.dispose(() => adapter?.dispose());
 
 let busy = false;
 let message = "";
+let messageScope = "";
 let draftReturnFormOpen = false;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
@@ -376,6 +382,7 @@ const money = (minor: number): string => new Intl.NumberFormat("en-AU", {
 
 const announce = (value: string): void => {
   message = value;
+  messageScope = currentMessageScope();
   announcer.textContent = value;
 };
 
@@ -390,6 +397,30 @@ const objectiveLabel = (objective: string): string => ({
 }[objective] ?? objective.replaceAll("_", " "));
 
 const currentArrival = (): ArrivalOrder | null => arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
+const currentMessageScope = (): string => {
+  const kernel = runtime.kernel;
+  const arrival = currentArrival();
+  return JSON.stringify({
+    planId: kernel.profile.planId,
+    profileId: kernel.profile.profileId,
+    revision: kernel.revision,
+    lifecycleStatus: kernel.lifecycleStatus,
+    activeEventId: kernel.activeEventId,
+    stagedCandidateId: kernel.stagedCandidate?.candidateId ?? null,
+    approvalId: kernel.approval?.approvalId ?? null,
+    lifecycleChangeId: kernel.pendingLifecycleChange?.lifecycleChangeId ?? null,
+    lifecycleConfirmationId: kernel.lifecycleConfirmation?.confirmationId ?? null,
+    groupDecisionId: kernel.pendingGroupDecision?.groupDecisionId ?? null,
+    groupDecisionConfirmationId: kernel.groupDecisionConfirmation?.confirmationId ?? null,
+    externalActionChangeId: kernel.pendingExternalAction?.externalActionChangeId ?? null,
+    externalActionConfirmationId: kernel.externalActionConfirmation?.confirmationId ?? null,
+    draftId: runtime.pendingPlanDraft?.draftId ?? null,
+    planActivationConfirmationId: runtime.planActivationConfirmation?.confirmationId ?? null,
+    arrivalId: arrival?.orderId ?? null,
+    arrivalVersion: arrival?.version ?? null,
+    arrivalStatus: arrival?.status ?? null,
+  });
+};
 const pendingDraftMatchesArrival = (): boolean => {
   const draft = runtime.pendingPlanDraft;
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
@@ -843,10 +874,13 @@ const renderLifecycleControl = (): string => {
   const kernel = runtime.kernel;
   const pending = kernel.pendingLifecycleChange;
   const latest = kernel.lifecycleEvents.at(-1);
-  if (pending) return `<section class="lifecycle-control lifecycle-control--pending" aria-label="Plan status confirmation">
+  if (pending) {
+    const confirmed = kernel.lifecycleConfirmation?.targetId === pending.lifecycleChangeId;
+    return `<section class="lifecycle-control lifecycle-control--pending" aria-label="Plan status confirmation">
     <div><p class="eyebrow">Plan conclusion</p><h2>Mark this plan ${escapeHtml(pending.after)}?</h2><p>${escapeHtml(pending.reason)}</p></div>
-    <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span><button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button></div>
+    <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span>${confirmed ? `<p class="quiet">Human confirmation recorded. Codex may now apply this exact status and return its receipt.</p>` : `<button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button>`}</div>
   </section>`;
+  }
   const inactive = kernel.lifecycleStatus !== "active";
   return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" ${inactive ? "open" : ""}>
     <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : latest ? `Last changed because: ${escapeHtml(latest.reason)}` : "Finish, pause, or stop cleanly"}</small></summary>
@@ -960,16 +994,27 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   else if (zone.component === "option_compare") body = renderOptions();
   else if (zone.component === "approval_panel") {
     const staged = kernel.stagedCandidate;
-    body = staged ? `<div class="approval-copy"><p>This commits exactly <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong> against revision ${kernel.revision}. It changes no booking, purchase, or payment outside this demonstration.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} after</span><strong>${money(staged.resultingBufferMinor)}</strong></div><button class="button button--approve" data-action="approve">Approve this exact plan</button><button class="text-button" data-action="return">Not this one</button></div>` : `<p class="quiet">Choose an outcome before approval.</p>`;
+    const approved = staged && kernel.approval?.candidateId === staged.candidateId;
+    body = staged ? `<div class="approval-copy"><p>This commits exactly <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong> against revision ${kernel.revision}. It changes no booking, purchase, or payment outside this demonstration.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} after</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Human approval recorded. Codex may now apply this exact option and return its receipt.</p>` : `<button class="button button--approve" data-action="approve">Approve this exact plan</button><button class="text-button" data-action="return">Not this one</button>`}</div>` : `<p class="quiet">Choose an outcome before approval.</p>`;
   }
   return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><p class="eyebrow">${escapeHtml(manifest.nouns.plan)}</p><h2>${escapeHtml(zone.title)}</h2></div>${body}</section>`;
 };
 
 async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
+  const reconciledMessage = reconcileScopedSurfaceMessage({ message, scope: messageScope }, currentMessageScope());
+  if (message && !reconciledMessage.message) announcer!.textContent = "";
+  message = reconciledMessage.message;
+  messageScope = reconciledMessage.scope;
   const manifest = await compileSurfaceManifest(kernel.profile, kernel);
   const params = new URLSearchParams(location.search);
-  if (params.get("lab") !== "1" && params.get("kitchen") !== "1") {
+  const experienceSurface = selectExperienceSurface({
+    labMode: params.get("lab") === "1",
+    kitchenMode: params.get("kitchen") === "1",
+    hasArrival: isWaitingArrivalStatus(currentArrival()?.status),
+    hasActivatedPlan: runtime.hasActivationReceipt(),
+  });
+  if (experienceSurface === "arrival") {
     renderArrival(manifest);
     return manifest;
   }
@@ -1016,20 +1061,17 @@ const chooseCandidate = async (candidateId: string): Promise<void> => {
   document.querySelector("#approval_panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
 };
 
-const approveAndApply = async (): Promise<void> => {
+const approveCandidate = async (): Promise<void> => {
   const kernel = runtime.kernel;
   const candidate = kernel.stagedCandidate;
   if (!candidate) return;
   busy = true;
   await render();
   const approval = await kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => String(warning.code)) });
-  const approvalId = (approval.approval as { approvalId?: string } | undefined)?.approvalId;
-  if (!approvalId) { busy = false; announce(`Approval was not recorded: ${approval.code}`); await render(); return; }
-  const applied = await kernel.applyApprovedOption({ candidateId: candidate.candidateId, approvalId, expectedRevision: kernel.revision, idempotencyKey: `surface-${kernel.profile.profileId}-${kernel.revision}-${candidate.contentHash.slice(0, 12)}` });
+  if (approval.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
   busy = false;
-  announce(applied.ok ? "Approved plan applied. Your revised plan and receipt are ready." : `The plan was not applied: ${applied.code}`);
+  announce(approval.ok ? "Exact option approved. Codex may now apply it through the guarded WebMCP tool." : `Approval was not recorded: ${approval.code}`);
   await render();
-  document.querySelector(".receipt")?.scrollIntoView({ behavior: "smooth", block: "center" });
 };
 
 const switchProfile = async (profileId: ProfileId): Promise<void> => {
@@ -1105,10 +1147,9 @@ const confirmLifecycle = async (lifecycleChangeId: string): Promise<void> => {
   busy = true;
   await render();
   const confirmed = runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId });
-  const confirmationId = (confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId;
-  const result = confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision: runtime.kernel.revision, idempotencyKey: `surface-lifecycle-${runtime.kernel.profile.planId}-${runtime.kernel.revision}-${pending.contentHash.slice(0, 12)}` }) : confirmed;
+  if (confirmed.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
   busy = false;
-  announce(result.ok ? `Plan status saved as ${runtime.kernel.lifecycleStatus}.` : `The plan status was not changed: ${result.code}`);
+  announce(confirmed.ok ? "Exact plan status confirmed. Codex may now apply it through the guarded WebMCP tool." : `The plan status was not confirmed: ${confirmed.code}`);
   await render();
 };
 
@@ -1130,7 +1171,7 @@ function bindInteractions(): void {
   bindCodexHandoffInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
-  root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveAndApply());
+  root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });

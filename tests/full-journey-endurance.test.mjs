@@ -81,7 +81,7 @@ const compileArrivalBoundDraft = async (host, profile) => {
 
 const applyPreference = async (host, runtime, changes, id) => {
   await openGroup(host, "planning");
-  const feedback = requireCode(await host.execute("finite_record_feedback", { message: `Human preference reversal in ${id}: choose lived experience over the numerically cheapest route.`, kind: "taste" }), "FEEDBACK_RECORDED");
+  const feedback = requireCode(await host.execute("finite_record_feedback", { message: `Human preference reversal in ${id}: choose lived experience over the numerically cheapest route.`, kind: "taste", expectedRevision: runtime.kernel.revision }), "FEEDBACK_RECORDED");
   await openGroup(host, "decisions");
   const staged = requireCode(await host.execute("finite_stage_preference_change", { feedbackId: feedback.feedback.feedbackId, changes, expectedRevision: runtime.kernel.revision }), "PREFERENCE_CHANGE_STAGED");
   const confirmation = requireCode(runtime.kernel.humanConfirmPreferenceChange({ preferenceChangeId: staged.preferenceChange.preferenceChangeId }), "HUMAN_PREFERENCE_CONFIRMED");

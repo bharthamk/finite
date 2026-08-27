@@ -287,6 +287,19 @@ test("a compiled plan draft asks for draft judgment and keeps the activation rou
   assert.equal(host.tools.has("finite_activate_confirmed_plan"), false);
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "construction_review_draft");
 
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  assert.equal(confirmed.code, "HUMAN_PLAN_ACTIVATION_CONFIRMED");
+  const authorized = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
+  assert.equal(authorized.operatorPacket.nextAction.stage, "human_confirmed");
+  assert.equal(authorized.operatorPacket.nextAction.nextTool, "finite_activate_confirmed_plan");
+  assert.deepEqual(authorized.operatorPacket.nextAction.knownArgs, {
+    draftId: staged.draft.draftId,
+    confirmationId: confirmed.confirmation.confirmationId,
+    expectedPlanId: "plan_travel_europe",
+    expectedRevision: 1,
+  });
+  assert.equal(authorized.operatorPacket.nextAction.missingInputs[0].argument, "idempotencyKey");
+
   const returned = await runtime.humanRejectPlanDraft({ draftId: staged.draft.draftId, reasonCode: "structure", reason: "Make the route and open decisions primary; keep the budget subordinate." });
   assert.equal(returned.code, "HUMAN_PLAN_DRAFT_RETURNED");
   const reentered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });

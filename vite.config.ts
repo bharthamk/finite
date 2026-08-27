@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { sites } from "@openai/sites-vite-plugin";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     sites(),
     cloudflare({
@@ -16,6 +16,14 @@ export default defineConfig({
           not_found_handling: "single-page-application",
           run_worker_first: true,
         },
+        ...(command === "serve" ? {
+          d1_databases: [{
+            binding: "DB",
+            database_name: "finite-local",
+            database_id: "11111111-1111-4111-8111-111111111111",
+            migrations_dir: "drizzle",
+          }],
+        } : {}),
       },
     }),
   ],
@@ -43,4 +51,4 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
   },
-});
+}));

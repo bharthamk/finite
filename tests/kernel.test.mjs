@@ -60,7 +60,10 @@ test("correction and preference authority remain human-confirmed after productio
   assert.equal(corrected.code, "ACTUAL_CORRECTION_APPLIED");
   assert.equal(kernel.getState(["actuals"]).state.actuals.find((actual) => actual.actualId === "actual_travel_food").currentAmountMinor, 45_000);
 
-  const feedback = kernel.recordConsumerFeedback({ message: "Comfort matters most", kind: "taste" });
+  const staleFeedback = kernel.recordConsumerFeedback({ message: "Use the old plan", kind: "taste", expectedRevision: 1 });
+  assert.equal(staleFeedback.code, "STALE_REVISION");
+  const feedback = kernel.recordConsumerFeedback({ message: "Comfort matters most", kind: "taste", expectedRevision: 2, attribution: "operator_attributed_unverified" });
+  assert.equal(feedback.provenance.humanVerified, false);
   const stagedPreference = await kernel.stagePreferenceChange({ feedbackId: feedback.feedback.feedbackId, changes: { comfort: 98 }, expectedRevision: 2 });
   const fakePreference = await kernel.applyConfirmedPreferenceChange({ preferenceChangeId: stagedPreference.preferenceChange.preferenceChangeId, confirmationId: "fake", expectedRevision: 2, idempotencyKey: "production-preference-0001" });
   assert.equal(fakePreference.code, "CONFIRMATION_MISSING_OR_MISMATCHED");

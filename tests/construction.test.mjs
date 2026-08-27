@@ -71,6 +71,33 @@ test("partial intake survives reload as checksum-bound work and discards by exac
   assert.equal((await restored.resumeConstructionPacket()).code, "CONSTRUCTION_PACKET_NOT_FOUND");
 });
 
+test("accepted activation retires the remote build packet so the next project can start", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const snapshotStore = new PlanSnapshotStore(storage);
+  const catalogStore = new PlanCatalogStore(storage);
+  const clock = { value: "2026-08-26T01:00:00.000Z" };
+  const construction = new MemoryConstructionPacketRepository(() => new Date(clock.value));
+  const runtime = new FinitePlanRuntime(profiles, snapshotStore, "travel", catalogStore, [], () => new Date(clock.value), undefined, construction);
+  const staged = await runtime.stagePlanDraft(newTravel("plan_travel_remote_cleanup"));
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  const activated = await runtime.activateConfirmedPlanDraft({
+    draftId: staged.draft.draftId,
+    confirmationId: confirmed.confirmation.confirmationId,
+    expectedPlanId: "plan_travel_europe",
+    expectedRevision: 1,
+    idempotencyKey: "remote-cleanup-activation-0001",
+  });
+  assert.equal(activated.code, "PLAN_ACTIVATED");
+  assert.equal(activated.constructionPacketCleared, true);
+
+  clock.value = "2026-08-26T01:00:01.000Z";
+  const next = await runtime.assessPlanIntake({ profileId: "event", name: "Next project" });
+  assert.equal(next.code, "INTAKE_FACTS_MISSING");
+  assert(next.constructionPacket.packetId);
+  assert.equal(next.durability, undefined);
+});
+
 test("a human-confirmed amendment draft resumes without authority and activates only after fresh confirmation", async () => {
   const { profiles, snapshotStore, catalogStore, runtime, clock } = await setup();
   const blueprint = runtime.getAmendmentBlueprint();

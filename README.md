@@ -18,6 +18,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Compiled bounded option search that enumerates legal move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
 - Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
 - One-call operator orientation: `finite_enter_kitchen` arbitrates arrival-versus-plan work and returns a compact content-addressed service ticket containing canonical identity, one authoritative `nextAction`, known and missing inputs, authority state, and a state-grounded chef menu without asking the human to explain the application.
+- A document-lifetime-safe native registry: the browser permanently exposes seven tools—status, entry, capabilities, bounded toolset selection, exact result reading, effort receipt, and semantic invocation. `finite_open_toolset` returns one typed action manifest without registering more browser tools; `finite_invoke` revalidates the selected group, plan revision, evidence, and human authority before dispatch. Long route churn can no longer exhaust Chrome's experimental WebMCP registration budget.
 - Production WebMCP output is capped at 1,500 characters. Larger deterministic results are retained in a 24-entry ephemeral content-addressed vault; Codex first reads a bounded manifest, then requests only exact JSON Pointer fields. Oversized semantic values are refused with narrower descendants rather than truncated.
 - Every advertised tool and parameter is regression-tested against current discovery guidance: tool/parameter names stay within 30 characters, tool descriptions within 500, parameter descriptions within 150, every parameter has semantic metadata, and every route exposes at most 20 tools.
 - WebMCP execution accepts the host cancellation signal through arrival, construction, operator-session, authority, and accepted-truth HTTP rails. Pre-cancelled work never starts; interrupted accepted commits roll back the exact local checkpoint and report the remote outcome as unknown so Codex must re-read canonical truth before idempotent replay.
@@ -50,7 +51,7 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- Route-sized WebMCP discovery: the live page advertises only bootstrap/orientation, bounded result recovery, and the current safe route, with the full catalog available through explicit capability groups. Redundant kitchen/menu reads are no longer permanently advertised. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
+- Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
 - Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations; there is no backend model or application-owned agent.
 - Append-only, human-confirmed ledgers for named group decisions and real-world action status, so disagreement is not averaged away and researched/quoted/held/booked/paid/verified/cancelled cannot collapse into one fluent claim.
@@ -60,11 +61,17 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 
 ```bash
 npm install
+npm run db:local:migrate
 npm run typecheck
 npm test
 npm run build
 npm run dev
 ```
+
+Local development binds an isolated D1 named `finite-local`;
+`db:local:migrate` applies the same inspected migrations used by the hosted
+product. Production continues to use the Sites-managed `DB` binding from
+`.openai/hosting.json`.
 
 The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`; the optional diagnostic and explicit authenticated acceptance trace is available at `?lab=1`.
 
@@ -127,6 +134,7 @@ testing, not basic Site Tools availability.
 - `src/operator-policy.ts` — explicit AUD ledger law, external execution-state ladder, 24-rule human-reality contract, and named group decision protocols.
 - `src/release.ts` — single release marker consumed by both the client and Worker shell.
 - `src/webmcp.ts` — native host adapter and tool registry.
+- `src/experience-route.ts` and `src/surface-message.ts` — cross-surface routing plus state-scoped consumer messages that cannot survive into a different accepted or pending state.
 - `src/main.ts` — adaptive product renderer and human authority surface.
 - `PRODUCT_NORTH_STAR.md` — canonical category, operating model, plan grammar, adaptive-surface promise, moat, boundaries, and public narrative.
 - `ARRIVAL_AND_SURFACE_CONTINUITY.md` — zero-plan arrival, asynchronous Site/Codex continuity, wrong-surface recovery, lifecycle truth, and version-conflict law.
@@ -149,6 +157,8 @@ testing, not basic Site Tools availability.
 - `FULL_JOURNEY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — twelve arrival-to-conclusion journeys, late shocks, stale-work invalidation, impossible-request refusal, lifecycle closure, reload, and repair receipt.
 - `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — all 54 operational and human failure points, their closed/controlled disposition, regression proof, and remaining external research boundaries.
 - `PRIZE_ENGINEERING_SCORECARD_2026-08-27.md` — current challenge criteria translated into executable product gates, measured WebMCP context budgets, proof status, and the remaining competition-grade engineering queue.
+- `NATIVE_THREE_FAMILY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — native travel, renovation, and event pressure journeys; fixed-registry endurance; authority boundaries; truthful external-state handling; and the defects repaired during the run.
+- `REPRODUCIBLE_RELEASE.md` and `THIRD_PARTY_LICENSES.md` — clean-checkout build boundary, source/data exclusions, deployment provenance, and direct dependency licenses without pre-empting the owner's license or publication decision.
 - `WEBMCP_OPERATOR_CONTEXT_ACCEPTANCE_2026-08-27.md` — bounded service-ticket orientation, content-addressed detail recovery, metadata and cancellation budgets, fresh inline-Codex receipt, and remaining live-journey boundary.
 - `WEBMCP_SEMANTIC_RECOVERY_ACCEPTANCE_2026-08-27.md` — exact JSON Pointer recovery, refusal of semantic truncation, end-to-end HTTP cancellation, interrupted-commit rollback law, deterministic clocks, and complete regression receipt.
 - `WEBMCP_ROUTE_AND_EFFORT_ACCEPTANCE_2026-08-27.md` — post-response route replacement, legacy unregister-cancellation proof, arrival route arbitration, and hash-verifiable operator-effort evaluation.

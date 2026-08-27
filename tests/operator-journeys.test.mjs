@@ -193,7 +193,7 @@ test("accepted option, correction, and preference writes are failure-atomic and 
 
   const preferenceStorage = new FailingSnapshotStorage();
   const preferenceKernel = new FinitePlanKernel(profile, new PlanSnapshotStore(preferenceStorage));
-  const feedback = preferenceKernel.recordConsumerFeedback({ message: "Protect comfort", kind: "taste" });
+  const feedback = preferenceKernel.recordConsumerFeedback({ message: "Protect comfort", kind: "taste", expectedRevision: 1 });
   const preference = await preferenceKernel.stagePreferenceChange({ feedbackId: feedback.feedback.feedbackId, changes: { comfort: 98 }, expectedRevision: 1 });
   const preferenceConfirmation = preferenceKernel.humanConfirmPreferenceChange({ preferenceChangeId: preference.preferenceChange.preferenceChangeId });
   const preferenceCommand = { preferenceChangeId: preference.preferenceChange.preferenceChangeId, confirmationId: preferenceConfirmation.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "atomic-preference-0001" };

@@ -232,10 +232,25 @@ export class FinitePlanRuntime {
   }
 
   private async clearMatchingConstructionDraft(draftId: string, context: RuntimeRequestContext = {}): Promise<boolean> {
+    if (this.constructionRepository) {
+      try {
+        const packet = await this.constructionRepository.load(context);
+        if (!packet) { this.catalogStore?.clearConstructionPacket(); return true; }
+        if (packet.kind !== "draft" || packet.payload.draftId !== draftId) return false;
+        await this.constructionRepository.clear(packet.packetId, context);
+        this.catalogStore?.clearConstructionPacket();
+        return true;
+      } catch (error) {
+        if (error instanceof ConstructionPacketRepositoryError && ["CONSTRUCTION_PACKET_CLEARED", "CONSTRUCTION_PACKET_TOMBSTONED"].includes(error.code)) {
+          this.catalogStore?.clearConstructionPacket();
+          return true;
+        }
+        throw error;
+      }
+    }
     const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) return verified.code === "CONSTRUCTION_PACKET_NOT_FOUND";
     if (verified.kind !== "draft" || verified.payload.draftId !== draftId) return false;
-    if (this.constructionRepository) await this.constructionRepository.clear(verified.packetId, context);
     this.catalogStore?.clearConstructionPacket();
     return true;
   }
@@ -361,6 +376,23 @@ export class FinitePlanRuntime {
   async discardConstructionPacket({ packetId }: { packetId: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
     const verified = await this.readVerifiedConstructionPacket(context);
     if ("ok" in verified) {
+      if (this.constructionRepository) {
+        try {
+          const raw = await this.constructionRepository.load(context);
+          if (raw?.packetId === packetId) {
+            await this.constructionRepository.clear(packetId, context);
+            this.catalogStore?.clearConstructionPacket();
+            this.pendingPlanDraft = null;
+            this.planActivationConfirmation = null;
+            this.latestIntakeAssessment = null;
+            return { ok: true, code: "CONSTRUCTION_PACKET_DISCARDED", packetId, acceptedStateChanged: false, next: "Begin again from the current reviewed human order." };
+          }
+        } catch (error) {
+          if (!(error instanceof ConstructionPacketRepositoryError && ["CONSTRUCTION_PACKET_CLEARED", "CONSTRUCTION_PACKET_TOMBSTONED"].includes(error.code))) {
+            return { ok: false, code: "CONSTRUCTION_PACKET_DISCARD_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+          }
+        }
+      }
       if (this.returnedConstructionReview?.packetId !== packetId) return { ok: false, code: "CONSTRUCTION_PACKET_NOT_FOUND", acceptedStateChanged: false };
       try {
         if (this.constructionRepository) await this.constructionRepository.clear(packetId, context);
@@ -398,7 +430,18 @@ export class FinitePlanRuntime {
     let route: KitchenRoute;
     if (this.pendingPlanDraft) {
       route = this.planActivationConfirmation
-        ? { stage: "human_confirmed", nextTool: "finite_activate_confirmed_plan", targetId: this.pendingPlanDraft.draftId, authorityPresent: true }
+        ? {
+          stage: "human_confirmed",
+          nextTool: "finite_activate_confirmed_plan",
+          targetId: this.pendingPlanDraft.draftId,
+          authorityPresent: true,
+          knownArgs: {
+            draftId: this.pendingPlanDraft.draftId,
+            confirmationId: this.planActivationConfirmation.confirmationId,
+            expectedPlanId: this.pendingPlanDraft.basePlanId,
+            expectedRevision: this.pendingPlanDraft.baseRevision,
+          },
+        }
         : { stage: "awaiting_human", nextTool: null, humanAction: "confirm_or_reject_plan_draft", targetId: this.pendingPlanDraft.draftId, authorityPresent: false };
     } else if (this.returnedConstructionReview) {
       route = this.returnedConstructionReview.feedbackRequired

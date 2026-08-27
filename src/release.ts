@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "operator-reliability-v54",
+  build: "native-kitchen-endurance-v55",
 } as const;

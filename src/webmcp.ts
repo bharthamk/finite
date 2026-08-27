@@ -3,6 +3,7 @@ import { HttpArrivalRepository, type ArrivalInputKind, type ArrivalOrientation, 
 import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
 import { assessExternalAction, currencyContract, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
+import { isWaitingArrivalStatus } from "./experience-route.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -58,6 +59,8 @@ const parameterDescriptions: Record<string, string> = {
   costDeltaMinor: "Cost change in the plan currency's minor unit.",
   correctedAmountMinor: "Corrected actual amount in the plan currency's minor unit.",
   actionId: "Stable identity for the real-world action being assessed or recorded.",
+  action: "Exact semantic action name returned by the currently open bounded manifest.",
+  arguments: "Arguments matching the selected semantic action's input schema.",
   actualId: "Canonical actual-ledger entry to correct.",
   actuals: "Known actual ledger entries for the plan draft.",
   allocation: "Finite allocation whose components must conserve the total.",
@@ -187,6 +190,50 @@ const proofInput = (value: unknown): unknown => {
 type EntryIntent = "start_new" | "continue_current" | "resume_handoff";
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+type SchemaIssue = { path: string; code: string };
+
+const validateSchemaValue = (schemaValue: unknown, value: unknown, path = "$", depth = 0): SchemaIssue[] => {
+  if (depth > 24) return [{ path, code: "SCHEMA_DEPTH_EXCEEDED" }];
+  const schema = record(schemaValue);
+  const declaredTypes = Array.isArray(schema.type) ? schema.type.map(String) : typeof schema.type === "string" ? [schema.type] : [];
+  const actualType = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  const matchesType = (type: string): boolean => type === "integer" ? Number.isInteger(value) : type === "number" ? typeof value === "number" && Number.isFinite(value) : type === actualType;
+  if (declaredTypes.length && !declaredTypes.some(matchesType)) return [{ path, code: "TYPE_MISMATCH" }];
+  if (Array.isArray(schema.enum) && !schema.enum.some((candidate) => Object.is(candidate, value))) return [{ path, code: "ENUM_MISMATCH" }];
+
+  const issues: SchemaIssue[] = [];
+  if (typeof value === "string") {
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) issues.push({ path, code: "STRING_TOO_SHORT" });
+    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) issues.push({ path, code: "STRING_TOO_LONG" });
+    if (typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) issues.push({ path, code: "PATTERN_MISMATCH" });
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) issues.push({ path, code: "NUMBER_NOT_FINITE" });
+    if (typeof schema.minimum === "number" && value < schema.minimum) issues.push({ path, code: "NUMBER_TOO_SMALL" });
+    if (typeof schema.maximum === "number" && value > schema.maximum) issues.push({ path, code: "NUMBER_TOO_LARGE" });
+  }
+  if (Array.isArray(value)) {
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) issues.push({ path, code: "ARRAY_TOO_SHORT" });
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) issues.push({ path, code: "ARRAY_TOO_LONG" });
+    if (schema.uniqueItems === true && new Set(value.map((item) => JSON.stringify(item))).size !== value.length) issues.push({ path, code: "ARRAY_NOT_UNIQUE" });
+    if (schema.items) for (let index = 0; index < value.length && issues.length < 20; index += 1) issues.push(...validateSchemaValue(schema.items, value[index], `${path}/${index}`, depth + 1));
+  }
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const object = value as Record<string, unknown>;
+    const properties = record(schema.properties);
+    const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+    for (const name of required) if (!Object.hasOwn(object, name)) issues.push({ path: `${path}/${name}`, code: "REQUIRED" });
+    if (typeof schema.maxProperties === "number" && Object.keys(object).length > schema.maxProperties) issues.push({ path, code: "TOO_MANY_PROPERTIES" });
+    for (const [name, child] of Object.entries(object)) {
+      if (Object.hasOwn(properties, name)) issues.push(...validateSchemaValue(properties[name], child, `${path}/${name}`, depth + 1));
+      else if (schema.additionalProperties === false) issues.push({ path: `${path}/${name}`, code: "UNKNOWN_PROPERTY" });
+      else if (schema.additionalProperties && typeof schema.additionalProperties === "object") issues.push(...validateSchemaValue(schema.additionalProperties, child, `${path}/${name}`, depth + 1));
+      if (issues.length >= 20) break;
+    }
+  }
+  return issues.slice(0, 20);
+};
+
 const exactArrivalBinding = (orientation: ArrivalOrientation): { orderId: string; orderVersion: number; orderChecksum: string } => ({
   orderId: orientation.order.orderId,
   orderVersion: orientation.exactOrderVersion,
@@ -219,6 +266,7 @@ const WEBMCP_RESULT_CHUNK_BUDGET = 800;
 const WEBMCP_RESULT_VAULT_LIMIT = 24;
 const orientationToolNames = new Set(["finite_get_capabilities", "finite_enter_kitchen", "finite_open_toolset", "finite_read_result"]);
 const routeRefreshToolNames = new Set([
+  "finite_invoke",
   "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation",
   "finite_record_change_event", "finite_compare_options", "finite_record_feedback", "finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option",
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction",
@@ -294,9 +342,16 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
     };
   }
   if (stage === "options_available") {
+    const viableItems = items.filter((item) => item.viability === "constraint_validated" && item.nextTool === "finite_stage_option");
+    if (!viableItems.length) return {
+      actionVersion: "finite-next-action.v1", stage: "no_valid_option", reason: "Every bounded route violates at least one current constraint or evidence rule.",
+      nextTool: null, intendedTools: ["finite_record_change_event", "finite_register_evidence"], knownArgs: { blockedMenuItemIds: items.map((item) => item.menuItemId) }, derivedArgs: [],
+      missingInputs: [{ argument: "fallback_input", source: "human_or_research", reason: "A constraint, scope choice, or missing evidence must change before another route can be valid.", question: "Nothing currently fits every constraint. What may move, or should I research another input?" }],
+      requiresHuman: true, exactQuestion: "Nothing currently fits every constraint. What may move, or should I research another input?", targetId, authorityPresent: false,
+    };
     return {
       actionVersion: "finite-next-action.v1", stage: "menu_ready", reason: "Constraint-validated options are ready to be served to the human.",
-      nextTool: null, intendedTools: ["finite_stage_option"], knownArgs: { menuItemIds: items.map((item) => item.menuItemId) }, derivedArgs: [],
+      nextTool: null, intendedTools: ["finite_stage_option"], knownArgs: { menuItemIds: viableItems.map((item) => item.menuItemId) }, derivedArgs: [],
       missingInputs: [{ argument: "candidate_choice", source: "human", reason: "Codex may recommend, but the human chooses the outcome to stage.", question: "Which validated outcome should I prepare for exact approval?" }],
       requiresHuman: true, exactQuestion: "I have compared the viable outcomes. Which one should I prepare for approval?", targetId, authorityPresent,
     };
@@ -329,12 +384,22 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
       missingInputs: Array.isArray(item.missingInputs) ? item.missingInputs : [], requiresHuman: false, exactQuestion: null, targetId, authorityPresent: true,
     };
   }
-  if (stage === "human_confirmed" && items[0]) {
-    const item = items[0]!;
+  if (stage === "human_confirmed") {
+    const matchingItem = items.find((item) => item.nextTool === route.nextTool);
+    const item = matchingItem ?? {};
+    const routeKnownArgs = record(route.knownArgs);
+    const activationRoute = route.nextTool === "finite_activate_confirmed_plan";
     return {
       actionVersion: "finite-next-action.v1", stage, reason: "The exact staged change carries matching human confirmation and is ready for one idempotent apply.",
-      nextTool: item.nextTool ?? route.nextTool ?? null, knownArgs: item.knownArgs ?? {}, derivedArgs: [],
-      missingInputs: Array.isArray(item.missingInputs) ? item.missingInputs : [], requiresHuman: false, exactQuestion: null, targetId, authorityPresent: true,
+      nextTool: route.nextTool ?? item.nextTool ?? null,
+      knownArgs: Object.keys(routeKnownArgs).length ? routeKnownArgs : item.knownArgs ?? {},
+      derivedArgs: [],
+      missingInputs: Array.isArray(item.missingInputs)
+        ? item.missingInputs
+        : activationRoute
+          ? [{ argument: "idempotencyKey", source: "derived", reason: "Codex must supply one stable retry identity for this exact activation." }]
+          : [],
+      requiresHuman: false, exactQuestion: null, targetId, authorityPresent: true,
     };
   }
   if (stage === "plan_inactive") {
@@ -751,7 +816,7 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_record_change_event", title: "Record a proposed plan change", description: "Record typed intent, actual, quote, availability, or constraint change without changing accepted truth.", inputSchema: objectSchema({ type: string, title: string, costDeltaMinor: integer, daysDelta: integer, minimumBufferMinor: { type: "integer", minimum: 0 }, evidenceRefs: { type: "array", items: string }, assumptions: { type: "array", items: string }, entityChanges: { type: "array", items: { type: "object" } }, expectedRevision: revision }, ["type", "title", "costDeltaMinor", "minimumBufferMinor", "expectedRevision"]), execute: (input) => runtime.kernel.recordChangeEvent(input as never) }),
   define({ name: "finite_simulate_reallocation", title: "Simulate a move combination", description: "Validate a custom move combination against allocations, locks, relationships, evidence, and revision.", readOnly: true, inputSchema: objectSchema({ eventId: string, moveIds: { type: "array", items: string, uniqueItems: true }, objective: string }, ["eventId", "moveIds"]), execute: (input) => runtime.kernel.simulateReallocation(input as never) }),
   define({ name: "finite_compare_options", title: "Search and compare options", description: "Enumerate the compiled bounded set of legal move combinations, rank distinct options by profile objectives, and return exact search proof, measures, impacts, and refusals.", readOnly: true, inputSchema: objectSchema({ eventId: string, generate: { type: "boolean" } }, ["eventId"]), execute: (input) => runtime.kernel.compareOptions(input as never) }),
-  define({ name: "finite_record_feedback", title: "Record human feedback", description: "Record human taste, correction, or adjustment. Feedback alone changes no accepted truth.", inputSchema: objectSchema({ message: string, kind: { type: "string", enum: ["adjustment", "rejection", "taste", "constraint"] } }, ["message"]), execute: (input) => runtime.kernel.recordConsumerFeedback(input as never) }),
+  define({ name: "finite_record_feedback", title: "Record consumer-attributed feedback", description: "Record Codex's revision-bound attribution of consumer taste, correction, or adjustment as explicitly unverified, non-authoritative context. A later exact human confirmation is still required before accepted truth can change.", inputSchema: objectSchema({ message: string, kind: { type: "string", enum: ["adjustment", "rejection", "taste", "constraint"] }, expectedRevision: revision }, ["message", "expectedRevision"]), execute: (input) => runtime.kernel.recordConsumerFeedback({ ...input, attribution: "operator_attributed_unverified" } as never) }),
   define({ name: "finite_stage_preference_change", title: "Stage interpreted preference", description: "Translate feedback into typed preference weights for human confirmation without changing accepted truth.", inputSchema: objectSchema({ feedbackId: string, changes: { type: "object", additionalProperties: { type: "integer", minimum: 0, maximum: 100 } }, expectedRevision: revision }, ["feedbackId", "changes", "expectedRevision"]), execute: (input) => runtime.kernel.stagePreferenceChange(input as never) }),
   define({ name: "finite_apply_confirmed_preference_change", title: "Apply confirmed preference", description: "Apply the exact human-confirmed staged preference using revision and idempotency.", inputSchema: objectSchema({ preferenceChangeId: string, confirmationId: string, expectedRevision: revision, idempotencyKey }, ["preferenceChangeId", "confirmationId", "expectedRevision", "idempotencyKey"]), execute: (input, context) => runtime.kernel.applyConfirmedPreferenceChange(input as never, context) }),
   define({ name: "finite_stage_actual_correction", title: "Stage append-only actual correction", description: "Prepare a provenance-bound correction for human confirmation while preserving original history.", inputSchema: objectSchema({ actualId: string, correctedAmountMinor: { type: "integer", minimum: 0 }, reason: string, evidenceRef: string, expectedRevision: revision }, ["actualId", "correctedAmountMinor", "reason", "evidenceRef", "expectedRevision"]), execute: (input) => runtime.kernel.stageActualCorrection(input as never) }),
@@ -821,7 +886,7 @@ const contextualDefinitions = (runtime: FinitePlanRuntime): WebMCPToolDefinition
   const tools: Record<ProfileId, WebMCPToolDefinition[]> = {
     travel: [
       define({ name: "travel_extend_stay", title: "Record stay extension", description: "Compile destination nights into a typed cost, duration, and entity change event.", inputSchema: objectSchema({ destination: string, nights: { type: "integer", minimum: 1, maximum: 14 }, nightlyMinor: { type: "integer", minimum: 0 }, minimumBufferMinor: { type: "integer", minimum: 0 } }, ["destination", "nights", "nightlyMinor", "minimumBufferMinor"]), execute: ({ destination, nights, nightlyMinor, minimumBufferMinor }) => commonEvent({}, { type: "intent_change", title: `Extend ${String(destination)} by ${Number(nights)} nights`, costDeltaMinor: Number(nights) * Number(nightlyMinor), daysDelta: Number(nights), minimumBufferMinor, entityChanges: [{ entityId: "trip_days", field: "days", delta: Number(nights) }, { entityId: "booked_segment_days", field: "days", delta: Number(nights) }] }) }),
-      define({ name: "travel_change_comfort", title: "Record travel comfort feedback", description: "Record comfort feedback for typed human-confirmed interpretation.", inputSchema: objectSchema({ message: string }, ["message"]), execute: ({ message }) => kernel().recordConsumerFeedback({ message: String(message), kind: "taste" }) }),
+      define({ name: "travel_change_comfort", title: "Record attributed travel comfort feedback", description: "Record Codex's revision-bound attribution of comfort feedback as unverified context for a later exact human-confirmed preference change.", inputSchema: objectSchema({ message: string, expectedRevision: revision }, ["message", "expectedRevision"]), execute: ({ message, expectedRevision }) => kernel().recordConsumerFeedback({ message: String(message), kind: "taste", expectedRevision: Number(expectedRevision), attribution: "operator_attributed_unverified" }) }),
       define({ name: "travel_move_segment", title: "Record segment change", description: "Compile segment cost and duration changes into a typed event.", inputSchema: objectSchema({ segment: string, costDeltaMinor: integer, daysDelta: integer, minimumBufferMinor: { type: "integer", minimum: 0 } }, ["segment", "costDeltaMinor", "daysDelta", "minimumBufferMinor"]), execute: ({ segment, ...input }) => commonEvent(input, { type: "segment_change", title: `Change ${String(segment)}`, entityChanges: [] }) }),
     ],
     renovation: [
@@ -941,11 +1006,13 @@ const readSemanticPath = (value: unknown, pointer: string): { ok: true; value: u
 };
 
 export class FinitePlanWebMCPAdapter {
+  private executableTools: WebMCPToolDefinition[] = [];
   private coreTools: WebMCPToolDefinition[] = [];
   private advertisedCoreTools: WebMCPToolDefinition[] = [];
   private contextualTools: WebMCPToolDefinition[] = [];
   private routeController: AbortController | null = null;
   private contextualController: AbortController | null = null;
+  private persistentController = new AbortController();
   private entryTool: WebMCPToolDefinition | null = null;
   private activeToolset: ToolsetGroup = "arrival";
   private readonly effortStartedAt = Date.now();
@@ -969,12 +1036,18 @@ export class FinitePlanWebMCPAdapter {
   private routeRefreshChain: Promise<void> = Promise.resolve();
   private routeRefreshGeneration = 0;
   private boundedOutputs = false;
+  private stableDispatcher = false;
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
   constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false) {}
 
   useBoundedOutputs(): this {
     this.boundedOutputs = true;
+    return this;
+  }
+
+  useStableDispatcher(): this {
+    this.stableDispatcher = true;
     return this;
   }
 
@@ -1042,6 +1115,7 @@ export class FinitePlanWebMCPAdapter {
     const receipt = record(result.receipt);
     const candidate = record(result.candidate);
     const optionValues = Array.isArray(result.options) ? result.options : [];
+    const actionNames = Array.isArray(result.actionNames) ? result.actionNames.map(String).slice(0, 20) : [];
     const options = optionValues.slice(0, 3).map(record).map((option) => ({
       candidateId: option.candidateId,
       objective: shortText(option.objective, 80),
@@ -1061,6 +1135,8 @@ export class FinitePlanWebMCPAdapter {
       ...(candidate.candidateId ? { candidate: { candidateId: candidate.candidateId, valid: candidate.valid, objective: shortText(candidate.objective, 80) } } : {}),
       ...(receipt.receiptId ? { receipt: { receiptId: receipt.receiptId, receiptType: receipt.receiptType, revision: receipt.revision } } : {}),
       ...(options.length ? { options } : {}),
+      ...(actionNames.length ? { actionNames } : {}),
+      ...(typeof result.dispatchedAction === "string" ? { dispatchedAction: result.dispatchedAction } : {}),
       ...(toolName === "finite_enter_kitchen" ? { menu: compactMenu(packet.chefMenu) } : {}),
       ...(proof ? { proof } : {}),
       detail: { ...detail, readTool: "finite_read_result", format: "semantic_paths" },
@@ -1084,6 +1160,63 @@ export class FinitePlanWebMCPAdapter {
     };
   }
 
+  private authorityReady(toolName: string): boolean {
+    if (toolName === "finite_apply_approved_option") return Boolean((this.runtime.kernel.approval && this.runtime.kernel.stagedCandidate) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "plan_option"));
+    if (toolName === "finite_apply_confirmed_preference_change") return Boolean((this.runtime.kernel.preferenceConfirmation && this.runtime.kernel.pendingPreferenceChange) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "preference_change"));
+    if (toolName === "finite_apply_confirmed_actual_correction") return Boolean((this.runtime.kernel.correctionConfirmation && this.runtime.kernel.pendingCorrection) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "actual_correction"));
+    if (toolName === "finite_apply_confirmed_plan_lifecycle") return Boolean((this.runtime.kernel.lifecycleConfirmation && this.runtime.kernel.pendingLifecycleChange) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "plan_lifecycle"));
+    if (toolName === "finite_apply_confirmed_group_decision") return Boolean((this.runtime.kernel.groupDecisionConfirmation && this.runtime.kernel.pendingGroupDecision) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "group_decision"));
+    if (toolName === "finite_apply_confirmed_external_action") return Boolean((this.runtime.kernel.externalActionConfirmation && this.runtime.kernel.pendingExternalAction) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "external_action"));
+    if (toolName === "finite_activate_confirmed_plan") return Boolean((this.runtime.planActivationConfirmation && this.runtime.pendingPlanDraft) || this.runtime.hasActivationReceipt());
+    return true;
+  }
+
+  private logicalActions(group: ToolsetGroup = this.activeToolset): WebMCPToolDefinition[] {
+    const names = new Set<string>(toolsetGroups[group]);
+    const core = this.executableTools.filter((tool) => names.has(tool.name) && this.authorityReady(tool.name));
+    const contextual = group === "planning" ? contextualDefinitions(this.runtime).filter((tool) => this.authorityReady(tool.name)) : [];
+    return [...core, ...contextual].filter((tool, index, all) => all.findIndex((candidate) => candidate.name === tool.name) === index);
+  }
+
+  private actionManifest(group: ToolsetGroup = this.activeToolset): Array<Record<string, unknown>> {
+    return this.logicalActions(group).map((tool) => ({ name: tool.name, title: tool.title, description: tool.description, inputSchema: tool.inputSchema, readOnly: tool.annotations?.readOnlyHint === true }));
+  }
+
+  private async dispatchAction(input: unknown, context: { signal?: AbortSignal } = {}): Promise<ToolResult> {
+    const value = record(input);
+    const action = String(value.action ?? "");
+    const target = this.logicalActions().find((tool) => tool.name === action);
+    if (!target) return { ok: false, code: "ACTION_NOT_AVAILABLE", action, activeGroup: this.activeToolset, availableActions: this.logicalActions().map((tool) => tool.name), acceptedStateChanged: false, next: "Open the fitting bounded action group, then invoke only an action returned in its manifest." };
+    const args = record(value.arguments);
+    const validationIssues = validateSchemaValue(target.inputSchema, args);
+    if (validationIssues.length) return { ok: false, code: "INVALID_ACTION_ARGUMENTS", action, activeGroup: this.activeToolset, issues: validationIssues, acceptedStateChanged: false, next: "Use the exact input schema returned by finite_open_toolset; do not guess, coerce, or add arguments." };
+    const result = await target.execute(args, context);
+    return { ...result, dispatchedAction: action, dispatchedReadOnly: target.annotations?.readOnlyHint === true };
+  }
+
+  private dispatcherNextAction(value: unknown): unknown {
+    const action = record(value);
+    const semanticNextTool = String(action.nextTool ?? "");
+    if (!semanticNextTool || ["finite_invoke", "finite_open_toolset", "finite_read_result", "finite_enter_kitchen", "finite_get_capabilities", "finite_get_effort_receipt"].includes(semanticNextTool)) return value;
+    const missingInputs = Array.isArray(action.missingInputs) ? action.missingInputs.map((item) => {
+      const input = record(item);
+      return { ...input, argument: input.argument ? `arguments.${String(input.argument)}` : input.argument };
+    }) : action.missingInputs;
+    return { ...action, semanticNextTool, nextTool: "finite_invoke", knownArgs: { action: semanticNextTool, arguments: record(action.knownArgs) }, missingInputs };
+  }
+
+  private dispatcherResult(result: ToolResult): ToolResult {
+    if (!this.stableDispatcher) return result;
+    const continuation = record(result.operatorContinuation);
+    const packet = record(result.operatorPacket);
+    return {
+      ...result,
+      ...(result.nextAction ? { nextAction: this.dispatcherNextAction(result.nextAction) } : {}),
+      ...(Object.keys(continuation).length ? { operatorContinuation: { ...continuation, ...(continuation.nextAction ? { nextAction: this.dispatcherNextAction(continuation.nextAction) } : {}) } } : {}),
+      ...(Object.keys(packet).length ? { operatorPacket: { ...packet, ...(packet.nextAction ? { nextAction: this.dispatcherNextAction(packet.nextAction) } : {}) } } : {}),
+    };
+  }
+
   private instrument(tool: WebMCPToolDefinition): WebMCPToolDefinition {
     return {
       ...tool,
@@ -1097,15 +1230,18 @@ export class FinitePlanWebMCPAdapter {
         const inputHash = await sha256(proofInput(input));
         const result = await tool.execute(input, context);
         const cancelled = String(result.code).startsWith("TOOL_CANCELLED");
-        const refreshRouteAfterResponse = !cancelled && routeRefreshToolNames.has(tool.name);
+        const dispatchedAction = String(result.dispatchedAction ?? "");
+        const refreshRouteAfterResponse = !cancelled && routeRefreshToolNames.has(tool.name === "finite_invoke" ? dispatchedAction : tool.name);
         let routedResult: ToolResult = result;
-        if (!cancelled && tool.annotations?.readOnlyHint !== true && tool.name !== "finite_open_toolset") {
+        const effectivelyReadOnly = tool.annotations?.readOnlyHint === true || (tool.name === "finite_invoke" && result.dispatchedReadOnly === true);
+        if (!cancelled && !effectivelyReadOnly && tool.name !== "finite_open_toolset") {
           const entered = await enterKitchen(this.runtime, this.arrival, { entryIntent: "continue_current" }, context);
           if (entered.ok) {
             const packet = record(entered.operatorPacket);
             routedResult = { ...result, operatorContinuation: { nextAction: packet.nextAction, currency: packet.currency, externalActionLaw: packet.externalActionLaw } };
           }
         }
+        routedResult = this.dispatcherResult(routedResult);
         let observed: ToolResult = routedResult;
         if (this.observer && tool.name !== "finite_open_toolset") {
           try {
@@ -1158,14 +1294,17 @@ export class FinitePlanWebMCPAdapter {
         } : undefined;
         const complete = { ...observed, ...(toolsetReceipt ? { webmcpToolset: toolsetReceipt } : {}), operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
         const bounded = await this.boundedResult(tool.name, complete);
-        if (refreshRouteAfterResponse) this.scheduleRouteRefresh(result);
+        if (refreshRouteAfterResponse) {
+          if (this.stableDispatcher) await this.applyToolset(this.groupFromResult(result) ?? await this.inferredToolset());
+          else this.scheduleRouteRefresh(result);
+        }
         return bounded;
       },
     };
   }
 
   async register(): Promise<string[]> {
-    const openToolset = define({ name: "finite_open_toolset", title: "Open a bounded kitchen toolset", description: "Replace the currently advertised route tools with one bounded capability group. This changes page discovery only; it does not change plan truth, human input, or authority.", readOnly: true, inputSchema: objectSchema({ group: { type: "string", enum: toolsetGroupNames } }, ["group"]), execute: async ({ group }) => this.activateToolset(String(group) as ToolsetGroup) });
+    const openToolset = define({ name: "finite_open_toolset", title: "Open a bounded kitchen toolset", description: this.stableDispatcher ? "Select one bounded semantic action group and return its typed manifest. This changes no plan truth, human input, authority, or browser registrations." : "Replace the currently advertised route tools with one bounded capability group. This changes page discovery only; it does not change plan truth, human input, or authority.", readOnly: true, inputSchema: objectSchema({ group: { type: "string", enum: toolsetGroupNames } }, ["group"]), execute: async ({ group }) => this.activateToolset(String(group) as ToolsetGroup) });
     const readResult = define({
       name: "finite_read_result",
       title: "Read exact operation detail",
@@ -1223,17 +1362,41 @@ export class FinitePlanWebMCPAdapter {
       readOnly: true,
       execute: () => this.getEffortReceipt(),
     });
-    this.coreTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival), openToolset].map((tool) => this.instrument(tool));
-    this.coreTools.push(readResult, getEffortReceipt);
+    const invoke = define({
+      name: "finite_invoke",
+      title: "Invoke one available kitchen action",
+      description: "Execute one exact semantic action from the currently open bounded manifest. Finite revalidates group, authority, revision, evidence, and input at execution time.",
+      inputSchema: objectSchema({ action: { type: "string", minLength: 1, maxLength: 200 }, arguments: { type: "object" } }, ["action"]),
+      execute: (input, context) => this.dispatchAction(input, context),
+    });
+    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival), openToolset];
+    this.coreTools = this.executableTools.map((tool) => this.instrument(tool));
+    this.coreTools.push(readResult, getEffortReceipt, this.instrument(invoke));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;
-    const persistent = this.coreTools.filter((tool) => persistentToolNames.has(tool.name));
+    const stableNames = new Set([...persistentToolNames, "finite_get_effort_receipt", "finite_invoke"]);
+    const persistent = this.coreTools.filter((tool) => (this.stableDispatcher ? stableNames : persistentToolNames).has(tool.name));
     for (const tool of persistent) {
       if (this.entryAlreadyRegistered && tool.name === "finite_enter_kitchen") continue;
-      await this.host.registerTool(tool);
+      await this.host.registerTool(tool, { signal: this.persistentController.signal });
     }
     this.advertisedCoreTools = persistent;
-    await this.refreshRouteTools();
+    if (this.stableDispatcher) {
+      const opened = await this.arrival.open();
+      this.activeToolset = !opened.ok || !opened.order ? "arrival" : !isWaitingArrivalStatus(opened.order.status) ? "planning" : opened.order.status === "interpretation_confirmed" ? "construction" : "arrival";
+      this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
+    } else await this.refreshRouteTools();
     return this.inventory();
+  }
+
+  dispose(): void {
+    this.routeRefreshGeneration += 1;
+    this.routeController?.abort("adapter disposed");
+    this.contextualController?.abort("adapter disposed");
+    this.persistentController.abort("adapter disposed");
+    this.routeController = null;
+    this.contextualController = null;
+    this.advertisedCoreTools = [];
+    this.contextualTools = [];
   }
 
   async enterKitchen(input: unknown = {}, context: { signal?: AbortSignal } = {}): Promise<ToolResult> {
@@ -1252,9 +1415,10 @@ export class FinitePlanWebMCPAdapter {
     const arrivalStatus = String(order.status ?? "");
     if (nextTool === "finite_activate_confirmed_plan" || nextTool === "finite_stage_plan_draft" || nextTool === "finite_compile_intake_to_draft") return "plan_management";
     if (stage === "ready") return "planning";
+    if (stage === "no_valid_option") return "planning";
     if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required" || stage === "draft_returned") return "construction";
     if (stage === "awaiting_human" && targetId.startsWith("plan_draft_")) return "plan_management";
-    if (arrivalStatus) return arrivalStatus === "interpretation_confirmed" ? "construction" : "arrival";
+    if (isWaitingArrivalStatus(arrivalStatus)) return arrivalStatus === "interpretation_confirmed" ? "construction" : "arrival";
     if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved" || stage === "human_confirmed" || stage === "plan_inactive") return "decisions";
     if (stage === "menu_ready") {
       const intendedTools = Array.isArray(nextAction.intendedTools) ? nextAction.intendedTools.map(String) : [];
@@ -1265,6 +1429,7 @@ export class FinitePlanWebMCPAdapter {
     const code = String(result?.code ?? "");
     if (code === "PLAN_ACTIVATED" || code === "PLAN_AMENDMENT_ACTIVATED") return "planning";
     if (code.includes("PLAN_DRAFT") || code.includes("PLAN_AMENDMENT") || code.startsWith("PLAN_ACTIVATION")) return "plan_management";
+    if (code === "NO_VALID_OPTION") return "planning";
     if (code === "OPTIONS_GENERATED" || code === "OPTIONS_AVAILABLE" || code === "OPTION_STAGED" || code === "OPTION_REJECTED") return "decisions";
     if (code === "PREFERENCE_CHANGE_STAGED" || code === "ACTUAL_CORRECTION_STAGED" || code === "PLAN_LIFECYCLE_STAGED" || code === "PLAN_LIFECYCLE_APPLIED" || code === "GROUP_DECISION_STAGED" || code === "EXTERNAL_ACTION_STAGED") return "decisions";
     if (code === "PREFERENCE_CHANGE_APPLIED" || code === "ACTUAL_CORRECTION_APPLIED" || code === "GROUP_DECISION_APPLIED" || code === "EXTERNAL_ACTION_APPLIED") return "planning";
@@ -1276,6 +1441,7 @@ export class FinitePlanWebMCPAdapter {
   private async inferredToolset(): Promise<ToolsetGroup> {
     const opened = await this.arrival.open();
     if (!opened.ok || !opened.order) return "arrival";
+    if (!isWaitingArrivalStatus(opened.order.status)) return "planning";
     if (opened.order.status === "interpretation_confirmed") return "construction";
     return "arrival";
   }
@@ -1293,24 +1459,46 @@ export class FinitePlanWebMCPAdapter {
   private async applyToolset(group: ToolsetGroup): Promise<ToolResult> {
     if (!toolsetGroupNames.includes(group)) return { ok: false, code: "TOOLSET_GROUP_INVALID", acceptedStateChanged: false };
     const previousGroup = this.activeToolset;
-    this.routeController?.abort("toolset changed");
-    this.routeController = new AbortController();
-    this.activeToolset = group;
+    if (this.stableDispatcher) {
+      this.activeToolset = group;
+      this.effort.registryRefreshes += 1;
+      if (previousGroup !== group) this.effort.routeChanges += 1;
+      const actions = this.actionManifest(group);
+      this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
+      return { ok: true, code: "TOOLSET_READY", group, actionNames: actions.map((action) => action.name), actions, advertisedTools: this.inventory(), acceptedStateChanged: false, next: "Call finite_invoke with one exact action and arguments matching its returned schema." };
+    }
+    const names = new Set<string>(toolsetGroups[group]);
+    const persistent = this.coreTools.filter((tool) => persistentToolNames.has(tool.name));
+    const routeTools = this.coreTools.filter((tool) => names.has(tool.name) && !persistentToolNames.has(tool.name) && this.authorityReady(tool.name));
     this.effort.registryRefreshes += 1;
     if (previousGroup !== group) this.effort.routeChanges += 1;
-    const names = new Set<string>(toolsetGroups[group]);
-    const authorityReady = (toolName: string): boolean => {
-      if (toolName === "finite_apply_approved_option") return Boolean((this.runtime.kernel.approval && this.runtime.kernel.stagedCandidate) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "plan_option"));
-      if (toolName === "finite_apply_confirmed_preference_change") return Boolean((this.runtime.kernel.preferenceConfirmation && this.runtime.kernel.pendingPreferenceChange) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "preference_change"));
-      if (toolName === "finite_apply_confirmed_actual_correction") return Boolean((this.runtime.kernel.correctionConfirmation && this.runtime.kernel.pendingCorrection) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "actual_correction"));
-      if (toolName === "finite_apply_confirmed_plan_lifecycle") return Boolean((this.runtime.kernel.lifecycleConfirmation && this.runtime.kernel.pendingLifecycleChange) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "plan_lifecycle"));
-      if (toolName === "finite_apply_confirmed_group_decision") return Boolean((this.runtime.kernel.groupDecisionConfirmation && this.runtime.kernel.pendingGroupDecision) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "group_decision"));
-      if (toolName === "finite_apply_confirmed_external_action") return Boolean((this.runtime.kernel.externalActionConfirmation && this.runtime.kernel.pendingExternalAction) || this.runtime.kernel.receipts.some((receipt) => receipt.receiptType === "external_action"));
-      if (toolName === "finite_activate_confirmed_plan") return Boolean((this.runtime.planActivationConfirmation && this.runtime.pendingPlanDraft) || this.runtime.hasActivationReceipt());
-      return true;
-    };
-    const routeTools = this.coreTools.filter((tool) => names.has(tool.name) && !persistentToolNames.has(tool.name) && authorityReady(tool.name));
-    this.advertisedCoreTools = [...this.coreTools.filter((tool) => persistentToolNames.has(tool.name)), ...routeTools];
+
+    if (previousGroup === group && this.routeController) {
+      const currentRouteNames = new Set(this.advertisedCoreTools.filter((tool) => !persistentToolNames.has(tool.name)).map((tool) => tool.name));
+      const desiredRouteNames = new Set(routeTools.map((tool) => tool.name));
+      const removesRouteTool = [...currentRouteNames].some((name) => !desiredRouteNames.has(name));
+      const currentContextNames = this.contextualTools.map((tool) => tool.name).sort();
+      const desiredContextNames = group === "planning" ? contextualDefinitions(this.runtime).map((tool) => tool.name).sort() : [];
+      const contextChanged = JSON.stringify(currentContextNames) !== JSON.stringify(desiredContextNames);
+      if (!removesRouteTool && !contextChanged) {
+        for (const tool of routeTools) if (!currentRouteNames.has(tool.name)) await this.host.registerTool(tool, { signal: this.routeController.signal });
+        this.advertisedCoreTools = [...persistent, ...routeTools];
+        this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
+        return { ok: true, code: "TOOLSET_READY", group, advertisedTools: this.inventory(), acceptedStateChanged: false, next: "Continue with the route tool named by Finite's nextAction, or open another bounded group if the work changes." };
+      }
+    }
+
+    this.routeController?.abort("toolset changed");
+    this.contextualController?.abort("toolset changed");
+    this.contextualController = null;
+    this.contextualTools = [];
+    // Browser hosts may process AbortSignal-based unregistration on the next task.
+    // Never register the replacement route while the prior route/context tools can
+    // still count toward the document's hard WebMCP configuration limit.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    this.routeController = new AbortController();
+    this.activeToolset = group;
+    this.advertisedCoreTools = [...persistent, ...routeTools];
     for (const tool of routeTools) await this.host.registerTool(tool, { signal: this.routeController.signal });
     await this.refreshContextualTools();
     this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
@@ -1320,7 +1508,9 @@ export class FinitePlanWebMCPAdapter {
   async refreshContextualTools(): Promise<void> {
     this.contextualController?.abort("profile changed");
     this.contextualTools = [];
+    if (this.stableDispatcher) return;
     if (this.activeToolset !== "planning") return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     this.contextualController = new AbortController();
     this.contextualTools = contextualDefinitions(this.runtime).map((tool) => this.instrument(tool));
     for (const tool of this.contextualTools) await this.host.registerTool(tool, { signal: this.contextualController.signal });
