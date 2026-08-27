@@ -255,7 +255,7 @@ test("Codex can inspect, validate, save, apply, and delete a bounded custom them
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, reset, async () => {}, themes, async () => { themeCallbacks += 1; }, skins, async () => { skinCallbacks += 1; }).useStableDispatcher();
   await adapter.register();
   const opened = await host.execute("finite_open_toolset", { group: "settings" });
-  assert.deepEqual(opened.actionNames, ["finite_list_skins", "finite_get_skin_schema", "finite_preview_skin", "finite_save_custom_skin", "finite_set_skin", "finite_delete_custom_skin", "finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"]);
+  assert.deepEqual(opened.actionNames, ["finite_guide_view", "finite_list_skins", "finite_get_skin_schema", "finite_preview_skin", "finite_save_custom_skin", "finite_set_skin", "finite_delete_custom_skin", "finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"]);
   assert.equal((await host.execute("finite_invoke", { action: "finite_get_skin_schema", arguments: {} })).code, "SKIN_SCHEMA");
   const skinDraft = { skinId: customSkin.skinId, name: customSkin.name, description: customSkin.description, recipe: customSkin.recipe };
   assert.equal((await host.execute("finite_invoke", { action: "finite_preview_skin", arguments: skinDraft })).code, "SKIN_PREVIEW");
@@ -272,4 +272,27 @@ test("Codex can inspect, validate, save, apply, and delete a bounded custom them
   assert.equal(skinCallbacks, 2);
   assert.deepEqual(skinCalls.map(([name]) => name), ["preview", "save", "set", "delete"]);
   assert.deepEqual(calls.map(([name]) => name), ["preview", "save", "set", "delete"]);
+});
+
+test("guided view is a bounded read-only action and delegates consent to the human surface", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const requests = [];
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository())
+    .withGuideView(async (request) => { requests.push(request); return { ok: true, code: "VIEW_GUIDED", guide: request, acceptedStateChanged: false }; })
+    .useStableDispatcher();
+  await adapter.register();
+  const opened = await host.execute("finite_open_toolset", { group: "planning" });
+  const guide = opened.actions.find((action) => action.name === "finite_guide_view");
+  assert.equal(guide.readOnly, true);
+  assert.deepEqual(guide.inputSchema.properties.surface.enum, ["current", "arrival", "plan"]);
+  assert.deepEqual(guide.inputSchema.properties.target.enum, ["top", "starting_point", "status", "question", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"]);
+  const invalid = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "https://example.com", target: "#password" } });
+  assert.equal(invalid.code, "INVALID_ACTION_ARGUMENTS");
+  assert.equal(requests.length, 0);
+  const result = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "plan", target: "approval", refresh: true } });
+  assert.equal(result.code, "VIEW_GUIDED");
+  assert.equal(result.acceptedStateChanged, false);
+  assert.deepEqual(requests, [{ surface: "plan", target: "approval", refresh: true }]);
 });

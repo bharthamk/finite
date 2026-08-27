@@ -127,3 +127,18 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });
+
+test("Follow Codex is a human-controlled top-bar permission with bounded accessible spotlights", () => {
+  assert.equal(source.match(/\$\{renderFollowCodexButton\(\)\}/g)?.length, 2);
+  assert.match(source, /data-action="toggle-follow-codex" aria-pressed="\$\{followCodexEnabled\}"/);
+  assert.match(source, /scopedStorage\.getItem\("finite-plan\.follow-codex"\) === "true"/);
+  assert.match(source, /FOLLOW_CODEX_DISABLED/);
+  assert.match(source, /request\.surface !== "current"/);
+  assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
+  assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
+  assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
+  assert.match(source, /Codex is showing \$\{descriptor\.label\}/);
+  assert.match(styles, /\[data-codex-spotlight="true"\]/);
+  assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\.follow-codex-toggle\[aria-pressed="true"\]/);
+});

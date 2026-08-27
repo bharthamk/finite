@@ -3,7 +3,7 @@ import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogS
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, PlanLifecycleStatus, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
-import { FinitePlanWebMCPAdapter, type FiniteWebMCPReadiness } from "./webmcp.js";
+import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
@@ -447,12 +447,36 @@ const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogSt
 await runtime.hydrateAcceptedTruth();
 await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
+let forceArrivalSurface = false;
+let newPlanDraftMode = false;
+let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
+const guideView = async (request: FiniteGuideViewRequest) => {
+  if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to press Follow Codex in Finite's top bar. Codex must not move or highlight their screen without that permission." };
+  if (request.refresh) {
+    arrivalResult = await arrivalRepository.open();
+    await runtime.hydrateAcceptedTruth();
+    await runtime.hydrateConstructionPacket();
+    await runtime.resumeConstructionPacket();
+  }
+  if (request.surface !== "current") {
+    forceArrivalSurface = request.surface === "arrival";
+    newPlanDraftMode = false;
+    const target = new URL(location.href);
+    target.searchParams.delete("kitchen");
+    target.searchParams.delete("lab");
+    if (request.surface === "plan") target.searchParams.set("plan", "1");
+    else target.searchParams.delete("plan");
+    history.replaceState({}, "", target);
+  }
+  return { ok: true, code: "VIEW_GUIDED", guide: request, acceptedStateChanged: false, next: "Keep working from canonical Finite state. Move the person's view again only when it materially helps them follow along." };
+};
 const modelContext = document.modelContext;
 window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
+  const guidedView = result.code === "VIEW_GUIDED" ? applyCodexSpotlight(result.guide as FiniteGuideViewRequest) : null;
   return {
     toolName,
     resultCode: result.code,
@@ -460,6 +484,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     profileId: runtime.kernel.profile.profileId,
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
+    ...(guidedView ? { guidedView } : {}),
   };
 }, arrivalRepository, true, resetRepository, async () => {
   clearFiniteScope(localStorage, authSession.storageScope);
@@ -471,7 +496,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
 }, skinRepository, async (result: SkinResult) => {
   if (result.skin) applySkinDefinition(result.skin);
   await refreshSkinCatalog();
-}).useBoundedOutputs().useStableDispatcher() : null;
+}).withGuideView(guideView).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
   window.finiteEnterKitchen = (input, context) => adapter.enterKitchen(input, context);
@@ -500,8 +525,6 @@ let sharePreviewKey = "";
 let planPublications: PlanPublicationRecord[] = [];
 let newPublicationUrl = "";
 let shareError = "";
-let forceArrivalSurface = false;
-let newPlanDraftMode = false;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -525,6 +548,56 @@ const renderHeaderControls = (): string => {
         ${authSession.kind === "demo" ? `<button type="button" data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}
       </div>
     </details>`;
+};
+
+const renderFollowCodexButton = (): string => `<button type="button" class="follow-codex-toggle" data-action="toggle-follow-codex" aria-pressed="${followCodexEnabled}" title="${followCodexEnabled ? "Codex may refresh, move and highlight this Finite view" : "Allow Codex to refresh, move and highlight this Finite view"}"><span class="follow-codex-toggle__signal" aria-hidden="true"></span><span class="follow-codex-toggle__wide">${followCodexEnabled ? "Following Codex" : "Follow Codex"}</span><span class="follow-codex-toggle__short">${followCodexEnabled ? "Following" : "Follow"}</span></button>`;
+
+const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
+  top: { label: "the top of this page", selectors: [".arrival-compose", ".arrival-order-head", ".hero"] },
+  starting_point: { label: "your starting point", selectors: [".arrival-order", ".arrival-order-source"] },
+  status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
+  question: { label: "Codex's question", selectors: [".arrival-question"] },
+  review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
+  interpretation: { label: "Codex's working interpretation", selectors: [".arrival-interpretation"] },
+  updates: { label: "where to add or correct information", selectors: [".arrival-continuity"] },
+  plan_summary: { label: "the plan summary", selectors: [".hero", ".plan-orbit"] },
+  stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
+  options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
+  approval: { label: "the approval area", selectors: [".zone--approval_panel", ".plan-intake", ".lifecycle-control--pending"] },
+  receipt: { label: "the latest receipt", selectors: [".receipt"] },
+};
+let spotlightTimer: number | null = null;
+const clearCodexSpotlight = (): void => {
+  if (spotlightTimer !== null) window.clearTimeout(spotlightTimer);
+  spotlightTimer = null;
+  root.querySelectorAll<HTMLElement>("[data-codex-spotlight]").forEach((element) => element.removeAttribute("data-codex-spotlight"));
+};
+const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
+  clearCodexSpotlight();
+  const descriptor = guideTargetSelectors[request.target];
+  const element = descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
+  const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
+  if (!element) {
+    announce(`Codex refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
+    return { target: request.target, found: false, surface };
+  }
+  const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
+  if (disclosure) disclosure.open = true;
+  element.setAttribute("data-codex-spotlight", "true");
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
+  announce(`Codex is showing ${descriptor.label}.`);
+  spotlightTimer = window.setTimeout(() => { element.removeAttribute("data-codex-spotlight"); spotlightTimer = null; }, 7_000);
+  return { target: request.target, found: true, surface };
+};
+
+const bindFollowCodexInteractions = (): void => {
+  root.querySelector<HTMLButtonElement>("[data-action='toggle-follow-codex']")?.addEventListener("click", async () => {
+    followCodexEnabled = !followCodexEnabled;
+    if (followCodexEnabled) scopedStorage.setItem("finite-plan.follow-codex", "true");
+    else { scopedStorage.removeItem("finite-plan.follow-codex"); clearCodexSpotlight(); }
+    announce(followCodexEnabled ? "Follow Codex is on. Codex may refresh, move and highlight this Finite view." : "Follow Codex is off. Codex can keep working, but cannot move this view.");
+    await render();
+  });
 };
 
 type HeaderPlanChoice = { planId: string; profileId: string; name: string; active: boolean; supersededBy: string | null };
@@ -1054,6 +1127,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       ${renderPlanSwitcher("arrival")}
       ${renderShareHeaderAction("arrival")}
       <div class="header-actions">
+        ${renderFollowCodexButton()}
         ${order ? renderCodexHandoffButton() : ""}
         ${renderHeaderControls()}
       </div>
@@ -1376,6 +1450,7 @@ const bindThemeSettingsInteractions = (): void => {
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
   bindPlanShareInteractions();
+  bindFollowCodexInteractions();
   bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
@@ -1734,6 +1809,7 @@ async function render(): Promise<SurfaceManifest> {
       ${renderPlanSwitcher("plan")}
       ${renderShareHeaderAction("plan")}
       <div class="header-actions">
+        ${renderFollowCodexButton()}
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
       </div>
@@ -1886,6 +1962,7 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
 
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
+  bindFollowCodexInteractions();
   bindPlanShareInteractions();
   bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();

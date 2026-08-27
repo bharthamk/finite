@@ -33,6 +33,9 @@ const parameterDescriptions: Record<string, string> = {
   planId: "Canonical plan identity.",
   selectors: "Canonical state sections to return.",
   group: "Bounded tool group to advertise for the current work.",
+  surface: "Finite surface to keep, or the bounded arrival or active-plan surface to show.",
+  target: "Named Finite section to open, scroll to, and temporarily highlight.",
+  refresh: "Whether to reload canonical Finite truth before guiding the view.",
   rawOutcome: "Human's desired outcome in their own words.",
   structured: "Optional structured facts supplied by the human surface.",
   attachments: "Optional human-supplied attachment references.",
@@ -273,7 +276,7 @@ const persistentToolNames = new Set(["finite_get_capabilities", "finite_enter_ki
 export const WEBMCP_OUTPUT_CHARACTER_BUDGET = 1_500;
 const WEBMCP_RESULT_CHUNK_BUDGET = 800;
 const WEBMCP_RESULT_VAULT_LIMIT = 24;
-const orientationToolNames = new Set(["finite_get_capabilities", "finite_enter_kitchen", "finite_open_toolset", "finite_read_result"]);
+const orientationToolNames = new Set(["finite_get_capabilities", "finite_enter_kitchen", "finite_guide_view", "finite_open_toolset", "finite_read_result"]);
 const routeRefreshToolNames = new Set([
   "finite_invoke",
   "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation",
@@ -801,8 +804,16 @@ const skinDraftSchema = {
   recipe: objectSchema(skinRecipeSchema, Object.keys(skinRecipeSchema)),
 };
 
-const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>, skins: SkinRepository, onSkinChanged: (result: SkinResult) => Promise<void>): WebMCPToolDefinition[] => [
+export const finiteGuideSurfaces = ["current", "arrival", "plan"] as const;
+export const finiteGuideTargets = ["top", "starting_point", "status", "question", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"] as const;
+export type FiniteGuideSurface = typeof finiteGuideSurfaces[number];
+export type FiniteGuideTarget = typeof finiteGuideTargets[number];
+export interface FiniteGuideViewRequest { surface: FiniteGuideSurface; target: FiniteGuideTarget; refresh: boolean }
+export type FiniteGuideViewHandler = (request: FiniteGuideViewRequest) => Promise<ToolResult>;
+
+const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>, skins: SkinRepository, onSkinChanged: (result: SkinResult) => Promise<void>, guideView: FiniteGuideViewHandler): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
+  define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's Follow Codex permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, and temporarily highlight one named section. This cannot change plan truth, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true }) }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
   define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
   define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions, with exact known and missing inputs.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, input, context) }),
@@ -1105,6 +1116,7 @@ export class FinitePlanWebMCPAdapter {
   private routeRefreshGeneration = 0;
   private boundedOutputs = false;
   private stableDispatcher = false;
+  private guideView: FiniteGuideViewHandler = async () => ({ ok: false, code: "FOLLOW_CODEX_UNAVAILABLE", acceptedStateChanged: false, next: "Ask the person to open Finite in a browser that supports guided view." });
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
   constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}, private readonly themes: ThemeRepository = new HttpThemeRepository(), private readonly onThemeChanged: (result: ThemeResult) => Promise<void> = async () => {}, private readonly skins: SkinRepository = new HttpSkinRepository(), private readonly onSkinChanged: (result: SkinResult) => Promise<void> = async () => {}) {}
@@ -1116,6 +1128,11 @@ export class FinitePlanWebMCPAdapter {
 
   useStableDispatcher(): this {
     this.stableDispatcher = true;
+    return this;
+  }
+
+  withGuideView(handler: FiniteGuideViewHandler): this {
+    this.guideView = handler;
     return this;
   }
 
@@ -1240,7 +1257,7 @@ export class FinitePlanWebMCPAdapter {
   }
 
   private logicalActions(group: ToolsetGroup = this.activeToolset): WebMCPToolDefinition[] {
-    const names = new Set<string>(toolsetGroups[group]);
+    const names = new Set<string>([...toolsetGroups[group], "finite_guide_view"]);
     const core = this.executableTools.filter((tool) => names.has(tool.name) && this.authorityReady(tool.name));
     const contextual = group === "planning" ? contextualDefinitions(this.runtime).filter((tool) => this.authorityReady(tool.name)) : [];
     return [...core, ...contextual].filter((tool, index, all) => all.findIndex((candidate) => candidate.name === tool.name) === index);
@@ -1438,7 +1455,7 @@ export class FinitePlanWebMCPAdapter {
       inputSchema: objectSchema({ action: { type: "string", minLength: 1, maxLength: 200 }, arguments: { type: "object" } }, ["action"]),
       execute: (input, context) => this.dispatchAction(input, context),
     });
-    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset, this.themes, this.onThemeChanged, this.skins, this.onSkinChanged), openToolset];
+    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset, this.themes, this.onThemeChanged, this.skins, this.onSkinChanged, (request) => this.guideView(request)), openToolset];
     this.coreTools = this.executableTools.map((tool) => this.instrument(tool));
     this.coreTools.push(readResult, getEffortReceipt, this.instrument(invoke));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;

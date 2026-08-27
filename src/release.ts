@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "browser-language-spellcheck-v74",
+  build: "follow-codex-guided-view-v75",
 } as const;
