@@ -6,6 +6,7 @@ import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.j
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter, humanOnlyActions, registerFiniteWebMCPStatus } from "../dist-test/src/webmcp.js";
+import { builtInThemes, themeCoreTokenKeys } from "../dist-test/src/theme.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -220,4 +221,35 @@ test("Codex can preview and execute the same guarded kitchen reset only after ex
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], { confirmation: "START OVER", idempotencyKey: "codex-reset-0001", sourceSurface: "codex" });
   assert.equal(resetCallback, 1);
+});
+
+test("Codex can inspect, validate, save, apply, and delete a bounded custom theme", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const reset = { preview: async () => ({ ok: true, code: "KITCHEN_RESET_PREVIEW", acceptedStateChanged: false }), reset: async () => ({ ok: false, code: "NOT_USED", acceptedStateChanged: false }) };
+  const workshop = builtInThemes[0];
+  const tokens = Object.fromEntries(themeCoreTokenKeys.map((key) => [key, workshop.tokens[key]]));
+  const custom = { themeId: "custom_codex-studio", name: "Codex studio", mode: "light", kind: "custom", tokens: workshop.tokens };
+  const calls = [];
+  const themes = {
+    list: async () => ({ ok: true, code: "THEME_CATALOG", builtIns: builtInThemes, custom: [], activeThemeId: "workshop", activeTheme: workshop, acceptedStateChanged: false }),
+    preview: async (input) => { calls.push(["preview", input]); return { ok: true, code: "THEME_PREVIEW", theme: custom, acceptedStateChanged: false }; },
+    save: async (input) => { calls.push(["save", input]); return { ok: true, code: "CUSTOM_THEME_CREATED", theme: custom, acceptedStateChanged: true }; },
+    setActive: async (input) => { calls.push(["set", input]); return { ok: true, code: "THEME_APPLIED", theme: custom, activeThemeId: custom.themeId, acceptedStateChanged: true }; },
+    delete: async (input) => { calls.push(["delete", input]); return { ok: true, code: "CUSTOM_THEME_DELETED", theme: workshop, activeThemeId: "workshop", acceptedStateChanged: true }; },
+  };
+  let themeCallbacks = 0;
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, reset, async () => {}, themes, async () => { themeCallbacks += 1; }).useStableDispatcher();
+  await adapter.register();
+  const opened = await host.execute("finite_open_toolset", { group: "settings" });
+  assert.deepEqual(opened.actionNames, ["finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"]);
+  assert.equal((await host.execute("finite_invoke", { action: "finite_get_theme_schema", arguments: {} })).code, "THEME_SCHEMA");
+  const draft = { themeId: custom.themeId, name: custom.name, mode: custom.mode, tokens };
+  assert.equal((await host.execute("finite_invoke", { action: "finite_preview_theme", arguments: draft })).code, "THEME_PREVIEW");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_save_custom_theme", arguments: { ...draft, idempotencyKey: "codex-theme-save-0001", sourceSurface: "codex" } })).code, "CUSTOM_THEME_CREATED");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_set_theme", arguments: { themeId: custom.themeId, idempotencyKey: "codex-theme-set-0001", sourceSurface: "codex" } })).code, "THEME_APPLIED");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_delete_custom_theme", arguments: { themeId: custom.themeId, idempotencyKey: "codex-theme-delete-0001", sourceSurface: "codex" } })).code, "CUSTOM_THEME_DELETED");
+  assert.equal(themeCallbacks, 2);
+  assert.deepEqual(calls.map(([name]) => name), ["preview", "save", "set", "delete"]);
 });

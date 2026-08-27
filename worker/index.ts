@@ -2,6 +2,7 @@ import { handleAcceptedTruthRequest, type D1Database } from "./accepted-truth.js
 import { handleAuthRequest } from "./auth.js";
 import { handleArrivalRequest } from "./arrival.js";
 import { handleConstructionPacketRequest } from "./construction-packet.js";
+import { handleThemeRequest } from "./themes.js";
 import { finiteRelease } from "../src/release.js";
 
 interface AssetsBinding {
@@ -47,6 +48,8 @@ export default {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
     const authResponse = await handleAuthRequest(request, environment.DB);
     if (authResponse) return withSecurityHeaders(authResponse);
+    const themeResponse = await handleThemeRequest(request, environment.DB);
+    if (themeResponse) return withSecurityHeaders(themeResponse);
     const arrivalResponse = await handleArrivalRequest(request, environment.DB);
     if (arrivalResponse) return withSecurityHeaders(arrivalResponse);
     const constructionResponse = await handleConstructionPacketRequest(request, environment.DB);

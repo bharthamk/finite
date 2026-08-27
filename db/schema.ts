@@ -270,3 +270,34 @@ export const constructionReturnReviews = sqliteTable("construction_return_review
   resolvedAt: text("resolved_at"),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const tenantThemes = sqliteTable("tenant_themes", {
+  scopeId: text("scope_id").notNull(),
+  themeId: text("theme_id").notNull(),
+  name: text("name").notNull(),
+  mode: text("mode").notNull(),
+  tokensJson: text("tokens_json").notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.themeId] }),
+  index("idx_tenant_themes_scope_updated").on(table.scopeId, table.updatedAt),
+]);
+
+export const tenantThemePreferences = sqliteTable("tenant_theme_preferences", {
+  scopeId: text("scope_id").primaryKey(),
+  activeThemeId: text("active_theme_id").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const tenantThemeReceipts = sqliteTable("tenant_theme_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_tenant_theme_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

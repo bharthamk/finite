@@ -5,6 +5,7 @@ import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, Web
 import { assessExternalAction, currencyContract, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
 import { isWaitingArrivalStatus } from "./experience-route.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetRepository, type KitchenResetResult } from "./kitchen-reset.js";
+import { HttpThemeRepository, themeCoreTokenKeys, themeSchema, type ThemeCoreTokens, type ThemeMode, type ThemeRepository, type ThemeResult } from "./theme.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -63,7 +64,10 @@ const parameterDescriptions: Record<string, string> = {
   action: "Exact semantic action name returned by the currently open bounded manifest.",
   arguments: "Arguments matching the selected semantic action's input schema.",
   confirmation: `Exact destructive phrase supplied by the human: ${kitchenResetConfirmation}.`,
-  sourceSurface: "Surface where the human requested this permanent reset.",
+  sourceSurface: "Surface where the human requested this operation.",
+  themeId: "Stable built-in or tenant-local custom theme identity.",
+  mode: "Light or dark browser colour mode.",
+  tokens: "Exact bounded colour-role tokens; raw CSS and URLs are not accepted.",
   actualId: "Canonical actual-ledger entry to correct.",
   actuals: "Known actual ledger entries for the plan draft.",
   allocation: "Finite allocation whose components must conserve the total.",
@@ -95,7 +99,7 @@ const parameterDescriptions: Record<string, string> = {
   locks: "Plan commitments that legal moves must not change.",
   moveIds: "Legal move identities to simulate together.",
   moves: "Plan-specific legal recovery moves compiled into the draft.",
-  name: "Human-readable plan name.",
+  name: "Human-readable plan or theme name.",
   nights: "Number of nights added to the stay.",
   objective: "Outcome shape used to score the simulated route.",
   orderChecksum: "Exact arrival-order checksum bound to construction.",
@@ -260,6 +264,7 @@ const toolsetGroups = {
   evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_assess_external_action", "finite_get_external_actions", "finite_stage_external_action", "finite_export_plan_receipt"],
   continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff", "finite_get_effort_receipt"],
   plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile", "finite_get_reset_preview", "finite_reset_kitchen"],
+  settings: ["finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"],
 } as const;
 type ToolsetGroup = keyof typeof toolsetGroups;
 const toolsetGroupNames = Object.keys(toolsetGroups) as ToolsetGroup[];
@@ -770,7 +775,15 @@ const getChefMenu = async (runtime: FinitePlanRuntime, arrival: ArrivalRepositor
   };
 };
 
-const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>): WebMCPToolDefinition[] => [
+const themeTokensSchema = Object.fromEntries(themeCoreTokenKeys.map((key) => [key, { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: `${key} colour role as #RRGGBB.` }]));
+const themeDraftSchema = {
+  themeId: { type: "string", pattern: "^custom_[a-z0-9-]{3,60}$", minLength: 10, maxLength: 67 },
+  name: { type: "string", minLength: 1, maxLength: 60 },
+  mode: { type: "string", enum: ["light", "dark"] },
+  tokens: objectSchema(themeTokensSchema, [...themeCoreTokenKeys]),
+};
+
+const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
   define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
@@ -794,6 +807,20 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_close_operator_session", title: "Close operator work", description: "Close one exact non-authoritative work packet without changing accepted truth.", inputSchema: objectSchema({ sessionId: string }, ["sessionId"]), execute: (input, context) => runtime.closeOperatorSession(input as never, context) }),
   define({ name: "finite_resume_human_handoff", title: "Resume an exact human handoff", description: "Resume one unexpired, unconsumed human-created authority challenge only after the exact candidate has been independently rebuilt and staged on this device.", inputSchema: objectSchema({ challengeId: string }, ["challengeId"]), execute: (input, context) => runtime.kernel.resumeHumanAuthorityChallenge(input as never, context) }),
   define({ name: "finite_list_plans", title: "List compiled finite plans", description: "Read the active plan, available built-in and human-confirmed plans, and any staged activation awaiting the human.", readOnly: true, execute: () => runtime.listPlans() }),
+  define({ name: "finite_list_themes", title: "List this kitchen's themes", description: "Read the four built-in themes, tenant custom themes, and exact active theme. Theme preference is reversible UI state and never accepted plan truth.", readOnly: true, execute: (_input, context) => themes.list(context) }),
+  define({ name: "finite_get_theme_schema", title: "Read the custom-theme contract", description: "Read the bounded token schema, derived roles, contrast requirements, and raw-CSS boundary before designing a custom theme.", readOnly: true, execute: () => ({ ok: true, code: "THEME_SCHEMA", schema: themeSchema(), acceptedStateChanged: false }) }),
+  define({ name: "finite_preview_theme", title: "Validate a custom theme draft", description: "Validate exact colour-role tokens and accessibility contrast without saving or applying anything.", readOnly: true, inputSchema: objectSchema(themeDraftSchema, ["themeId", "name", "mode", "tokens"]), execute: (input, context) => themes.preview(input as never, context) }),
+  define({ name: "finite_save_custom_theme", title: "Save a custom theme", description: "Create or update one tenant-local custom theme from validated tokens. This stores a reversible appearance setting and cannot alter plan truth, layout, CSS, scripts, assets, or external systems.", inputSchema: objectSchema({ ...themeDraftSchema, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "name", "mode", "tokens", "idempotencyKey", "sourceSurface"]), execute: (input, context) => themes.save({ themeId: String(input.themeId), name: String(input.name), mode: input.mode as ThemeMode, tokens: input.tokens as ThemeCoreTokens, idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context) }),
+  define({ name: "finite_set_theme", title: "Apply a kitchen theme", description: "Apply one available built-in or tenant custom theme only when the human explicitly requests it. This preference is reversible and does not change accepted plan truth.", inputSchema: objectSchema({ themeId: { type: "string", minLength: 1, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+    const result = await themes.setActive({ themeId: String(input.themeId), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
+    if (result.ok && result.code === "THEME_APPLIED") await onThemeChanged(result);
+    return result;
+  } }),
+  define({ name: "finite_delete_custom_theme", title: "Delete a custom theme", description: "Delete one exact tenant custom theme only when the human asks. Built-in themes cannot be deleted; deleting the active custom theme falls back to Workshop.", inputSchema: objectSchema({ themeId: { type: "string", pattern: "^custom_[a-z0-9-]{3,60}$", minLength: 10, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+    const result = await themes.delete({ themeId: String(input.themeId), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
+    if (result.ok && result.code === "CUSTOM_THEME_DELETED") await onThemeChanged(result);
+    return result;
+  } }),
   define({ name: "finite_get_reset_preview", title: "Preview a permanent kitchen reset", description: "Read exact same-tenant record counts and the required confirmation phrase before offering a reset. This changes nothing and exposes no other tenant.", readOnly: true, execute: (_input, context) => reset.preview(context) }),
   define({ name: "finite_reset_kitchen", title: "Permanently start this Finite kitchen over", description: `Permanently delete this authenticated tenant's Finite arrivals, construction work, plans, evidence, decisions, authority records, sessions, events, and receipts while preserving sign-in. Call only after the human explicitly requests the deletion and supplies ${kitchenResetConfirmation} exactly.`, inputSchema: objectSchema({ confirmation: { type: "string", enum: [kitchenResetConfirmation] }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["confirmation", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
     const result = await reset.reset({ confirmation: String(input.confirmation), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
@@ -1048,7 +1075,7 @@ export class FinitePlanWebMCPAdapter {
   private stableDispatcher = false;
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
-  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}) {}
+  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}, private readonly themes: ThemeRepository = new HttpThemeRepository(), private readonly onThemeChanged: (result: ThemeResult) => Promise<void> = async () => {}) {}
 
   useBoundedOutputs(): this {
     this.boundedOutputs = true;
@@ -1379,7 +1406,7 @@ export class FinitePlanWebMCPAdapter {
       inputSchema: objectSchema({ action: { type: "string", minLength: 1, maxLength: 200 }, arguments: { type: "object" } }, ["action"]),
       execute: (input, context) => this.dispatchAction(input, context),
     });
-    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset), openToolset];
+    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset, this.themes, this.onThemeChanged), openToolset];
     this.coreTools = this.executableTools.map((tool) => this.instrument(tool));
     this.coreTools.push(readResult, getEffortReceipt, this.instrument(invoke));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;

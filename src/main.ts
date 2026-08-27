@@ -13,6 +13,7 @@ import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, render
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
+import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -357,6 +358,21 @@ const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
 const resetRepository = new HttpKitchenResetRepository();
+const themeRepository = new HttpThemeRepository();
+let themeCatalog: ThemeCatalogResult;
+try {
+  themeCatalog = await themeRepository.list();
+  if (!themeCatalog.ok) throw new Error(themeCatalog.code);
+} catch {
+  themeCatalog = { ok: true, code: "THEME_CATALOG_FALLBACK", builtIns: builtInThemes, custom: [], activeThemeId: defaultTheme.themeId, activeTheme: defaultTheme, acceptedStateChanged: false };
+}
+applyThemeDefinition(themeCatalog.activeTheme);
+const refreshThemeCatalog = async (): Promise<void> => {
+  const next = await themeRepository.list();
+  if (!next.ok) throw new Error(next.code);
+  themeCatalog = next;
+  applyThemeDefinition(themeCatalog.activeTheme);
+};
 let arrivalResult: ArrivalResult = await arrivalRepository.open();
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 await runtime.hydrateAcceptedTruth();
@@ -380,6 +396,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   clearFiniteScope(localStorage, authSession.storageScope);
   if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
   window.setTimeout(() => location.assign("/"), 1_500);
+}, themeRepository, async (result: ThemeResult) => {
+  if (result.theme) applyThemeDefinition(result.theme);
+  await refreshThemeCatalog();
 }).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
@@ -395,6 +414,9 @@ let message = "";
 let messageScope = "";
 let draftReturnFormOpen = false;
 let kitchenResetPreview: KitchenResetResult | null = null;
+let themeSettingsOpen = false;
+let themeEditingId: string | null = null;
+let themeDeleteId: string | null = null;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -402,7 +424,7 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
-const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span><button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
+const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "account" ? `<button type="button" data-action="open-theme-settings" aria-label="Appearance settings">Theme</button>` : ""}<button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
 
 const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
 
@@ -424,6 +446,44 @@ const renderKitchenResetDialog = (): string => {
       <div><button class="button button--danger" type="submit" ${ready && !busy ? "" : "disabled"}>Permanently start over</button><button class="text-button" type="button" data-action="cancel-kitchen-reset">Keep my kitchen</button></div>
       <small>This cannot be undone. Finite keeps only a non-content reset receipt so an interrupted request cannot delete twice.</small>
     </form>
+  </dialog>`;
+};
+
+const themeCore = (theme: ThemeDefinition): ThemeCoreTokens => Object.fromEntries(themeCoreTokenKeys.map((key) => [key, theme.tokens[key]])) as ThemeCoreTokens;
+const allThemes = (): ThemeDefinition[] => [...themeCatalog.builtIns, ...themeCatalog.custom];
+const currentThemeDraft = (): ThemeDefinition => themeCatalog.custom.find((theme) => theme.themeId === themeEditingId) ?? themeCatalog.activeTheme;
+const renderThemeCard = (theme: ThemeDefinition): string => {
+  const current = theme.themeId === themeCatalog.activeThemeId;
+  const confirmingDelete = theme.themeId === themeDeleteId;
+  return `<article class="theme-card${current ? " is-current" : ""}" data-theme-card="${escapeHtml(theme.themeId)}">
+    <div class="theme-card__swatches" aria-hidden="true"><i style="background:${theme.tokens.paper}"></i><i style="background:${theme.tokens.panel}"></i><i style="background:${theme.tokens.accent}"></i><i style="background:${theme.tokens.deep}"></i><i style="background:${theme.tokens.signal}"></i></div>
+    <div class="theme-card__copy"><span>${theme.kind === "built_in" ? "Finite theme" : "Your theme"} · ${theme.mode}</span><h3>${escapeHtml(theme.name)}</h3></div>
+    <button type="button" data-theme-apply="${escapeHtml(theme.themeId)}" ${current || busy ? "disabled" : ""}>${current ? "Current" : "Use theme"}</button>
+    ${theme.kind === "custom" ? `<div class="theme-card__custom">${confirmingDelete ? `<button type="button" class="is-danger" data-theme-delete-confirm="${escapeHtml(theme.themeId)}">Delete permanently</button><button type="button" data-action="cancel-theme-delete">Keep</button>` : `<button type="button" data-theme-edit="${escapeHtml(theme.themeId)}">Edit</button><button type="button" data-theme-delete="${escapeHtml(theme.themeId)}">Delete</button>`}</div>` : ""}
+  </article>`;
+};
+
+const renderThemeSettingsDialog = (): string => {
+  const draft = currentThemeDraft();
+  const core = themeCore(draft);
+  const editing = themeEditingId !== null;
+  return `<dialog class="theme-settings-dialog" data-theme-settings-dialog aria-labelledby="theme_settings_title">
+    <form method="dialog" class="theme-settings-dialog__close"><button aria-label="Close appearance settings">×</button></form>
+    <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this kitchen</p><h2 id="theme_settings_title">Make Finite feel like yours.</h2><p>Choose a finished theme or create one from bounded colour roles. Plan identity, layout, authority and accepted truth stay unchanged.</p></header>
+    <section class="theme-gallery" aria-label="Available themes">${allThemes().map(renderThemeCard).join("")}</section>
+    <details class="theme-maker" ${editing ? "open" : ""}>
+      <summary><span>${editing ? "Editing your theme" : "Custom theme"}</span><strong>${editing ? escapeHtml(draft.name) : "Make your own"}</strong><small>Validated before it can be saved</small></summary>
+      <form data-theme-custom-form>
+        <input type="hidden" name="themeId" value="${editing ? escapeHtml(draft.themeId) : ""}">
+        <div class="theme-maker__identity">
+          <label><span>Name</span><input name="name" required maxlength="60" value="${editing ? escapeHtml(draft.name) : ""}" placeholder="Quiet studio"></label>
+          <label><span>Mode</span><select name="mode"><option value="light" ${draft.mode === "light" ? "selected" : ""}>Light</option><option value="dark" ${draft.mode === "dark" ? "selected" : ""}>Dark</option></select></label>
+        </div>
+        <div class="theme-token-grid">${themeCoreTokenKeys.map((key) => `<label><span>${escapeHtml(key.replace(/([A-Z])/g, " $1"))}</span><input type="color" name="${key}" value="${core[key]}"><code>${core[key]}</code></label>`).join("")}</div>
+        <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editing ? "Save and use changes" : "Save and use custom theme"}</button>${editing ? `<button class="text-button" type="button" data-action="new-custom-theme">Make another instead</button>` : ""}</div>
+        <p class="theme-maker__boundary">Finite checks text contrast, focus visibility and signal surfaces. Custom themes cannot contain CSS, selectors, scripts, URLs, fonts or assets.</p>
+      </form>
+    </details>
   </dialog>`;
 };
 
@@ -675,7 +735,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     </main>
     <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No arrival waiting · accepted plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}
-    ${renderKitchenResetDialog()}`;
+    ${renderKitchenResetDialog()}
+    ${renderThemeSettingsDialog()}`;
   bindArrivalInteractions();
 };
 
@@ -774,9 +835,97 @@ const bindKitchenResetInteractions = (): void => {
   root?.querySelector<HTMLFormElement>("[data-kitchen-reset-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void submitKitchenReset(event.currentTarget as HTMLFormElement); });
 };
 
+const themeSlug = (name: string): string => name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 38) || "theme";
+
+const openThemeSettings = async (): Promise<void> => {
+  if (busy) return;
+  try { await refreshThemeCatalog(); }
+  catch { announce("Finite could not refresh appearance settings. Your current theme is unchanged."); }
+  themeSettingsOpen = true;
+  themeEditingId = null;
+  themeDeleteId = null;
+  await render();
+};
+
+const applyThemeChoice = async (themeId: string): Promise<void> => {
+  if (busy || themeId === themeCatalog.activeThemeId) return;
+  busy = true;
+  const result = await themeRepository.setActive({ themeId, idempotencyKey: `site-theme-apply-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false;
+  if (result.ok && result.code === "THEME_APPLIED" && result.theme) {
+    applyThemeDefinition(result.theme);
+    await refreshThemeCatalog();
+    announce(`${result.theme.name} is now your Finite theme.`);
+  } else announce(`The theme was not changed: ${result.code}`);
+  await render();
+};
+
+const saveCustomTheme = async (form: HTMLFormElement): Promise<void> => {
+  if (busy) return;
+  const data = new FormData(form);
+  const name = String(data.get("name") ?? "").trim();
+  const existingId = String(data.get("themeId") ?? "");
+  const themeId = existingId || `custom_${themeSlug(name)}-${crypto.randomUUID().slice(0, 8)}`;
+  const mode = String(data.get("mode")) as ThemeMode;
+  const tokens = Object.fromEntries(themeCoreTokenKeys.map((key) => [key, String(data.get(key) ?? "")])) as ThemeCoreTokens;
+  const draft = { themeId, name, mode, tokens };
+  busy = true;
+  const preview = await themeRepository.preview(draft);
+  if (!preview.ok) {
+    busy = false;
+    announce(`That theme needs adjustment: ${(preview.issues ?? [preview.message ?? preview.code]).slice(0, 2).join(" ")}`);
+    return;
+  }
+  const saved = await themeRepository.save({ ...draft, idempotencyKey: `site-theme-save-${crypto.randomUUID()}`, sourceSurface: "site" });
+  if (!saved.ok) {
+    busy = false;
+    announce(`The custom theme was not saved: ${saved.code}`);
+    return;
+  }
+  const applied = await themeRepository.setActive({ themeId, idempotencyKey: `site-theme-apply-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false;
+  if (applied.ok && applied.theme) {
+    applyThemeDefinition(applied.theme);
+    await refreshThemeCatalog();
+    themeEditingId = themeId;
+    announce(`${applied.theme.name} is saved and active.`);
+  } else announce(`The custom theme was saved but could not be applied: ${applied.code}`);
+  await render();
+};
+
+const deleteCustomTheme = async (themeId: string): Promise<void> => {
+  if (busy) return;
+  busy = true;
+  const result = await themeRepository.delete({ themeId, idempotencyKey: `site-theme-delete-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false;
+  themeDeleteId = null;
+  if (result.ok) {
+    await refreshThemeCatalog();
+    themeEditingId = null;
+    announce("The custom theme was deleted. Your available themes are up to date.");
+  } else announce(`The custom theme was not deleted: ${result.code}`);
+  await render();
+};
+
+const bindThemeSettingsInteractions = (): void => {
+  root?.querySelector<HTMLButtonElement>("[data-action='open-theme-settings']")?.addEventListener("click", () => { void openThemeSettings(); });
+  const dialog = root?.querySelector<HTMLDialogElement>("[data-theme-settings-dialog]");
+  dialog?.addEventListener("close", () => { themeSettingsOpen = false; themeDeleteId = null; });
+  root?.querySelectorAll<HTMLButtonElement>("[data-theme-apply]").forEach((button) => button.addEventListener("click", () => { void applyThemeChoice(button.dataset.themeApply ?? ""); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-theme-edit]").forEach((button) => button.addEventListener("click", async () => { themeEditingId = button.dataset.themeEdit ?? null; themeDeleteId = null; await render(); root.querySelector<HTMLInputElement>("[data-theme-custom-form] input[name='name']")?.focus(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-theme-delete]").forEach((button) => button.addEventListener("click", async () => { themeDeleteId = button.dataset.themeDelete ?? null; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-theme-delete-confirm]").forEach((button) => button.addEventListener("click", () => { void deleteCustomTheme(button.dataset.themeDeleteConfirm ?? ""); }));
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-theme-delete']")?.addEventListener("click", async () => { themeDeleteId = null; await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='new-custom-theme']")?.addEventListener("click", async () => { themeEditingId = null; await render(); root.querySelector<HTMLInputElement>("[data-theme-custom-form] input[name='name']")?.focus(); });
+  root?.querySelector<HTMLFormElement>("[data-theme-custom-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void saveCustomTheme(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLInputElement>("[data-theme-custom-form] input[type='color']").forEach((input) => input.addEventListener("input", () => { const code = input.parentElement?.querySelector("code"); if (code) code.textContent = input.value; }));
+  if (themeSettingsOpen && dialog && !dialog.open) dialog.showModal();
+};
+
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
   bindKitchenResetInteractions();
+  bindThemeSettingsInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
@@ -1154,7 +1303,8 @@ async function render(): Promise<SurfaceManifest> {
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
-    ${renderKitchenResetDialog()}`;
+    ${renderKitchenResetDialog()}
+    ${renderThemeSettingsDialog()}`;
   bindInteractions();
   return manifest;
 }
@@ -1275,6 +1425,7 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   bindKitchenResetInteractions();
+  bindThemeSettingsInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());

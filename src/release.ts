@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "first-user-reset-v58",
+  build: "tenant-themes-v59",
 } as const;
