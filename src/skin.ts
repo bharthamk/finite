@@ -75,19 +75,19 @@ const choices = {
 const builtIn = (skinId: string, name: string, description: string, recipe: SkinRecipe): SkinDefinition => ({ skinId, name, description, kind: "built_in", recipe });
 
 export const builtInSkins: SkinDefinition[] = [
-  builtIn("workshop", "Workshop", "Bold, expressive and deliberately hard-edged.", {
+  builtIn("workshop", "Workshop", "For urgent, decisive planning: bold scale, hard edges and visible pressure.", {
     typeStyle: "grotesk", headingScale: "expressive", density: "comfortable", cornerStyle: "square",
     borderStyle: "strong", shadowStyle: "offset", controlStyle: "solid", panelStyle: "outlined", motionStyle: "expressive",
   }),
-  builtIn("quiet", "Quiet", "Restrained type, more breathing room and almost no visual pressure.", {
+  builtIn("quiet", "Quiet", "For long focused sessions: low chrome, generous space and almost no visual pressure.", {
     typeStyle: "humanist", headingScale: "restrained", density: "airy", cornerStyle: "subtle",
     borderStyle: "hairline", shadowStyle: "none", controlStyle: "plain", panelStyle: "flat", motionStyle: "restrained",
   }),
-  builtIn("editorial", "Editorial", "A calm, document-like surface with a serif-led hierarchy.", {
+  builtIn("editorial", "Editorial", "For reading and judgment: a serif-led, ruled surface that feels like a considered brief.", {
     typeStyle: "editorial", headingScale: "balanced", density: "airy", cornerStyle: "square",
     borderStyle: "hairline", shadowStyle: "none", controlStyle: "plain", panelStyle: "outlined", motionStyle: "restrained",
   }),
-  builtIn("soft-system", "Soft System", "Rounded surfaces, gentle depth and familiar app ergonomics.", {
+  builtIn("soft-system", "Soft System", "For everyday comfort: friendly app chrome, layered cards and forgiving controls.", {
     typeStyle: "system", headingScale: "restrained", density: "comfortable", cornerStyle: "rounded",
     borderStyle: "none", shadowStyle: "soft", controlStyle: "pill", panelStyle: "layered", motionStyle: "restrained",
   }),

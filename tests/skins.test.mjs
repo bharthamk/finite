@@ -66,6 +66,18 @@ test("the selector compares every skin with one representative Finite plan examp
   for (const trait of skinTraitKeys) assert.match(source, new RegExp(`skin\\.recipe\\.${trait}`));
 });
 
+test("each built-in skin owns a distinct selector and applied-product language", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  for (const skinId of ["workshop", "quiet", "editorial", "soft-system"]) {
+    assert.match(css, new RegExp(`html\\[data-skin="${skinId}"\\] \\.arrival-order`));
+    assert.match(css, new RegExp(`\\.skin-card--${skinId} \\.skin-preview`));
+  }
+  assert.match(css, /html\[data-skin="quiet"\] \.arrival-compose \{[^}]*grid-template-areas:"intro" "form" "codex"/s);
+  assert.match(css, /html\[data-skin="editorial"\] \.site-header \{[^}]*border-bottom:3px double/s);
+  assert.match(css, /html\[data-skin="soft-system"\] \.arrival-order \{[^}]*border-radius:32px/s);
+  assert.match(css, /html\[data-skin="workshop"\] \.arrival-order,[^}]*box-shadow:14px 14px 0/s);
+});
+
 test("an authenticated account can save, replay, apply, list, and delete a custom skin", async () => {
   const db = new SkinDb();
   const draft = { skinId: "custom_quiet-studio", name: "Quiet studio", description: "A calm working surface.", recipe: builtInSkins[1].recipe, idempotencyKey: "skin-save-0001", sourceSurface: "codex" };
