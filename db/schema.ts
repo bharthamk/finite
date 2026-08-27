@@ -366,3 +366,33 @@ export const tenantSettingsReceipts = sqliteTable("tenant_settings_receipts", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_tenant_settings_receipts_scope_created").on(table.scopeId, table.createdAt),
 ]);
+
+export const planInputs = sqliteTable("plan_inputs", {
+  scopeId: text("scope_id").notNull(),
+  inputId: text("input_id").notNull(),
+  planId: text("plan_id").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  kind: text("kind").notNull(),
+  section: text("section").notNull(),
+  contextId: text("context_id"),
+  contextLabel: text("context_label"),
+  message: text("message").notNull(),
+  status: text("status").default("open").notNull(),
+  sourceSurface: text("source_surface").notNull(),
+  createdAt: text("created_at").notNull(),
+  handledAt: text("handled_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.inputId] }),
+  index("idx_plan_inputs_scope_plan_status_created").on(table.scopeId, table.planId, table.status, table.createdAt),
+]);
+
+export const planInputReceipts = sqliteTable("plan_input_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_plan_input_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

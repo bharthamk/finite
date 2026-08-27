@@ -6,6 +6,7 @@ import { handleThemeRequest } from "./themes.js";
 import { handleSkinRequest } from "./skins.js";
 import { handlePlanShareRequest } from "./plan-shares.js";
 import { handleSettingsRequest } from "./settings.js";
+import { handlePlanInputRequest } from "./plan-inputs.js";
 import { finiteRelease } from "../src/release.js";
 
 interface AssetsBinding {
@@ -67,6 +68,8 @@ export default {
     if (authResponse) return withSecurityHeaders(authResponse);
     const settingsResponse = await handleSettingsRequest(request, environment.DB);
     if (settingsResponse) return withSecurityHeaders(settingsResponse);
+    const planInputResponse = await handlePlanInputRequest(request, environment.DB);
+    if (planInputResponse) return withSecurityHeaders(planInputResponse);
     const themeResponse = await handleThemeRequest(request, environment.DB);
     if (themeResponse) return withSecurityHeaders(themeResponse);
     const skinResponse = await handleSkinRequest(request, environment.DB);

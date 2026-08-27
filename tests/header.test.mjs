@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const webmcp = readFileSync(new URL("../src/webmcp.ts", import.meta.url), "utf8");
 const handoffSource = readFileSync(new URL("../src/codex-handoff.ts", import.meta.url), "utf8");
 const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSync(new URL(`../worker/${name}.ts`, import.meta.url), "utf8")).join("\n");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -259,4 +260,18 @@ test("ordinary plan views never invent demo disruptions", () => {
   assert.match(source, /if \(labMode\) await seedDecision\(\);/);
   assert.doesNotMatch(source, /labMode \|\| new URLSearchParams\(location\.search\)\.get\("plan"\)/);
   assert.doesNotMatch(source, /if \(result\.code === "PLAN_SWITCHED"\) \{\s*await adapter\?\.refreshContextualTools\(\);\s*await seedDecision\(\);/);
+});
+
+test("Managing accepts general and section-specific decisions from both the page and Codex", () => {
+  assert.match(source, />\+ Add decision or update<\/button>/);
+  assert.match(source, /data-plan-input-section="timeline"/);
+  assert.match(source, /zone\.component === "finite_summary" \? "money"/);
+  assert.match(source, /zone\.component === "constraint_panel" \? "boundaries"/);
+  assert.match(source, /<dialog class="plan-input-dialog"/);
+  assert.match(source, /Decisions & updates/);
+  assert.match(source, /planInputRepository\.add\(/);
+  assert.match(source, /planInputRepository\.resolve\(/);
+  assert.match(webmcp, /finite_list_plan_inputs/);
+  assert.match(webmcp, /finite_add_plan_input/);
+  assert.match(webmcp, /finite_resolve_plan_input/);
 });

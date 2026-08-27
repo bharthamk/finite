@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "managing-information-architecture-v86",
+  build: "plan-inputs-v87",
 } as const;
