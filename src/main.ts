@@ -2402,7 +2402,7 @@ const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {
   if (busy) return;
   const data = new FormData(form);
   const reasonCode = String(data.get("reasonCode") ?? "") as import("./types.js").ConstructionReturnReason;
-  const reason = String(data.get("reason") ?? "").trim() || (status === "completed" ? "The planned outcome happened." : "");
+  const reason = String(data.get("reason") ?? "").trim();
   if (!reasonCode || !reason) return;
   busy = true;
   announce("Returning the exact draft with your revision notes…");
@@ -2426,9 +2426,27 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
   if (busy) return;
   const data = new FormData(form);
   const status = String(data.get("status") ?? "") as PlanLifecycleStatus;
-  const reason = String(data.get("reason") ?? "").trim();
+  const reason = String(data.get("reason") ?? "").trim() || (status === "completed" ? "The planned outcome happened." : "");
   if (!status || !reason) return;
+  const finishNow = form.hasAttribute("data-plan-complete") && status === "completed";
+  const revision = runtime.kernel.revision;
+  if (finishNow) {
+    busy = true;
+    announce("Finishing this plan…");
+    await render();
+  }
   const result = await runtime.kernel.stagePlanLifecycle({ status, reason, expectedRevision: runtime.kernel.revision });
+  if (finishNow) {
+    const pending = result.ok ? runtime.kernel.pendingLifecycleChange : null;
+    const confirmed = pending ? runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId }) : result;
+    const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
+    const applied = pending && confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-lifecycle-site-${crypto.randomUUID()}` }) : confirmed;
+    busy = false;
+    announce(applied.ok ? "Plan finished." : `The plan could not be finished: ${applied.code}`);
+    if (applied.ok) await adapter?.refreshContextualTools();
+    await render();
+    return;
+  }
   announce(result.ok ? "Review the exact plan status below. Nothing has changed yet." : `The plan status could not be prepared: ${result.code}`);
   await render();
   document.querySelector(".lifecycle-control")?.scrollIntoView({ behavior: "smooth", block: "center" });

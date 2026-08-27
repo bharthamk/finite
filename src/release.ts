@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "obvious-plan-finish-v97",
+  build: "single-click-plan-finish-v98",
 } as const;
