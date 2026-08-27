@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "share-header-interaction-v70",
+  build: "new-plan-consumer-language-v71",
 } as const;

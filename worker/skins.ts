@@ -64,7 +64,7 @@ const setActiveSkin = async (request: Request, db: D1Database, scopeId: string):
   const preset = builtInSkins.find((skin) => skin.skinId === skinId);
   const custom = preset ? null : await db.prepare("SELECT skin_id, name, description, recipe_json, content_hash, created_at, updated_at FROM tenant_skins WHERE scope_id = ? AND skin_id = ?").bind(scopeId, skinId).first<SkinRow>();
   const skin = preset ?? (custom ? customDefinition(custom) : null);
-  if (!skin) return response(404, { ok: false, code: "SKIN_NOT_FOUND", message: "That skin is not available in this kitchen.", acceptedStateChanged: false });
+  if (!skin) return response(404, { ok: false, code: "SKIN_NOT_FOUND", message: "That skin is not available for this account.", acceptedStateChanged: false });
   const requestHash = await authSha256({ scopeId, operation: "set_active", skinId, sourceSurface: operation.sourceSurface });
   const replay = await replayOperation(db, scopeId, operation.idempotencyKey, requestHash); if (replay) return replay;
   const now = new Date().toISOString();
@@ -81,7 +81,7 @@ const deleteSkin = async (request: Request, db: D1Database, scopeId: string, ski
   const body = await parseBody(request); const operation = operationInput(body);
   if (!operation || !/^custom_[a-z0-9-]{3,60}$/.test(skinId) || body.skinId !== skinId) return response(422, { ok: false, code: "SKIN_DELETE_GUARD_REQUIRED", message: "Only an exact account custom skin can be deleted.", acceptedStateChanged: false });
   const existing = await db.prepare("SELECT skin_id FROM tenant_skins WHERE scope_id = ? AND skin_id = ?").bind(scopeId, skinId).first<{ skin_id: string }>();
-  if (!existing) return response(404, { ok: false, code: "SKIN_NOT_FOUND", message: "That custom skin is not available in this kitchen.", acceptedStateChanged: false });
+  if (!existing) return response(404, { ok: false, code: "SKIN_NOT_FOUND", message: "That custom skin is not available for this account.", acceptedStateChanged: false });
   const preference = await db.prepare("SELECT active_skin_id FROM tenant_skin_preferences WHERE scope_id = ?").bind(scopeId).first<{ active_skin_id: string }>();
   const wasActive = preference?.active_skin_id === skinId;
   const requestHash = await authSha256({ scopeId, operation: "delete", skinId, sourceSurface: operation.sourceSurface });
@@ -103,7 +103,7 @@ export const handleSkinRequest = async (request: Request, db: D1Database): Promi
   try {
     const principal = await resolveRequestPrincipal(request, db);
     if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", message: "Sign in or open a demo before changing skins.", acceptedStateChanged: false });
-    if (principal.kind === "demo" && request.method !== "GET" && url.pathname !== "/api/skins/preview") return response(403, { ok: false, code: "ACCOUNT_SKIN_REQUIRED", message: "Persistent appearance settings are available in a signed-in kitchen.", acceptedStateChanged: false });
+    if (principal.kind === "demo" && request.method !== "GET" && url.pathname !== "/api/skins/preview") return response(403, { ok: false, code: "ACCOUNT_SKIN_REQUIRED", message: "Persistent appearance settings require a signed-in account. Demo data remains temporary and isolated.", acceptedStateChanged: false });
     const { scopeId } = await principalStorageScope(principal);
     if (principal.kind === "demo" && request.method === "GET" && url.pathname === "/api/skins") return response(200, { ok: true, code: "SKIN_CATALOG", builtIns: builtInSkins, custom: [], activeSkinId: defaultSkin.skinId, activeSkin: defaultSkin, acceptedStateChanged: false });
     if (request.method === "GET" && url.pathname === "/api/skins") return response(200, await listSkins(db, scopeId));

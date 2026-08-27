@@ -268,11 +268,11 @@ export const handleAuthRequest = async (request: Request, db: D1Database): Promi
     if (request.method === "POST" && url.pathname === "/api/auth/demo/end") return endDemoSession(request, db);
     if (url.pathname === "/api/auth/reset") {
       const principal = await resolveRequestPrincipal(request, db);
-      if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", message: "Sign in or open a demo before resetting a kitchen.", acceptedStateChanged: false });
+      if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", message: "Sign in or open a demo before resetting Finite.", acceptedStateChanged: false });
       if (request.method === "GET") {
         const { scopeId } = await principalStorageScope(principal);
         const preview = await resetPreview(db, scopeId);
-        return response(200, { ok: true, code: "KITCHEN_RESET_PREVIEW", ...preview, confirmation: resetConfirmation, permanent: true, preserves: ["ChatGPT sign-in", "current demo session", "external bookings and supplier systems"], acceptedStateChanged: false, next: `Type ${resetConfirmation} exactly to permanently clear this Finite kitchen.` });
+        return response(200, { ok: true, code: "KITCHEN_RESET_PREVIEW", ...preview, confirmation: resetConfirmation, permanent: true, preserves: ["ChatGPT sign-in", "current demo session", "external bookings and supplier systems"], acceptedStateChanged: false, next: `Type ${resetConfirmation} exactly to permanently clear this Finite account.` });
       }
       if (request.method === "POST") return resetKitchen(request, db, principal);
     }

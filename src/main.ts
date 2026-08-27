@@ -85,13 +85,13 @@ const renderPublishedPage = (label: string, publishedAt: string, projection: Pub
   root.innerHTML = `<div class="publication-page">
     <header class="publication-header">${renderBrand()}<div><span>${projection.mode === "live" ? "Live view" : "Frozen snapshot"}</span><strong>View only</strong></div></header>
     <main id="main" class="publication-main"><div class="publication-context"><p>Shared as</p><h2>${escapePublicHtml(label)}</h2><span>Published ${escapePublicHtml(new Date(publishedAt).toLocaleDateString("en-AU", { dateStyle: "long" }))}</span></div>${renderPublicProjection(projection)}</main>
-    <footer class="publication-footer"><p>This is a read-only page selected and published by the plan owner.</p><span>No kitchen access · no editing · no approval controls</span></footer>
+    <footer class="publication-footer"><p>This is a read-only page selected and published by the plan owner.</p><span>No editing · no approval controls · no access to the full plan</span></footer>
   </div>`;
 };
 
 const renderPublicationFailure = (message: string): void => {
   document.title = "Shared page unavailable — Finite";
-  root.innerHTML = `<div class="publication-page"><header class="publication-header">${renderBrand()}<div><strong>View only</strong></div></header><main id="main" class="publication-missing"><p class="eyebrow">Shared page unavailable</p><h1>This plate is no longer on the pass.</h1><p>${escapePublicHtml(message)}</p></main></div>`;
+  root.innerHTML = `<div class="publication-page"><header class="publication-header">${renderBrand()}<div><strong>View only</strong></div></header><main id="main" class="publication-missing"><p class="eyebrow">Shared page unavailable</p><h1>This shared page is no longer available.</h1><p>${escapePublicHtml(message)}</p></main></div>`;
 };
 
 const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
@@ -122,7 +122,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
               <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
               <button class="button button--demo" data-action="start-demo">Try the demo</button>
             </div>
-            <p class="public-auth-note">One private kitchen with ChatGPT identity, or a separate 24-hour demo.</p>
+            <p class="public-auth-note">One private workspace with ChatGPT identity, or a separate 24-hour demo.</p>
           </div>
           <article class="paris-plan" aria-label="Paris whole-plan replanning example">
             <header class="paris-plan__head">
@@ -270,7 +270,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             </li>
             <li>
               <div class="build-log__index"><span>Build 04</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>Identity becomes a boundary, not a credential store.</h3><p>ChatGPT owns sign-in. Finite derives an isolated tenant, provisions a private kitchen on first use, and offers a separate 24-hour demo whose complete namespace expires with it.</p></div>
+              <div class="build-log__copy"><h3>Identity becomes a boundary, not a credential store.</h3><p>ChatGPT owns sign-in. Finite creates an isolated private workspace on first use, plus a separate 24-hour demo whose saved data expires with it.</p></div>
               <span class="build-status">Proven</span>
             </li>
             <li>
@@ -285,7 +285,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             </li>
             <li>
               <div class="build-log__index"><span>Build 01</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-            <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes a route-sized kitchen against the page the human sees, with bounded content-addressed results instead of the full catalog or plan dumped into context. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
+            <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes only the tools needed for the page the human sees, with bounded results instead of the full catalog or plan dumped into context. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
               <span class="build-status">Working</span>
             </li>
           </ol>
@@ -312,7 +312,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             </article>
             <article class="roadmap-lane">
               <span>Next / portability</span>
-              <h3>A kitchen another person can own.</h3>
+              <h3>A plan another person can own.</h3>
               <ul>
                 <li>Standard OIDC for a portable, self-hosted identity route</li>
                 <li>Supported recovery, migration and first-run ownership paths</li>
@@ -336,9 +336,9 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
 
         <section class="public-entry" id="enter" aria-labelledby="enter_title">
           <div>
-            <p class="eyebrow">Your kitchen, when you are ready</p>
+            <p class="eyebrow">Your plans, when you are ready</p>
             <h2 id="enter_title">Bring the plan that cannot afford to fall apart.</h2>
-            <p>Continue with ChatGPT for a private kitchen across visits, or enter an isolated demo that expires with its complete namespace after 24 hours.</p>
+            <p>Continue with ChatGPT for private plans across visits, or enter an isolated demo whose saved data expires after 24 hours.</p>
           </div>
           <div class="public-entry__actions">
             <a class="button button--entry" href="${signInPath}">Continue with ChatGPT</a>
@@ -346,7 +346,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </div>
           <dl class="identity-promises">
             <div><dt>No Finite password</dt><dd>ChatGPT handles identity. Finite stores no credential.</dd></div>
-            <div><dt>No registration form</dt><dd>Your private kitchen is provisioned on first use.</dd></div>
+            <div><dt>No registration form</dt><dd>Your private Finite workspace is ready on first use.</dd></div>
             <div><dt>Demo means isolated</dt><dd>It never adopts or copies an authenticated plan history.</dd></div>
           </dl>
         </section>
@@ -356,13 +356,13 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
   root.querySelectorAll<HTMLButtonElement>("[data-action='start-demo']").forEach((demoButton) => demoButton.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
-    button.textContent = "Opening the demo kitchen…";
+    button.textContent = "Opening the demo…";
     const response = await fetch("/api/auth/demo", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     if (response.ok) location.reload();
     else {
       button.disabled = false;
       button.textContent = "Try the demo";
-      announcer.textContent = "The demo kitchen could not be opened. Nothing was saved.";
+      announcer.textContent = "The demo could not be opened. Nothing was saved.";
     }
   }));
 };
@@ -496,6 +496,7 @@ let planPublications: PlanPublicationRecord[] = [];
 let newPublicationUrl = "";
 let shareError = "";
 let forceArrivalSurface = false;
+let newPlanDraftMode = false;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -504,13 +505,17 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
 const renderHeaderControls = (): string => {
-  const accountName = authSession.displayName.trim() || (authSession.kind === "demo" ? "Demo kitchen" : "Finite account");
+  const accountName = authSession.displayName.trim() || (authSession.kind === "demo" ? "Finite demo" : "Finite account");
   const initial = Array.from(accountName)[0]?.toLocaleUpperCase() ?? "F";
   return `${authSession.kind === "account" ? `<button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
     <details class="account-menu">
       <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__name">${escapeHtml(accountName)}</span><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
       <div class="account-menu__popover">
         <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
+        <details class="account-menu__how">
+          <summary>How Finite works</summary>
+          <div><p>Think of Finite as the kitchen behind your plan: you describe the outcome, Codex works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>Codex keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
+        </details>
         <button type="button" data-action="open-kitchen-reset">Start over</button>
         ${authSession.kind === "demo" ? `<button type="button" data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}
       </div>
@@ -518,6 +523,7 @@ const renderHeaderControls = (): string => {
 };
 
 type HeaderPlanChoice = { planId: string; profileId: string; name: string; active: boolean; supersededBy: string | null };
+const newPlanChoice = "__new_plan__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
   const plans = runtime.listPlans().plans as HeaderPlanChoice[];
@@ -526,6 +532,7 @@ const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
   return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan">
     ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
+    <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
     ${current.length ? `<optgroup label="Current plans">${options(current)}</optgroup>` : ""}
     ${earlier.length ? `<optgroup label="Earlier versions">${options(earlier, true)}</optgroup>` : ""}
   </select></label>`;
@@ -548,7 +555,7 @@ const renderPlanShareDialog = (): string => {
   const earlierPlans = plans.filter((plan) => Boolean(plan.supersededBy));
   if (shareDialogMode === "signin") return `<dialog class="plan-share-dialog plan-share-dialog--choice" data-plan-share-dialog aria-labelledby="plan_share_title">
     <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
-    <header class="plan-share-dialog__head"><p class="eyebrow">Share a plan</p><h2 id="plan_share_title">Sign in to publish a view.</h2><p>A demo kitchen disappears. Sign in first so Finite can keep the plan, its live or frozen pages, and your revocation controls together.</p></header>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Share a plan</p><h2 id="plan_share_title">Sign in to publish a view.</h2><p>A demo expires. Sign in first so Finite can keep the plan, its live or frozen pages, and your revocation controls together.</p></header>
     <div class="plan-share-choice__actions"><a class="button" href="/signin-with-chatgpt?return_to=/">Continue with ChatGPT</a><button type="button" class="text-button" data-action="close-plan-share">Not now</button></div>
   </dialog>`;
   if (shareDialogMode === "choose") return `<dialog class="plan-share-dialog plan-share-dialog--choice" data-plan-share-dialog aria-labelledby="plan_share_title">
@@ -568,7 +575,7 @@ const renderPlanShareDialog = (): string => {
   const active = planPublications.filter((publication) => !publication.revokedAt);
   return `<dialog class="plan-share-dialog" data-plan-share-dialog aria-labelledby="plan_share_title">
     <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
-    <header class="plan-share-dialog__head"><p class="eyebrow">Publish a view / not the kitchen</p><h2 id="plan_share_title">What should they see?</h2><p>Create a separate read-only page. Choose a live view that tracks accepted changes or freeze exactly what is current now.</p></header>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Publish a separate view</p><h2 id="plan_share_title">What should they see?</h2><p>Create a separate read-only page. Choose a live view that tracks accepted changes or freeze exactly what is current now.</p></header>
     ${newPublicationUrl ? `<section class="plan-share-created" aria-labelledby="plan_share_created"><p class="eyebrow">Page published</p><h3 id="plan_share_created">Your private link is ready.</h3><div><input value="${escapeHtml(newPublicationUrl)}" readonly data-publication-url aria-label="Published plan URL"><button type="button" class="button" data-action="copy-publication-url">Copy link</button></div><p>Anyone with this unguessable link can see only the page preview you approved. Keep or revoke it whenever you like.</p></section>` : ""}
     <form class="plan-share-form" data-plan-share-form>
       <label class="plan-share-label"><span>Who or what is this page for?</span><input name="label" maxlength="80" required value="${escapeHtml(shareDraft.label)}" placeholder="Family update, contractor view…"><small>This label appears on the shared page.</small></label>
@@ -580,7 +587,7 @@ const renderPlanShareDialog = (): string => {
       ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
       <div class="plan-share-actions"><button type="submit" class="button button--secondary" data-share-intent="preview" ${shareBusy ? "disabled" : ""}>Preview exact page</button><button type="submit" class="button" data-share-intent="publish" ${shareBusy || !sharePreview || sharePreviewKey !== shareSelectionKey() ? "disabled" : ""}>Publish this page</button></div>
     </form>
-    <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Exact preview</p><h3 id="plan_share_preview">Only this leaves the kitchen.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not prepared"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
+    <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Exact preview</p><h3 id="plan_share_preview">Only this page will be shared.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not prepared"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
     <section class="plan-share-existing" aria-labelledby="plan_share_existing"><header><p class="eyebrow">Published pages</p><h3 id="plan_share_existing">Active views for this plan</h3></header>${active.length ? `<p class="plan-share-existing__note">For privacy, a link can be copied only when it is first published. You can revoke any active page here.</p><ul>${active.map((publication) => `<li><div><strong>${escapeHtml(publication.label)}</strong><span>${publication.mode === "live" ? "Live view" : "Frozen snapshot"} · ${publication.sections.map((section) => shareSectionOptions.find((option) => option.id === section)?.name ?? section).join(", ")}</span><small>Published ${escapeHtml(new Date(publication.createdAt).toLocaleDateString("en-AU", { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-publication="${escapeHtml(publication.shareId)}">Revoke</button></li>`).join("")}</ul>` : `<p>No active pages for this plan.</p>`}</section>
     <footer class="plan-share-boundary"><strong>Never included</strong><p>Arrival text, evidence, receipts, internal IDs or hashes, Codex tools, editing and approval controls.</p></footer>
   </dialog>`;
@@ -593,7 +600,7 @@ const renderKitchenResetDialog = (): string => {
   const ready = kitchenResetPreview?.ok === true;
   return `<dialog class="kitchen-reset-dialog" data-kitchen-reset-dialog aria-labelledby="kitchen_reset_title">
     <form method="dialog" class="kitchen-reset-dialog__close"><button aria-label="Close start-over dialog">×</button></form>
-    <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / this kitchen only</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>This deletes the plans and work in this signed-in Finite kitchen. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system.</p></div>
+    <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / this account only</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>This deletes every plan and all saved work in this Finite account. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system.</p></div>
     ${ready ? `<dl class="kitchen-reset-dialog__counts">
       <div><dt>Arrival history</dt><dd>${resetCategoryCount(["arrival_orders", "arrival_events"])}</dd></div>
       <div><dt>Plans, revisions and shared pages</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts", "plan_shares"])}</dd></div>
@@ -603,7 +610,7 @@ const renderKitchenResetDialog = (): string => {
     </dl><p class="kitchen-reset-dialog__total"><strong>${total}</strong> durable record${total === 1 ? "" : "s"} will be cleared, plus this tenant's browser cache.</p>` : `<p class="kitchen-reset-dialog__warning">Finite could not verify the exact reset scope. Nothing can be deleted until the preview loads.</p>`}
     <form data-kitchen-reset-form class="kitchen-reset-dialog__form">
       <label><span>Type <strong>${kitchenResetConfirmation}</strong> to confirm</span><input name="confirmation" required autocomplete="off" spellcheck="false" pattern="${kitchenResetConfirmation}" ${ready ? "" : "disabled"}></label>
-      <div><button class="button button--danger" type="submit" ${ready && !busy ? "" : "disabled"}>Permanently start over</button><button class="text-button" type="button" data-action="cancel-kitchen-reset">Keep my kitchen</button></div>
+      <div><button class="button button--danger" type="submit" ${ready && !busy ? "" : "disabled"}>Permanently start over</button><button class="text-button" type="button" data-action="cancel-kitchen-reset">Keep everything</button></div>
       <small>This cannot be undone. Finite keeps only a non-content reset receipt so an interrupted request cannot delete twice.</small>
     </form>
   </dialog>`;
@@ -661,7 +668,7 @@ const renderThemeSettingsDialog = (): string => {
   const editingSkin = skinEditingId !== null;
   return `<dialog class="theme-settings-dialog" data-theme-settings-dialog aria-labelledby="theme_settings_title">
     <form method="dialog" class="theme-settings-dialog__close"><button aria-label="Close appearance settings">×</button></form>
-    <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this kitchen</p><h2 id="theme_settings_title">Choose how Finite feels.</h2><p>Skins change Finite’s visual character without moving its layout. Palettes set colour independently. Plan identity, authority and accepted truth stay unchanged.</p></header>
+    <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this account</p><h2 id="theme_settings_title">Choose how Finite feels.</h2><p>Skins change Finite’s visual character without moving its layout. Palettes set colour independently. Plan identity, authority and accepted truth stay unchanged.</p></header>
     <section class="appearance-section" aria-labelledby="skin_heading"><div class="appearance-section__head"><p class="eyebrow">01 / Skin</p><h3 id="skin_heading">Visual character</h3><p>Each choice shows the same Finite plan, so you can compare typography, hierarchy, panels and controls before applying it.</p></div><div class="skin-gallery">${allSkins().map(renderSkinCard).join("")}</div></section>
     <details class="theme-maker skin-maker" ${editingSkin ? "open" : ""}>
       <summary><span>${editingSkin ? "Editing your skin" : "Custom skin"}</span><strong>${editingSkin ? escapeHtml(skinDraft.name) : "Compose a recipe"}</strong><small>Bounded visual traits</small></summary>
@@ -719,7 +726,7 @@ const objectiveLabel = (objective: string): string => ({
   custom: "Custom route",
 }[objective] ?? objective.replaceAll("_", " "));
 
-const currentArrival = (): ArrivalOrder | null => arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
+const currentArrival = (): ArrivalOrder | null => !newPlanDraftMode && arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
 const currentMessageScope = (): string => {
   const kernel = runtime.kernel;
   const arrival = currentArrival();
@@ -762,7 +769,7 @@ const currentCodexHandoff = () => createCodexHandoff({
   order: currentArrival(),
   entryIntent: currentArrival()
     ? "resume_handoff"
-    : new URLSearchParams(location.search).has("kitchen") || new URLSearchParams(location.search).has("lab")
+    : new URLSearchParams(location.search).has("plan") || new URLSearchParams(location.search).has("kitchen") || new URLSearchParams(location.search).has("lab")
       ? "continue_current"
       : "start_new",
   plan: {
@@ -792,7 +799,7 @@ const renderCodexHandoffDialog = (): string => {
       <ol class="codex-handoff-steps">
         <li><span>01</span><p>Open your Codex task.</p></li>
         <li><span>02</span><p>Paste the introduction below.</p></li>
-        <li><span>03</span><p>Codex opens Finite and reads the live kitchen.</p></li>
+        <li><span>03</span><p>Codex opens Finite and reads the live plan.</p></li>
       </ol>
       <label class="codex-handoff-prompt"><span>What Codex receives</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label>
       <div class="codex-handoff-actions">
@@ -800,8 +807,8 @@ const renderCodexHandoffDialog = (): string => {
         <p data-codex-handoff-status>Nothing has been sent to Codex yet.</p>
       </div>
       <dl class="codex-handoff-boundary">
-        <div><dt>Kitchen</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
-        <div><dt>Order receipt</dt><dd>${order ? `Version ${order.version} · ${escapeHtml(order.checksum.slice(0, 12))}…` : "No order yet"}</dd></div>
+        <div><dt>Finite site</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
+        <div><dt>Request receipt</dt><dd>${order ? `Version ${order.version} · ${escapeHtml(order.checksum.slice(0, 12))}…` : "No request yet"}</dd></div>
         <div><dt>Copied</dt><dd>Directions only</dd></div>
         <div><dt>Not copied</dt><dd>Credentials, plan contents, authority</dd></div>
       </dl>
@@ -892,16 +899,26 @@ const choosePlanToShare = async (form: HTMLFormElement): Promise<void> => {
   await openPlanShareDialog();
 };
 
-const startPlanFromShare = async (): Promise<void> => {
+const startNewPlan = async (): Promise<void> => {
   shareDialogMode = "closed";
   shareError = "";
-  forceArrivalSurface = !isWaitingArrivalStatus(currentArrival()?.status);
+  newPlanDraftMode = true;
+  forceArrivalSurface = true;
   const target = new URL(location.href);
+  target.searchParams.delete("plan");
   target.searchParams.delete("kitchen");
   target.searchParams.delete("lab");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
   root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='rawOutcome']")?.focus();
+};
+
+const bindPlanSwitcherInteractions = (): void => {
+  root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => {
+    const planId = (event.currentTarget as HTMLSelectElement).value;
+    if (planId === newPlanChoice) { void startNewPlan(); return; }
+    if (planId) void openPlan(planId);
+  });
 };
 
 const submitPlanShare = async (form: HTMLFormElement, intent: "preview" | "publish"): Promise<void> => {
@@ -962,7 +979,7 @@ const bindPlanShareInteractions = (): void => {
   dialog?.addEventListener("close", () => { shareDialogMode = "closed"; });
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogMode = "closed"; dialog.close(); } });
   root.querySelector<HTMLFormElement>("[data-share-plan-choice]")?.addEventListener("submit", (event) => { event.preventDefault(); void choosePlanToShare(event.currentTarget as HTMLFormElement); });
-  root.querySelector<HTMLButtonElement>("[data-action='start-plan-from-share']")?.addEventListener("click", () => { void startPlanFromShare(); });
+  root.querySelector<HTMLButtonElement>("[data-action='start-plan-from-share']")?.addEventListener("click", () => { void startNewPlan(); });
   root.querySelector<HTMLFormElement>("[data-plan-share-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.shareIntent === "publish" ? "publish" : "preview";
@@ -986,14 +1003,14 @@ const bindPlanShareInteractions = (): void => {
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
   if (order.status === "waiting_for_codex") return modelContext
-    ? { label: "Saved · ready for Codex", title: "Your order is safe. Codex has not processed the latest version yet.", detail: "You can keep adding details here. When Codex opens the order, it receives the full brief and every change since its last checkpoint." }
-    : { label: "Saved · waiting for Codex", title: "Your order is safe. Nothing is pretending to process in the background.", detail: "Open Codex when you are ready and ask it to open your Finite arrival. It will receive this exact version and every saved detail." };
-  if (order.status === "codex_reviewing") return { label: "Codex reviewing", title: "The operator has checkpointed your latest order.", detail: "You may still add or correct facts. Any change creates a new order version and stale Codex work will be refused." };
-  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can keep cooking.", detail: "Your answer is appended as human-supplied input. Codex cannot fill it in for you." };
+    ? { label: "Saved · ready for Codex", title: "Your starting point is safe. Codex has not processed the latest version yet.", detail: "You can keep adding details here. When Codex opens it, it receives the full brief and every change since its last checkpoint." }
+    : { label: "Saved · waiting for Codex", title: "Your starting point is safe. Nothing is pretending to process in the background.", detail: "Open Codex when you are ready and ask it to open your Finite plan. It will receive this exact version and every saved detail." };
+  if (order.status === "codex_reviewing") return { label: "Codex reviewing", title: "Codex has checkpointed your latest update.", detail: "You may still add or correct facts. Any change creates a new version and stale work will be refused." };
+  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can continue.", detail: "Your answer is saved as information from you. Codex cannot fill it in for you." };
   if (order.status === "proposed_plan_ready") return { label: "Proposed plan ready", title: "Codex has staged its interpretation for your review.", detail: "This is still a proposal. Accepted plan truth changes only through an exact human confirmation on the Site." };
   if (order.status === "interpretation_confirmed") return { label: "Brief confirmed", title: "Codex can now construct the plan.", detail: "You confirmed what Codex understood. This review does not authorize plan activation or any external action." };
   if (order.status === "awaiting_human_authority") return { label: "Approval needed", title: "One exact plan is waiting for your authority.", detail: "Review the proposed outcome here. Codex cannot press the approval control." };
-  return { label: order.status.replaceAll("_", " "), title: "This arrival is complete.", detail: "Its immutable plan and receipt remain available in the kitchen." };
+  return { label: order.status.replaceAll("_", " "), title: "This request is complete.", detail: "Its plan and receipt remain available in Finite." };
 };
 
 const renderArrival = (manifest: SurfaceManifest): void => {
@@ -1044,16 +1061,16 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             </details>
             <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button><p>Saved first. Interpreted only when Codex opens it.</p></div>
           </form>
-          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with Codex</strong><small>Same kitchen. Same saved starting point.</small></button>
+          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with Codex</strong><small>Same plan. Same saved starting point.</small></button>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
         <section class="arrival-order-head" aria-label="Arrival status">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
           <details class="arrival-order-source">
-            <summary><span>Original order · version ${order.version}</span><strong>View what you asked Finite to make happen</strong></summary>
+            <summary><span>Original request · version ${order.version}</span><strong>View what you asked Finite to make happen</strong></summary>
             <p>${escapeHtml(order.rawOutcome)}</p>
           </details>
-          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div><small>Order v${order.version}</small></aside>
+          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div><small>Request v${order.version}</small></aside>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer is saved as human input. Codex cannot fill it in for you.</small></section>` : ""}
@@ -1075,12 +1092,12 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         </details>` : ""}
         ${renderPlanDraft()}
         <details class="arrival-continuity">
-          <summary><span>Order controls</span><strong>Add or correct something</strong><small>New facts create a fresh version and invalidate stale work.</small></summary>
-          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the order</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
+          <summary><span>Request controls</span><strong>Add or correct something</strong><small>New facts create a fresh version and invalidate stale work.</small></summary>
+          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>New facts are append-only. If Codex is already working, this creates a fresh version and invalidates stale staging automatically.</p></div>
             <form data-arrival-form="append">
               <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
               <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
-              <button class="button" type="submit" ${busy ? "disabled" : ""}>Append to order</button>
+              <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to request</button>
             </form>
           </div>
         </details>
@@ -1088,7 +1105,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No arrival waiting · accepted plans remain available"}</span></footer>
+    <footer><p>You define the outcome. Codex works through the plan. Finite keeps every change exact.</p><span>${order ? `Request · version ${order.version}` : "No request waiting · accepted plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
@@ -1106,14 +1123,14 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   const rawOutcome = String(data.get("rawOutcome") ?? "").trim();
   if (!rawOutcome) return;
   busy = true;
-  announce("Saving your exact order…");
+  announce("Saving your exact request…");
   await render();
   const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
   const evidence = String(data.get("evidence") ?? "").trim();
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
-  if (arrivalResult.ok) forceArrivalSurface = false;
+  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
-  announce(arrivalResult.ok ? "Your order is saved. Codex has not processed it yet." : `The order was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? "Your request is saved. Codex has not processed it yet." : `The request was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1124,7 +1141,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   const value = String(data.get(answer ? "answer" : "detail") ?? "").trim();
   if (!value) return;
   busy = true;
-  announce("Appending your update to the exact order…");
+  announce("Adding your update to the exact request…");
   await render();
   arrivalResult = await arrivalRepository.appendInput({
     orderId: order.orderId,
@@ -1134,7 +1151,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
-  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex must re-open the new order version." : "Your update is saved. Any stale Codex work will now be refused.") : `The update was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex must re-open the new request version." : "Your update is saved. Any stale Codex work will now be refused.") : `The update was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1171,7 +1188,7 @@ const submitKitchenReset = async (form: HTMLFormElement): Promise<void> => {
   if (confirmation !== kitchenResetConfirmation) return;
   busy = true;
   const submit = form.querySelector<HTMLButtonElement>("button[type='submit']");
-  if (submit) { submit.disabled = true; submit.textContent = "Clearing this kitchen…"; }
+  if (submit) { submit.disabled = true; submit.textContent = "Clearing your Finite data…"; }
   const result = await resetRepository.reset({ confirmation, idempotencyKey: `site-reset-${crypto.randomUUID()}`, sourceSurface: "site" });
   if (result.ok && result.code === "KITCHEN_RESET") {
     clearFiniteScope(localStorage, authSession.storageScope);
@@ -1331,6 +1348,7 @@ const bindThemeSettingsInteractions = (): void => {
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
   bindPlanShareInteractions();
+  bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
@@ -1368,7 +1386,7 @@ const runAuthenticatedHandoffAcceptance = async (): Promise<void> => {
   if (!labMode || busy) return;
   busy = true;
   labAcceptanceResult = { status: "running" };
-  announce("Running the authenticated three-kitchen handoff acceptance…");
+  announce("Running the authenticated three-plan handoff acceptance…");
   await render();
   try {
     const journeys = [];
@@ -1577,13 +1595,13 @@ const renderPlanDraft = (): string => {
   if (!draft && returned && returned.packet.kind === "draft") {
     const profile = returned.packet.payload.profile;
     const feedback = returned.feedbackRequired ? `<form class="draft-return-form" data-plan-return="legacy" data-packet="${escapeHtml(returned.packetId)}">
-      <div><p class="eyebrow">Help the chef revise it</p><h3>What wasn’t right about this kitchen?</h3><p>Your answer changes the next draft, not the confirmed trip brief or accepted plan.</p></div>
+      <div><p class="eyebrow">Help Codex revise it</p><h3>What wasn’t right about this draft?</h3><p>Your answer changes the next draft, not the confirmed brief or accepted plan.</p></div>
       <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
       <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="For example: this feels like a budget shell, not the living trip plan I expected."></textarea></label>
       <button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button>
     </form>` : `<div class="draft-returned-copy"><span>Changes requested</span><strong>${escapeHtml(returned.reasonCode?.replaceAll("_", " ") ?? "Revision requested")}</strong><p>${escapeHtml(returned.message)}</p><button class="button" type="button" data-action="open-codex-handoff">Hand off this revision to Codex</button></div>`;
     return `<section class="zone zone--approval_panel plan-intake plan-intake--returned" aria-label="Returned plan draft">
-      <div class="zone__heading"><p class="eyebrow">Kitchen returned / accepted plan unchanged</p><h2>${escapeHtml(profile.name)}</h2></div>
+      <div class="zone__heading"><p class="eyebrow">Draft returned / accepted plan unchanged</p><h2>${escapeHtml(profile.name)}</h2></div>
       <div class="approval-copy"><p>The rejected draft remains visible as revision context. It cannot be confirmed or activated.</p><div><span>Packet proof</span><strong>${escapeHtml(returned.packet.checksum.slice(0, 16))}…</strong></div><div><span>Draft proof</span><strong>${escapeHtml(returned.packet.payload.contentHash.slice(0, 16))}…</strong></div></div>
       ${feedback}
       <details class="draft-discard"><summary>Start over instead</summary><p>Discard the returned draft and begin again from the unchanged reviewed brief.</p><button class="text-button" type="button" data-action="discard-returned-draft" data-packet="${escapeHtml(returned.packetId)}">Discard this draft entirely</button></details>
@@ -1602,11 +1620,11 @@ const renderPlanDraft = (): string => {
     ["planning dependencies", JSON.stringify(priorProfile.surface.dependencies ?? []) !== JSON.stringify(draft.profile.surface.dependencies ?? [])],
     ["constraints and preferences", JSON.stringify({ locks: priorProfile.locks, preferenceLabels: priorProfile.preferenceLabels, preferenceWeights: priorProfile.preferenceWeights, relationships: priorProfile.relationships }) !== JSON.stringify({ locks: draft.profile.locks, preferenceLabels: draft.profile.preferenceLabels, preferenceWeights: draft.profile.preferenceWeights, relationships: draft.profile.relationships })],
   ].filter((entry) => entry[1]).map((entry) => String(entry[0])) : [];
-  const revisionReceipt = priorReview ? `<section class="draft-revision-diff" aria-label="Revision response"><div><p class="eyebrow">Revised from your returned kitchen</p><h3>${escapeHtml(priorReview.message)}</h3></div><div><span>Codex changed</span><strong>${escapeHtml(changedSinceReturn.join(" · ") || "the compiled plan content")}</strong></div></section>` : "";
+  const revisionReceipt = priorReview ? `<section class="draft-revision-diff" aria-label="Revision response"><div><p class="eyebrow">Revised from your returned draft</p><h3>${escapeHtml(priorReview.message)}</h3></div><div><span>Codex changed</span><strong>${escapeHtml(changedSinceReturn.join(" · ") || "the compiled plan content")}</strong></div></section>` : "";
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
-  if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Kitchen update queued">
-    <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous kitchen is no longer confirmable.</h2></div>
-    <div class="approval-copy"><p>Order v${orientation.exactOrderVersion} has newer human input. Codex must reconcile that exact version and compile a replacement before you can confirm anything.</p><div><span>Current order</span><strong>v${orientation.exactOrderVersion}</strong></div><div><span>Prior draft</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}… · stale</strong></div></div>
+  if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Plan update queued">
+    <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous draft is no longer confirmable.</h2></div>
+    <div class="approval-copy"><p>Request v${orientation.exactOrderVersion} has newer information. Codex must reconcile that exact version and compile a replacement before you can confirm anything.</p><div><span>Current request</span><strong>v${orientation.exactOrderVersion}</strong></div><div><span>Prior draft</span><strong>${escapeHtml(draft.contentHash.slice(0, 16))}… · stale</strong></div></div>
   </section>`;
   const confirmation = runtime.planActivationConfirmation;
   const confirmed = confirmation?.draftId === draft.draftId;
@@ -1614,7 +1632,7 @@ const renderPlanDraft = (): string => {
   const dependencies = draft.profile.surface.dependencies ?? [];
   const assumptions = draft.profile.surface.assumptions ?? [];
   return `<section class="zone zone--approval_panel plan-intake" aria-label="New plan activation">
-    <div class="zone__heading"><p class="eyebrow">New finite kitchen</p><h2>${escapeHtml(draft.profile.name)}</h2></div>
+    <div class="zone__heading"><p class="eyebrow">New Finite plan</p><h2>${escapeHtml(draft.profile.name)}</h2></div>
     <div class="approval-copy">
       <p>Codex compiled a complete <strong>${escapeHtml(draft.profile.profileId)}</strong> operating profile${amendment ? ` that supersedes <strong>${escapeHtml(amendment.supersedesPlanId)}</strong>` : ""}. Confirming authorizes only this exact packet; it does not activate the plan.</p>
       <div><span>Profile proof</span><strong>${escapeHtml(draft.profile.profileHash.slice(0, 16))}…</strong></div>
@@ -1625,9 +1643,9 @@ const renderPlanDraft = (): string => {
       ${amendment ? `<div><span>Amendment proof</span><strong>${escapeHtml(amendment.diffHash.slice(0, 16))}…</strong></div><p class="quiet">Changed: ${escapeHtml(amendment.diff.changedSections.join(", "))}</p>` : ""}
       ${confirmed
         ? `<p class="quiet">Human confirmation recorded. Codex can now activate this exact draft through WebMCP.</p>`
-        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact kitchen</button>`}
+        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Confirm this exact plan</button>`}
       ${draftReturnFormOpen ? `<form class="draft-return-form" data-plan-return="current" data-draft="${escapeHtml(draft.draftId)}">
-        <div><p class="eyebrow">Return for revision</p><h3>What wasn’t right about this kitchen?</h3><p>The draft stays visible while you explain. This does not change the confirmed brief or accepted plan.</p></div>
+        <div><p class="eyebrow">Return for revision</p><h3>What wasn’t right about this draft?</h3><p>The draft stays visible while you explain. This does not change the confirmed brief or accepted plan.</p></div>
         <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
         <label><span>Tell Codex what should change</span><textarea name="reason" required maxlength="1000" placeholder="Say what you expected to receive instead."></textarea></label>
         <div class="draft-return-actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>Send back for revision</button><button class="text-button" type="button" data-action="cancel-plan-return">Keep reviewing</button></div>
@@ -1670,7 +1688,7 @@ async function render(): Promise<SurfaceManifest> {
   const params = new URLSearchParams(location.search);
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode: params.get("lab") === "1",
-    kitchenMode: params.get("kitchen") === "1",
+    kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
     hasArrival: isWaitingArrivalStatus(currentArrival()?.status),
     hasActivatedPlan: runtime.hasActivationReceipt(),
   });
@@ -1695,7 +1713,7 @@ async function render(): Promise<SurfaceManifest> {
     <main id="main">
       <div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>${kernel.lifecycleStatus === "active" ? "This plan is open for change." : `This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.`}</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>
       <section class="hero">
-        <div class="hero__copy"><p class="eyebrow">${escapeHtml(kernel.profile.surface.hero.eyebrow)}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p><div class="brief-card"><span>You ordered</span><p>${escapeHtml(manifest.decisionFocus ?? kernel.profile.surface.hero.brief)}</p></div></div>
+        <div class="hero__copy"><p class="eyebrow">${escapeHtml(kernel.profile.surface.hero.eyebrow)}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p><div class="brief-card"><span>You asked for</span><p>${escapeHtml(manifest.decisionFocus ?? kernel.profile.surface.hero.brief)}</p></div></div>
         <aside class="plan-orbit" aria-label="Current finite plan summary"><div class="orbit-number"><span>Total plan</span><strong>${money(kernel.accepted.totalBudgetMinor)}</strong></div><div class="orbit-ring" style="--used:${spentPercent}%"><div><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span></div></div><p>${spentPercent}% spent or committed. Every option below keeps the same finite total.</p></aside>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
@@ -1704,9 +1722,9 @@ async function render(): Promise<SurfaceManifest> {
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
-      ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three kitchens. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
+      ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
+    <footer><p>Codex works through the plan. You choose and approve every consequential change.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
@@ -1737,6 +1755,8 @@ const approveCandidate = async (): Promise<void> => {
 
 const openPlan = async (planId: string): Promise<void> => {
   if (!planId || busy) return;
+  newPlanDraftMode = false;
+  forceArrivalSurface = false;
   busy = true;
   announce("");
   const result = await runtime.switchPlanPersisted(planId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
@@ -1752,7 +1772,8 @@ const openPlan = async (planId: string): Promise<void> => {
     await seedDecision();
   }
   const target = new URL(location.href);
-  target.searchParams.set("kitchen", "1");
+  target.searchParams.delete("kitchen");
+  target.searchParams.set("plan", "1");
   target.searchParams.delete("lab");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
@@ -1762,7 +1783,7 @@ const openPlan = async (planId: string): Promise<void> => {
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {
   if (!pendingDraftMatchesArrival()) {
-    announce("That draft is stale because the human order changed. Codex must compile a replacement from the latest version.");
+    announce("That draft is stale because your request changed. Codex must compile a replacement from the latest version.");
     await render();
     return;
   }
@@ -1779,7 +1800,7 @@ const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {
   const reason = String(data.get("reason") ?? "").trim();
   if (!reasonCode || !reason) return;
   busy = true;
-  announce("Returning the exact kitchen with your revision notes…");
+  announce("Returning the exact draft with your revision notes…");
   await render();
   const result = form.dataset.draft
     ? await runtime.humanRejectPlanDraft({ draftId: form.dataset.draft, reasonCode, reason })
@@ -1837,9 +1858,9 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   bindPlanShareInteractions();
+  bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
-  root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => { void openPlan((event.currentTarget as HTMLSelectElement).value); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
@@ -1863,7 +1884,7 @@ function bindInteractions(): void {
   });
 }
 
-if (labMode || new URLSearchParams(location.search).get("kitchen") === "1") await seedDecision();
+if (labMode || new URLSearchParams(location.search).get("plan") === "1" || new URLSearchParams(location.search).get("kitchen") === "1") await seedDecision();
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 };

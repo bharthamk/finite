@@ -71,10 +71,10 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
   return {
     handoffVersion: "finite-codex-handoff.v1",
     buttonLabel: buttonLabel(),
-    title: order ? "Bring Codex into the kitchen." : "Start this with Codex.",
+    title: order ? "Bring Codex into this plan." : "Start this with Codex.",
     detail: context.inline
       ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
-      : "Copy one introduction into Codex. It points to the kitchen and the correct first tool; it does not copy your plan or sign anybody in.",
+      : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",
     prompt,
     copiedPayload: {
       siteOrigin,

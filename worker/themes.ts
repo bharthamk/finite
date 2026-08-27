@@ -101,7 +101,7 @@ const setActiveTheme = async (request: Request, db: D1Database, scopeId: string)
   const builtIn = builtInThemes.find((theme) => theme.themeId === themeId);
   const custom = builtIn ? null : await db.prepare("SELECT theme_id, name, mode, tokens_json, content_hash, created_at, updated_at FROM tenant_themes WHERE scope_id = ? AND theme_id = ?").bind(scopeId, themeId).first<ThemeRow>();
   const theme = builtIn ?? (custom ? customDefinition(custom) : null);
-  if (!theme) return response(404, { ok: false, code: "THEME_NOT_FOUND", message: "That theme is not available in this kitchen.", acceptedStateChanged: false });
+  if (!theme) return response(404, { ok: false, code: "THEME_NOT_FOUND", message: "That palette is not available for this account.", acceptedStateChanged: false });
   const requestHash = await authSha256({ scopeId, operation: "set_active", themeId, sourceSurface: operation.sourceSurface });
   const replay = await replayOperation(db, scopeId, operation.idempotencyKey, requestHash);
   if (replay) return replay;
@@ -120,7 +120,7 @@ const deleteTheme = async (request: Request, db: D1Database, scopeId: string, th
   const operation = operationInput(body);
   if (!operation || !/^custom_[a-z0-9-]{3,60}$/.test(themeId) || body.themeId !== themeId) return response(422, { ok: false, code: "THEME_DELETE_GUARD_REQUIRED", message: "Only an exact tenant custom theme can be deleted.", acceptedStateChanged: false });
   const existing = await db.prepare("SELECT theme_id FROM tenant_themes WHERE scope_id = ? AND theme_id = ?").bind(scopeId, themeId).first<{ theme_id: string }>();
-  if (!existing) return response(404, { ok: false, code: "THEME_NOT_FOUND", message: "That custom theme is not available in this kitchen.", acceptedStateChanged: false });
+  if (!existing) return response(404, { ok: false, code: "THEME_NOT_FOUND", message: "That custom palette is not available for this account.", acceptedStateChanged: false });
   const preference = await db.prepare("SELECT active_theme_id FROM tenant_theme_preferences WHERE scope_id = ?").bind(scopeId).first<{ active_theme_id: string }>();
   const wasActive = preference?.active_theme_id === themeId;
   const requestHash = await authSha256({ scopeId, operation: "delete", themeId, sourceSurface: operation.sourceSurface });
@@ -145,7 +145,7 @@ export const handleThemeRequest = async (request: Request, db: D1Database): Prom
   try {
     const principal = await resolveRequestPrincipal(request, db);
     if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", message: "Sign in or open a demo before changing themes.", acceptedStateChanged: false });
-    if (principal.kind === "demo" && request.method !== "GET" && url.pathname !== "/api/themes/preview") return response(403, { ok: false, code: "ACCOUNT_THEME_REQUIRED", message: "Persistent appearance settings are available in a signed-in kitchen. Demo teardown remains complete and isolated.", acceptedStateChanged: false });
+    if (principal.kind === "demo" && request.method !== "GET" && url.pathname !== "/api/themes/preview") return response(403, { ok: false, code: "ACCOUNT_THEME_REQUIRED", message: "Persistent appearance settings require a signed-in account. Demo data remains temporary and isolated.", acceptedStateChanged: false });
     const { scopeId } = await principalStorageScope(principal);
     if (principal.kind === "demo" && request.method === "GET" && url.pathname === "/api/themes") return response(200, { ok: true, code: "THEME_CATALOG", builtIns: builtInThemes, custom: [], activeThemeId: defaultTheme.themeId, activeTheme: defaultTheme, acceptedStateChanged: false });
     if (request.method === "GET" && url.pathname === "/api/themes") return response(200, await listThemes(db, scopeId));

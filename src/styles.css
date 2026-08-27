@@ -28,12 +28,20 @@ button { font: inherit; cursor: pointer; }
 .account-menu>summary::before { content:"Menu"; color:var(--muted); font:500 .6rem/1.2 "DM Mono",monospace; letter-spacing:.05em; text-transform:uppercase; }
 .account-menu__name { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.74rem; }
 .account-menu__avatar { width:28px; height:28px; display:grid; place-items:center; color:var(--on-deep); background:var(--deep); font:600 .68rem/1 "DM Mono",monospace; }
-.account-menu__popover { width:min(250px,calc(100vw - 36px)); position:absolute; top:calc(100% + 10px); right:0; z-index:30; display:grid; padding:8px; border:1px solid var(--ink); background:var(--panel); box-shadow:8px 8px 0 color-mix(in srgb,var(--deep) 28%,transparent); }
+.account-menu__popover { width:min(320px,calc(100vw - 36px)); position:absolute; top:calc(100% + 10px); right:0; z-index:30; display:grid; padding:8px; border:1px solid var(--ink); background:var(--panel); box-shadow:8px 8px 0 color-mix(in srgb,var(--deep) 28%,transparent); }
 .account-menu__popover p { display:grid; gap:4px; margin:0; padding:10px 12px 14px; border-bottom:1px solid var(--line); }
 .account-menu__popover p span { color:var(--muted); font-size:.68rem; }
 .account-menu__popover p strong { overflow:hidden; text-overflow:ellipsis; font-size:.82rem; }
 .account-menu__popover a,.account-menu__popover button { width:100%; border:0; padding:11px 12px; color:var(--ink); background:transparent; text-align:left; text-decoration:none; font:600 .72rem/1.2 "DM Mono",monospace; }
 .account-menu__popover a:hover,.account-menu__popover button:hover { color:var(--on-deep); background:var(--deep); }
+.account-menu__how { border-bottom:1px solid var(--line); }
+.account-menu__how>summary { padding:11px 12px; cursor:pointer; list-style:none; font:600 .72rem/1.2 "DM Mono",monospace; }
+.account-menu__how>summary::-webkit-details-marker { display:none; }
+.account-menu__how>summary::after { content:"＋"; float:right; color:var(--muted); }
+.account-menu__how[open]>summary::after { content:"−"; }
+.account-menu__how>div { padding:2px 12px 14px; }
+.account-menu__popover .account-menu__how p { display:block; margin:0; padding:0; border:0; color:var(--muted); font-size:.73rem; line-height:1.55; }
+.account-menu__how ol { margin:10px 0 0; padding-left:18px; color:var(--ink); font-size:.7rem; line-height:1.55; }
 .account-menu__popover button[data-action="open-kitchen-reset"] { margin-top:4px; color:var(--danger); }
 .codex-handoff-trigger { display:inline-flex; align-items:center; gap:8px; min-height:36px; border:1px solid var(--deep); border-radius:999px; padding:8px 13px; color:var(--deep); background:var(--signal); font:600 .66rem/1.2 "DM Mono",monospace; letter-spacing:.02em; white-space:nowrap; }
 .codex-handoff-trigger>span { width:7px; height:7px; border-radius:50%; background:var(--deep); }
