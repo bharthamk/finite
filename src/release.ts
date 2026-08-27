@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "plan-inputs-v88",
+  build: "human-plan-editing-v89",
 } as const;

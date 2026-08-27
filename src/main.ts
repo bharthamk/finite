@@ -17,7 +17,7 @@ import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository,
 import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, skinTraitKeys, type SkinCatalogResult, type SkinDefinition, type SkinRecipe, type SkinResult } from "./skin.js";
 import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
-import { HttpPlanInputRepository, type PlanInputKind, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
+import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -535,6 +535,7 @@ let settingsError = "";
 let planInputDialogOpen = false;
 let planInputBusy = false;
 let planInputError = "";
+let planInputEditingId: string | null = null;
 let planInputContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
 let draftReturnFormOpen = false;
 let planActivationError = "";
@@ -591,7 +592,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
   review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
   interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
-  updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-queue", ".plan-input-dialog", "[data-action='open-plan-input']"] },
+  updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
   plan_summary: { label: "the plan summary", selectors: [".hero", ".plan-orbit"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
@@ -1684,17 +1685,32 @@ const formatBinding = (zone: SurfaceZone): string => zone.bindings.map((binding)
   return `<div class="measure"><span>${escapeHtml(binding.label)}</span><strong>${escapeHtml(formatted)}</strong></div>`;
 }).join("");
 
+const stageComponents = new Set<SurfaceZone["component"]>(["timeline_lane", "phase_lane", "run_of_show"]);
+
+const planInputSectionLabel = (section: PlanInputSection): string => ({ general: "Whole plan", timeline: "Timeline", money: "Money", boundaries: "Boundaries" })[section];
+const planInputKindLabel = (kind: PlanInputKind): string => ({ decision: "Decision", update: "Update", question: "Question" })[kind];
+const planInputsFor = (section: PlanInputSection, contextId: string | null = null): PlanInputRecord[] => planInputs.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
+const pendingBadge = (section: PlanInputSection, contextId: string | null = null): string => planInputsFor(section, contextId).some((item) => item.mode === "codex") ? `<span class="pending-badge">Pending</span>` : "";
+const renderPlanInputItems = (section: PlanInputSection, contextId: string | null = null, compact = false): string => {
+  const items = planInputsFor(section, contextId);
+  if (!items.length) return "";
+  return `<div class="plan-input-items${compact ? " plan-input-items--compact" : ""}">${items.map((item) => `<article class="plan-input-item plan-input-item--${escapeHtml(item.mode)}">
+    <div class="plan-input-item__copy"><span>${escapeHtml(planInputKindLabel(item.kind))}</span><p>${escapeHtml(item.message)}</p></div>
+    <div class="plan-input-item__actions"><button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Change</button><button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">${item.mode === "codex" ? "Clear" : "Done"}</button></div>
+  </article>`).join("")}</div>`;
+};
+
 const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["component"]): string => `
+  ${renderPlanInputItems("timeline")}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
     ${manifest.stages.map((stage) => `
       <li class="stage stage--${escapeHtml(stage.status)}">
         <span class="stage__marker">${escapeHtml(stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(stage.status)}</small><button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add decision</button></div>
+        <div class="stage__actions"><small>${escapeHtml(stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
+        <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}</div>
       </li>`).join("")}
   </ol>`;
-
-const stageComponents = new Set<SurfaceZone["component"]>(["timeline_lane", "phase_lane", "run_of_show"]);
 
 const renderNextStep = (manifest: SurfaceManifest): string => {
   const next = manifest.stages.find((stage) => stage.status === "current")
@@ -1705,46 +1721,36 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
   if (!next) return "";
   return `<section class="managing-next" aria-labelledby="managing_next_title">
-    <div><p class="eyebrow">Up next</p><span class="managing-next__marker">${escapeHtml(next.marker)}</span></div>
-    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(next.detail)}</p></div>
-    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add to this step</button></div>
+    <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(next.marker)}</span></div>
+    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(next.detail)}</p>${renderPlanInputItems("timeline", next.stageId, true)}</div>
+    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button></div>
   </section>`;
 };
 
-const planInputSectionLabel = (section: PlanInputSection): string => ({ general: "Whole plan", timeline: "Timeline", money: "Money", boundaries: "Boundaries" })[section];
-const planInputKindLabel = (kind: PlanInputKind): string => ({ decision: "Decision", update: "Update", question: "Question" })[kind];
-
-const renderPlanInputQueue = (): string => {
-  if (!planInputs.length) return "";
-  return `<section class="plan-input-queue" aria-labelledby="plan_inputs_title">
-    <header><div><p class="eyebrow">Working queue</p><h2 id="plan_inputs_title">Decisions & updates</h2></div><button type="button" data-action="open-plan-input" data-plan-input-section="general">+ Add another</button></header>
-    <ol>${planInputs.map((item) => `<li>
-      <div class="plan-input-queue__meta"><span>${escapeHtml(planInputKindLabel(item.kind))}</span><span>${escapeHtml(item.contextLabel ? `${planInputSectionLabel(item.section)} · ${item.contextLabel}` : planInputSectionLabel(item.section))}</span>${item.baseCurrent ? "" : "<span>From an earlier version</span>"}</div>
-      <p>${escapeHtml(item.message)}</p>
-      <button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Mark handled</button>
-    </li>`).join("")}</ol>
-  </section>`;
-};
-
-const renderPlanInputDialog = (): string => `<dialog class="plan-input-dialog" aria-labelledby="plan_input_title">
+const renderPlanInputDialog = (): string => {
+  const editing = planInputEditingId ? planInputs.find((item) => item.inputId === planInputEditingId) ?? null : null;
+  const kind = editing?.kind ?? "decision";
+  const section = editing?.section ?? planInputContext.section;
+  const messageValue = editing?.message ?? "";
+  return `<dialog class="plan-input-dialog" aria-labelledby="plan_input_title">
   <button type="button" class="dialog-close" data-action="close-plan-input" aria-label="Close">×</button>
-  <form data-plan-input-form>
-    <header><p class="eyebrow">Add to this plan</p><h2 id="plan_input_title">Decision, update, or question</h2><p>Put it where it belongs. Finite will keep it with this plan so you or ${escapeHtml(agenticName())} can work through it next.</p></header>
+  <form data-plan-input-form data-plan-input-id="${escapeHtml(editing?.inputId ?? "")}">
+    <header><p class="eyebrow">${editing ? "Change this item" : "Add to this plan"}</p><h2 id="plan_input_title">Decision, update, or question</h2></header>
     <div class="plan-input-dialog__fields">
-      <label><span>What is this?</span><select name="kind"><option value="decision">A decision</option><option value="update">An update</option><option value="question">A question</option></select></label>
+      <label><span>What is this?</span><select name="kind"><option value="decision" ${kind === "decision" ? "selected" : ""}>A decision</option><option value="update" ${kind === "update" ? "selected" : ""}>An update</option><option value="question" ${kind === "question" ? "selected" : ""}>A question</option></select></label>
       <label><span>Where does it belong?</span><select name="section">
-        <option value="general" ${planInputContext.section === "general" ? "selected" : ""}>Whole plan</option>
-        <option value="timeline" ${planInputContext.section === "timeline" ? "selected" : ""}>Timeline${planInputContext.section === "timeline" && planInputContext.contextLabel ? ` · ${escapeHtml(planInputContext.contextLabel)}` : ""}</option>
-        <option value="money" ${planInputContext.section === "money" ? "selected" : ""}>Money</option>
-        <option value="boundaries" ${planInputContext.section === "boundaries" ? "selected" : ""}>Boundaries</option>
+        <option value="general" ${section === "general" ? "selected" : ""}>Whole plan</option>
+        <option value="timeline" ${section === "timeline" ? "selected" : ""}>Timeline${section === "timeline" && planInputContext.contextLabel ? ` · ${escapeHtml(planInputContext.contextLabel)}` : editing?.contextLabel ? ` · ${escapeHtml(editing.contextLabel)}` : ""}</option>
+        <option value="money" ${section === "money" ? "selected" : ""}>Money</option>
+        <option value="boundaries" ${section === "boundaries" ? "selected" : ""}>Boundaries</option>
       </select></label>
-      <label class="plan-input-dialog__message"><span>What should the plan remember?</span><textarea name="message" required maxlength="2000" placeholder="For example: We decided on Monday 12 October, or one guest can no longer make it."></textarea></label>
+      <label class="plan-input-dialog__message"><span>What should the plan say?</span><textarea name="message" required maxlength="2000" placeholder="For example: We decided on Monday 12 October.">${escapeHtml(messageValue)}</textarea></label>
     </div>
     ${planInputError ? `<p class="plan-input-dialog__error" role="alert">${escapeHtml(planInputError)}</p>` : ""}
-    <p class="plan-input-dialog__note">This adds the item to the working plan. It does not silently rewrite the approved plan or approve a consequential change.</p>
-    <div class="plan-input-dialog__actions"><button class="button" type="submit" ${planInputBusy ? "disabled" : ""}>${planInputBusy ? "Adding…" : "Add to plan"}</button><button class="text-button" type="button" data-action="close-plan-input">Cancel</button></div>
+    <div class="plan-input-dialog__actions"><button class="button" type="submit" name="mode" value="direct" ${planInputBusy ? "disabled" : ""}>${planInputBusy ? "Saving…" : "Save to plan"}</button><button class="button button--secondary" type="submit" name="mode" value="codex" ${planInputBusy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())} to update</button><button class="text-button" type="button" data-action="close-plan-input">Cancel</button></div>
   </form>
 </dialog>`;
+};
 
 const visibleManagingZones = (manifest: SurfaceManifest): SurfaceZone[] => {
   const hiddenDuplicates = new Set<SurfaceZone["component"]>(["pressure_meter", "entity_table", "commitment_stack"]);
@@ -1967,7 +1973,8 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     body = staged ? `<div class="approval-copy"><p>This commits exactly <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong> against revision ${kernel.revision}. It changes no booking, purchase, or payment outside this demonstration.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} after</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Human approval recorded. Codex may now apply this exact option and return its receipt.</p>` : `<button class="button button--approve" data-action="approve">Approve this exact plan</button><button class="text-button" data-action="return">Not this one</button>`}</div>` : `<p class="quiet">Choose an outcome before approval.</p>`;
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
-  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zone.title)}</h2>${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add decision</button>` : ""}</div>${body}</section>`;
+  const timelineSection = stageComponents.has(zone.component);
+  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zone.title)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2>${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</section>`;
 };
 
 const settingsReturnPath = (): string => {
@@ -2087,11 +2094,11 @@ async function render(): Promise<SurfaceManifest> {
     <main id="main">
       ${kernel.lifecycleStatus === "active" ? "" : `<div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>`}
       <section class="hero">
-        <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add decision or update</button></div>
+        <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan ${pendingBadge("general")}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add or change</button></div>
+        ${renderPlanInputItems("general")}
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
       ${renderNextStep(manifest)}
-      ${renderPlanInputQueue()}
       ${renderHumanRealityControl()}
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
@@ -2315,13 +2322,25 @@ const openPlanInput = async (button: HTMLButtonElement): Promise<void> => {
     contextId: button.dataset.planInputContext || null,
     contextLabel: button.dataset.planInputLabel || null,
   };
+  planInputEditingId = null;
   planInputError = "";
   planInputDialogOpen = true;
   await render();
   root.querySelector<HTMLTextAreaElement>("[data-plan-input-form] textarea")?.focus();
 };
 
-const addPlanInput = async (form: HTMLFormElement): Promise<void> => {
+const editPlanInput = async (inputId: string): Promise<void> => {
+  const item = planInputs.find((candidate) => candidate.inputId === inputId);
+  if (!item) return;
+  planInputEditingId = item.inputId;
+  planInputContext = { section: item.section, contextId: item.contextId, contextLabel: item.contextLabel };
+  planInputError = "";
+  planInputDialogOpen = true;
+  await render();
+  root.querySelector<HTMLTextAreaElement>("[data-plan-input-form] textarea")?.focus();
+};
+
+const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promise<void> => {
   if (planInputBusy) return;
   const data = new FormData(form);
   const section = String(data.get("section") ?? "general") as PlanInputSection;
@@ -2329,22 +2348,27 @@ const addPlanInput = async (form: HTMLFormElement): Promise<void> => {
   planInputError = "";
   await render();
   try {
-    const result = await planInputRepository.add({
+    const input = {
       planId: runtime.kernel.profile.planId,
       expectedRevision: runtime.kernel.revision,
       kind: String(data.get("kind") ?? "decision") as PlanInputKind,
+      mode,
       section,
       contextId: section === planInputContext.section ? planInputContext.contextId : null,
       contextLabel: section === planInputContext.section ? planInputContext.contextLabel : null,
       message: String(data.get("message") ?? ""),
-      idempotencyKey: `plan-input-site-${crypto.randomUUID()}`,
-      sourceSurface: "site",
-    });
+      idempotencyKey: `plan-input-${planInputEditingId ? "update" : "add"}-site-${crypto.randomUUID()}`,
+      sourceSurface: "site" as const,
+    };
+    const result = planInputEditingId
+      ? await planInputRepository.update({ ...input, inputId: planInputEditingId })
+      : await planInputRepository.add(input);
     if (!result.ok) planInputError = result.issues?.join(" ") || result.message || "That item could not be added. Nothing else changed.";
     else {
       planInputs = result.inputs;
       planInputDialogOpen = false;
-      announce(`${planInputKindLabel(result.input?.kind ?? "update")} added to ${result.input?.contextLabel ?? planInputSectionLabel(result.input?.section ?? "general")}.`);
+      planInputEditingId = null;
+      announce(mode === "codex" ? `${planInputSectionLabel(result.input?.section ?? "general")} is pending.` : "Plan updated.");
     }
   } catch { planInputError = "That item could not be added. Nothing else changed."; }
   planInputBusy = false;
@@ -2371,8 +2395,9 @@ function bindInteractions(): void {
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-input']").forEach((button) => button.addEventListener("click", () => { void openPlanInput(button); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputError = ""; await render(); }));
-  root?.querySelector<HTMLFormElement>("[data-plan-input-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void addPlanInput(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='edit-plan-input']").forEach((button) => button.addEventListener("click", () => { void editPlanInput(String(button.dataset.planInputId ?? "")); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputError = ""; await render(); }));
+  root?.querySelector<HTMLFormElement>("[data-plan-input-form]")?.addEventListener("submit", (event) => { event.preventDefault(); const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null; const mode: PlanInputMode = submitter?.value === "codex" ? "codex" : "direct"; void savePlanInput(event.currentTarget as HTMLFormElement, mode); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']").forEach((button) => button.addEventListener("click", () => { void handlePlanInput(String(button.dataset.planInputId ?? "")); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());

@@ -240,9 +240,9 @@ test("approving a pending plan activates it and enters Managing in the same huma
 });
 
 test("Managing starts with one brief and prioritises the next step", () => {
-  assert.match(source, /<p class="eyebrow">Current plan<\/p>/);
+  assert.match(source, /<p class="eyebrow">Current plan \$\{pendingBadge\("general"\)\}<\/p>/);
   assert.match(source, /<section class="managing-next"/);
-  assert.match(source, /<p class="eyebrow">Up next<\/p>/);
+  assert.match(source, /<p class="eyebrow">Up next \$\{pendingBadge\("timeline", next\.stageId\)\}<\/p>/);
   assert.match(source, /visibleManagingZones\(manifest\)/);
   assert.match(source, /hiddenDuplicates.*pressure_meter.*entity_table.*commitment_stack/);
   assert.match(source, /<div class="money-overview">/);
@@ -263,16 +263,22 @@ test("ordinary plan views never invent demo disruptions", () => {
 });
 
 test("Managing accepts general and section-specific decisions from both the page and Codex", () => {
-  assert.match(source, />\+ Add decision or update<\/button>/);
+  assert.match(source, />\+ Add or change<\/button>/);
   assert.match(source, /data-plan-input-section="timeline"/);
   assert.match(source, /zone\.component === "finite_summary" \? "money"/);
   assert.match(source, /zone\.component === "constraint_panel" \? "boundaries"/);
   assert.match(source, /<dialog class="plan-input-dialog"/);
-  assert.match(source, /Decisions & updates/);
+  assert.match(source, />\$\{planInputBusy \? "Saving…" : "Save to plan"\}<\/button>/);
+  assert.match(source, /Ask \$\{escapeHtml\(agenticName\(\)\)\} to update/);
+  assert.match(source, /pending-badge/);
+  assert.doesNotMatch(source, /Put it where it belongs/);
+  assert.doesNotMatch(source, /It does not silently rewrite the approved plan/);
   assert.match(source, /planInputRepository\.add\(/);
+  assert.match(source, /planInputRepository\.update\(/);
   assert.match(source, /planInputRepository\.resolve\(/);
   assert.match(webmcp, /finite_list_plan_inputs/);
   assert.match(webmcp, /finite_add_plan_input/);
+  assert.match(webmcp, /finite_update_plan_input/);
   assert.match(webmcp, /finite_resolve_plan_input/);
   assert.match(styles, /main \{[^}]*scroll-margin-top:132px/);
 });

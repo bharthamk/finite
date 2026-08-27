@@ -373,6 +373,7 @@ export const planInputs = sqliteTable("plan_inputs", {
   planId: text("plan_id").notNull(),
   planRevision: integer("plan_revision").notNull(),
   kind: text("kind").notNull(),
+  handlingMode: text("handling_mode").default("codex").notNull(),
   section: text("section").notNull(),
   contextId: text("context_id"),
   contextLabel: text("context_label"),

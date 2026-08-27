@@ -28,9 +28,15 @@ class PlanInputDb {
   async batch(statements) {
     for (const statement of statements) {
       if (statement.query.startsWith("INSERT INTO plan_inputs")) {
-        const [scopeId, inputId, planId, planRevision, kind, section, contextId, contextLabel, message, sourceSurface, createdAt] = statement.values;
-        this.inputs.set(`${scopeId}:${inputId}`, { scope_id: scopeId, input_id: inputId, plan_id: planId, plan_revision: planRevision, kind, section, context_id: contextId, context_label: contextLabel, message, status: "open", source_surface: sourceSurface, created_at: createdAt, handled_at: null });
+        const [scopeId, inputId, planId, planRevision, kind, handlingMode, section, contextId, contextLabel, message, sourceSurface, createdAt] = statement.values;
+        this.inputs.set(`${scopeId}:${inputId}`, { scope_id: scopeId, input_id: inputId, plan_id: planId, plan_revision: planRevision, kind, handling_mode: handlingMode, section, context_id: contextId, context_label: contextLabel, message, status: "open", source_surface: sourceSurface, created_at: createdAt, handled_at: null });
       } else if (statement.query.startsWith("UPDATE plan_inputs")) {
+        if (statement.query.includes("SET kind")) {
+          const [kind, handlingMode, section, contextId, contextLabel, message, sourceSurface, scopeId, inputId, planId] = statement.values;
+          const item = this.inputs.get(`${scopeId}:${inputId}`);
+          if (item && item.plan_id === planId && item.status === "open") this.inputs.set(`${scopeId}:${inputId}`, { ...item, kind, handling_mode: handlingMode, section, context_id: contextId, context_label: contextLabel, message, source_surface: sourceSurface });
+          continue;
+        }
         const [handledAt, scopeId, inputId, planId] = statement.values;
         const item = this.inputs.get(`${scopeId}:${inputId}`);
         if (item && item.plan_id === planId) this.inputs.set(`${scopeId}:${inputId}`, { ...item, status: "handled", handled_at: item.handled_at ?? handledAt });
@@ -54,17 +60,19 @@ const request = (path, method = "GET", body, extras = {}) => new Request(`https:
 const seed = (db) => { db.heads.set(`${scopeId}:${planId}`, { revision: 1 }); };
 
 test("plan input text is bounded and can target a specific plan area", () => {
-  assert.deepEqual(validatePlanInput({ kind: "decision", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "  We decided on 12 October.  " }), { ok: true, value: { kind: "decision", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "We decided on 12 October." } });
-  assert.equal(validatePlanInput({ kind: "", section: "general", message: "" }).ok, false);
-  assert.equal(validatePlanInput({ kind: "decision", section: "unknown", message: "Keep this" }).ok, false);
+  assert.deepEqual(validatePlanInput({ kind: "decision", mode: "direct", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "  We decided on 12 October.  " }), { ok: true, value: { kind: "decision", mode: "direct", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "We decided on 12 October." } });
+  assert.equal(validatePlanInput({ kind: "", mode: "direct", section: "general", message: "" }).ok, false);
+  assert.equal(validatePlanInput({ kind: "decision", mode: "unknown", section: "general", message: "Keep this" }).ok, false);
+  assert.equal(validatePlanInput({ kind: "decision", mode: "direct", section: "unknown", message: "Keep this" }).ok, false);
 });
 
 test("a person can add, reload, and handle a revision-bound plan decision", async () => {
   const db = new PlanInputDb(); seed(db);
-  const input = { planId, expectedRevision: 1, kind: "decision", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "Use Monday 12 October.", idempotencyKey: "plan-input-add-0001", sourceSurface: "site" };
+  const input = { planId, expectedRevision: 1, kind: "decision", mode: "direct", section: "timeline", contextId: "choose_date", contextLabel: "Choose the Monday", message: "Use Monday 12 October.", idempotencyKey: "plan-input-add-0001", sourceSurface: "site" };
   const saved = await (await handlePlanInputRequest(request("/api/plan-inputs", "POST", input), db)).json();
   assert.equal(saved.code, "PLAN_INPUT_ADDED");
   assert.equal(saved.input.contextLabel, "Choose the Monday");
+  assert.equal(saved.input.mode, "direct");
   assert.equal(saved.input.acceptedStateChanged, undefined);
   const replay = await (await handlePlanInputRequest(request("/api/plan-inputs", "POST", input), db)).json();
   assert.deepEqual(replay, saved);
@@ -76,9 +84,20 @@ test("a person can add, reload, and handle a revision-bound plan decision", asyn
   assert.equal(handled.inputs.length, 0);
 });
 
+test("a person can change a direct plan item or hand it to Codex", async () => {
+  const db = new PlanInputDb(); seed(db);
+  const added = await (await handlePlanInputRequest(request("/api/plan-inputs", "POST", { planId, expectedRevision: 1, kind: "decision", mode: "direct", section: "money", message: "Keep $40 aside.", idempotencyKey: "plan-input-add-0003", sourceSurface: "site" }), db)).json();
+  const changed = await (await handlePlanInputRequest(request(`/api/plan-inputs/${added.input.inputId}`, "POST", { inputId: added.input.inputId, planId, expectedRevision: 1, kind: "update", mode: "codex", section: "money", message: "Rework the budget with $50 set aside.", idempotencyKey: "plan-input-update-0003", sourceSurface: "site" }), db)).json();
+  assert.equal(changed.code, "PLAN_INPUT_UPDATED");
+  assert.equal(changed.input.mode, "codex");
+  assert.equal(changed.input.message, "Rework the budget with $50 set aside.");
+  const listed = await (await handlePlanInputRequest(request(`/api/plan-inputs?planId=${planId}`), db)).json();
+  assert.equal(listed.inputs[0].mode, "codex");
+});
+
 test("plan inputs refuse stale, cross-origin, anonymous, and idempotency-conflicting writes", async () => {
   const db = new PlanInputDb(); seed(db);
-  const base = { planId, expectedRevision: 1, kind: "update", section: "general", message: "Two guests may be late.", idempotencyKey: "plan-input-add-0002", sourceSurface: "codex" };
+  const base = { planId, expectedRevision: 1, kind: "update", mode: "codex", section: "general", message: "Two guests may be late.", idempotencyKey: "plan-input-add-0002", sourceSurface: "codex" };
   assert.equal((await handlePlanInputRequest(request("/api/plan-inputs", "POST", { ...base, expectedRevision: 2 }), db)).status, 409);
   assert.equal((await handlePlanInputRequest(request("/api/plan-inputs", "POST", base, { origin: "https://other.example" }), db)).status, 403);
   assert.equal((await handlePlanInputRequest(new Request("https://finite.example/api/plan-inputs", { method: "POST", headers: { "content-type": "application/json", origin: "https://finite.example" }, body: JSON.stringify(base) }), db)).status, 401);
