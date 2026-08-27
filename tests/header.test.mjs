@@ -16,7 +16,7 @@ test("the product header contains actions instead of unexplained internal state"
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
     assert.doesNotMatch(source, new RegExp(obsoleteLabel));
   }
-  assert.equal(source.match(/class="header-actions"/g)?.length, 3);
+  assert.equal(source.match(/class="header-actions"/g)?.length, 4);
   assert.match(source, /class="header-action" data-action="open-theme-settings">Appearance<\/button>/);
   assert.match(source, /<details class="account-menu">/);
   assert.doesNotMatch(source, /class="account-menu__name"/);
@@ -30,7 +30,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
   for (const label of ["Starting", "Planning", "Managing", "Wrapping up"]) assert.match(source, new RegExp(`label: "${label}"`));
   assert.match(source, /aria-label="Plan lifecycle"/);
   assert.match(source, /aria-current="step"/);
-  assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 2);
+  assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 3);
   assert.match(source, /renderLifecycleRail\(order \? "planning" : "starting"\)/);
   assert.match(source, /status === "completed" \|\| status === "abandoned" \? "wrapping" : "managing"/);
   assert.match(source, /detail: "Day-to-day use"/);
@@ -46,7 +46,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 6);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 7);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -68,8 +68,8 @@ test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /<a href="\$\{escapeHtml\(settingsPath\)\}">Settings<\/a>/);
 });
 
-test("the header plan dropdown creates and opens plans from both product surfaces", () => {
-  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 2);
+test("the header plan dropdown creates and opens plans from every private product surface", () => {
+  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 3);
   assert.match(source, /runtime\.listPlans\(\)\.plans/);
   assert.match(source, /data-action="plan-switch" aria-label="Open a Finite plan"/);
   assert.match(source, /<option value="\$\{newPlanChoice\}">＋ Create a new plan…<\/option>/);
@@ -87,10 +87,10 @@ test("the header plan dropdown creates and opens plans from both product surface
 });
 
 test("plan sharing publishes a selected plate without registering a kitchen on the shared route", () => {
-  assert.equal(source.match(/data-action="open-plan-share"/g)?.length, 1);
+  assert.equal(source.match(/data-action="open-plan-share"/g)?.length, 2);
   assert.match(source, /renderShareHeaderAction\("arrival"\)/);
   assert.match(source, /renderShareHeaderAction\("plan"\)/);
-  assert.equal(source.match(/\$\{renderPlanShareDialog\(\)\}/g)?.length, 2);
+  assert.equal(source.match(/\$\{renderPlanShareDialog\(\)\}/g)?.length, 3);
   assert.match(source, /function bindArrivalInteractions\(\): void \{\s*bindCodexHandoffInteractions\(\);\s*bindPlanShareInteractions\(\);/);
   assert.match(styles, /html \.header-action--share/);
   assert.match(styles, /\.site-header>\.header-action--share \{ grid-column:3; grid-row:2; \}/);
@@ -185,7 +185,7 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true"><\/div>/);
   assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
   assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
-  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 3);
+  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 4);
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });

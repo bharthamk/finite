@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "single-click-plan-finish-v98",
+  build: "useful-wrapping-summary-v99",
 } as const;

@@ -33,6 +33,12 @@ test("Managing exposes checkboxes and section-bound attachments without engineer
   assert.match(source, /form\.hasAttribute\("data-plan-complete"\)/);
   assert.match(source, /Finishing this plan…/);
   assert.doesNotMatch(source, /const returnPlanDraft[\s\S]{0,500}status === "completed"/);
+  assert.match(source, /renderWrapUpSurface/);
+  assert.match(source, /The plan at finish/);
+  assert.match(source, /How it came together/);
+  assert.match(source, /Decisions and updates/);
+  assert.match(source, /Share this summary/);
+  assert.match(source, /Start another plan/);
 });
 
 test("Codex receives a bounded execution toolset matching the human progress surface", async () => {
