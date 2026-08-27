@@ -1811,11 +1811,14 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
   const next = manifest.stages.find((stage) => stage.status !== "complete" && unresolved(stage))
     ?? manifest.stages.find((stage) => unresolved(stage));
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
-  if (!next) return `<section class="managing-next managing-next--complete" aria-labelledby="managing_next_title">
-    <div><p class="eyebrow">Current list</p><span class="managing-next__marker">All done</span></div>
-    <div><h2 id="managing_next_title">Everything is ticked off.</h2><p>Reopen anything that still needs work, add another task, or wrap up this plan when the outcome has actually happened.</p></div>
-    <div class="managing-next__actions"><a href="#plan_work">Review the list ↑</a><a href="#plan_status">Wrap up this plan ↓</a></div>
-  </section>`;
+  if (!next) {
+    const finished = runtime.kernel.lifecycleStatus === "completed";
+    return `<section class="managing-next managing-next--complete" aria-labelledby="managing_next_title">
+      <div><p class="eyebrow">${finished ? "Plan complete" : "Current list"}</p><span class="managing-next__marker">${finished ? "Finished" : "All done"}</span></div>
+      <div><h2 id="managing_next_title">${finished ? "This plan is finished." : "Everything is ticked off."}</h2><p>${finished ? "Your plan, decisions, files and history are still here." : "Reopen anything that still needs work, add another task, or wrap up this plan when the outcome has actually happened."}</p></div>
+      <div class="managing-next__actions"><a href="#plan_work">Review the list ↑</a><a href="#plan_status">${finished ? "Reopen this plan ↓" : "Wrap up this plan ↓"}</a></div>
+    </section>`;
+  }
   const direct = [...planInputsFor("timeline", next.stageId)].reverse().find((item) => item.mode === "direct") ?? null;
   const chosen = direct?.kind === "decision";
   return `<section class="managing-next" aria-labelledby="managing_next_title">
@@ -1920,12 +1923,29 @@ const renderLifecycleControl = (): string => {
   const latest = kernel.lifecycleEvents.at(-1);
   if (pending) {
     const confirmed = kernel.lifecycleConfirmation?.targetId === pending.lifecycleChangeId;
+    const completing = pending.after === "completed";
     return `<section class="lifecycle-control lifecycle-control--pending" id="plan_status" aria-label="Plan status confirmation">
-    <div><p class="eyebrow">Plan conclusion</p><h2>Mark this plan ${escapeHtml(pending.after)}?</h2><p>${escapeHtml(pending.reason)}</p></div>
-    <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span>${confirmed ? `<p class="quiet">Human confirmation recorded. Codex may now apply this exact status and return its receipt.</p>` : `<button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button>`}</div>
+    <div><p class="eyebrow">${completing ? "Finish plan" : "Plan status"}</p><h2>${completing ? "Finish this plan?" : `Mark this plan ${escapeHtml(pending.after)}?`}</h2><p>${escapeHtml(pending.reason)}</p></div>
+    <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span>${confirmed ? `<p class="quiet">Saving this status…</p>` : `<button class="button ${completing ? "button--finish" : ""}" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">${completing ? "Yes, finish the plan" : "Confirm this status"}</button><button class="text-button" type="button" data-action="cancel-lifecycle">${completing ? "Not yet" : `Keep plan ${escapeHtml(pending.before)}`}</button>`}</div>
   </section>`;
   }
   const inactive = kernel.lifecycleStatus !== "active";
+  if (!inactive) return `<section class="plan-finish" id="plan_status" aria-labelledby="plan_finish_heading">
+    <div class="plan-finish__copy"><p class="eyebrow">Wrapping up</p><h2 id="plan_finish_heading">Did this plan reach its outcome?</h2><p>Finish it when the real thing has happened. Your plan, decisions, files and history will stay available.</p></div>
+    <form class="plan-finish__form" data-plan-lifecycle data-plan-complete>
+      <input type="hidden" name="status" value="completed">
+      <label><span>Closing note <small>optional</small></span><textarea name="reason" maxlength="1000" placeholder="What happened?"></textarea></label>
+      <button class="button button--finish" type="submit" ${busy ? "disabled" : ""}>Finish this plan</button>
+    </form>
+    <details class="plan-finish__other">
+      <summary>Pause or stop this plan</summary>
+      <form data-plan-lifecycle>
+        <label><span>What should happen?</span><select name="status" required><option value="">Choose one</option><option value="paused">Pause — keep it, but stop active work</option><option value="abandoned">Abandon — the outcome is no longer being pursued</option></select></label>
+        <label><span>Why?</span><textarea name="reason" required maxlength="1000" placeholder="Why is the plan changing status?"></textarea></label>
+        <button class="button" type="submit" ${busy ? "disabled" : ""}>Review this change</button>
+      </form>
+    </details>
+  </section>`;
   return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" id="plan_status" ${inactive ? "open" : ""}>
     <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : latest ? `Last changed because: ${escapeHtml(latest.reason)}` : "Finish, pause, or stop cleanly"}</small></summary>
     <form data-plan-lifecycle>
@@ -2382,7 +2402,7 @@ const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {
   if (busy) return;
   const data = new FormData(form);
   const reasonCode = String(data.get("reasonCode") ?? "") as import("./types.js").ConstructionReturnReason;
-  const reason = String(data.get("reason") ?? "").trim();
+  const reason = String(data.get("reason") ?? "").trim() || (status === "completed" ? "The planned outcome happened." : "");
   if (!reasonCode || !reason) return;
   busy = true;
   announce("Returning the exact draft with your revision notes…");
@@ -2417,12 +2437,15 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
 const confirmLifecycle = async (lifecycleChangeId: string): Promise<void> => {
   const pending = runtime.kernel.pendingLifecycleChange;
   if (!pending || pending.lifecycleChangeId !== lifecycleChangeId) return;
+  const revision = runtime.kernel.revision;
   busy = true;
   await render();
   const confirmed = runtime.kernel.humanConfirmPlanLifecycle({ lifecycleChangeId });
-  if (confirmed.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
+  const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
+  const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-lifecycle-site-${crypto.randomUUID()}` }) : confirmed;
   busy = false;
-  announce(confirmed.ok ? "Exact plan status confirmed. Codex may now apply it through the guarded WebMCP tool." : `The plan status was not confirmed: ${confirmed.code}`);
+  announce(applied.ok ? (pending.after === "completed" ? "Plan finished." : "Plan status updated.") : `The plan status was not saved: ${applied.code}`);
+  if (applied.ok) await adapter?.refreshContextualTools();
   await render();
 };
 
@@ -2683,7 +2706,7 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
   root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
-  root?.querySelector<HTMLFormElement>("[data-plan-lifecycle]")?.addEventListener("submit", (event) => { event.preventDefault(); void stageLifecycle(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-plan-lifecycle]").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void stageLifecycle(event.currentTarget as HTMLFormElement); }));
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-lifecycle']")?.addEventListener("click", (event) => { void confirmLifecycle((event.currentTarget as HTMLButtonElement).dataset.lifecycle ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-lifecycle']")?.addEventListener("click", async () => { runtime.kernel.pendingLifecycleChange = null; runtime.kernel.lifecycleConfirmation = null; announce("Plan status change cancelled. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-group-decision']")?.addEventListener("click", (event) => { void confirmGroupDecision((event.currentTarget as HTMLButtonElement).dataset.groupDecision ?? ""); });

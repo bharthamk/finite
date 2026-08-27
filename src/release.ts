@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "checklist-driven-managing-v96",
+  build: "obvious-plan-finish-v97",
 } as const;

@@ -25,6 +25,11 @@ test("Managing exposes checkboxes and section-bound attachments without engineer
   assert.match(source, /checklistForStage/);
   assert.match(source, /Everything is ticked off\./);
   assert.match(source, /data-action="reopen-stage"/);
+  assert.match(source, /Did this plan reach its outcome\?/);
+  assert.match(source, /Finish this plan/);
+  assert.match(source, /Pause or stop this plan/);
+  assert.match(source, /applyConfirmedPlanLifecycle/);
+  assert.match(source, /This plan is finished\./);
 });
 
 test("Codex receives a bounded execution toolset matching the human progress surface", async () => {
