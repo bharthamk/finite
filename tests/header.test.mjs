@@ -238,17 +238,25 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.doesNotMatch(source, /Exact plan draft confirmed\. Codex may now activate it/);
 });
 
-test("Managing starts compactly with one brief and a readable summary", () => {
+test("Managing starts with one brief and prioritises the next step", () => {
   assert.match(source, /<p class="eyebrow">Current plan<\/p>/);
-  assert.match(source, /<dl class="hero-summary" aria-label="Plan at a glance">/);
-  assert.match(source, /<dt>Total limit<\/dt>/);
-  assert.match(source, /<dt>Spent or committed<\/dt>/);
-  assert.match(source, /<dt>Available<\/dt>/);
+  assert.match(source, /<section class="managing-next"/);
+  assert.match(source, /<p class="eyebrow">Up next<\/p>/);
+  assert.match(source, /visibleManagingZones\(manifest\)/);
+  assert.match(source, /hiddenDuplicates.*pressure_meter.*entity_table.*commitment_stack/);
+  assert.match(source, /<div class="money-overview">/);
   assert.match(source, /kernel\.lifecycleStatus === "active" \? "" : `<div class="plan-status-strip/);
   assert.doesNotMatch(source, /<div class="brief-card">/);
   assert.doesNotMatch(source, /<aside class="plan-orbit"/);
   assert.doesNotMatch(source, /<span>You asked for<\/span>/);
   assert.match(styles, /\.hero \{ padding:38px 0 34px;/);
-  assert.match(styles, /\.hero-summary \{[^}]*grid-template-columns:repeat\(auto-fit,minmax\(150px,1fr\)\)/);
+  assert.doesNotMatch(styles, /\.hero-summary \{/);
+  assert.match(styles, /\.managing-next \{/);
   assert.doesNotMatch(styles, /\.orbit-ring \{/);
+});
+
+test("ordinary plan views never invent demo disruptions", () => {
+  assert.match(source, /if \(labMode\) await seedDecision\(\);/);
+  assert.doesNotMatch(source, /labMode \|\| new URLSearchParams\(location\.search\)\.get\("plan"\)/);
+  assert.doesNotMatch(source, /if \(result\.code === "PLAN_SWITCHED"\) \{\s*await adapter\?\.refreshContextualTools\(\);\s*await seedDecision\(\);/);
 });

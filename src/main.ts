@@ -1678,6 +1678,40 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       </li>`).join("")}
   </ol>`;
 
+const stageComponents = new Set<SurfaceZone["component"]>(["timeline_lane", "phase_lane", "run_of_show"]);
+
+const renderNextStep = (manifest: SurfaceManifest): string => {
+  const next = manifest.stages.find((stage) => stage.status === "current")
+    ?? manifest.stages.find((stage) => stage.status === "planned")
+    ?? manifest.stages.find((stage) => stage.status === "movable")
+    ?? manifest.stages.find((stage) => stage.status !== "complete")
+    ?? manifest.stages.at(-1);
+  const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
+  if (!next) return "";
+  return `<section class="managing-next" aria-labelledby="managing_next_title">
+    <div><p class="eyebrow">Up next</p><span class="managing-next__marker">${escapeHtml(next.marker)}</span></div>
+    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(next.detail)}</p></div>
+    ${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}
+  </section>`;
+};
+
+const visibleManagingZones = (manifest: SurfaceManifest): SurfaceZone[] => {
+  const hiddenDuplicates = new Set<SurfaceZone["component"]>(["pressure_meter", "entity_table", "commitment_stack"]);
+  const hasCurrentChange = Boolean(runtime.kernel.activeEventId);
+  const priority = (zone: SurfaceZone): number => stageComponents.has(zone.component) ? 0
+    : zone.component === "finite_summary" ? 1
+      : zone.component === "actual_forecast" ? 2
+        : zone.component === "constraint_panel" ? 3
+          : zone.component === "change_tray" ? 4
+            : zone.component === "option_compare" ? 5
+              : zone.component === "approval_panel" ? 6 : 7;
+  return manifest.zones
+    .filter((zone) => !hiddenDuplicates.has(zone.component))
+    .filter((zone) => zone.component !== "change_tray" || hasCurrentChange)
+    .filter((zone) => zone.component !== "option_compare" || activeCandidates().length > 0)
+    .sort((a, b) => priority(a) - priority(b));
+};
+
 const renderOptions = (): string => {
   const candidates = activeCandidates();
   if (!candidates.length) return runtime.kernel.activeEventId
@@ -1862,7 +1896,11 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   const actualsState = kernel.getState(["actuals"]).state as { actuals?: Array<{ label: string; currentAmountMinor: number }> };
   const latestEvent = kernel.events.find((event) => event.eventId === kernel.activeEventId);
   let body = "";
-  if (["finite_summary", "entity_table"].includes(zone.component)) body = `<div class="measure-grid">${formatBinding(zone)}</div>`;
+  if (zone.component === "finite_summary") body = `<div class="money-overview">
+    <div class="money-overview__lead"><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
+    <dl><div><dt>Total limit</dt><dd>${money(kernel.accepted.totalBudgetMinor)}</dd></div><div><dt>Spent</dt><dd>${money(kernel.accepted.spentMinor)}</dd></div><div><dt>Committed</dt><dd>${money(kernel.accepted.committedMinor)}</dd></div></dl>
+  </div>`;
+  else if (zone.component === "entity_table") body = `<div class="measure-grid">${formatBinding(zone)}</div>`;
   else if (zone.component === "pressure_meter") {
     const percentage = Math.max(0, Math.min(100, Math.round((kernel.accepted.bufferMinor / kernel.accepted.totalBudgetMinor) * 100)));
     body = `<div class="pressure-copy"><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} remains · ${percentage}% of the finite total</span></div><div class="pressure-track" role="meter" aria-label="Remaining buffer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}"><span style="width:${percentage}%"></span></div>`;
@@ -1877,7 +1915,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     const approved = staged && kernel.approval?.candidateId === staged.candidateId;
     body = staged ? `<div class="approval-copy"><p>This commits exactly <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong> against revision ${kernel.revision}. It changes no booking, purchase, or payment outside this demonstration.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} after</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Human approval recorded. Codex may now apply this exact option and return its receipt.</p>` : `<button class="button button--approve" data-action="approve">Approve this exact plan</button><button class="text-button" data-action="return">Not this one</button>`}</div>` : `<p class="quiet">Choose an outcome before approval.</p>`;
   }
-  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><p class="eyebrow">${escapeHtml(manifest.nouns.plan)}</p><h2>${escapeHtml(zone.title)}</h2></div>${body}</section>`;
+  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zone.title)}</h2></div>${body}</section>`;
 };
 
 const settingsReturnPath = (): string => {
@@ -1977,12 +2015,7 @@ async function render(): Promise<SurfaceManifest> {
     return manifest;
   }
   const receipt = kernel.receipts.at(-1);
-  const spentOrCommittedMinor = kernel.accepted.spentMinor + kernel.accepted.committedMinor;
-  const leadSummary = manifest.summaryFields.find((binding) => binding.format !== "money");
-  const leadSummaryRaw = leadSummary ? resolveSurfaceBinding(kernel, leadSummary) : null;
-  const leadSummaryValue = leadSummary
-    ? leadSummary.format === "days" && typeof leadSummaryRaw === "number" ? `${leadSummaryRaw} days` : String(leadSummaryRaw ?? "—")
-    : null;
+  const managingZones = visibleManagingZones(manifest);
   surfaceRoot.dataset.profile = kernel.profile.profileId;
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
@@ -2003,19 +2036,14 @@ async function render(): Promise<SurfaceManifest> {
       ${kernel.lifecycleStatus === "active" ? "" : `<div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>`}
       <section class="hero">
         <div class="hero__copy"><p class="eyebrow">Current plan</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div>
-        <dl class="hero-summary" aria-label="Plan at a glance">
-          ${leadSummary && leadSummaryValue !== null ? `<div><dt>${escapeHtml(leadSummary.label)}</dt><dd>${escapeHtml(leadSummaryValue)}</dd></div>` : ""}
-          <div><dt>Total limit</dt><dd>${money(kernel.accepted.totalBudgetMinor)}</dd></div>
-          <div><dt>Spent or committed</dt><dd>${money(spentOrCommittedMinor)}</dd></div>
-          <div><dt>Available</dt><dd>${money(kernel.accepted.bufferMinor)}</dd></div>
-        </dl>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
-      ${renderLifecycleControl()}
+      ${renderNextStep(manifest)}
       ${renderHumanRealityControl()}
       ${renderPlanDraft()}
       ${receipt ? renderReceipt(receipt) : ""}
-      <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
+      <div class="surface-grid">${managingZones.map((zone) => renderZone(manifest, zone)).join("")}</div>
+      ${renderLifecycleControl()}
       ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
     <footer><p>${escapeHtml(agenticName())} works through the plan. You choose and approve every consequential change.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
@@ -2064,7 +2092,7 @@ const openPlan = async (planId: string): Promise<void> => {
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (result.code === "PLAN_SWITCHED") {
     await adapter?.refreshContextualTools();
-    await seedDecision();
+    if (labMode) await seedDecision();
   }
   const target = new URL(location.href);
   target.searchParams.delete("kitchen");
@@ -2254,7 +2282,7 @@ function bindInteractions(): void {
   });
 }
 
-if (labMode || new URLSearchParams(location.search).get("plan") === "1" || new URLSearchParams(location.search).get("kitchen") === "1") await seedDecision();
+if (labMode) await seedDecision();
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 };

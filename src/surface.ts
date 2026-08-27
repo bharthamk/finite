@@ -27,17 +27,17 @@ const coreActions = [
 ] as const;
 
 const zoneContract: Record<SurfaceComponentType, { title: string; selectors: StateSelector[]; required?: boolean }> = {
-  finite_summary: { title: "The finite plan", selectors: ["identity", "allocations"], required: true },
+  finite_summary: { title: "Money", selectors: ["identity", "allocations"], required: true },
   pressure_meter: { title: "Room to move", selectors: ["allocations", "constraints"], required: true },
-  timeline_lane: { title: "Trip shape", selectors: ["entities", "constraints"] },
-  phase_lane: { title: "Critical path", selectors: ["entities", "constraints"] },
-  run_of_show: { title: "Run of show", selectors: ["entities", "constraints"] },
+  timeline_lane: { title: "Plan timeline", selectors: ["entities", "constraints"] },
+  phase_lane: { title: "Plan timeline", selectors: ["entities", "constraints"] },
+  run_of_show: { title: "Plan timeline", selectors: ["entities", "constraints"] },
   entity_table: { title: "Operating measures", selectors: ["entities", "allocations"] },
   commitment_stack: { title: "Already true", selectors: ["actuals", "constraints", "allocations"] },
   actual_forecast: { title: "Actual and forecast", selectors: ["actuals", "allocations"] },
-  constraint_panel: { title: "What cannot move", selectors: ["constraints", "preferences"], required: true },
-  change_tray: { title: "What changed", selectors: ["pending", "lineage"] },
-  option_compare: { title: "Ways through", selectors: ["allocations", "preferences", "pending"] },
+  constraint_panel: { title: "Boundaries", selectors: ["constraints", "preferences"], required: true },
+  change_tray: { title: "Changes", selectors: ["pending", "lineage"] },
+  option_compare: { title: "Decisions", selectors: ["allocations", "preferences", "pending"] },
   approval_panel: { title: "Exact approval", selectors: ["allocations", "pending", "lineage"] },
 };
 

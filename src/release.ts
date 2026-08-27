@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "managing-page-focus-v85",
+  build: "managing-information-architecture-v86",
 } as const;
