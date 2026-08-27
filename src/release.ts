@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "adaptive-checklists-and-attachments-v95",
+  build: "checklist-driven-managing-v96",
 } as const;

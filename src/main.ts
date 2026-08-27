@@ -1734,6 +1734,7 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
 };
 
 const checklistFor = (section: PlanInputSection, contextId: string | null = null): ChecklistItem[] => checklistItems.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
+const checklistForStage = (stageId: string): ChecklistItem | null => checklistItems.find((item) => item.sourceRef === `stage:${stageId}`) ?? null;
 const attachmentsFor = (section: PlanInputSection, contextId: string | null = null): PlanAttachment[] => planAttachments.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
 const attachmentKindLabel = (kind: PlanAttachment["kind"]): string => ({ image: "Image", file: "File", link: "Link", note: "Note" })[kind];
 const formatFileSize = (bytes: number | null): string => bytes === null ? "" : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -1749,7 +1750,7 @@ const renderAttachmentItems = (items: PlanAttachment[], compact = false): string
 const renderPlanWork = (): string => {
   const open = checklistItems.filter((item) => item.status === "open");
   const done = checklistItems.filter((item) => item.status === "done");
-  return `<section class="plan-work" aria-label="Plan progress and attachments">
+  return `<section class="plan-work" id="plan_work" aria-label="Plan progress and attachments">
     <article class="plan-work__checklist">
       <header><div><p class="eyebrow">Progress</p><h2>To do</h2></div><span>${done.length}/${checklistItems.length} done</span></header>
       <div class="checklist-items">${[...open, ...done].map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>
@@ -1790,25 +1791,31 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
     ${manifest.stages.map((stage) => {
       const direct = [...planInputsFor("timeline", stage.stageId)].reverse().find((item) => item.mode === "direct") ?? null;
       const decided = direct?.kind === "decision";
+      const checklist = checklistForStage(stage.stageId);
+      const completed = checklist?.status === "done";
       return `
-      <li class="stage stage--${escapeHtml(stage.status)}">
-        <span class="stage__marker">${escapeHtml(decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
+      <li class="stage stage--${escapeHtml(completed ? "complete" : stage.status)}">
+        <span class="stage__marker">${escapeHtml(completed ? "Done" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
+        <div class="stage__actions"><small>${escapeHtml(completed ? "done" : decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}${completed && checklist ? `<button type="button" data-action="reopen-stage" data-checklist-id="${escapeHtml(checklist.itemId)}">Reopen</button>` : ""}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
     }).join("")}
   </ol>`;
 
 const renderNextStep = (manifest: SurfaceManifest): string => {
-  const unresolved = (stage: SurfaceManifest["stages"][number]): boolean => !planInputsFor("timeline", stage.stageId).some((item) => item.mode === "direct" && item.kind === "decision");
-  const next = manifest.stages.find((stage) => stage.status === "current" && unresolved(stage))
-    ?? manifest.stages.find((stage) => stage.status === "planned" && unresolved(stage))
-    ?? manifest.stages.find((stage) => stage.status === "movable" && unresolved(stage))
-    ?? manifest.stages.find((stage) => stage.status !== "complete" && unresolved(stage))
-    ?? manifest.stages.at(-1);
+  const unresolved = (stage: SurfaceManifest["stages"][number]): boolean => {
+    const checklist = checklistForStage(stage.stageId);
+    return checklist ? checklist.status !== "done" : !planInputsFor("timeline", stage.stageId).some((item) => item.mode === "direct" && item.kind === "decision");
+  };
+  const next = manifest.stages.find((stage) => stage.status !== "complete" && unresolved(stage))
+    ?? manifest.stages.find((stage) => unresolved(stage));
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
-  if (!next) return "";
+  if (!next) return `<section class="managing-next managing-next--complete" aria-labelledby="managing_next_title">
+    <div><p class="eyebrow">Current list</p><span class="managing-next__marker">All done</span></div>
+    <div><h2 id="managing_next_title">Everything is ticked off.</h2><p>Reopen anything that still needs work, add another task, or wrap up this plan when the outcome has actually happened.</p></div>
+    <div class="managing-next__actions"><a href="#plan_work">Review the list ↑</a><a href="#plan_status">Wrap up this plan ↓</a></div>
+  </section>`;
   const direct = [...planInputsFor("timeline", next.stageId)].reverse().find((item) => item.mode === "direct") ?? null;
   const chosen = direct?.kind === "decision";
   return `<section class="managing-next" aria-labelledby="managing_next_title">
@@ -1913,13 +1920,13 @@ const renderLifecycleControl = (): string => {
   const latest = kernel.lifecycleEvents.at(-1);
   if (pending) {
     const confirmed = kernel.lifecycleConfirmation?.targetId === pending.lifecycleChangeId;
-    return `<section class="lifecycle-control lifecycle-control--pending" aria-label="Plan status confirmation">
+    return `<section class="lifecycle-control lifecycle-control--pending" id="plan_status" aria-label="Plan status confirmation">
     <div><p class="eyebrow">Plan conclusion</p><h2>Mark this plan ${escapeHtml(pending.after)}?</h2><p>${escapeHtml(pending.reason)}</p></div>
     <div class="lifecycle-control__actions"><span>Current: ${escapeHtml(pending.before)}</span>${confirmed ? `<p class="quiet">Human confirmation recorded. Codex may now apply this exact status and return its receipt.</p>` : `<button class="button" type="button" data-action="confirm-lifecycle" data-lifecycle="${escapeHtml(pending.lifecycleChangeId)}">Confirm exact status</button><button class="text-button" type="button" data-action="cancel-lifecycle">Keep plan ${escapeHtml(pending.before)}</button>`}</div>
   </section>`;
   }
   const inactive = kernel.lifecycleStatus !== "active";
-  return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" ${inactive ? "open" : ""}>
+  return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" id="plan_status" ${inactive ? "open" : ""}>
     <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : latest ? `Last changed because: ${escapeHtml(latest.reason)}` : "Finish, pause, or stop cleanly"}</small></summary>
     <form data-plan-lifecycle>
       <label><span>What should happen?</span><select name="status" required>
@@ -2659,6 +2666,7 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']").forEach((button) => button.addEventListener("click", () => { void handlePlanInput(String(button.dataset.planInputId ?? "")); }));
   root?.querySelector<HTMLFormElement>("[data-checklist-add]")?.addEventListener("submit", (event) => { event.preventDefault(); void addChecklistItem(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLInputElement>("[data-action='toggle-checklist']").forEach((input) => input.addEventListener("change", () => { void toggleChecklistItem(String(input.dataset.checklistId ?? ""), input.checked); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='reopen-stage']").forEach((button) => button.addEventListener("click", () => { void toggleChecklistItem(String(button.dataset.checklistId ?? ""), false); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-attachment']").forEach((button) => button.addEventListener("click", () => { void openAttachmentDialog(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-attachment']").forEach((button) => button.addEventListener("click", async () => { attachmentDialogOpen = false; planWorkError = ""; await render(); }));
   root?.querySelector<HTMLFormElement>("[data-attachment-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void saveAttachments(event.currentTarget as HTMLFormElement); });

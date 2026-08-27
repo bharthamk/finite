@@ -835,6 +835,9 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .stage--locked { background:repeating-linear-gradient(135deg,transparent 0 12px,color-mix(in srgb,var(--accent-soft) 55%,transparent) 12px 13px); }
 .stage--current { background:var(--accent-soft); }
 .stage--movable { border-color:var(--accent)!important; }
+.stage--complete { border-color:color-mix(in srgb,var(--accent) 50%,var(--line))!important; background:color-mix(in srgb,var(--accent-soft) 34%,var(--panel)); }
+.stage--complete .stage__marker,.stage--complete .stage__actions small { color:var(--accent); }
+.stage--complete>div:not(.stage__actions):not(.stage__inputs)>strong { text-decoration:line-through; text-decoration-thickness:1px; }
 
 .truth-list,.actual-list { margin-top:20px; }
 .truth-list>div,.actual-list>div { display:flex; justify-content:space-between; gap:20px; padding:17px 0; border-bottom:1px solid var(--line); }
