@@ -301,3 +301,34 @@ export const tenantThemeReceipts = sqliteTable("tenant_theme_receipts", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_tenant_theme_receipts_scope_created").on(table.scopeId, table.createdAt),
 ]);
+
+export const tenantSkins = sqliteTable("tenant_skins", {
+  scopeId: text("scope_id").notNull(),
+  skinId: text("skin_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  recipeJson: text("recipe_json").notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.skinId] }),
+  index("idx_tenant_skins_scope_updated").on(table.scopeId, table.updatedAt),
+]);
+
+export const tenantSkinPreferences = sqliteTable("tenant_skin_preferences", {
+  scopeId: text("scope_id").primaryKey(),
+  activeSkinId: text("active_skin_id").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const tenantSkinReceipts = sqliteTable("tenant_skin_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_tenant_skin_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

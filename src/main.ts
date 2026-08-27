@@ -14,6 +14,7 @@ import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-ro
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
+import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, skinTraitKeys, type SkinCatalogResult, type SkinDefinition, type SkinRecipe, type SkinResult } from "./skin.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -359,6 +360,7 @@ const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
 const resetRepository = new HttpKitchenResetRepository();
 const themeRepository = new HttpThemeRepository();
+const skinRepository = new HttpSkinRepository();
 let themeCatalog: ThemeCatalogResult;
 try {
   themeCatalog = await themeRepository.list();
@@ -372,6 +374,20 @@ const refreshThemeCatalog = async (): Promise<void> => {
   if (!next.ok) throw new Error(next.code);
   themeCatalog = next;
   applyThemeDefinition(themeCatalog.activeTheme);
+};
+let skinCatalog: SkinCatalogResult;
+try {
+  skinCatalog = await skinRepository.list();
+  if (!skinCatalog.ok) throw new Error(skinCatalog.code);
+} catch {
+  skinCatalog = { ok: true, code: "SKIN_CATALOG_FALLBACK", builtIns: builtInSkins, custom: [], activeSkinId: defaultSkin.skinId, activeSkin: defaultSkin, acceptedStateChanged: false };
+}
+applySkinDefinition(skinCatalog.activeSkin);
+const refreshSkinCatalog = async (): Promise<void> => {
+  const next = await skinRepository.list();
+  if (!next.ok) throw new Error(next.code);
+  skinCatalog = next;
+  applySkinDefinition(skinCatalog.activeSkin);
 };
 let arrivalResult: ArrivalResult = await arrivalRepository.open();
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
@@ -399,6 +415,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
 }, themeRepository, async (result: ThemeResult) => {
   if (result.theme) applyThemeDefinition(result.theme);
   await refreshThemeCatalog();
+}, skinRepository, async (result: SkinResult) => {
+  if (result.skin) applySkinDefinition(result.skin);
+  await refreshSkinCatalog();
 }).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
@@ -417,6 +436,8 @@ let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
 let themeEditingId: string | null = null;
 let themeDeleteId: string | null = null;
+let skinEditingId: string | null = null;
+let skinDeleteId: string | null = null;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -424,7 +445,7 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
-const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "account" ? `<button type="button" data-action="open-theme-settings" aria-label="Appearance settings">Theme</button>` : ""}<button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
+const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "account" ? `<button type="button" data-action="open-theme-settings" aria-label="Appearance settings">Appearance</button>` : ""}<button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
 
 const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
 
@@ -452,27 +473,64 @@ const renderKitchenResetDialog = (): string => {
 const themeCore = (theme: ThemeDefinition): ThemeCoreTokens => Object.fromEntries(themeCoreTokenKeys.map((key) => [key, theme.tokens[key]])) as ThemeCoreTokens;
 const allThemes = (): ThemeDefinition[] => [...themeCatalog.builtIns, ...themeCatalog.custom];
 const currentThemeDraft = (): ThemeDefinition => themeCatalog.custom.find((theme) => theme.themeId === themeEditingId) ?? themeCatalog.activeTheme;
+const allSkins = (): SkinDefinition[] => [...skinCatalog.builtIns, ...skinCatalog.custom];
+const currentSkinDraft = (): SkinDefinition => skinCatalog.custom.find((skin) => skin.skinId === skinEditingId) ?? skinCatalog.activeSkin;
+const skinTraitLabel = (value: string): string => value.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase());
+const skinTraitOptions: Record<keyof SkinRecipe, readonly string[]> = {
+  typeStyle: ["grotesk", "editorial", "system", "humanist"],
+  headingScale: ["restrained", "balanced", "expressive"],
+  density: ["compact", "comfortable", "airy"],
+  cornerStyle: ["square", "subtle", "rounded", "pill"],
+  borderStyle: ["none", "hairline", "strong"],
+  shadowStyle: ["none", "soft", "offset"],
+  controlStyle: ["plain", "solid", "pill"],
+  panelStyle: ["flat", "outlined", "layered"],
+  motionStyle: ["none", "restrained", "expressive"],
+};
+const renderSkinCard = (skin: SkinDefinition): string => {
+  const current = skin.skinId === skinCatalog.activeSkinId;
+  const confirmingDelete = skin.skinId === skinDeleteId;
+  return `<article class="skin-card skin-card--${escapeHtml(skin.skinId)}${current ? " is-current" : ""}" data-skin-card="${escapeHtml(skin.skinId)}">
+    <div class="skin-card__sample" aria-hidden="true"><span>Finite</span><i></i><b>Make room.</b><small>One plan, calmly held.</small></div>
+    <div class="skin-card__copy"><span>${skin.kind === "built_in" ? "Finite skin" : "Your skin"}</span><h3>${escapeHtml(skin.name)}</h3><p>${escapeHtml(skin.description)}</p></div>
+    <button type="button" data-skin-apply="${escapeHtml(skin.skinId)}" ${current || busy ? "disabled" : ""}>${current ? "Current" : "Use skin"}</button>
+    ${skin.kind === "custom" ? `<div class="skin-card__custom">${confirmingDelete ? `<button type="button" class="is-danger" data-skin-delete-confirm="${escapeHtml(skin.skinId)}">Delete permanently</button><button type="button" data-action="cancel-skin-delete">Keep</button>` : `<button type="button" data-skin-edit="${escapeHtml(skin.skinId)}">Edit</button><button type="button" data-skin-delete="${escapeHtml(skin.skinId)}">Delete</button>`}</div>` : ""}
+  </article>`;
+};
 const renderThemeCard = (theme: ThemeDefinition): string => {
   const current = theme.themeId === themeCatalog.activeThemeId;
   const confirmingDelete = theme.themeId === themeDeleteId;
   return `<article class="theme-card${current ? " is-current" : ""}" data-theme-card="${escapeHtml(theme.themeId)}">
     <div class="theme-card__swatches" aria-hidden="true"><i style="background:${theme.tokens.paper}"></i><i style="background:${theme.tokens.panel}"></i><i style="background:${theme.tokens.accent}"></i><i style="background:${theme.tokens.deep}"></i><i style="background:${theme.tokens.signal}"></i></div>
-    <div class="theme-card__copy"><span>${theme.kind === "built_in" ? "Finite theme" : "Your theme"} · ${theme.mode}</span><h3>${escapeHtml(theme.name)}</h3></div>
-    <button type="button" data-theme-apply="${escapeHtml(theme.themeId)}" ${current || busy ? "disabled" : ""}>${current ? "Current" : "Use theme"}</button>
+    <div class="theme-card__copy"><span>${theme.kind === "built_in" ? "Finite palette" : "Your palette"} · ${theme.mode}</span><h3>${escapeHtml(theme.name)}</h3></div>
+    <button type="button" data-theme-apply="${escapeHtml(theme.themeId)}" ${current || busy ? "disabled" : ""}>${current ? "Current" : "Use palette"}</button>
     ${theme.kind === "custom" ? `<div class="theme-card__custom">${confirmingDelete ? `<button type="button" class="is-danger" data-theme-delete-confirm="${escapeHtml(theme.themeId)}">Delete permanently</button><button type="button" data-action="cancel-theme-delete">Keep</button>` : `<button type="button" data-theme-edit="${escapeHtml(theme.themeId)}">Edit</button><button type="button" data-theme-delete="${escapeHtml(theme.themeId)}">Delete</button>`}</div>` : ""}
   </article>`;
 };
 
 const renderThemeSettingsDialog = (): string => {
   const draft = currentThemeDraft();
+  const skinDraft = currentSkinDraft();
   const core = themeCore(draft);
   const editing = themeEditingId !== null;
+  const editingSkin = skinEditingId !== null;
   return `<dialog class="theme-settings-dialog" data-theme-settings-dialog aria-labelledby="theme_settings_title">
     <form method="dialog" class="theme-settings-dialog__close"><button aria-label="Close appearance settings">×</button></form>
-    <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this kitchen</p><h2 id="theme_settings_title">Make Finite feel like yours.</h2><p>Choose a finished theme or create one from bounded colour roles. Plan identity, layout, authority and accepted truth stay unchanged.</p></header>
-    <section class="theme-gallery" aria-label="Available themes">${allThemes().map(renderThemeCard).join("")}</section>
+    <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this kitchen</p><h2 id="theme_settings_title">Choose how Finite feels.</h2><p>Skins change Finite’s visual character without moving its layout. Palettes set colour independently. Plan identity, authority and accepted truth stay unchanged.</p></header>
+    <section class="appearance-section" aria-labelledby="skin_heading"><div class="appearance-section__head"><p class="eyebrow">01 / Skin</p><h3 id="skin_heading">Visual character</h3><p>Typography, scale, spacing, edges, depth, controls, panels and motion.</p></div><div class="skin-gallery">${allSkins().map(renderSkinCard).join("")}</div></section>
+    <details class="theme-maker skin-maker" ${editingSkin ? "open" : ""}>
+      <summary><span>${editingSkin ? "Editing your skin" : "Custom skin"}</span><strong>${editingSkin ? escapeHtml(skinDraft.name) : "Compose a recipe"}</strong><small>Bounded visual traits</small></summary>
+      <form data-skin-custom-form>
+        <input type="hidden" name="skinId" value="${editingSkin ? escapeHtml(skinDraft.skinId) : ""}">
+        <div class="theme-maker__identity"><label><span>Name</span><input name="name" required maxlength="60" value="${editingSkin ? escapeHtml(skinDraft.name) : ""}" placeholder="Calm studio"></label><label><span>Description</span><input name="description" required maxlength="160" value="${editingSkin ? escapeHtml(skinDraft.description) : ""}" placeholder="A quiet, spacious working surface."></label></div>
+        <div class="skin-trait-grid">${skinTraitKeys.map((key) => `<label><span>${escapeHtml(skinTraitLabel(key))}</span><select name="${key}">${skinTraitOptions[key].map((value) => `<option value="${value}" ${skinDraft.recipe[key] === value ? "selected" : ""}>${escapeHtml(skinTraitLabel(value))}</option>`).join("")}</select></label>`).join("")}</div>
+        <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editingSkin ? "Save and use changes" : "Save and use custom skin"}</button>${editingSkin ? `<button class="text-button" type="button" data-action="new-custom-skin">Make another instead</button>` : ""}</div>
+        <p class="theme-maker__boundary">Skin recipes use validated choices only. They cannot contain CSS, selectors, markup, scripts, URLs, fonts or assets.</p>
+      </form>
+    </details>
+    <section class="appearance-section appearance-section--palette" aria-labelledby="palette_heading"><div class="appearance-section__head"><p class="eyebrow">02 / Palette</p><h3 id="palette_heading">Colour and contrast</h3><p>Keep your skin and change only its colour roles.</p></div><div class="theme-gallery" aria-label="Available palettes">${allThemes().map(renderThemeCard).join("")}</div></section>
     <details class="theme-maker" ${editing ? "open" : ""}>
-      <summary><span>${editing ? "Editing your theme" : "Custom theme"}</span><strong>${editing ? escapeHtml(draft.name) : "Make your own"}</strong><small>Validated before it can be saved</small></summary>
+      <summary><span>${editing ? "Editing your palette" : "Custom palette"}</span><strong>${editing ? escapeHtml(draft.name) : "Make your own"}</strong><small>Contrast validated before save</small></summary>
       <form data-theme-custom-form>
         <input type="hidden" name="themeId" value="${editing ? escapeHtml(draft.themeId) : ""}">
         <div class="theme-maker__identity">
@@ -480,8 +538,8 @@ const renderThemeSettingsDialog = (): string => {
           <label><span>Mode</span><select name="mode"><option value="light" ${draft.mode === "light" ? "selected" : ""}>Light</option><option value="dark" ${draft.mode === "dark" ? "selected" : ""}>Dark</option></select></label>
         </div>
         <div class="theme-token-grid">${themeCoreTokenKeys.map((key) => `<label><span>${escapeHtml(key.replace(/([A-Z])/g, " $1"))}</span><input type="color" name="${key}" value="${core[key]}"><code>${core[key]}</code></label>`).join("")}</div>
-        <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editing ? "Save and use changes" : "Save and use custom theme"}</button>${editing ? `<button class="text-button" type="button" data-action="new-custom-theme">Make another instead</button>` : ""}</div>
-        <p class="theme-maker__boundary">Finite checks text contrast, focus visibility and signal surfaces. Custom themes cannot contain CSS, selectors, scripts, URLs, fonts or assets.</p>
+        <div class="theme-maker__actions"><button class="button" type="submit" ${busy ? "disabled" : ""}>${editing ? "Save and use changes" : "Save and use custom palette"}</button>${editing ? `<button class="text-button" type="button" data-action="new-custom-theme">Make another instead</button>` : ""}</div>
+        <p class="theme-maker__boundary">Finite checks text contrast, focus visibility and signal surfaces. Custom palettes cannot contain CSS, selectors, scripts, URLs, fonts or assets.</p>
       </form>
     </details>
   </dialog>`;
@@ -839,11 +897,53 @@ const themeSlug = (name: string): string => name.toLowerCase().normalize("NFKD")
 
 const openThemeSettings = async (): Promise<void> => {
   if (busy) return;
-  try { await refreshThemeCatalog(); }
-  catch { announce("Finite could not refresh appearance settings. Your current theme is unchanged."); }
+  try { await Promise.all([refreshThemeCatalog(), refreshSkinCatalog()]); }
+  catch { announce("Finite could not refresh appearance settings. Your current appearance is unchanged."); }
   themeSettingsOpen = true;
   themeEditingId = null;
   themeDeleteId = null;
+  skinEditingId = null;
+  skinDeleteId = null;
+  await render();
+};
+
+const skinSlug = (name: string): string => name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 38) || "skin";
+const applySkinChoice = async (skinId: string): Promise<void> => {
+  if (busy || skinId === skinCatalog.activeSkinId) return;
+  busy = true;
+  const result = await skinRepository.setActive({ skinId, idempotencyKey: `site-skin-apply-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false;
+  if (result.ok && result.code === "SKIN_APPLIED" && result.skin) {
+    applySkinDefinition(result.skin); await refreshSkinCatalog(); announce(`${result.skin.name} is now your Finite skin.`);
+  } else announce(`The skin was not changed: ${result.code}`);
+  await render();
+};
+
+const saveCustomSkin = async (form: HTMLFormElement): Promise<void> => {
+  if (busy) return;
+  const data = new FormData(form); const name = String(data.get("name") ?? "").trim(); const existingId = String(data.get("skinId") ?? "");
+  const skinId = existingId || `custom_${skinSlug(name)}-${crypto.randomUUID().slice(0, 8)}`;
+  const recipe = Object.fromEntries(skinTraitKeys.map((key) => [key, String(data.get(key) ?? "")])) as SkinRecipe;
+  const draft = { skinId, name, description: String(data.get("description") ?? "").trim(), recipe };
+  busy = true;
+  const preview = await skinRepository.preview(draft); if (!preview.ok) {
+    busy = false; announce(`That skin needs adjustment: ${(preview.issues ?? [preview.message ?? preview.code]).slice(0, 2).join(" ")}`); await render(); return;
+  }
+  const saved = await skinRepository.save({ ...draft, idempotencyKey: `site-skin-save-${crypto.randomUUID()}`, sourceSurface: "site" });
+  if (!saved.ok) { busy = false; announce(`The custom skin was not saved: ${saved.code}`); await render(); return; }
+  const applied = await skinRepository.setActive({ skinId, idempotencyKey: `site-skin-apply-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false;
+  if (applied.ok && applied.skin) { applySkinDefinition(applied.skin); await refreshSkinCatalog(); skinEditingId = skinId; announce(`${applied.skin.name} is saved and active.`); }
+  else announce(`The custom skin was saved but could not be applied: ${applied.code}`);
+  await render();
+};
+
+const deleteCustomSkin = async (skinId: string): Promise<void> => {
+  if (busy) return; busy = true;
+  const result = await skinRepository.delete({ skinId, idempotencyKey: `site-skin-delete-${crypto.randomUUID()}`, sourceSurface: "site" });
+  busy = false; skinDeleteId = null;
+  if (result.ok && result.code === "CUSTOM_SKIN_DELETED") { await refreshSkinCatalog(); skinEditingId = null; announce("The custom skin was deleted."); }
+  else announce(`The custom skin was not deleted: ${result.code}`);
   await render();
 };
 
@@ -855,8 +955,8 @@ const applyThemeChoice = async (themeId: string): Promise<void> => {
   if (result.ok && result.code === "THEME_APPLIED" && result.theme) {
     applyThemeDefinition(result.theme);
     await refreshThemeCatalog();
-    announce(`${result.theme.name} is now your Finite theme.`);
-  } else announce(`The theme was not changed: ${result.code}`);
+    announce(`${result.theme.name} is now your Finite palette.`);
+  } else announce(`The palette was not changed: ${result.code}`);
   await render();
 };
 
@@ -873,13 +973,13 @@ const saveCustomTheme = async (form: HTMLFormElement): Promise<void> => {
   const preview = await themeRepository.preview(draft);
   if (!preview.ok) {
     busy = false;
-    announce(`That theme needs adjustment: ${(preview.issues ?? [preview.message ?? preview.code]).slice(0, 2).join(" ")}`);
+    announce(`That palette needs adjustment: ${(preview.issues ?? [preview.message ?? preview.code]).slice(0, 2).join(" ")}`);
     return;
   }
   const saved = await themeRepository.save({ ...draft, idempotencyKey: `site-theme-save-${crypto.randomUUID()}`, sourceSurface: "site" });
   if (!saved.ok) {
     busy = false;
-    announce(`The custom theme was not saved: ${saved.code}`);
+    announce(`The custom palette was not saved: ${saved.code}`);
     return;
   }
   const applied = await themeRepository.setActive({ themeId, idempotencyKey: `site-theme-apply-${crypto.randomUUID()}`, sourceSurface: "site" });
@@ -889,7 +989,7 @@ const saveCustomTheme = async (form: HTMLFormElement): Promise<void> => {
     await refreshThemeCatalog();
     themeEditingId = themeId;
     announce(`${applied.theme.name} is saved and active.`);
-  } else announce(`The custom theme was saved but could not be applied: ${applied.code}`);
+  } else announce(`The custom palette was saved but could not be applied: ${applied.code}`);
   await render();
 };
 
@@ -902,15 +1002,22 @@ const deleteCustomTheme = async (themeId: string): Promise<void> => {
   if (result.ok) {
     await refreshThemeCatalog();
     themeEditingId = null;
-    announce("The custom theme was deleted. Your available themes are up to date.");
-  } else announce(`The custom theme was not deleted: ${result.code}`);
+    announce("The custom palette was deleted. Your available palettes are up to date.");
+  } else announce(`The custom palette was not deleted: ${result.code}`);
   await render();
 };
 
 const bindThemeSettingsInteractions = (): void => {
   root?.querySelector<HTMLButtonElement>("[data-action='open-theme-settings']")?.addEventListener("click", () => { void openThemeSettings(); });
   const dialog = root?.querySelector<HTMLDialogElement>("[data-theme-settings-dialog]");
-  dialog?.addEventListener("close", () => { themeSettingsOpen = false; themeDeleteId = null; });
+  dialog?.addEventListener("close", () => { themeSettingsOpen = false; themeDeleteId = null; skinDeleteId = null; });
+  root?.querySelectorAll<HTMLButtonElement>("[data-skin-apply]").forEach((button) => button.addEventListener("click", () => { void applySkinChoice(button.dataset.skinApply ?? ""); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-skin-edit]").forEach((button) => button.addEventListener("click", async () => { skinEditingId = button.dataset.skinEdit ?? null; skinDeleteId = null; await render(); root.querySelector<HTMLInputElement>("[data-skin-custom-form] input[name='name']")?.focus(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-skin-delete]").forEach((button) => button.addEventListener("click", async () => { skinDeleteId = button.dataset.skinDelete ?? null; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-skin-delete-confirm]").forEach((button) => button.addEventListener("click", () => { void deleteCustomSkin(button.dataset.skinDeleteConfirm ?? ""); }));
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-skin-delete']")?.addEventListener("click", async () => { skinDeleteId = null; await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='new-custom-skin']")?.addEventListener("click", async () => { skinEditingId = null; await render(); root.querySelector<HTMLInputElement>("[data-skin-custom-form] input[name='name']")?.focus(); });
+  root?.querySelector<HTMLFormElement>("[data-skin-custom-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void saveCustomSkin(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLButtonElement>("[data-theme-apply]").forEach((button) => button.addEventListener("click", () => { void applyThemeChoice(button.dataset.themeApply ?? ""); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-theme-edit]").forEach((button) => button.addEventListener("click", async () => { themeEditingId = button.dataset.themeEdit ?? null; themeDeleteId = null; await render(); root.querySelector<HTMLInputElement>("[data-theme-custom-form] input[name='name']")?.focus(); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-theme-delete]").forEach((button) => button.addEventListener("click", async () => { themeDeleteId = button.dataset.themeDelete ?? null; await render(); }));

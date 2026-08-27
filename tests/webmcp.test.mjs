@@ -7,6 +7,7 @@ import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter, humanOnlyActions, registerFiniteWebMCPStatus } from "../dist-test/src/webmcp.js";
 import { builtInThemes, themeCoreTokenKeys } from "../dist-test/src/theme.js";
+import { builtInSkins } from "../dist-test/src/skin.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -239,11 +240,28 @@ test("Codex can inspect, validate, save, apply, and delete a bounded custom them
     setActive: async (input) => { calls.push(["set", input]); return { ok: true, code: "THEME_APPLIED", theme: custom, activeThemeId: custom.themeId, acceptedStateChanged: true }; },
     delete: async (input) => { calls.push(["delete", input]); return { ok: true, code: "CUSTOM_THEME_DELETED", theme: workshop, activeThemeId: "workshop", acceptedStateChanged: true }; },
   };
+  const workshopSkin = builtInSkins[0];
+  const customSkin = { skinId: "custom_codex-calm", name: "Codex calm", description: "A calm custom working surface.", kind: "custom", recipe: builtInSkins[1].recipe };
+  const skinCalls = [];
+  const skins = {
+    list: async () => ({ ok: true, code: "SKIN_CATALOG", builtIns: builtInSkins, custom: [], activeSkinId: "workshop", activeSkin: workshopSkin, acceptedStateChanged: false }),
+    preview: async (input) => { skinCalls.push(["preview", input]); return { ok: true, code: "SKIN_PREVIEW", skin: customSkin, acceptedStateChanged: false }; },
+    save: async (input) => { skinCalls.push(["save", input]); return { ok: true, code: "CUSTOM_SKIN_CREATED", skin: customSkin, acceptedStateChanged: true }; },
+    setActive: async (input) => { skinCalls.push(["set", input]); return { ok: true, code: "SKIN_APPLIED", skin: customSkin, activeSkinId: customSkin.skinId, acceptedStateChanged: true }; },
+    delete: async (input) => { skinCalls.push(["delete", input]); return { ok: true, code: "CUSTOM_SKIN_DELETED", skin: workshopSkin, activeSkinId: "workshop", acceptedStateChanged: true }; },
+  };
   let themeCallbacks = 0;
-  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, reset, async () => {}, themes, async () => { themeCallbacks += 1; }).useStableDispatcher();
+  let skinCallbacks = 0;
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, reset, async () => {}, themes, async () => { themeCallbacks += 1; }, skins, async () => { skinCallbacks += 1; }).useStableDispatcher();
   await adapter.register();
   const opened = await host.execute("finite_open_toolset", { group: "settings" });
-  assert.deepEqual(opened.actionNames, ["finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"]);
+  assert.deepEqual(opened.actionNames, ["finite_list_skins", "finite_get_skin_schema", "finite_preview_skin", "finite_save_custom_skin", "finite_set_skin", "finite_delete_custom_skin", "finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"]);
+  assert.equal((await host.execute("finite_invoke", { action: "finite_get_skin_schema", arguments: {} })).code, "SKIN_SCHEMA");
+  const skinDraft = { skinId: customSkin.skinId, name: customSkin.name, description: customSkin.description, recipe: customSkin.recipe };
+  assert.equal((await host.execute("finite_invoke", { action: "finite_preview_skin", arguments: skinDraft })).code, "SKIN_PREVIEW");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_save_custom_skin", arguments: { ...skinDraft, idempotencyKey: "codex-skin-save-0001", sourceSurface: "codex" } })).code, "CUSTOM_SKIN_CREATED");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_set_skin", arguments: { skinId: customSkin.skinId, idempotencyKey: "codex-skin-set-0001", sourceSurface: "codex" } })).code, "SKIN_APPLIED");
+  assert.equal((await host.execute("finite_invoke", { action: "finite_delete_custom_skin", arguments: { skinId: customSkin.skinId, idempotencyKey: "codex-skin-delete-0001", sourceSurface: "codex" } })).code, "CUSTOM_SKIN_DELETED");
   assert.equal((await host.execute("finite_invoke", { action: "finite_get_theme_schema", arguments: {} })).code, "THEME_SCHEMA");
   const draft = { themeId: custom.themeId, name: custom.name, mode: custom.mode, tokens };
   assert.equal((await host.execute("finite_invoke", { action: "finite_preview_theme", arguments: draft })).code, "THEME_PREVIEW");
@@ -251,5 +269,7 @@ test("Codex can inspect, validate, save, apply, and delete a bounded custom them
   assert.equal((await host.execute("finite_invoke", { action: "finite_set_theme", arguments: { themeId: custom.themeId, idempotencyKey: "codex-theme-set-0001", sourceSurface: "codex" } })).code, "THEME_APPLIED");
   assert.equal((await host.execute("finite_invoke", { action: "finite_delete_custom_theme", arguments: { themeId: custom.themeId, idempotencyKey: "codex-theme-delete-0001", sourceSurface: "codex" } })).code, "CUSTOM_THEME_DELETED");
   assert.equal(themeCallbacks, 2);
+  assert.equal(skinCallbacks, 2);
+  assert.deepEqual(skinCalls.map(([name]) => name), ["preview", "save", "set", "delete"]);
   assert.deepEqual(calls.map(([name]) => name), ["preview", "save", "set", "delete"]);
 });

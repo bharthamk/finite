@@ -6,6 +6,7 @@ import { assessExternalAction, currencyContract, groupDecisionContract, humanRea
 import { isWaitingArrivalStatus } from "./experience-route.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetRepository, type KitchenResetResult } from "./kitchen-reset.js";
 import { HttpThemeRepository, themeCoreTokenKeys, themeSchema, type ThemeCoreTokens, type ThemeMode, type ThemeRepository, type ThemeResult } from "./theme.js";
+import { HttpSkinRepository, skinSchema, type SkinRecipe, type SkinRepository, type SkinResult } from "./skin.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -264,7 +265,7 @@ const toolsetGroups = {
   evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_assess_external_action", "finite_get_external_actions", "finite_stage_external_action", "finite_export_plan_receipt"],
   continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff", "finite_get_effort_receipt"],
   plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile", "finite_get_reset_preview", "finite_reset_kitchen"],
-  settings: ["finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"],
+  settings: ["finite_list_skins", "finite_get_skin_schema", "finite_preview_skin", "finite_save_custom_skin", "finite_set_skin", "finite_delete_custom_skin", "finite_list_themes", "finite_get_theme_schema", "finite_preview_theme", "finite_save_custom_theme", "finite_set_theme", "finite_delete_custom_theme"],
 } as const;
 type ToolsetGroup = keyof typeof toolsetGroups;
 const toolsetGroupNames = Object.keys(toolsetGroups) as ToolsetGroup[];
@@ -782,8 +783,25 @@ const themeDraftSchema = {
   mode: { type: "string", enum: ["light", "dark"] },
   tokens: objectSchema(themeTokensSchema, [...themeCoreTokenKeys]),
 };
+const skinRecipeSchema = {
+  typeStyle: { type: "string", enum: ["grotesk", "editorial", "system", "humanist"] },
+  headingScale: { type: "string", enum: ["restrained", "balanced", "expressive"] },
+  density: { type: "string", enum: ["compact", "comfortable", "airy"] },
+  cornerStyle: { type: "string", enum: ["square", "subtle", "rounded", "pill"] },
+  borderStyle: { type: "string", enum: ["none", "hairline", "strong"] },
+  shadowStyle: { type: "string", enum: ["none", "soft", "offset"] },
+  controlStyle: { type: "string", enum: ["plain", "solid", "pill"] },
+  panelStyle: { type: "string", enum: ["flat", "outlined", "layered"] },
+  motionStyle: { type: "string", enum: ["none", "restrained", "expressive"] },
+};
+const skinDraftSchema = {
+  skinId: { type: "string", pattern: "^custom_[a-z0-9-]{3,60}$", minLength: 10, maxLength: 67 },
+  name: { type: "string", minLength: 1, maxLength: 60 },
+  description: { type: "string", minLength: 1, maxLength: 160 },
+  recipe: objectSchema(skinRecipeSchema, Object.keys(skinRecipeSchema)),
+};
 
-const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>): WebMCPToolDefinition[] => [
+const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>, skins: SkinRepository, onSkinChanged: (result: SkinResult) => Promise<void>): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
   define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
@@ -807,11 +825,25 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_close_operator_session", title: "Close operator work", description: "Close one exact non-authoritative work packet without changing accepted truth.", inputSchema: objectSchema({ sessionId: string }, ["sessionId"]), execute: (input, context) => runtime.closeOperatorSession(input as never, context) }),
   define({ name: "finite_resume_human_handoff", title: "Resume an exact human handoff", description: "Resume one unexpired, unconsumed human-created authority challenge only after the exact candidate has been independently rebuilt and staged on this device.", inputSchema: objectSchema({ challengeId: string }, ["challengeId"]), execute: (input, context) => runtime.kernel.resumeHumanAuthorityChallenge(input as never, context) }),
   define({ name: "finite_list_plans", title: "List compiled finite plans", description: "Read the active plan, available built-in and human-confirmed plans, and any staged activation awaiting the human.", readOnly: true, execute: () => runtime.listPlans() }),
-  define({ name: "finite_list_themes", title: "List this kitchen's themes", description: "Read the four built-in themes, tenant custom themes, and exact active theme. Theme preference is reversible UI state and never accepted plan truth.", readOnly: true, execute: (_input, context) => themes.list(context) }),
-  define({ name: "finite_get_theme_schema", title: "Read the custom-theme contract", description: "Read the bounded token schema, derived roles, contrast requirements, and raw-CSS boundary before designing a custom theme.", readOnly: true, execute: () => ({ ok: true, code: "THEME_SCHEMA", schema: themeSchema(), acceptedStateChanged: false }) }),
-  define({ name: "finite_preview_theme", title: "Validate a custom theme draft", description: "Validate exact colour-role tokens and accessibility contrast without saving or applying anything.", readOnly: true, inputSchema: objectSchema(themeDraftSchema, ["themeId", "name", "mode", "tokens"]), execute: (input, context) => themes.preview(input as never, context) }),
-  define({ name: "finite_save_custom_theme", title: "Save a custom theme", description: "Create or update one tenant-local custom theme from validated tokens. This stores a reversible appearance setting and cannot alter plan truth, layout, CSS, scripts, assets, or external systems.", inputSchema: objectSchema({ ...themeDraftSchema, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "name", "mode", "tokens", "idempotencyKey", "sourceSurface"]), execute: (input, context) => themes.save({ themeId: String(input.themeId), name: String(input.name), mode: input.mode as ThemeMode, tokens: input.tokens as ThemeCoreTokens, idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context) }),
-  define({ name: "finite_set_theme", title: "Apply a kitchen theme", description: "Apply one available built-in or tenant custom theme only when the human explicitly requests it. This preference is reversible and does not change accepted plan truth.", inputSchema: objectSchema({ themeId: { type: "string", minLength: 1, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+  define({ name: "finite_list_skins", title: "List this kitchen's visual skins", description: "Read Workshop, Quiet, Editorial, Soft System, account custom skins, and the exact active skin. Skins change presentation only, never layout structure or accepted plan truth.", readOnly: true, execute: (_input, context) => skins.list(context) }),
+  define({ name: "finite_get_skin_schema", title: "Read the custom-skin contract", description: "Read the bounded recipe choices for typography, scale, density, edges, depth, controls, panels, and motion before composing a skin.", readOnly: true, execute: () => ({ ok: true, code: "SKIN_SCHEMA", schema: skinSchema(), acceptedStateChanged: false }) }),
+  define({ name: "finite_preview_skin", title: "Validate a custom skin recipe", description: "Validate a categorical skin recipe without saving or applying anything. Arbitrary CSS, fonts, URLs, scripts, markup, and assets are not accepted.", readOnly: true, inputSchema: objectSchema(skinDraftSchema, ["skinId", "name", "description", "recipe"]), execute: (input, context) => skins.preview(input as never, context) }),
+  define({ name: "finite_save_custom_skin", title: "Save a custom visual skin", description: "Create or update one account-local skin from bounded recipe traits. This changes reversible presentation only.", inputSchema: objectSchema({ ...skinDraftSchema, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["skinId", "name", "description", "recipe", "idempotencyKey", "sourceSurface"]), execute: (input, context) => skins.save({ skinId: String(input.skinId), name: String(input.name), description: String(input.description), recipe: input.recipe as SkinRecipe, idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context) }),
+  define({ name: "finite_set_skin", title: "Apply a visual skin", description: "Apply one available built-in or account custom skin only when the human requests it. Colour palette remains independent.", inputSchema: objectSchema({ skinId: { type: "string", minLength: 1, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["skinId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+    const result = await skins.setActive({ skinId: String(input.skinId), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
+    if (result.ok && result.code === "SKIN_APPLIED") await onSkinChanged(result);
+    return result;
+  } }),
+  define({ name: "finite_delete_custom_skin", title: "Delete a custom visual skin", description: "Delete one exact account custom skin only when the human asks. Built-in skins cannot be deleted; deleting the active custom skin falls back to Workshop.", inputSchema: objectSchema({ skinId: { type: "string", pattern: "^custom_[a-z0-9-]{3,60}$", minLength: 10, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["skinId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+    const result = await skins.delete({ skinId: String(input.skinId), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
+    if (result.ok && result.code === "CUSTOM_SKIN_DELETED") await onSkinChanged(result);
+    return result;
+  } }),
+  define({ name: "finite_list_themes", title: "List this kitchen's colour palettes", description: "Read the built-in and custom colour palettes plus the exact active palette. The theme-named action remains as a compatibility alias; palette state is reversible and never accepted plan truth.", readOnly: true, execute: (_input, context) => themes.list(context) }),
+  define({ name: "finite_get_theme_schema", title: "Read the custom-palette contract", description: "Read the bounded colour-role schema, derived roles, contrast requirements, and raw-CSS boundary before designing a custom palette.", readOnly: true, execute: () => ({ ok: true, code: "THEME_SCHEMA", schema: themeSchema(), acceptedStateChanged: false }) }),
+  define({ name: "finite_preview_theme", title: "Validate a custom palette draft", description: "Validate exact colour-role tokens and accessibility contrast without saving or applying anything.", readOnly: true, inputSchema: objectSchema(themeDraftSchema, ["themeId", "name", "mode", "tokens"]), execute: (input, context) => themes.preview(input as never, context) }),
+  define({ name: "finite_save_custom_theme", title: "Save a custom colour palette", description: "Create or update one account-local custom palette from validated tokens. This stores a reversible appearance setting and cannot alter plan truth, layout, CSS, scripts, assets, or external systems.", inputSchema: objectSchema({ ...themeDraftSchema, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "name", "mode", "tokens", "idempotencyKey", "sourceSurface"]), execute: (input, context) => themes.save({ themeId: String(input.themeId), name: String(input.name), mode: input.mode as ThemeMode, tokens: input.tokens as ThemeCoreTokens, idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context) }),
+  define({ name: "finite_set_theme", title: "Apply a colour palette", description: "Apply one available built-in or custom palette only when the human explicitly requests it. The theme-named action remains for compatibility; this preference is reversible and does not change accepted plan truth.", inputSchema: objectSchema({ themeId: { type: "string", minLength: 1, maxLength: 67 }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["themeId", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
     const result = await themes.setActive({ themeId: String(input.themeId), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
     if (result.ok && result.code === "THEME_APPLIED") await onThemeChanged(result);
     return result;
@@ -1075,7 +1107,7 @@ export class FinitePlanWebMCPAdapter {
   private stableDispatcher = false;
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
-  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}, private readonly themes: ThemeRepository = new HttpThemeRepository(), private readonly onThemeChanged: (result: ThemeResult) => Promise<void> = async () => {}) {}
+  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}, private readonly themes: ThemeRepository = new HttpThemeRepository(), private readonly onThemeChanged: (result: ThemeResult) => Promise<void> = async () => {}, private readonly skins: SkinRepository = new HttpSkinRepository(), private readonly onSkinChanged: (result: SkinResult) => Promise<void> = async () => {}) {}
 
   useBoundedOutputs(): this {
     this.boundedOutputs = true;
@@ -1406,7 +1438,7 @@ export class FinitePlanWebMCPAdapter {
       inputSchema: objectSchema({ action: { type: "string", minLength: 1, maxLength: 200 }, arguments: { type: "object" } }, ["action"]),
       execute: (input, context) => this.dispatchAction(input, context),
     });
-    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset, this.themes, this.onThemeChanged), openToolset];
+    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset, this.themes, this.onThemeChanged, this.skins, this.onSkinChanged), openToolset];
     this.coreTools = this.executableTools.map((tool) => this.instrument(tool));
     this.coreTools.push(readResult, getEffortReceipt, this.instrument(invoke));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;

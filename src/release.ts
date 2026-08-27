@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "tenant-themes-v59",
+  build: "appearance-skins-v60",
 } as const;
