@@ -1724,10 +1724,11 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
     ?? manifest.stages.at(-1);
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
   if (!next) return "";
+  const chosen = planInputsFor("timeline", next.stageId).find((item) => item.mode === "direct" && item.kind === "decision") ?? null;
   return `<section class="managing-next" aria-labelledby="managing_next_title">
-    <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(next.marker)}</span></div>
-    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(next.detail)}</p>${renderPlanInputItems("timeline", next.stageId, true)}</div>
-    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button></div>
+    <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(chosen ? "Chosen" : next.marker)}</span></div>
+    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(chosen?.message ?? next.detail)}</p>${chosen ? "" : renderPlanInputItems("timeline", next.stageId, true)}</div>
+    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}${chosen ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(chosen.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
   </section>`;
 };
 
