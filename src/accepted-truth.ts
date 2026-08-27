@@ -54,16 +54,17 @@ const asRecord = (value: unknown): Record<string, unknown> => value !== null && 
 
 const receiptAuthorityBinding = (receipt: Receipt): { targetType: Receipt["receiptType"]; targetId: string; contentHash: string; authorityId: string } | null => {
   const payload = asRecord(receipt.payload);
-  const eventKey = ({ actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Partial<Record<Receipt["receiptType"], string>>)[receipt.receiptType];
+  const eventKey = ({ plan_fact_change: "planFactChange", actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Partial<Record<Receipt["receiptType"], string>>)[receipt.receiptType];
   const event = eventKey ? asRecord(payload[eventKey]) : {};
   const targetId = receipt.receiptType === "plan_option" ? payload.candidateId
+    : receipt.receiptType === "plan_fact_change" ? event.planFactChangeId
     : receipt.receiptType === "actual_correction" ? event.correctionId
       : receipt.receiptType === "preference_change" ? event.preferenceChangeId
         : receipt.receiptType === "plan_lifecycle" ? event.lifecycleChangeId
           : receipt.receiptType === "group_decision" ? event.groupDecisionId
             : event.externalActionChangeId;
   const contentHash = receipt.receiptType === "plan_option" ? payload.contentHash : event.contentHash;
-  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : event.confirmationId;
+  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : receipt.receiptType === "plan_fact_change" ? payload.confirmationId : event.confirmationId;
   return typeof targetId === "string" && typeof contentHash === "string" && typeof authorityId === "string" ? { targetType: receipt.receiptType, targetId, contentHash, authorityId } : null;
 };
 

@@ -214,20 +214,21 @@ const activationReceiptValid = async (receipt: ActivationReceipt): Promise<boole
     && await sha256(base) === replayChecksum;
 };
 
-const authorityTargetTypes = new Set(["plan_option", "actual_correction", "preference_change", "plan_lifecycle", "group_decision", "external_action", "plan_activation"]);
+const authorityTargetTypes = new Set(["plan_option", "plan_fact_change", "actual_correction", "preference_change", "plan_lifecycle", "group_decision", "external_action", "plan_activation"]);
 
 const receiptAuthorityBinding = (receipt: Receipt): { targetType: string; targetId: string; contentHash: string; authorityId: string } | null => {
   const payload = receipt.payload;
-  const eventKey = ({ actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Record<string, string>)[receipt.receiptType];
+  const eventKey = ({ plan_fact_change: "planFactChange", actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Record<string, string>)[receipt.receiptType];
   const event = eventKey && payload[eventKey] && typeof payload[eventKey] === "object" && !Array.isArray(payload[eventKey]) ? payload[eventKey] as JsonRecord : null;
   const targetId = receipt.receiptType === "plan_option" ? payload.candidateId
+    : receipt.receiptType === "plan_fact_change" ? event?.planFactChangeId
     : receipt.receiptType === "actual_correction" ? event?.correctionId
       : receipt.receiptType === "preference_change" ? event?.preferenceChangeId
         : receipt.receiptType === "plan_lifecycle" ? event?.lifecycleChangeId
           : receipt.receiptType === "group_decision" ? event?.groupDecisionId
             : receipt.receiptType === "external_action" ? event?.externalActionChangeId : null;
   const contentHash = receipt.receiptType === "plan_option" ? payload.contentHash : event?.contentHash;
-  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : event?.confirmationId;
+  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : receipt.receiptType === "plan_fact_change" ? payload.confirmationId : event?.confirmationId;
   return typeof targetId === "string" && typeof contentHash === "string" && typeof authorityId === "string"
     ? { targetType: receipt.receiptType, targetId, contentHash, authorityId }
     : null;

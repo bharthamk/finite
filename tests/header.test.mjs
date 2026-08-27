@@ -245,7 +245,9 @@ test("Managing starts with one brief and prioritises the next step", () => {
   assert.match(source, /<p class="eyebrow">Up next \$\{pendingBadge\("timeline", next\.stageId\)\}<\/p>/);
   assert.match(source, /visibleManagingZones\(manifest\)/);
   assert.match(source, /hiddenDuplicates.*pressure_meter.*entity_table.*commitment_stack/);
-  assert.match(source, /<div class="money-overview">/);
+  assert.match(source, /<div class="plan-detail-grid">/);
+  assert.match(source, /data-action="open-plan-facts"/);
+  assert.match(source, /editablePlanFacts\(runtime\.kernel\.profile/);
   assert.match(source, /kernel\.lifecycleStatus === "active" \? "" : `<div class="plan-status-strip/);
   assert.doesNotMatch(source, /<div class="brief-card">/);
   assert.doesNotMatch(source, /<aside class="plan-orbit"/);

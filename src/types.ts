@@ -540,7 +540,7 @@ export interface PlanLifecycleEvent {
 
 export interface Receipt {
   receiptId: string;
-  receiptType: "plan_option" | "actual_correction" | "preference_change" | "plan_lifecycle" | "group_decision" | "external_action";
+  receiptType: "plan_option" | "plan_fact_change" | "actual_correction" | "preference_change" | "plan_lifecycle" | "group_decision" | "external_action";
   idempotencyKey: string;
   planId: string;
   fromRevision: number;

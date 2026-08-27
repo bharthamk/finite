@@ -18,6 +18,7 @@ import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, ski
 import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
+import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -537,6 +538,9 @@ let planInputBusy = false;
 let planInputError = "";
 let planInputEditingId: string | null = null;
 let planInputContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
+let planFactDialogOpen = false;
+let planFactBusy = false;
+let planFactError = "";
 let draftReturnFormOpen = false;
 let planActivationError = "";
 let kitchenResetPreview: KitchenResetResult | null = null;
@@ -1752,6 +1756,32 @@ const renderPlanInputDialog = (): string => {
 </dialog>`;
 };
 
+const currentEditablePlanFacts = (): EditablePlanFact[] => editablePlanFacts(runtime.kernel.profile, runtime.kernel.accepted, runtime.kernel.entities);
+
+const formatPlanFactValue = (fact: EditablePlanFact): string => fact.format === "money" ? money(fact.value)
+  : fact.format === "days" ? `${fact.value} days`
+    : String(fact.value);
+
+const renderPlanFactDialog = (): string => {
+  const facts = currentEditablePlanFacts();
+  return `<dialog class="plan-fact-dialog" aria-labelledby="plan_fact_title">
+    <button type="button" class="dialog-close" data-action="close-plan-facts" aria-label="Close">×</button>
+    <form data-plan-fact-form>
+      <header><p class="eyebrow">Plan details</p><h2 id="plan_fact_title">Change the numbers</h2></header>
+      <div class="plan-fact-dialog__fields">${facts.map((fact) => {
+        const moneyFact = fact.format === "money";
+        const value = moneyFact ? fact.value / 100 : fact.value;
+        const minimum = moneyFact ? fact.minimum / 100 : fact.minimum;
+        const maximum = fact.maximum === null ? "" : String(moneyFact ? fact.maximum / 100 : fact.maximum);
+        return `<label><span>${escapeHtml(fact.label)}</span><div class="plan-fact-input">${moneyFact ? `<span aria-hidden="true">$</span>` : ""}<input type="number" inputmode="${moneyFact ? "decimal" : "numeric"}" name="${escapeHtml(fact.factId)}" value="${escapeHtml(value)}" min="${escapeHtml(minimum)}" ${maximum ? `max="${escapeHtml(maximum)}"` : ""} step="${moneyFact ? "0.01" : escapeHtml(fact.step)}" required></div></label>`;
+      }).join("")}</div>
+      <div class="plan-fact-dialog__calculation"><span>Available after assigned costs</span><output data-plan-fact-available>${money(runtime.kernel.accepted.bufferMinor)}</output></div>
+      ${planFactError ? `<p class="plan-input-dialog__error" role="alert">${escapeHtml(planFactError)}</p>` : ""}
+      <div class="plan-input-dialog__actions"><button class="button" type="submit" ${planFactBusy ? "disabled" : ""}>${planFactBusy ? "Saving…" : "Save changes"}</button><button class="text-button" type="button" data-action="close-plan-facts">Cancel</button></div>
+    </form>
+  </dialog>`;
+};
+
 const visibleManagingZones = (manifest: SurfaceManifest): SurfaceZone[] => {
   const hiddenDuplicates = new Set<SurfaceZone["component"]>(["pressure_meter", "entity_table", "commitment_stack"]);
   const hasCurrentChange = Boolean(runtime.kernel.activeEventId);
@@ -1830,6 +1860,10 @@ const renderLifecycleControl = (): string => {
 
 const renderHumanRealityControl = (): string => {
   const kernel = runtime.kernel;
+  if (kernel.pendingPlanFactChange) {
+    const pending = kernel.pendingPlanFactChange;
+    return `<section class="zone zone--approval_panel lifecycle-control" aria-label="Plan detail review"><div class="zone__heading"><p class="eyebrow">Plan details</p><h2>Save these changes?</h2></div><div class="approval-copy"><div class="plan-fact-review">${pending.changes.map((change) => `<div><span>${escapeHtml(change.label)}</span><strong>${change.format === "money" ? `${money(change.before)} → ${money(change.after)}` : `${escapeHtml(change.before)} → ${escapeHtml(change.after)}`}</strong></div>`).join("")}</div><button class="button button--approve" type="button" data-action="confirm-plan-facts" data-plan-fact-change="${escapeHtml(pending.planFactChangeId)}">Save changes</button><button class="text-button" type="button" data-action="cancel-plan-facts">Cancel</button></div></section>`;
+  }
   if (kernel.pendingGroupDecision) {
     const pending = kernel.pendingGroupDecision;
     const confirmed = kernel.groupDecisionConfirmation?.targetId === pending.groupDecisionId;
@@ -1953,10 +1987,15 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   const actualsState = kernel.getState(["actuals"]).state as { actuals?: Array<{ label: string; currentAmountMinor: number }> };
   const latestEvent = kernel.events.find((event) => event.eventId === kernel.activeEventId);
   let body = "";
-  if (zone.component === "finite_summary") body = `<div class="money-overview">
-    <div class="money-overview__lead"><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
-    <dl><div><dt>Total limit</dt><dd>${money(kernel.accepted.totalBudgetMinor)}</dd></div><div><dt>Spent</dt><dd>${money(kernel.accepted.spentMinor)}</dd></div><div><dt>Committed</dt><dd>${money(kernel.accepted.committedMinor)}</dd></div></dl>
-  </div>`;
+  if (zone.component === "finite_summary") {
+    const facts = currentEditablePlanFacts();
+    body = `<div class="plan-detail-grid">
+      ${facts.map((fact) => `<button type="button" class="plan-detail plan-detail--editable" data-action="open-plan-facts"><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(formatPlanFactValue(fact))}</strong><small>Change</small></button>`).join("")}
+      <div class="plan-detail"><span>Spent</span><strong>${money(kernel.accepted.spentMinor)}</strong></div>
+      <div class="plan-detail"><span>Committed</span><strong>${money(kernel.accepted.committedMinor)}</strong></div>
+      <div class="plan-detail plan-detail--available"><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
+    </div>`;
+  }
   else if (zone.component === "entity_table") body = `<div class="measure-grid">${formatBinding(zone)}</div>`;
   else if (zone.component === "pressure_meter") {
     const percentage = Math.max(0, Math.min(100, Math.round((kernel.accepted.bufferMinor / kernel.accepted.totalBudgetMinor) * 100)));
@@ -1974,7 +2013,9 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
   const timelineSection = stageComponents.has(zone.component);
-  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zone.title)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2>${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</section>`;
+  const zoneTitle = zone.component === "finite_summary" ? "Plan details" : zone.title;
+  const structuredEdit = zone.component === "finite_summary" ? `<button type="button" data-action="open-plan-facts">Edit numbers</button>` : "";
+  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zoneTitle)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2><div class="zone__heading-actions">${structuredEdit}${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div></div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</section>`;
 };
 
 const settingsReturnPath = (): string => {
@@ -2110,9 +2151,11 @@ async function render(): Promise<SurfaceManifest> {
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderPlanInputDialog()}
+    ${renderPlanFactDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   if (planInputDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-input-dialog")?.showModal();
+  if (planFactDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-fact-dialog")?.showModal();
   enableNativeWritingAssistance();
   bindInteractions();
   return manifest;
@@ -2315,6 +2358,21 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
   await render();
 };
 
+const confirmPendingPlanFacts = async (planFactChangeId: string): Promise<void> => {
+  const pending = runtime.kernel.pendingPlanFactChange;
+  if (!pending || pending.planFactChangeId !== planFactChangeId) return;
+  const revision = runtime.kernel.revision;
+  busy = true;
+  await render();
+  const confirmed = runtime.kernel.humanConfirmPlanFactChanges({ planFactChangeId });
+  const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
+  const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
+  busy = false;
+  announce(applied.ok ? "Plan details updated." : `Those values could not be saved: ${applied.code}`);
+  if (applied.ok) await adapter?.refreshContextualTools();
+  await render();
+};
+
 const openPlanInput = async (button: HTMLButtonElement): Promise<void> => {
   const section = button.dataset.planInputSection as PlanInputSection;
   planInputContext = {
@@ -2387,6 +2445,51 @@ const handlePlanInput = async (inputId: string): Promise<void> => {
   await render();
 };
 
+const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
+  if (planFactBusy) return;
+  const facts = new Map(currentEditablePlanFacts().map((fact) => [fact.factId, fact]));
+  const data = new FormData(form);
+  const changes: PlanFactChange[] = [];
+  for (const [factId, fact] of facts) {
+    const raw = Number(data.get(factId));
+    changes.push({ factId, value: fact.format === "money" ? Math.round(raw * 100) : raw });
+  }
+  planFactBusy = true;
+  planFactError = "";
+  await render();
+  const revision = runtime.kernel.revision;
+  const staged = await runtime.kernel.stagePlanFactChanges({ changes, expectedRevision: revision });
+  if (!staged.ok) {
+    planFactError = Array.isArray(staged.issues) ? staged.issues.map(String).join(" ") : "Those values do not fit this plan.";
+  } else {
+    const pending = runtime.kernel.pendingPlanFactChange!;
+    const confirmed = runtime.kernel.humanConfirmPlanFactChanges({ planFactChangeId: pending.planFactChangeId });
+    const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
+    const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId: pending.planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
+    if (applied.ok) {
+      planFactDialogOpen = false;
+      announce("Plan details updated.");
+      await adapter?.refreshContextualTools();
+    } else planFactError = Array.isArray(applied.issues) ? applied.issues.map(String).join(" ") : `Those values could not be saved: ${applied.code}`;
+  }
+  planFactBusy = false;
+  await render();
+};
+
+const bindPlanFactCalculation = (): void => {
+  const form = root?.querySelector<HTMLFormElement>("[data-plan-fact-form]");
+  if (!form) return;
+  const total = form.elements.namedItem("allocations.totalBudgetMinor") as HTMLInputElement | null;
+  const output = form.querySelector<HTMLOutputElement>("[data-plan-fact-available]");
+  if (!total || !output) return;
+  const update = (): void => {
+    const totalMinor = Math.round(Number(total.value) * 100);
+    const assigned = runtime.kernel.accepted.spentMinor + runtime.kernel.accepted.committedMinor + runtime.kernel.accepted.forecastMinor;
+    output.value = Number.isFinite(totalMinor) ? money(Math.max(0, totalMinor - assigned)) : "—";
+  };
+  total.addEventListener("input", update);
+};
+
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   bindFollowCodexInteractions();
@@ -2399,6 +2502,10 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputError = ""; await render(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-input-form]")?.addEventListener("submit", (event) => { event.preventDefault(); const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null; const mode: PlanInputMode = submitter?.value === "codex" ? "codex" : "direct"; void savePlanInput(event.currentTarget as HTMLFormElement, mode); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']").forEach((button) => button.addEventListener("click", () => { void handlePlanInput(String(button.dataset.planInputId ?? "")); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactError = ""; planFactDialogOpen = true; await render(); root.querySelector<HTMLInputElement>("[data-plan-fact-form] input")?.focus(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactDialogOpen = false; planFactError = ""; await render(); }));
+  root?.querySelector<HTMLFormElement>("[data-plan-fact-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void savePlanFacts(event.currentTarget as HTMLFormElement); });
+  bindPlanFactCalculation();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
@@ -2414,6 +2521,8 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-group-decision']")?.addEventListener("click", async () => { runtime.kernel.pendingGroupDecision = null; runtime.kernel.groupDecisionConfirmation = null; announce("Group decision returned. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-external-action']")?.addEventListener("click", (event) => { void confirmExternalAction((event.currentTarget as HTMLButtonElement).dataset.externalAction ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-external-action']")?.addEventListener("click", async () => { runtime.kernel.pendingExternalAction = null; runtime.kernel.externalActionConfirmation = null; announce("Real-world status returned. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan-facts']")?.addEventListener("click", (event) => { void confirmPendingPlanFacts((event.currentTarget as HTMLButtonElement).dataset.planFactChange ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-facts']")?.addEventListener("click", async () => { runtime.kernel.pendingPlanFactChange = null; runtime.kernel.planFactConfirmation = null; announce("Plan detail changes cancelled."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

@@ -716,6 +716,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .zone { grid-column:span 6; min-width:0; padding:clamp(22px,3vw,36px); border:1px solid var(--line); background:var(--panel); }
 .zone__heading { display:flex; align-items:baseline; justify-content:space-between; gap:20px; padding-bottom:22px; border-bottom:1px solid var(--line); }
 .zone__heading button:hover { color:var(--accent); }
+.zone__heading-actions { display:flex; align-items:center; gap:18px; }
 .zone__heading .eyebrow { margin:0; }
 .zone h2 { margin:0; font-size:clamp(1.45rem,2.5vw,2.3rem); font-weight:500; letter-spacing:-.045em; }
 .zone--timeline_lane,.zone--phase_lane,.zone--run_of_show,.zone--option_compare,.zone--approval_panel { grid-column:1/-1; }
@@ -735,6 +736,33 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .money-overview dl { margin:0; border-top:1px solid var(--line); }
 .money-overview dl div { display:flex; justify-content:space-between; gap:20px; padding:15px 0; border-bottom:1px solid var(--line); }
 .money-overview dd { margin:0; font-weight:600; }
+.plan-detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:1px; margin-top:24px; border:1px solid var(--line); background:var(--line); }
+.plan-detail { min-height:112px; display:grid; align-content:space-between; gap:12px; padding:18px; border:0; color:var(--ink); background:var(--panel); text-align:left; }
+.plan-detail>span { color:var(--muted); font-size:.72rem; }
+.plan-detail>strong { font-size:clamp(1.55rem,3vw,2.5rem); font-weight:500; letter-spacing:-.055em; }
+.plan-detail>small { color:var(--accent); font:600 .6rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.plan-detail--editable { cursor:pointer; }
+.plan-detail--editable:hover,.plan-detail--editable:focus-visible { position:relative; z-index:1; outline:2px solid var(--focus); outline-offset:-2px; }
+.plan-detail--available { color:var(--on-deep); background:var(--deep); }
+.plan-detail--available>span { color:color-mix(in srgb,var(--on-deep) 70%,transparent); }
+
+.plan-fact-dialog { width:min(760px,calc(100vw - 28px)); max-height:calc(100vh - 28px); position:fixed; inset:14px; margin:auto; padding:clamp(28px,5vw,54px); border:1px solid var(--ink); color:var(--ink); background:var(--paper); box-shadow:18px 18px 0 color-mix(in srgb,var(--deep) 35%,transparent); overflow:auto; z-index:80; }
+.plan-fact-dialog::backdrop { background:rgba(18,27,25,.62); }
+.plan-fact-dialog[open] { display:block; }
+.plan-fact-dialog .dialog-close { width:38px; height:38px; position:absolute; top:18px; right:18px; border:1px solid var(--ink); background:transparent; font-size:1.3rem; cursor:pointer; }
+.plan-fact-dialog header { padding-right:42px; }
+.plan-fact-dialog header .eyebrow { margin:0 0 10px; }
+.plan-fact-dialog h2 { margin:0; font-size:clamp(2.25rem,5vw,4.2rem); font-weight:500; line-height:.98; letter-spacing:-.06em; }
+.plan-fact-dialog__fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:34px; }
+.plan-fact-dialog label { display:grid; gap:8px; }
+.plan-fact-dialog label>span,.plan-fact-dialog__calculation>span { color:var(--muted); font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.plan-fact-input { display:flex; align-items:center; gap:8px; padding:0 14px; border:1px solid var(--line); background:var(--panel); }
+.plan-fact-input>span { font-size:1.3rem; }
+.plan-fact-input input { width:100%; min-width:0; padding:13px 0; border:0; color:var(--ink); background:transparent; font:inherit; font-size:1.25rem; font-weight:600; }
+.plan-fact-input input:focus { outline:0; }
+.plan-fact-input:focus-within { outline:2px solid var(--focus); outline-offset:2px; }
+.plan-fact-dialog__calculation { display:flex; justify-content:space-between; gap:20px; margin-top:22px; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.plan-fact-dialog__calculation output { font-size:1.35rem; font-weight:700; }
 .pressure-copy { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding:32px 0 20px; }
 .pressure-copy strong { font-size:clamp(2.6rem,5vw,5rem); font-weight:500; letter-spacing:-.07em; }
 .pressure-copy span { max-width:210px; color:#c8d6d2; text-align:right; }
@@ -796,6 +824,9 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .approval-copy>div span { color:#a8bab5; font-size:.72rem; }
 .approval-copy>div strong { font-size:1.5rem; }
 .approval-copy .button,.approval-copy .text-button { grid-column:1/-1; }
+.approval-copy .plan-fact-review { grid-column:1/-1; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1px; color:var(--ink); background:rgba(255,255,255,.2); }
+.plan-fact-review>div { display:grid; gap:8px; padding:16px; background:var(--paper); }
+.plan-fact-review>div span { color:var(--muted); }
 .draft-review .zone__heading { display:grid; gap:10px; }
 .draft-review .zone__heading h2 { margin-bottom:0; }
 .draft-review__lede { max-width:780px; margin:0; color:#ced9d6; font-size:1rem; line-height:1.65; }
@@ -1050,10 +1081,12 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .surface-grid { display:block; padding-top:30px; }
   .zone { margin-bottom:14px; padding:22px 18px; }
   .zone__heading { display:block; }
+  .zone__heading-actions { margin-top:14px; }
   .zone__heading .eyebrow { margin-bottom:8px; }
   .measure { min-height:95px; }
   .measure strong { font-size:1.45rem; }
   .money-overview { grid-template-columns:1fr; }
+  .plan-fact-dialog__fields { grid-template-columns:1fr; }
   .pressure-copy { display:grid; }
   .pressure-copy span { text-align:left; }
   .stage-list--calendar,.stage-list--phases { display:block; }

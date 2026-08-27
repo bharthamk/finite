@@ -38,6 +38,7 @@ import type {
 } from "./types.js";
 import { PlanSnapshotStore } from "./persistence.js";
 import { currencyContract, externalActionStatuses, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
+import { editablePlanFacts, PlanFactValidationError, projectPlanFactChanges, type PlanFactChange, type PlanFactProjection } from "./plan-facts.js";
 
 interface PendingCorrection {
   correctionId: string;
@@ -98,6 +99,12 @@ interface PendingExternalAction {
   contentHash: string;
 }
 
+interface PendingPlanFactChange extends PlanFactProjection {
+  planFactChangeId: string;
+  baseRevision: number;
+  contentHash: string;
+}
+
 interface KernelCheckpoint {
   revision: number;
   lifecycleStatus: PlanLifecycleStatus;
@@ -126,12 +133,15 @@ interface KernelCheckpoint {
   groupDecisionConfirmation: Confirmation | null;
   pendingExternalAction: PendingExternalAction | null;
   externalActionConfirmation: Confirmation | null;
+  pendingPlanFactChange: PendingPlanFactChange | null;
+  planFactConfirmation: Confirmation | null;
   optionIdempotency: Map<string, Receipt>;
   correctionIdempotency: Map<string, Receipt>;
   preferenceIdempotency: Map<string, Receipt>;
   lifecycleIdempotency: Map<string, Receipt>;
   groupDecisionIdempotency: Map<string, Receipt>;
   externalActionIdempotency: Map<string, Receipt>;
+  planFactIdempotency: Map<string, Receipt>;
 }
 
 const contentHash = (content: string): Promise<string> => sha256({ content });
@@ -183,12 +193,15 @@ export class FinitePlanKernel {
   groupDecisionConfirmation: Confirmation | null = null;
   pendingExternalAction: PendingExternalAction | null = null;
   externalActionConfirmation: Confirmation | null = null;
+  pendingPlanFactChange: PendingPlanFactChange | null = null;
+  planFactConfirmation: Confirmation | null = null;
   private readonly optionIdempotency = new Map<string, Receipt>();
   private readonly correctionIdempotency = new Map<string, Receipt>();
   private readonly preferenceIdempotency = new Map<string, Receipt>();
   private readonly lifecycleIdempotency = new Map<string, Receipt>();
   private readonly groupDecisionIdempotency = new Map<string, Receipt>();
   private readonly externalActionIdempotency = new Map<string, Receipt>();
+  private readonly planFactIdempotency = new Map<string, Receipt>();
   private acceptedSnapshotHash: string | null = null;
   private acceptedTruthStatus: "local" | "uninitialized" | "ready" | "unavailable";
 
@@ -236,6 +249,7 @@ export class FinitePlanKernel {
       if (receipt.receiptType === "plan_lifecycle") this.lifecycleIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "group_decision") this.groupDecisionIdempotency.set(receipt.idempotencyKey, receipt);
       if (receipt.receiptType === "external_action") this.externalActionIdempotency.set(receipt.idempotencyKey, receipt);
+      if (receipt.receiptType === "plan_fact_change") this.planFactIdempotency.set(receipt.idempotencyKey, receipt);
     }
   }
 
@@ -255,6 +269,7 @@ export class FinitePlanKernel {
     this.lifecycleIdempotency.clear();
     this.groupDecisionIdempotency.clear();
     this.externalActionIdempotency.clear();
+    this.planFactIdempotency.clear();
     this.activeEventId = null;
     this.stagedCandidate = null;
     this.approval = null;
@@ -268,6 +283,8 @@ export class FinitePlanKernel {
     this.groupDecisionConfirmation = null;
     this.pendingExternalAction = null;
     this.externalActionConfirmation = null;
+    this.pendingPlanFactChange = null;
+    this.planFactConfirmation = null;
     this.restore(snapshot);
   }
 
@@ -369,12 +386,15 @@ export class FinitePlanKernel {
       groupDecisionConfirmation: this.groupDecisionConfirmation,
       pendingExternalAction: this.pendingExternalAction,
       externalActionConfirmation: this.externalActionConfirmation,
+      pendingPlanFactChange: this.pendingPlanFactChange,
+      planFactConfirmation: this.planFactConfirmation,
       optionIdempotency: this.optionIdempotency,
       correctionIdempotency: this.correctionIdempotency,
       preferenceIdempotency: this.preferenceIdempotency,
       lifecycleIdempotency: this.lifecycleIdempotency,
       groupDecisionIdempotency: this.groupDecisionIdempotency,
       externalActionIdempotency: this.externalActionIdempotency,
+      planFactIdempotency: this.planFactIdempotency,
     });
   }
 
@@ -407,6 +427,8 @@ export class FinitePlanKernel {
     this.groupDecisionConfirmation = clone(checkpoint.groupDecisionConfirmation);
     this.pendingExternalAction = clone(checkpoint.pendingExternalAction);
     this.externalActionConfirmation = clone(checkpoint.externalActionConfirmation);
+    this.pendingPlanFactChange = clone(checkpoint.pendingPlanFactChange);
+    this.planFactConfirmation = clone(checkpoint.planFactConfirmation);
     this.optionIdempotency.clear();
     for (const [key, receipt] of checkpoint.optionIdempotency) this.optionIdempotency.set(key, clone(receipt));
     this.correctionIdempotency.clear();
@@ -419,6 +441,8 @@ export class FinitePlanKernel {
     for (const [key, receipt] of checkpoint.groupDecisionIdempotency) this.groupDecisionIdempotency.set(key, clone(receipt));
     this.externalActionIdempotency.clear();
     for (const [key, receipt] of checkpoint.externalActionIdempotency) this.externalActionIdempotency.set(key, clone(receipt));
+    this.planFactIdempotency.clear();
+    for (const [key, receipt] of checkpoint.planFactIdempotency) this.planFactIdempotency.set(key, clone(receipt));
   }
 
   private async persistAcceptedOrRollback(checkpoint: KernelCheckpoint, mutation: Receipt["receiptType"], receipt: Receipt, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}): Promise<ToolResult | null> {
@@ -536,7 +560,25 @@ export class FinitePlanKernel {
     if (unique.includes("constraints")) state.constraints = { locks: clone(this.profile.locks), relationships: clone(this.profile.relationships) };
     if (unique.includes("entities")) state.entities = clone(this.entities);
     if (unique.includes("preferences")) state.preferences = { labels: clone(this.profile.preferenceLabels), weights: clone(this.preferenceWeights) };
-    if (unique.includes("pending")) state.pending = { eventIds: this.activeEventId ? [this.activeEventId] : [], supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId), activeEventId: this.activeEventId, decisionStatus: this.decisionStatus(), candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId), stagedCandidateId: this.stagedCandidate?.candidateId ?? null, approvalId: this.approval?.approvalId ?? null, correctionId: this.pendingCorrection?.correctionId ?? null, preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null, lifecycleChangeId: this.pendingLifecycleChange?.lifecycleChangeId ?? null, groupDecisionId: this.pendingGroupDecision?.groupDecisionId ?? null, groupDecisionConfirmationId: this.groupDecisionConfirmation?.confirmationId ?? null, externalActionChangeId: this.pendingExternalAction?.externalActionChangeId ?? null, externalActionConfirmationId: this.externalActionConfirmation?.confirmationId ?? null, next: this.decisionNext() };
+    if (unique.includes("pending")) state.pending = {
+      eventIds: this.activeEventId ? [this.activeEventId] : [],
+      supersededEventIds: this.events.filter((event) => event.baseRevision === this.revision && event.eventId !== this.activeEventId).map((event) => event.eventId),
+      activeEventId: this.activeEventId,
+      decisionStatus: this.decisionStatus(),
+      candidateIds: this.activeCandidates().map((candidate) => candidate.candidateId),
+      stagedCandidateId: this.stagedCandidate?.candidateId ?? null,
+      approvalId: this.approval?.approvalId ?? null,
+      planFactChangeId: this.pendingPlanFactChange?.planFactChangeId ?? null,
+      planFactConfirmationId: this.planFactConfirmation?.confirmationId ?? null,
+      correctionId: this.pendingCorrection?.correctionId ?? null,
+      preferenceChangeId: this.pendingPreferenceChange?.preferenceChangeId ?? null,
+      lifecycleChangeId: this.pendingLifecycleChange?.lifecycleChangeId ?? null,
+      groupDecisionId: this.pendingGroupDecision?.groupDecisionId ?? null,
+      groupDecisionConfirmationId: this.groupDecisionConfirmation?.confirmationId ?? null,
+      externalActionChangeId: this.pendingExternalAction?.externalActionChangeId ?? null,
+      externalActionConfirmationId: this.externalActionConfirmation?.confirmationId ?? null,
+      next: this.decisionNext(),
+    };
     if (unique.includes("lineage")) state.lineage = { events: clone(this.events), correctionEvents: clone(this.correctionEvents), preferenceEvents: clone(this.preferenceEvents), lifecycleEvents: clone(this.lifecycleEvents), groupDecisionEvents: clone(this.groupDecisionEvents), externalActionEvents: clone(this.externalActionEvents), feedback: clone(this.feedback), receipts: clone(this.receipts) };
     return { ok: true, code: "PLAN_STATE", selectors: unique, state, acceptedStateChanged: false };
   }
@@ -549,6 +591,68 @@ export class FinitePlanKernel {
       target.push({ moveId, ...clone(move) });
     }
     return { ok: true, code: "MOVABLE_SET", revision: this.revision, legal, blocked, acceptedStateChanged: false };
+  }
+
+  getEditablePlanFacts(): ToolResult {
+    return {
+      ok: true,
+      code: "EDITABLE_PLAN_FACTS",
+      planId: this.profile.planId,
+      revision: this.revision,
+      facts: editablePlanFacts(this.profile, this.accepted, this.entities),
+      pending: clone(this.pendingPlanFactChange),
+      acceptedStateChanged: false,
+    };
+  }
+
+  async stagePlanFactChanges({ changes, expectedRevision }: { changes: PlanFactChange[]; expectedRevision: number }): Promise<ToolResult> {
+    if (this.lifecycleStatus !== "active") return { ok: false, code: "PLAN_NOT_ACTIVE", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false };
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    try {
+      const projection = projectPlanFactChanges(this.profile, this.accepted, this.entities, changes);
+      const base = { planFactChangeId: makeId("plan_fact_change"), baseRevision: this.revision, ...projection };
+      this.pendingPlanFactChange = { ...base, contentHash: await sha256(base) };
+      this.planFactConfirmation = null;
+      return { ok: true, code: "PLAN_FACT_CHANGES_STAGED", planFactChange: clone(this.pendingPlanFactChange), acceptedStateChanged: false };
+    } catch (error) {
+      if (error instanceof PlanFactValidationError) return { ok: false, code: error.code, issues: clone(error.issues), acceptedStateChanged: false };
+      return { ok: false, code: "PLAN_FACT_CHANGES_INVALID", issues: [error instanceof Error ? error.message : String(error)], acceptedStateChanged: false };
+    }
+  }
+
+  humanConfirmPlanFactChanges({ planFactChangeId }: { planFactChangeId: string }): ToolResult {
+    const pending = this.pendingPlanFactChange;
+    if (!pending || pending.planFactChangeId !== planFactChangeId) return { ok: false, code: "PLAN_FACT_CHANGES_NOT_STAGED", acceptedStateChanged: false };
+    this.planFactConfirmation = { confirmationId: makeId("plan_fact_confirmation"), targetId: planFactChangeId, revision: this.revision, contentHash: pending.contentHash, source: "human_action" };
+    return { ok: true, code: "HUMAN_PLAN_FACTS_CONFIRMED", confirmation: clone(this.planFactConfirmation), acceptedStateChanged: false };
+  }
+
+  async applyConfirmedPlanFactChanges({ planFactChangeId, confirmationId, expectedRevision, idempotencyKey }: { planFactChangeId: string; confirmationId: string; expectedRevision: number; idempotencyKey: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
+    const replay = this.planFactIdempotency.get(idempotencyKey);
+    if (replay) {
+      const saved = replay.payload.planFactChange as Partial<PendingPlanFactChange> | undefined;
+      const matches = saved?.planFactChangeId === planFactChangeId && replay.payload.confirmationId === confirmationId && replay.fromRevision === expectedRevision;
+      return matches ? { ok: true, code: "IDEMPOTENT_REPLAY", replay: true, receipt: clone(replay), acceptedStateChanged: false } : { ok: false, code: "IDEMPOTENCY_KEY_REUSED", acceptedStateChanged: false };
+    }
+    if (expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false };
+    const pending = this.pendingPlanFactChange;
+    const confirmation = this.planFactConfirmation;
+    if (!pending || pending.planFactChangeId !== planFactChangeId) return { ok: false, code: "PLAN_FACT_CHANGES_NOT_STAGED", acceptedStateChanged: false };
+    if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.targetId !== planFactChangeId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision || confirmation.source !== "human_action") return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("plan_fact_change", planFactChangeId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
+    const checkpoint = this.checkpoint();
+    const fromRevision = this.revision;
+    this.accepted = clone(pending.accepted);
+    this.entities = clone(pending.entities);
+    this.revision += 1;
+    const persistedChange = { ...clone(pending), confirmationId, fromRevision, toRevision: this.revision };
+    const receipt = await this.makeReceipt("plan_fact_change", fromRevision, idempotencyKey, { planFactChange: persistedChange, confirmationId, accepted: clone(this.accepted), entities: clone(this.entities) });
+    this.planFactIdempotency.set(idempotencyKey, receipt);
+    this.clearPending();
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_fact_change", receipt, authorityChallenge, context);
+    if (storageFailure) return storageFailure;
+    return { ok: true, code: "PLAN_FACT_CHANGES_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
 
   private activeCandidates(): Candidate[] {
@@ -1344,5 +1448,7 @@ export class FinitePlanKernel {
     this.groupDecisionConfirmation = null;
     this.pendingExternalAction = null;
     this.externalActionConfirmation = null;
+    this.pendingPlanFactChange = null;
+    this.planFactConfirmation = null;
   }
 }
