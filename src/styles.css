@@ -776,6 +776,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .draft-review__actions .draft-return-form,.draft-review__actions .draft-revision-diff,.draft-review__actions .draft-review__amendment,.draft-review__actions .draft-review__approved { grid-column:1/-1; }
 .draft-review__amendment,.draft-review__approved { margin:0; color:#ced9d6; line-height:1.55; }
 .draft-review__approved { padding:16px 18px; color:var(--deep); background:var(--signal); font-weight:700; }
+.draft-review__activation-error { grid-column:1/-1; margin:0; padding:14px 16px; color:var(--ink); background:var(--paper); border-left:5px solid var(--danger); line-height:1.55; }
 .draft-return-form,.draft-returned-copy { display:grid; grid-template-columns:1.1fr .7fr 1.2fr; gap:22px; align-items:end; margin-top:30px; padding:24px; color:var(--ink); background:var(--paper); border:1px solid var(--line); }
 .draft-return-form>div:first-child { align-self:start; }
 .draft-return-form h3 { margin:4px 0 8px; font-size:1.3rem; }

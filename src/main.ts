@@ -521,6 +521,7 @@ let settingsBusy = false;
 let settingsMessage = "";
 let settingsError = "";
 let draftReturnFormOpen = false;
+let planActivationError = "";
 let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
 let themeEditingId: string | null = null;
@@ -1841,9 +1842,10 @@ const renderPlanDraft = (): string => {
     <div class="draft-review__actions">
       ${revisionReceipt}
       ${amendment ? `<p class="draft-review__amendment">This is an updated version of your plan. Changed: ${escapeHtml(amendment.diff.changedSections.map(humanPlanLabel).join(", "))}.</p>` : ""}
-      ${confirmed
-        ? `<p class="draft-review__approved">Plan approved. ${escapeHtml(agenticName())} can now put it into action.</p>`
-        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">Approve this plan</button>`}
+      ${planActivationError ? `<p class="draft-review__activation-error" role="alert">${escapeHtml(planActivationError)}</p>` : ""}
+      ${busy
+        ? `<button class="button button--approve" type="button" disabled>Starting your plan…</button>`
+        : `<button class="button button--approve" data-action="confirm-plan" data-draft="${escapeHtml(draft.draftId)}">${confirmed ? "Continue to Managing" : planActivationError ? "Try again" : "Approve this plan"}</button>`}
       ${draftReturnFormOpen ? `<form class="draft-return-form" data-plan-return="current" data-draft="${escapeHtml(draft.draftId)}">
         <div><p class="eyebrow">Request changes</p><h3>What should be different?</h3><p>The plan will stay here while you explain what you want changed.</p></div>
         <label><span>What kind of change?</span><select name="reasonCode" required><option value="">Choose one</option><option value="assumptions">Wrong assumptions</option><option value="structure">Wrong structure or emphasis</option><option value="missing">Something important is missing</option><option value="too_rigid">Too rigid or decided too early</option><option value="too_vague">Too vague to be useful</option><option value="other">Something else</option></select></label>
@@ -2065,15 +2067,87 @@ const openPlan = async (planId: string): Promise<void> => {
 };
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {
-  if (!pendingDraftMatchesArrival()) {
-    announce("That draft was made before your latest update. Codex needs to prepare a new one first.");
+  if (busy) return;
+  const draft = runtime.pendingPlanDraft;
+  if (!draft || draft.draftId !== draftId) return;
+  busy = true;
+  planActivationError = "";
+  announce("Starting your plan…");
+  await render();
+
+  const latestArrival = await arrivalRepository.open();
+  if (latestArrival.ok) arrivalResult = latestArrival;
+  if ((draft.sourceArrival && !latestArrival.ok) || !pendingDraftMatchesArrival()) {
+    busy = false;
+    planActivationError = latestArrival.ok
+      ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
+      : "Finite could not check your latest information. Nothing changed—please try again.";
+    announce(planActivationError);
     await render();
     return;
   }
-  const result = runtime.humanConfirmPlanDraft({ draftId });
-  if (result.ok) await adapter?.enterKitchen({ entryIntent: "continue_current" });
-  announce(result.ok ? "Exact plan draft confirmed. Codex may now activate it through the guarded WebMCP tool." : `The plan draft was not confirmed: ${result.code}`);
+
+  const existingConfirmation = runtime.planActivationConfirmation?.draftId === draftId
+    ? runtime.planActivationConfirmation
+    : null;
+  const confirmationResult = existingConfirmation ? null : runtime.humanConfirmPlanDraft({ draftId });
+  const confirmation = runtime.planActivationConfirmation;
+  if ((confirmationResult && !confirmationResult.ok) || !confirmation) {
+    busy = false;
+    planActivationError = "Finite could not record your approval. Nothing changed—please try again.";
+    announce(planActivationError);
+    await render();
+    return;
+  }
+
+  const sourceArrival = draft.sourceArrival;
+  const activation = await runtime.activateConfirmedPlanDraft({
+    draftId,
+    confirmationId: confirmation.confirmationId,
+    expectedPlanId: draft.basePlanId,
+    expectedRevision: draft.baseRevision,
+    idempotencyKey: `human-plan-activation:${draftId}:${confirmation.confirmationId}`,
+  });
+  if (!activation.ok) {
+    busy = false;
+    planActivationError = activation.code === "PLAN_DRAFT_STALE" || activation.code === "PLAN_DRAFT_ARRIVAL_STALE"
+      ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
+      : "Finite could not start the plan. Your approval is still here—please try again.";
+    announce(planActivationError);
+    await render();
+    return;
+  }
+
+  let arrivalClosed = true;
+  if (sourceArrival) {
+    const completion = await arrivalRepository.acceptPlan({
+      orderId: sourceArrival.orderId,
+      expectedVersion: sourceArrival.orderVersion,
+      expectedChecksum: sourceArrival.orderChecksum,
+      planId: runtime.kernel.profile.planId,
+      profileHash: runtime.kernel.profile.profileHash,
+      planRevision: runtime.kernel.revision,
+    });
+    arrivalClosed = completion.ok;
+  }
+  arrivalResult = await arrivalRepository.open();
+  scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  await adapter?.refreshContextualTools();
+  forceArrivalSurface = false;
+  newPlanDraftMode = false;
+  const target = new URL(location.href);
+  target.searchParams.delete("arrival");
+  target.searchParams.delete("kitchen");
+  target.searchParams.delete("lab");
+  target.searchParams.set("plan", "1");
+  history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+  busy = false;
+  planActivationError = "";
+  announce(arrivalClosed
+    ? "Plan approved and ready. You are now in Managing."
+    : "Your plan is active. Finite is still syncing the completed starting request.");
   await render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
 const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {

@@ -220,3 +220,19 @@ test("pending plan review leads with the actual plan and hides internal proof la
   assert.match(styles, /\.draft-review__stages/);
   assert.match(styles, /\.draft-review__summary/);
 });
+
+test("approving a pending plan activates it and enters Managing in the same human action", () => {
+  assert.match(source, /const confirmPlanDraft = async/);
+  assert.match(source, /runtime\.humanConfirmPlanDraft\(\{ draftId \}\)/);
+  assert.match(source, /runtime\.activateConfirmedPlanDraft\(\{/);
+  assert.match(source, /const latestArrival = await arrivalRepository\.open\(\);/);
+  assert.match(source, /draft\.sourceArrival && !latestArrival\.ok/);
+  assert.match(source, /idempotencyKey: `human-plan-activation:\$\{draftId\}:\$\{confirmation\.confirmationId\}`/);
+  assert.match(source, /arrivalRepository\.acceptPlan\(\{/);
+  assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
+  assert.match(source, /Plan approved and ready\. You are now in Managing\./);
+  assert.match(source, /Starting your plan…/);
+  assert.match(source, /Continue to Managing/);
+  assert.doesNotMatch(source, /Plan approved\. \$\{escapeHtml\(agenticName\(\)\)\} can now put it into action\./);
+  assert.doesNotMatch(source, /Exact plan draft confirmed\. Codex may now activate it/);
+});

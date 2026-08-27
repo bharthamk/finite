@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "human-plan-review-v83",
+  build: "one-click-plan-activation-v84",
 } as const;
