@@ -1447,14 +1447,16 @@ const themeSlug = (name: string): string => name.toLowerCase().normalize("NFKD")
 
 const openThemeSettings = async (): Promise<void> => {
   if (busy) return;
-  try { await Promise.all([refreshThemeCatalog(), refreshSkinCatalog()]); }
-  catch { announce("Finite could not refresh appearance settings. Your current appearance is unchanged."); }
   themeSettingsOpen = true;
   themeEditingId = null;
   themeDeleteId = null;
   skinEditingId = null;
   skinDeleteId = null;
   await render();
+  try {
+    await Promise.all([refreshThemeCatalog(), refreshSkinCatalog()]);
+    if (themeSettingsOpen) await render();
+  } catch { announce("Finite could not refresh appearance settings. Your current appearance is unchanged."); }
 };
 
 const skinSlug = (name: string): string => name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 38) || "skin";

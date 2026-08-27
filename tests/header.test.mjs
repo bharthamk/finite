@@ -302,3 +302,8 @@ test("checklist progress updates optimistically and rolls back failed writes", (
   assert.match(source, /planWorkBusy = true;\s*await render\(\);\s*try/);
   assert.match(source, /checklistItems = priorChecklist; announce\(result\.message/);
 });
+
+test("appearance opens from cache before refreshing choices", () => {
+  assert.match(source, /themeSettingsOpen = true;[\s\S]*?await render\(\);\s*try \{\s*await Promise\.all\(\[refreshThemeCatalog\(\), refreshSkinCatalog\(\)\]\)/);
+  assert.match(source, /if \(themeSettingsOpen\) await render\(\)/);
+});
