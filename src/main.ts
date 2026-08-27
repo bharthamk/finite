@@ -537,7 +537,7 @@ const renderHeaderControls = (): string => {
   const initial = Array.from(accountName)[0]?.toLocaleUpperCase() ?? "F";
   return `${authSession.kind === "account" ? `<button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
     <details class="account-menu">
-      <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__name">${escapeHtml(accountName)}</span><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
+      <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
       <div class="account-menu__popover">
         <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
         <details class="account-menu__how">

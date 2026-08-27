@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "follow-codex-guided-view-v75",
+  build: "topbar-spacing-v76",
 } as const;

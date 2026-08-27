@@ -18,6 +18,11 @@ test("the product header contains actions instead of unexplained internal state"
   assert.equal(source.match(/class="header-actions"/g)?.length, 2);
   assert.match(source, /class="header-action" data-action="open-theme-settings">Appearance<\/button>/);
   assert.match(source, /<details class="account-menu">/);
+  assert.doesNotMatch(source, /class="account-menu__name"/);
+  assert.doesNotMatch(styles, /\.account-menu__name/);
+  assert.match(source, /<p><span>Signed in as<\/span><strong>\$\{escapeHtml\(accountName\)\}<\/strong><\/p>/);
+  assert.match(styles, /grid-template-columns:auto minmax\(210px,340px\) auto minmax\(0,1fr\)/);
+  assert.match(styles, /@media \(max-width:1180px\) and \(min-width:981px\)/);
 });
 
 test("every product surface uses the accepted ImageGen identity source", () => {
