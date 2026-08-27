@@ -55,7 +55,10 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(source, /renderShareHeaderAction\("arrival"\)/);
   assert.match(source, /renderShareHeaderAction\("plan"\)/);
   assert.equal(source.match(/\$\{renderPlanShareDialog\(\)\}/g)?.length, 2);
+  assert.match(source, /function bindArrivalInteractions\(\): void \{\s*bindCodexHandoffInteractions\(\);\s*bindPlanShareInteractions\(\);/);
   assert.match(styles, /html \.header-action--share/);
+  assert.match(styles, /\.site-header>\.header-action--share \{ grid-column:3; grid-row:2; \}/);
+  assert.match(styles, /@media \(max-width:460px\)/);
   assert.match(source, /Which plan do you want to share\?/);
   assert.match(source, /There isn’t a plan to share yet\./);
   assert.match(source, /data-share-plan-choice/);

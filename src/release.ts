@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "share-from-arrival-v69",
+  build: "share-header-interaction-v70",
 } as const;

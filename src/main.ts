@@ -1008,8 +1008,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     <header class="site-header arrival-header">
       ${renderBrand()}
       ${renderPlanSwitcher("arrival")}
+      ${renderShareHeaderAction("arrival")}
       <div class="header-actions">
-        ${renderShareHeaderAction("arrival")}
         ${order ? renderCodexHandoffButton() : ""}
         ${renderHeaderControls()}
       </div>
@@ -1330,6 +1330,7 @@ const bindThemeSettingsInteractions = (): void => {
 
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
+  bindPlanShareInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
@@ -1685,8 +1686,8 @@ async function render(): Promise<SurfaceManifest> {
     <header class="site-header">
       ${renderBrand()}
       ${renderPlanSwitcher("plan")}
+      ${renderShareHeaderAction("plan")}
       <div class="header-actions">
-        ${renderShareHeaderAction("plan")}
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
       </div>
