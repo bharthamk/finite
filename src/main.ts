@@ -560,41 +560,46 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   surfaceRoot.innerHTML = `
     <header class="site-header arrival-header">
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
-      <p class="arrival-header__mode">New finite plan / human order</p>
+      <p class="arrival-header__mode">Arrival / a new finite plan</p>
       <div class="identity-cluster">
-        ${renderCodexHandoffButton()}
+        ${order ? renderCodexHandoffButton() : ""}
         <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Saved kitchen"}</div>
         <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
       </div>
     </header>
     <main id="main" class="arrival-main">
       ${!order ? `
-        <section class="arrival-intro" aria-labelledby="arrival_title">
-          <p class="eyebrow">Place the order. The kitchen adapts.</p>
-          <h1 id="arrival_title">What are we making <em>happen?</em></h1>
-          <div class="arrival-intro__paths">
-            <p>Describe the outcome here in your own language, or start in Codex and talk it through. You do not need to choose a template, build a dashboard, or already know what the plan should contain.</p>
-            <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to begin with the chef?</span><strong>Start with Codex</strong><small>Codex will open this kitchen and create the order with you.</small></button>
+        <section class="arrival-compose" aria-labelledby="arrival_title">
+          <div class="arrival-compose__intro">
+            <p class="eyebrow">Start with the outcome</p>
+            <h1 id="arrival_title">What are you trying to make <em>happen?</em></h1>
+            <p class="arrival-compose__lede">Tell Finite in your own language. One sentence is enough. You do not need to choose a plan type, build a dashboard, or know every detail yet.</p>
+            <p class="arrival-compose__promise"><span>Your words stay intact.</span> Codex interprets them later; Finite does not pretend the work has already started.</p>
           </div>
+          <form class="arrival-order" data-arrival-form="create">
+            <div class="arrival-order__head"><p class="eyebrow">Your starting point</p><span>Only this is required</span></div>
+            <label class="arrival-order__outcome"><span>What needs to happen?</span><textarea name="rawOutcome" required maxlength="4000" placeholder="I’m trying to…"></textarea><small>Write it how you would say it. Finite keeps your exact words.</small></label>
+            <div class="arrival-examples" aria-label="Example outcomes">
+              <span>Need a starting point?</span>
+              <button type="button" data-arrival-example="Plan a three-week Europe trip around my fixed flights, with room to change as prices and ideas move.">A trip</button>
+              <button type="button" data-arrival-example="Get my renovation to handover without losing the parts of the design I care about.">A renovation</button>
+              <button type="button" data-arrival-example="Deliver an event that can absorb guest, supplier and programme changes without falling apart.">An event</button>
+              <button type="button" data-arrival-example="Help me turn a messy outcome with limited time and resources into a plan that can keep adapting.">Something else</button>
+            </div>
+            <details class="arrival-more">
+              <summary><span>Add context</span><strong>Dates, limits, commitments, or links</strong><small>Optional</small></summary>
+              <div class="arrival-fields">
+                <label><span>When does it need to happen?</span><input name="deadline" maxlength="200" placeholder="A date, window, or ‘not sure’"></label>
+                <label><span>What is finite?</span><input name="finiteLimit" maxlength="300" placeholder="Money, time, capacity, energy—or none yet"></label>
+                <label><span>What must not move?</span><input name="hardConstraint" maxlength="500" placeholder="One known commitment or hard edge"></label>
+                <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
+              </div>
+            </details>
+            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button><p>Saved first. Interpreted only when Codex opens it.</p></div>
+          </form>
+          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with Codex</strong><small>Same kitchen. Same saved starting point.</small></button>
         </section>
-        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
-        <form class="arrival-order" data-arrival-form="create">
-          <label class="arrival-order__outcome"><span>The outcome</span><textarea name="rawOutcome" required maxlength="4000" placeholder="I need to…"></textarea><small>Write it like an order, not a form submission.</small></label>
-          <div class="arrival-fields">
-            <label><span>When does it need to happen?</span><input name="deadline" maxlength="200" placeholder="A date, window, or ‘not sure’"></label>
-            <label><span>What is finite?</span><input name="finiteLimit" maxlength="300" placeholder="Money, time, capacity, energy—or none yet"></label>
-            <label><span>What must not move?</span><input name="hardConstraint" maxlength="500" placeholder="One known commitment or hard edge"></label>
-            <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
-          </div>
-          <div class="arrival-examples" aria-label="Example outcomes">
-            <span>Examples, not templates</span>
-            <button type="button" data-arrival-example="Plan a three-week Europe trip around my fixed flights, with room to change as prices and ideas move.">A trip</button>
-            <button type="button" data-arrival-example="Get my renovation to handover without losing the parts of the design I care about.">A renovation</button>
-            <button type="button" data-arrival-example="Deliver an event that can absorb guest, supplier and programme changes without falling apart.">An event</button>
-            <button type="button" data-arrival-example="Help me turn a messy outcome with limited time and resources into a plan that can keep adapting.">Something else</button>
-          </div>
-          <button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save my order</button>
-        </form>` : `
+        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
         <section class="arrival-order-head" aria-label="Arrival status">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
           <details class="arrival-order-source">

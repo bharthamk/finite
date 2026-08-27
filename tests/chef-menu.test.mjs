@@ -33,7 +33,7 @@ test("empty arrival handoff starts a new outcome instead of routing into the see
   assert.equal(entered.operatorPacket.nextAction.stage, "outcome_required");
   assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_create_arrival_order");
   assert.equal(entered.operatorPacket.nextAction.requiresHuman, true);
-  assert.equal(entered.operatorPacket.nextAction.exactQuestion, "What are we making happen? Tell me the outcome in ordinary language; we can work out the structure together.");
+  assert.equal(entered.operatorPacket.nextAction.exactQuestion, "What are you trying to make happen? Tell me the outcome in ordinary language; we can work out the structure together.");
   assert.equal(entered.operatorPacket.chefMenu.items.length, 3);
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_tell_outcome");
   assert.equal(runtime.kernel.revision, 1);
