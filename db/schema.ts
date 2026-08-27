@@ -332,3 +332,16 @@ export const tenantSkinReceipts = sqliteTable("tenant_skin_receipts", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_tenant_skin_receipts_scope_created").on(table.scopeId, table.createdAt),
 ]);
+
+export const planShares = sqliteTable("plan_shares", {
+  scopeId: text("scope_id").notNull(),
+  shareId: text("share_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  planId: text("plan_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  revokedAt: text("revoked_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.shareId] }),
+  uniqueIndex("idx_plan_shares_token_hash").on(table.tokenHash),
+  index("idx_plan_shares_scope_plan_created").on(table.scopeId, table.planId, table.createdAt),
+]);

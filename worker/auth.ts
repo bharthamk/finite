@@ -24,6 +24,7 @@ const resetConfirmation = "START OVER";
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 
 const resetTables = [
+  "plan_shares",
   "arrival_events",
   "arrival_orders",
   "construction_return_reviews",

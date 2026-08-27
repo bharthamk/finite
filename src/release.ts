@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "plan-switcher-v64",
+  build: "current-logo-v65",
 } as const;

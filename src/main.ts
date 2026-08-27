@@ -47,12 +47,14 @@ const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
   return response.json() as Promise<FiniteAuthStatus>;
 };
 
+const renderBrand = (): string => `<a class="brand" href="#main" aria-label="Finite home"><img src="/finite-mark.svg" width="26" height="33" alt=""><span>inite</span></a>`;
+
 const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
   document.title = "Finite — plans that survive contact with reality";
   root.innerHTML = `
     <div class="public-surface">
       <header class="public-header">
-        <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+        ${renderBrand()}
         <nav class="public-nav" aria-label="Product">
           <a href="#surfaces">Product</a>
           <a href="#how-it-works">How it works</a>
@@ -275,8 +277,9 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             </article>
             <article class="roadmap-lane">
               <span>Later / earned expansion</span>
-              <h3>External action with capability-specific authority.</h3>
+              <h3>Shared ownership and external action, with explicit authority.</h3>
               <ul>
+                <li>Multiple named people collaborating on one plan with clear roles, attribution and decision authority</li>
                 <li>Booking, supplier and calendar connectors with explicit approval per action</li>
                 <li>Proof of what an external system actually accepted or refused</li>
                 <li>More plan families only where the work demands a genuinely different grammar</li>
@@ -741,7 +744,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
     <header class="site-header arrival-header">
-      <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+      ${renderBrand()}
       ${renderPlanSwitcher("arrival")}
       <div class="header-actions">
         ${order ? renderCodexHandoffButton() : ""}
@@ -1415,7 +1418,7 @@ async function render(): Promise<SurfaceManifest> {
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
     <header class="site-header">
-      <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+      ${renderBrand()}
       ${renderPlanSwitcher("plan")}
       <div class="header-actions">
         ${renderCodexHandoffButton()}
