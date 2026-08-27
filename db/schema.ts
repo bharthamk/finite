@@ -338,6 +338,10 @@ export const planShares = sqliteTable("plan_shares", {
   shareId: text("share_id").notNull(),
   tokenHash: text("token_hash").notNull(),
   planId: text("plan_id").notNull(),
+  mode: text("mode").default("frozen").notNull(),
+  sectionsJson: text("sections_json").default('["overview"]').notNull(),
+  frozenProjectionJson: text("frozen_projection_json"),
+  label: text("label").default("Shared plan").notNull(),
   createdAt: text("created_at").notNull(),
   revokedAt: text("revoked_at"),
 }, (table) => [

@@ -30,7 +30,7 @@
     <div id="announcer" class="sr-only" aria-live="polite"></div>
     <noscript>Finite needs JavaScript to calculate and validate the live plan.</noscript>
     <script>
-      if (document.modelContext) {
+      if (document.modelContext && !location.pathname.startsWith("/share/")) {
         window.finiteWebMCPReadiness = { state: "initializing" };
         document.modelContext.registerTool({
           name: "finite_webmcp_status",

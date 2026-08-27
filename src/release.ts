@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "current-logo-v65",
+  build: "plan-publications-v66",
 } as const;

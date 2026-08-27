@@ -15,6 +15,7 @@ import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
 import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, skinTraitKeys, type SkinCatalogResult, type SkinDefinition, type SkinRecipe, type SkinResult } from "./skin.js";
+import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -48,6 +49,50 @@ const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
 };
 
 const renderBrand = (): string => `<a class="brand" href="#main" aria-label="Finite home"><img src="/finite-mark.svg" width="26" height="33" alt=""><span>inite</span></a>`;
+const shareRepository = new HttpPlanShareRepository();
+const escapePublicHtml = (value: unknown): string => String(value ?? "")
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+const publicMoney = (minor: number): string => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(minor / 100);
+
+const publicMeasure = (value: string | number, format: string): string => {
+  if (format === "money" && typeof value === "number") return publicMoney(value);
+  if (format === "days" && typeof value === "number") return `${value} day${value === 1 ? "" : "s"}`;
+  if (format === "percent" && typeof value === "number") return `${value}%`;
+  return String(value);
+};
+
+const renderPublicProjection = (projection: PublicPlanProjection, compact = false): string => {
+  const plan = projection.plan;
+  const allocation = plan.allocation;
+  return `<article class="published-plan${compact ? " published-plan--preview" : ""}" data-publication-mode="${projection.mode}">
+    <header class="published-plan__hero">
+      <p class="eyebrow">${escapePublicHtml(plan.eyebrow || `${plan.family} plan`)}</p>
+      <h1>${escapePublicHtml(plan.headline || plan.name)}</h1>
+      ${plan.brief ? `<p>${escapePublicHtml(plan.brief)}</p>` : ""}
+      <dl class="published-plan__meta"><div><dt>Plan</dt><dd>${escapePublicHtml(plan.name)}</dd></div><div><dt>Revision</dt><dd>${plan.revision}</dd></div><div><dt>Status</dt><dd>${escapePublicHtml(plan.status)}</dd></div><div><dt>${projection.mode === "live" ? "Updated" : "Frozen"}</dt><dd>${escapePublicHtml(new Date(plan.updatedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }))}</dd></div></dl>
+    </header>
+    ${allocation ? `<section class="published-plan__allocation" aria-labelledby="published_allocation"><h2 id="published_allocation">The finite total</h2><dl><div><dt>Total</dt><dd>${publicMoney(allocation.totalBudgetMinor)}</dd></div><div><dt>Spent</dt><dd>${publicMoney(allocation.spentMinor)}</dd></div><div><dt>Committed</dt><dd>${publicMoney(allocation.committedMinor)}</dd></div><div><dt>Forecast</dt><dd>${publicMoney(allocation.forecastMinor)}</dd></div><div class="is-buffer"><dt>Remaining</dt><dd>${publicMoney(allocation.bufferMinor)}</dd></div></dl></section>` : ""}
+    ${plan.measures?.length ? `<section class="published-plan__measures" aria-labelledby="published_measures"><h2 id="published_measures">Key measures</h2><dl>${plan.measures.map((measure) => `<div><dt>${escapePublicHtml(measure.label)}</dt><dd>${escapePublicHtml(publicMeasure(measure.value, measure.format))}</dd></div>`).join("")}</dl></section>` : ""}
+    ${plan.stages?.length ? `<section class="published-plan__stages" aria-labelledby="published_stages"><h2 id="published_stages">Plan stages</h2><ol>${plan.stages.map((stage) => `<li data-stage-status="${escapePublicHtml(stage.status)}"><span>${escapePublicHtml(stage.marker)}</span><div><strong>${escapePublicHtml(stage.label)}</strong><p>${escapePublicHtml(stage.detail)}</p></div><small>${escapePublicHtml(stage.status)}</small></li>`).join("")}</ol></section>` : ""}
+    ${plan.changes?.length ? `<section class="published-plan__changes" aria-labelledby="published_changes"><h2 id="published_changes">Recent accepted changes</h2><ol>${plan.changes.map((change) => `<li><span>Revision ${change.revision}</span><strong>${escapePublicHtml(change.title)}</strong></li>`).join("")}</ol></section>` : ""}
+  </article>`;
+};
+
+const renderPublishedPage = (label: string, publishedAt: string, projection: PublicPlanProjection): void => {
+  document.title = `${projection.plan.name} — shared from Finite`;
+  document.documentElement.dataset.skin = "quiet";
+  root.innerHTML = `<div class="publication-page">
+    <header class="publication-header">${renderBrand()}<div><span>${projection.mode === "live" ? "Live view" : "Frozen snapshot"}</span><strong>View only</strong></div></header>
+    <main id="main" class="publication-main"><div class="publication-context"><p>Shared as</p><h2>${escapePublicHtml(label)}</h2><span>Published ${escapePublicHtml(new Date(publishedAt).toLocaleDateString("en-AU", { dateStyle: "long" }))}</span></div>${renderPublicProjection(projection)}</main>
+    <footer class="publication-footer"><p>This is a read-only page selected and published by the plan owner.</p><span>No kitchen access · no editing · no approval controls</span></footer>
+  </div>`;
+};
+
+const renderPublicationFailure = (message: string): void => {
+  document.title = "Shared page unavailable — Finite";
+  root.innerHTML = `<div class="publication-page"><header class="publication-header">${renderBrand()}<div><strong>View only</strong></div></header><main id="main" class="publication-missing"><p class="eyebrow">Shared page unavailable</p><h1>This plate is no longer on the pass.</h1><p>${escapePublicHtml(message)}</p></main></div>`;
+};
 
 const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
   document.title = "Finite — plans that survive contact with reality";
@@ -441,6 +486,14 @@ let themeEditingId: string | null = null;
 let themeDeleteId: string | null = null;
 let skinEditingId: string | null = null;
 let skinDeleteId: string | null = null;
+let shareDialogOpen = false;
+let shareBusy = false;
+let shareDraft: { label: string; mode: PlanShareMode; sections: PlanShareSection[] } = { label: "Plan update", mode: "live", sections: ["overview"] };
+let sharePreview: PublicPlanProjection | null = null;
+let sharePreviewKey = "";
+let planPublications: PlanPublicationRecord[] = [];
+let newPublicationUrl = "";
+let shareError = "";
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -476,6 +529,37 @@ const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
   </select></label>`;
 };
 
+const shareSelectionKey = (draft = shareDraft): string => JSON.stringify({ label: draft.label.trim(), mode: draft.mode, sections: [...draft.sections].sort() });
+const shareSectionOptions: Array<{ id: PlanShareSection; name: string; description: string }> = [
+  { id: "overview", name: "Summary", description: "Plan name, headline, brief, revision and status." },
+  { id: "allocation", name: "Finances", description: "Total, spent, committed, forecast and remaining room." },
+  { id: "measures", name: "Key measures", description: "The plan’s primary dates, counts or operating measures." },
+  { id: "stages", name: "Timeline or stages", description: "The current plan shape and stage status." },
+  { id: "changes", name: "Recent changes", description: "Titles of the five latest accepted plan changes." },
+];
+
+const renderPlanShareDialog = (): string => {
+  const active = planPublications.filter((publication) => !publication.revokedAt);
+  return `<dialog class="plan-share-dialog" data-plan-share-dialog aria-labelledby="plan_share_title">
+    <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Publish a view / not the kitchen</p><h2 id="plan_share_title">What should they see?</h2><p>Create a separate read-only page. Choose a live view that tracks accepted changes or freeze exactly what is current now.</p></header>
+    ${newPublicationUrl ? `<section class="plan-share-created" aria-labelledby="plan_share_created"><p class="eyebrow">Page published</p><h3 id="plan_share_created">Your private link is ready.</h3><div><input value="${escapeHtml(newPublicationUrl)}" readonly data-publication-url aria-label="Published plan URL"><button type="button" class="button" data-action="copy-publication-url">Copy link</button></div><p>Anyone with this unguessable link can see only the page preview you approved. Keep or revoke it whenever you like.</p></section>` : ""}
+    <form class="plan-share-form" data-plan-share-form>
+      <label class="plan-share-label"><span>Who or what is this page for?</span><input name="label" maxlength="80" required value="${escapeHtml(shareDraft.label)}" placeholder="Family update, contractor view…"><small>This label appears on the shared page.</small></label>
+      <fieldset class="plan-share-mode"><legend>Should it keep changing?</legend>
+        <label><input type="radio" name="mode" value="live" ${shareDraft.mode === "live" ? "checked" : ""}><span><strong>Live view</strong><small>Selected sections follow the latest accepted revision.</small></span></label>
+        <label><input type="radio" name="mode" value="frozen" ${shareDraft.mode === "frozen" ? "checked" : ""}><span><strong>Frozen snapshot</strong><small>This exact page never changes, even when the plan does.</small></span></label>
+      </fieldset>
+      <fieldset class="plan-share-sections"><legend>Choose what goes on the page</legend>${shareSectionOptions.map((option) => `<label><input type="checkbox" name="sections" value="${option.id}" ${shareDraft.sections.includes(option.id) ? "checked" : ""} ${option.id === "overview" ? "disabled" : ""}><span><strong>${option.name}${option.id === "overview" ? " · always included" : ""}</strong><small>${option.description}</small></span></label>`).join("")}</fieldset>
+      ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
+      <div class="plan-share-actions"><button type="submit" class="button button--secondary" data-share-intent="preview" ${shareBusy ? "disabled" : ""}>Preview exact page</button><button type="submit" class="button" data-share-intent="publish" ${shareBusy || !sharePreview || sharePreviewKey !== shareSelectionKey() ? "disabled" : ""}>Publish this page</button></div>
+    </form>
+    <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Exact preview</p><h3 id="plan_share_preview">Only this leaves the kitchen.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not prepared"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
+    <section class="plan-share-existing" aria-labelledby="plan_share_existing"><header><p class="eyebrow">Published pages</p><h3 id="plan_share_existing">Active views for this plan</h3></header>${active.length ? `<p class="plan-share-existing__note">For privacy, a link can be copied only when it is first published. You can revoke any active page here.</p><ul>${active.map((publication) => `<li><div><strong>${escapeHtml(publication.label)}</strong><span>${publication.mode === "live" ? "Live view" : "Frozen snapshot"} · ${publication.sections.map((section) => shareSectionOptions.find((option) => option.id === section)?.name ?? section).join(", ")}</span><small>Published ${escapeHtml(new Date(publication.createdAt).toLocaleDateString("en-AU", { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-publication="${escapeHtml(publication.shareId)}">Revoke</button></li>`).join("")}</ul>` : `<p>No active pages for this plan.</p>`}</section>
+    <footer class="plan-share-boundary"><strong>Never included</strong><p>Arrival text, evidence, receipts, internal IDs or hashes, Codex tools, editing and approval controls.</p></footer>
+  </dialog>`;
+};
+
 const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
 
 const renderKitchenResetDialog = (): string => {
@@ -486,7 +570,7 @@ const renderKitchenResetDialog = (): string => {
     <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / this kitchen only</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>This deletes the plans and work in this signed-in Finite kitchen. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system.</p></div>
     ${ready ? `<dl class="kitchen-reset-dialog__counts">
       <div><dt>Arrival history</dt><dd>${resetCategoryCount(["arrival_orders", "arrival_events"])}</dd></div>
-      <div><dt>Plans and revisions</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts"])}</dd></div>
+      <div><dt>Plans, revisions and shared pages</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts", "plan_shares"])}</dd></div>
       <div><dt>Construction work</dt><dd>${resetCategoryCount(["construction_packets", "construction_return_reviews"])}</dd></div>
       <div><dt>Evidence, decisions and receipts</dt><dd>${resetCategoryCount(["evidence_records", "domain_events", "receipts", "operation_log"])}</dd></div>
       <div><dt>Authority and operator sessions</dt><dd>${resetCategoryCount(["authority_challenges", "challenge_consumptions", "operator_sessions"])}</dd></div>
@@ -720,6 +804,115 @@ const bindCodexHandoffInteractions = (): void => {
       announce("The handoff prompt is selected and ready to copy.");
     }
   });
+};
+
+const readShareDraft = (form: HTMLFormElement): typeof shareDraft => {
+  const label = form.querySelector<HTMLInputElement>("input[name='label']")?.value.trim() ?? "";
+  const mode = form.querySelector<HTMLInputElement>("input[name='mode']:checked")?.value === "frozen" ? "frozen" : "live";
+  const sections = [...form.querySelectorAll<HTMLInputElement>("input[name='sections']:checked")].map((input) => input.value as PlanShareSection);
+  return { label, mode, sections: sections.includes("overview") ? sections : ["overview", ...sections] };
+};
+
+const openPlanShareDialog = async (): Promise<void> => {
+  shareDialogOpen = true;
+  shareBusy = true;
+  shareError = "";
+  newPublicationUrl = "";
+  shareDraft = { label: `${runtime.kernel.profile.name} update`, mode: "live", sections: ["overview"] };
+  sharePreview = null;
+  sharePreviewKey = "";
+  await render();
+  try {
+    const [publications, preview] = await Promise.all([
+      shareRepository.list(runtime.kernel.profile.planId),
+      shareRepository.preview({ planId: runtime.kernel.profile.planId, mode: shareDraft.mode, sections: shareDraft.sections }),
+    ]);
+    planPublications = publications;
+    sharePreview = preview;
+    sharePreviewKey = shareSelectionKey();
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The publication preview could not be prepared.";
+  }
+  shareBusy = false;
+  await render();
+};
+
+const submitPlanShare = async (form: HTMLFormElement, intent: "preview" | "publish"): Promise<void> => {
+  if (shareBusy) return;
+  shareDraft = readShareDraft(form);
+  shareError = "";
+  newPublicationUrl = "";
+  if (!shareDraft.label) {
+    shareError = "Add a short audience label before previewing this page.";
+    await render();
+    return;
+  }
+  if (intent === "publish" && (!sharePreview || sharePreviewKey !== shareSelectionKey())) {
+    shareError = "Preview this exact selection before publishing it.";
+    await render();
+    return;
+  }
+  shareBusy = true;
+  await render();
+  try {
+    if (intent === "preview") {
+      sharePreview = await shareRepository.preview({ planId: runtime.kernel.profile.planId, mode: shareDraft.mode, sections: shareDraft.sections });
+      sharePreviewKey = shareSelectionKey();
+    } else {
+      const publication = await shareRepository.create({ planId: runtime.kernel.profile.planId, ...shareDraft });
+      if (!publication.path) throw new Error("The page was published without a usable link.");
+      newPublicationUrl = new URL(publication.path, location.origin).toString();
+      planPublications = [publication, ...planPublications];
+      announce("The read-only plan page is published. Its private link is ready to copy.");
+    }
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The plan page could not be published.";
+  }
+  shareBusy = false;
+  await render();
+};
+
+const revokePlanShare = async (shareId: string): Promise<void> => {
+  if (shareBusy) return;
+  shareBusy = true;
+  shareError = "";
+  await render();
+  try {
+    await shareRepository.revoke(shareId);
+    planPublications = await shareRepository.list(runtime.kernel.profile.planId);
+    announce("The shared page was revoked. Its link no longer opens the plan view.");
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The shared page could not be revoked.";
+  }
+  shareBusy = false;
+  await render();
+};
+
+const bindPlanShareInteractions = (): void => {
+  root.querySelector<HTMLButtonElement>("[data-action='open-plan-share']")?.addEventListener("click", () => { void openPlanShareDialog(); });
+  const dialog = root.querySelector<HTMLDialogElement>("[data-plan-share-dialog]");
+  root.querySelector<HTMLButtonElement>("[data-action='close-plan-share']")?.addEventListener("click", () => { shareDialogOpen = false; dialog?.close(); });
+  dialog?.addEventListener("close", () => { shareDialogOpen = false; });
+  dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogOpen = false; dialog.close(); } });
+  root.querySelector<HTMLFormElement>("[data-plan-share-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.shareIntent === "publish" ? "publish" : "preview";
+    void submitPlanShare(event.currentTarget as HTMLFormElement, intent);
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-revoke-publication]").forEach((button) => button.addEventListener("click", () => { void revokePlanShare(button.dataset.revokePublication ?? ""); }));
+  root.querySelector<HTMLButtonElement>("[data-action='copy-publication-url']")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    try {
+      await navigator.clipboard.writeText(newPublicationUrl);
+      button.textContent = "Copied";
+      announce("Shared-page link copied.");
+    } catch {
+      const input = root.querySelector<HTMLInputElement>("[data-publication-url]");
+      input?.focus(); input?.select();
+      announce("The shared-page link is selected and ready to copy.");
+    }
+  });
+  if (shareDialogOpen && dialog && !dialog.open) dialog.showModal();
 };
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
@@ -1421,6 +1614,7 @@ async function render(): Promise<SurfaceManifest> {
       ${renderBrand()}
       ${renderPlanSwitcher("plan")}
       <div class="header-actions">
+        ${authSession.kind === "account" ? `<button type="button" class="header-action header-action--share" data-action="open-plan-share">Share</button>` : ""}
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
       </div>
@@ -1441,6 +1635,7 @@ async function render(): Promise<SurfaceManifest> {
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
+    ${authSession.kind === "account" ? renderPlanShareDialog() : ""}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   bindInteractions();
@@ -1568,6 +1763,7 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
 
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
+  bindPlanShareInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
   root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => { void openPlan((event.currentTarget as HTMLSelectElement).value); });
@@ -1599,15 +1795,26 @@ await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 };
 
-const authStatus = await loadAuthStatus();
-if (authStatus.session) {
-  try { await startKitchen(authStatus.session); }
-  catch (error) {
-    webmcpReadiness.state = "failed";
-    webmcpReadiness.detail = error instanceof Error ? error.message : String(error);
-    throw error;
+const publicationPath = location.pathname.startsWith("/share/") ? decodeURIComponent(location.pathname.slice("/share/".length)) : null;
+if (publicationPath && !publicationPath.includes("/")) {
+  webmcpReadiness.state = "signed_out";
+  try {
+    const shared = await shareRepository.loadPublic(publicationPath);
+    renderPublishedPage(shared.label, shared.publishedAt, shared.publication);
+  } catch (error) {
+    renderPublicationFailure(error instanceof Error ? error.message : "This shared page is not available.");
   }
 } else {
-  webmcpReadiness.state = "signed_out";
-  renderAuthGate(authStatus.signInPath);
+  const authStatus = await loadAuthStatus();
+  if (authStatus.session) {
+    try { await startKitchen(authStatus.session); }
+    catch (error) {
+      webmcpReadiness.state = "failed";
+      webmcpReadiness.detail = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  } else {
+    webmcpReadiness.state = "signed_out";
+    renderAuthGate(authStatus.signInPath);
+  }
 }
