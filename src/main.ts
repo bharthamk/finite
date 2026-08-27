@@ -1,7 +1,7 @@
 import { compileBuiltInProfiles } from "./profiles.js";
 import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
-import { compileSurfaceManifest, projectAcceptedPlanCopy, resolveSurfaceBinding } from "./surface.js";
+import { compileSurfaceManifest, projectAcceptedPlanCopy, projectAcceptedPlanCopyFromReceipts, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
@@ -465,6 +465,18 @@ const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogSt
 await runtime.hydrateAcceptedTruth();
 await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
+const planDisplayNames = new Map<string, string>();
+const refreshPlanDisplayNames = async (): Promise<void> => {
+  const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string }>;
+  await Promise.all(plans.map(async (plan) => {
+    try {
+      const envelope = await acceptedRepository.load(plan.planId, plan.profileHash);
+      const receipts = envelope?.snapshot.receipts ?? [];
+      planDisplayNames.set(plan.planId, projectAcceptedPlanCopyFromReceipts(plan.name, receipts));
+    } catch { planDisplayNames.set(plan.planId, plan.name); }
+  }));
+};
+await refreshPlanDisplayNames();
 let planInputs: PlanInputRecord[] = [];
 let checklistItems: ChecklistItem[] = [];
 let planAttachments: PlanAttachment[] = [];
@@ -520,6 +532,7 @@ window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await syncAdaptiveChecklist(); }
+  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
   const guidedView = result.code === "VIEW_GUIDED" ? applyCodexSpotlight(result.guide as FiniteGuideViewRequest) : null;
@@ -671,14 +684,14 @@ const bindFollowCodexInteractions = (): void => {
   });
 };
 
-type HeaderPlanChoice = { planId: string; profileId: string; name: string; active: boolean; supersededBy: string | null };
+type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string; name: string; active: boolean; supersededBy: string | null };
 const newPlanChoice = "__new_plan__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {
   const plans = runtime.listPlans().plans as HeaderPlanChoice[];
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
-  const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
+  const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : planDisplayNames.get(plan.planId) ?? plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
   return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan" ${busy ? "disabled" : ""}>
     ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
     <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
@@ -742,8 +755,8 @@ const renderPlanShareDialog = (): string => {
     ${plans.length ? `<form class="plan-share-choice" data-share-plan-choice>
       <label><span>Plan to share</span><select name="planId" required aria-label="Choose a plan to share">
         <option value="">Choose a plan…</option>
-        ${currentPlans.length ? `<optgroup label="Current plans">${currentPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(plan.name)}</option>`).join("")}</optgroup>` : ""}
-        ${earlierPlans.length ? `<optgroup label="Earlier versions">${earlierPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(plan.name)} · earlier version</option>`).join("")}</optgroup>` : ""}
+        ${currentPlans.length ? `<optgroup label="Current plans">${currentPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(planDisplayNames.get(plan.planId) ?? plan.name)}</option>`).join("")}</optgroup>` : ""}
+        ${earlierPlans.length ? `<optgroup label="Earlier versions">${earlierPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(planDisplayNames.get(plan.planId) ?? plan.name)} · earlier version</option>`).join("")}</optgroup>` : ""}
       </select></label>
       <button type="submit" class="button">Choose what to share</button>
     </form>` : ""}
@@ -2411,7 +2424,6 @@ const openPlan = async (planId: string): Promise<void> => {
     await adapter?.refreshContextualTools();
     if (labMode) await seedDecision();
   }
-  try { await syncAdaptiveChecklist(); await refreshPlanWork(); } catch { /* The verified target plan remains usable without a checklist refresh. */ }
   const target = new URL(location.href);
   target.searchParams.delete("kitchen");
   target.searchParams.set("plan", "1");
@@ -2420,6 +2432,13 @@ const openPlan = async (planId: string): Promise<void> => {
   busy = false;
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
+  void (async () => {
+    try {
+      await syncAdaptiveChecklist();
+      await refreshPlanWork();
+      if (runtime.kernel.profile.planId === planId) await render();
+    } catch { /* The verified target plan remains usable without a checklist refresh. */ }
+  })();
 };
 
 const confirmPlanDraft = async (draftId: string): Promise<void> => {
@@ -2784,6 +2803,7 @@ const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
     const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId: pending.planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
     if (applied.ok) {
       planFactDialogOpen = false;
+      planDisplayNames.set(runtime.kernel.profile.planId, projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel));
       announce("Plan details updated.");
       await adapter?.refreshContextualTools();
     } else planFactError = Array.isArray(applied.issues) ? applied.issues.map(String).join(" ") : `Those values could not be saved: ${applied.code}`;
