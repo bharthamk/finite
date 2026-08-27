@@ -459,6 +459,20 @@ const renderHeaderControls = (): string => {
     </details>`;
 };
 
+type HeaderPlanChoice = { planId: string; profileId: string; name: string; active: boolean; supersededBy: string | null };
+
+const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
+  const plans = runtime.listPlans().plans as HeaderPlanChoice[];
+  const current = plans.filter((plan) => !plan.supersededBy);
+  const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
+  const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
+  return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan">
+    ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
+    ${current.length ? `<optgroup label="Current plans">${options(current)}</optgroup>` : ""}
+    ${earlier.length ? `<optgroup label="Earlier versions">${options(earlier, true)}</optgroup>` : ""}
+  </select></label>`;
+};
+
 const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
 
 const renderKitchenResetDialog = (): string => {
@@ -728,6 +742,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   surfaceRoot.innerHTML = `
     <header class="site-header arrival-header">
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
+      ${renderPlanSwitcher("arrival")}
       <div class="header-actions">
         ${order ? renderCodexHandoffButton() : ""}
         ${renderHeaderControls()}
@@ -1401,9 +1416,7 @@ async function render(): Promise<SurfaceManifest> {
   surfaceRoot.innerHTML = `
     <header class="site-header">
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
-      <nav class="profile-nav" aria-label="Demonstration plan">
-        ${(["travel", "renovation", "event"] as ProfileId[]).map((profileId) => `<button data-action="profile" data-profile="${profileId}" aria-pressed="${kernel.profile.profileId === profileId}">${profileId === "event" ? "Launch event" : profileId}</button>`).join("")}
-      </nav>
+      ${renderPlanSwitcher("plan")}
       <div class="header-actions">
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
@@ -1451,11 +1464,11 @@ const approveCandidate = async (): Promise<void> => {
   await render();
 };
 
-const switchProfile = async (profileId: ProfileId): Promise<void> => {
-  if (profileId === runtime.kernel.profile.profileId || busy) return;
+const openPlan = async (planId: string): Promise<void> => {
+  if (!planId || busy) return;
   busy = true;
   announce("");
-  const result = await runtime.switchProfilePersisted(profileId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
+  const result = await runtime.switchPlanPersisted(planId, { expectedCurrentPlanId: runtime.kernel.profile.planId, expectedCurrentRevision: runtime.kernel.revision });
   if (!result.ok) {
     busy = false;
     announce(`That plan could not be opened safely: ${result.code}`);
@@ -1463,8 +1476,14 @@ const switchProfile = async (profileId: ProfileId): Promise<void> => {
     return;
   }
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
-  await adapter?.refreshContextualTools();
-  await seedDecision();
+  if (result.code === "PLAN_SWITCHED") {
+    await adapter?.refreshContextualTools();
+    await seedDecision();
+  }
+  const target = new URL(location.href);
+  target.searchParams.set("kitchen", "1");
+  target.searchParams.delete("lab");
+  history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1548,7 +1567,7 @@ function bindInteractions(): void {
   bindCodexHandoffInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
+  root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => { void openPlan((event.currentTarget as HTMLSelectElement).value); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });

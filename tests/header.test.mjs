@@ -19,3 +19,14 @@ test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /data-action="open-kitchen-reset">Start over<\/button>/);
   assert.match(source, /href="\/signout-with-chatgpt\?return_to=\/">Sign out<\/a>/);
 });
+
+test("the header plan dropdown uses the durable catalog and guarded switch path", () => {
+  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"\)/g)?.length, 2);
+  assert.match(source, /runtime\.listPlans\(\)\.plans/);
+  assert.match(source, /data-action="plan-switch" aria-label="Open a Finite plan"/);
+  assert.match(source, /optgroup label="Current plans"/);
+  assert.match(source, /optgroup label="Earlier versions"/);
+  assert.match(source, /runtime\.switchPlanPersisted\(planId, \{ expectedCurrentPlanId:/);
+  assert.match(source, /target\.searchParams\.set\("kitchen", "1"\)/);
+  assert.doesNotMatch(source, /aria-label="Demonstration plan"/);
+});
