@@ -274,4 +274,5 @@ test("Managing accepts general and section-specific decisions from both the page
   assert.match(webmcp, /finite_list_plan_inputs/);
   assert.match(webmcp, /finite_add_plan_input/);
   assert.match(webmcp, /finite_resolve_plan_input/);
+  assert.match(styles, /main \{[^}]*scroll-margin-top:132px/);
 });
