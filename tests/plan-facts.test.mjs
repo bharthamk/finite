@@ -5,7 +5,9 @@ import { FinitePlanKernel } from "../dist-test/src/kernel.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { editablePlanFacts, projectPlanFactChanges } from "../dist-test/src/plan-facts.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
+import { compileProfile } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
+import { compileSurfaceManifest } from "../dist-test/src/surface.js";
 
 const profiles = await compileBuiltInProfiles();
 
@@ -93,4 +95,34 @@ test("a stale numeric edit cannot overwrite a newer revision", async () => {
   await kernel.applyConfirmedPlanFactChanges({ planFactChangeId: staged.planFactChange.planFactChangeId, confirmationId: confirmed.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "plan-facts-travel-0001" });
   const stale = await kernel.stagePlanFactChanges({ changes: [{ factId: "allocations.totalBudgetMinor", value: 700_000 }], expectedRevision: 1 });
   assert.equal(stale.code, "STALE_REVISION");
+});
+
+test("accepted numeric edits propagate through human-facing plan copy", async () => {
+  const source = profiles.get("event");
+  assert(source);
+  const { profileHash: _profileHash, ...definition } = structuredClone(source);
+  definition.name = "Monday dinner for six";
+  definition.accepted = { totalBudgetMinor: 20_000, spentMinor: 0, committedMinor: 0, forecastMinor: 0, bufferMinor: 20_000 };
+  definition.actuals = [];
+  definition.entities.guest_headcount.values.count = 6;
+  definition.entities.venue.values.capacity = 6;
+  definition.surface.hero = {
+    eyebrow: "Monday dinner",
+    title: "Monday dinner for six",
+    brief: "Dinner for six friends, capped at $20 per person and $200 total.",
+  };
+  definition.surface.stages = [{ stageId: "shop", label: "Shop to the caps", detail: "Keep dinner below $20 per person and $200 total.", marker: "1–2 days before", status: "current" }];
+  const profile = await compileProfile(definition);
+  const kernel = new FinitePlanKernel(profile);
+  const staged = await kernel.stagePlanFactChanges({ changes: [
+    { factId: "allocations.totalBudgetMinor", value: 18_000 },
+    { factId: "entities.guest_headcount.count", value: 7 },
+    { factId: "entities.venue.capacity", value: 8 },
+  ], expectedRevision: 1 });
+  const confirmed = kernel.humanConfirmPlanFactChanges({ planFactChangeId: staged.planFactChange.planFactChangeId });
+  await kernel.applyConfirmedPlanFactChanges({ planFactChangeId: staged.planFactChange.planFactChangeId, confirmationId: confirmed.confirmation.confirmationId, expectedRevision: 1, idempotencyKey: "plan-facts-copy-0001" });
+  const manifest = await compileSurfaceManifest(profile, kernel);
+  assert.equal(manifest.title, "Monday dinner for seven");
+  assert.equal(manifest.brief, "Dinner for seven friends, capped at $20 per person and $180 total.");
+  assert.equal(manifest.stages[0].detail, "Keep dinner below $20 per person and $180 total.");
 });

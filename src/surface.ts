@@ -10,6 +10,55 @@ import type {
   SurfaceZone,
 } from "./types.js";
 
+type AcceptedCopyChange = { format: string; before: number; after: number };
+
+const escapePattern = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const smallNumberWords = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+] as const;
+
+const preserveWordCase = (before: string, after: string): string => before === before.toUpperCase()
+  ? after.toUpperCase()
+  : before[0] === before[0]?.toUpperCase() ? `${after[0]?.toUpperCase() ?? ""}${after.slice(1)}` : after;
+
+const projectMoneyCopy = (text: string, beforeMinor: number, afterMinor: number): string => {
+  const beforeMajor = beforeMinor / 100;
+  const afterMajor = afterMinor / 100;
+  const before = new Intl.NumberFormat("en-AU", { minimumFractionDigits: Number.isInteger(beforeMajor) ? 0 : 2, maximumFractionDigits: 2 }).format(beforeMajor);
+  const after = new Intl.NumberFormat("en-AU", { minimumFractionDigits: Number.isInteger(afterMajor) ? 0 : 2, maximumFractionDigits: 2 }).format(afterMajor);
+  return text.replace(new RegExp(`((?:A\\$|\\$)\\s*)${escapePattern(before)}(?:\\.00)?(?![\\d.])`, "g"), `$1${after}`);
+};
+
+const projectNumberCopy = (text: string, before: number, after: number): string => {
+  let projected = text.replace(new RegExp(`(?<![\\d.])${escapePattern(String(before))}(?![\\d.])`, "g"), String(after));
+  const beforeWord = smallNumberWords[before];
+  if (!beforeWord) return projected;
+  const afterWord = smallNumberWords[after] ?? String(after);
+  projected = projected.replace(new RegExp(`\\b${beforeWord}\\b`, "gi"), (match) => preserveWordCase(match, afterWord));
+  return projected;
+};
+
+const acceptedCopyChanges = (kernel: FinitePlanKernel): AcceptedCopyChange[] => kernel.receipts
+  .filter((receipt) => receipt.receiptType === "plan_fact_change")
+  .flatMap((receipt) => {
+    const change = receipt.payload.planFactChange;
+    if (!change || typeof change !== "object" || !("changes" in change) || !Array.isArray(change.changes)) return [];
+    return change.changes.flatMap((candidate): AcceptedCopyChange[] => {
+      if (!candidate || typeof candidate !== "object") return [];
+      const record = candidate as Record<string, unknown>;
+      return typeof record.format === "string" && typeof record.before === "number" && typeof record.after === "number"
+        ? [{ format: record.format, before: record.before, after: record.after }]
+        : [];
+    });
+  });
+
+export const projectAcceptedPlanCopy = (text: string, kernel: FinitePlanKernel): string => acceptedCopyChanges(kernel)
+  .reduce((projected, change) => change.format === "money"
+    ? projectMoneyCopy(projected, change.before, change.after)
+    : projectNumberCopy(projected, change.before, change.after), text);
+
 const supportedComponents = new Set<SurfaceComponentType>([
   "finite_summary", "pressure_meter", "timeline_lane", "phase_lane", "run_of_show", "entity_table",
   "commitment_stack", "actual_forecast", "constraint_panel", "change_tray", "option_compare", "approval_panel",
@@ -107,11 +156,16 @@ export const compileSurfaceManifest = async (
     profileId: profile.profileId,
     profileVersion: profile.surface.version,
     timeModel: profile.surface.timeModel,
-    title: profile.surface.hero.title,
-    brief: profile.surface.hero.brief,
+    title: projectAcceptedPlanCopy(profile.surface.hero.title, kernel),
+    brief: projectAcceptedPlanCopy(profile.surface.hero.brief, kernel),
     nouns: clone(profile.surface.nouns),
     summaryFields: clone(profile.surface.primaryMeasures),
-    stages: clone(profile.surface.stages),
+    stages: profile.surface.stages.map((stage) => ({
+      ...clone(stage),
+      label: projectAcceptedPlanCopy(stage.label, kernel),
+      detail: projectAcceptedPlanCopy(stage.detail, kernel),
+      marker: projectAcceptedPlanCopy(stage.marker, kernel),
+    })),
     ...(profile.surface.dependencies?.length ? { dependencies: clone(profile.surface.dependencies) } : {}),
     ...(profile.surface.assumptions?.length ? { assumptions: clone(profile.surface.assumptions) } : {}),
     zones,

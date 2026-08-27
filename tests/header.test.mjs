@@ -69,7 +69,7 @@ test("account and destructive actions live in a labelled account menu", () => {
 });
 
 test("the header plan dropdown creates and opens plans from both product surfaces", () => {
-  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"\)/g)?.length, 2);
+  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 2);
   assert.match(source, /runtime\.listPlans\(\)\.plans/);
   assert.match(source, /data-action="plan-switch" aria-label="Open a Finite plan"/);
   assert.match(source, /<option value="\$\{newPlanChoice\}">＋ Create a new plan…<\/option>/);

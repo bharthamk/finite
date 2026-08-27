@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "dynamic-plan-facts-v92",
+  build: "accepted-copy-projection-v93",
 } as const;

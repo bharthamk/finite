@@ -2,7 +2,7 @@ import { compileBuiltInProfiles } from "./profiles.js";
 import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
-import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
+import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository } from "./construction-packet.js";
@@ -640,11 +640,11 @@ const bindFollowCodexInteractions = (): void => {
 type HeaderPlanChoice = { planId: string; profileId: string; name: string; active: boolean; supersededBy: string | null };
 const newPlanChoice = "__new_plan__";
 
-const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
+const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {
   const plans = runtime.listPlans().plans as HeaderPlanChoice[];
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
-  const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
+  const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
   return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan">
     ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
     <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
@@ -1707,20 +1707,24 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
 const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["component"]): string => `
   ${renderPlanInputItems("timeline")}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
-    ${manifest.stages.map((stage) => `
+    ${manifest.stages.map((stage) => {
+      const chosen = planInputsFor("timeline", stage.stageId).some((item) => item.mode === "direct" && item.kind === "decision");
+      return `
       <li class="stage stage--${escapeHtml(stage.status)}">
-        <span class="stage__marker">${escapeHtml(stage.marker)}</span>
+        <span class="stage__marker">${escapeHtml(chosen ? "Chosen" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
+        <div class="stage__actions"><small>${escapeHtml(chosen ? "chosen" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}</div>
-      </li>`).join("")}
+      </li>`;
+    }).join("")}
   </ol>`;
 
 const renderNextStep = (manifest: SurfaceManifest): string => {
-  const next = manifest.stages.find((stage) => stage.status === "current")
-    ?? manifest.stages.find((stage) => stage.status === "planned")
-    ?? manifest.stages.find((stage) => stage.status === "movable")
-    ?? manifest.stages.find((stage) => stage.status !== "complete")
+  const unresolved = (stage: SurfaceManifest["stages"][number]): boolean => !planInputsFor("timeline", stage.stageId).some((item) => item.mode === "direct" && item.kind === "decision");
+  const next = manifest.stages.find((stage) => stage.status === "current" && unresolved(stage))
+    ?? manifest.stages.find((stage) => stage.status === "planned" && unresolved(stage))
+    ?? manifest.stages.find((stage) => stage.status === "movable" && unresolved(stage))
+    ?? manifest.stages.find((stage) => stage.status !== "complete" && unresolved(stage))
     ?? manifest.stages.at(-1);
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
   if (!next) return "";
@@ -1818,19 +1822,6 @@ const renderOptions = (): string => {
           ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Choose this ${escapeHtml(runtime.kernel.profile.surface.nouns.option)}</button>`
           : `<p class="refusal">${escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</p>`}
       </article>`).join("")}
-  </div>`;
-};
-
-const renderReceipt = (receipt: Receipt): string => {
-  const after = receipt.payload.after as { bufferMinor?: number } | undefined;
-  const lifecycle = receipt.payload.lifecycle as { status?: PlanLifecycleStatus } | undefined;
-  return `<div class="receipt">
-    <div><span class="receipt__tick" aria-hidden="true">✓</span><p class="eyebrow">Served and receipted</p><h2>${lifecycle?.status ? `This plan is now ${escapeHtml(lifecycle.status)}.` : `The accepted plan is now revision ${receipt.toRevision}.`}</h2></div>
-    <dl>
-      <div><dt>${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)}</dt><dd>${typeof after?.bufferMinor === "number" ? money(after.bufferMinor) : money(runtime.kernel.accepted.bufferMinor)}</dd></div>
-      <div><dt>Receipt</dt><dd>${escapeHtml(receipt.receiptId)}</dd></div>
-      <div><dt>Replay proof</dt><dd>${escapeHtml(receipt.replayChecksum.slice(0, 12))}…</dd></div>
-    </dl>
   </div>`;
 };
 
@@ -2115,7 +2106,6 @@ async function render(): Promise<SurfaceManifest> {
     renderArrival(manifest);
     return manifest;
   }
-  const receipt = kernel.receipts.at(-1);
   const managingZones = visibleManagingZones(manifest);
   surfaceRoot.dataset.profile = kernel.profile.profileId;
   surfaceRoot.setAttribute("aria-busy", String(busy));
@@ -2123,7 +2113,7 @@ async function render(): Promise<SurfaceManifest> {
     <div class="private-top-shell">
       <header class="site-header">
         ${renderBrand()}
-        ${renderPlanSwitcher("plan")}
+        ${renderPlanSwitcher("plan", manifest.title)}
         ${renderShareHeaderAction("plan")}
         <div class="header-actions">
           ${renderFollowCodexButton()}
@@ -2143,7 +2133,6 @@ async function render(): Promise<SurfaceManifest> {
       ${renderNextStep(manifest)}
       ${renderHumanRealityControl()}
       ${renderPlanDraft()}
-      ${receipt ? renderReceipt(receipt) : ""}
       <div class="surface-grid">${managingZones.map((zone) => renderZone(manifest, zone)).join("")}</div>
       ${renderLifecycleControl()}
       ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
