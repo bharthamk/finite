@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "whole-journey-repair-v105",
+  build: "whole-journey-repair-v106",
 } as const;

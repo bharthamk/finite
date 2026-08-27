@@ -1774,7 +1774,7 @@ const renderPlanWork = (): string => {
   return `<section class="plan-work" id="plan_work" aria-label="Plan progress and attachments">
     <article class="plan-work__checklist">
       <header><div><p class="eyebrow">Progress</p><h2>${done.length} of ${checklistItems.length} done</h2><small>Plan-stage tasks are ticked off in the timeline below.</small></div></header>
-      ${custom.length ? `<div class="checklist-items">${custom.sort((a, b) => Number(a.status === "done") - Number(b.status === "done")).map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>` : ""}
+      ${custom.length ? `<div class="checklist-items">${custom.sort((a, b) => Number(a.status === "done") - Number(b.status === "done")).map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>` : ""}
       <form class="checklist-add" data-checklist-add><label><span class="sr-only">Add something to do</span><input name="label" type="text" maxlength="240" placeholder="Add something to do…" required></label><button type="submit" ${planWorkBusy ? "disabled" : ""}>Add</button></form>
     </article>
     <article class="plan-work__attachments">
@@ -1818,7 +1818,7 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       <li class="stage stage--${escapeHtml(completed ? "complete" : stage.status)}">
         <span class="stage__marker">${escapeHtml(completed ? "Done" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""}><span>${completed ? "Done" : "Mark done"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
+        <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span>${completed ? "Done" : "Mark done"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
     }).join("")}
@@ -2722,12 +2722,15 @@ const toggleChecklistItem = async (itemId: string, done: boolean): Promise<void>
   if (planWorkBusy) return;
   const item = checklistItems.find((candidate) => candidate.itemId === itemId);
   if (!item) return;
+  const priorChecklist = checklistItems;
+  checklistItems = checklistItems.map((candidate) => candidate.itemId === itemId ? { ...candidate, status: done ? "done" : "open" } : candidate);
   planWorkBusy = true;
+  await render();
   try {
     const result = await planWorkRepository.setChecklist({ itemId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, status: done ? "done" : "open", idempotencyKey: `checklist-${done ? "done" : "reopen"}-site-${crypto.randomUUID()}`, sourceSurface: "site" });
     if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce(done ? "Ticked off." : "Put back on the list."); }
-    else announce(result.message || "That item could not be updated.");
-  } catch { announce("That item could not be updated."); }
+    else { checklistItems = priorChecklist; announce(result.message || "That item could not be updated."); }
+  } catch { checklistItems = priorChecklist; announce("That item could not be updated."); }
   planWorkBusy = false;
   await render();
 };

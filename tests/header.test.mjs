@@ -295,3 +295,10 @@ test("Managing accepts general and section-specific decisions from both the page
   assert.match(webmcp, /finite_resolve_plan_input/);
   assert.match(styles, /main \{[^}]*scroll-margin-top:132px/);
 });
+
+test("checklist progress updates optimistically and rolls back failed writes", () => {
+  assert.match(source, /const priorChecklist = checklistItems;/);
+  assert.match(source, /checklistItems = checklistItems\.map\(\(candidate\) => candidate\.itemId === itemId/);
+  assert.match(source, /planWorkBusy = true;\s*await render\(\);\s*try/);
+  assert.match(source, /checklistItems = priorChecklist; announce\(result\.message/);
+});
