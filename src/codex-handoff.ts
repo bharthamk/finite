@@ -73,8 +73,8 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     buttonLabel: `Hand off to ${agenticName}`,
     title: order ? `Bring ${agenticName} into this plan.` : `Start this with ${agenticName}.`,
     detail: context.inline
-      ? `Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools. ${agenticName} is the display name you chose in Finite.`
-      : `Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in. ${agenticName} is the display name you chose in Finite.`,
+      ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
+      : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",
     prompt,
     copiedPayload: {
       siteOrigin,

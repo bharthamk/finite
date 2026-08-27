@@ -906,7 +906,6 @@ const renderCodexHandoffButton = (): string => {
 
 const renderCodexHandoffDialog = (): string => {
   const handoff = currentCodexHandoff();
-  const order = currentArrival();
   return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
     <form method="dialog" class="codex-handoff-sheet">
       <header>
@@ -924,12 +923,6 @@ const renderCodexHandoffDialog = (): string => {
         <button type="button" class="button" data-action="copy-codex-handoff">Copy handoff prompt</button>
         <p data-codex-handoff-status>Nothing has been sent to ${escapeHtml(agenticName())} yet.</p>
       </div>
-      <dl class="codex-handoff-boundary">
-        <div><dt>Finite site</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
-        <div><dt>Your plan</dt><dd>${order ? "Your saved starting point and additions" : "No starting point yet"}</dd></div>
-        <div><dt>Copied</dt><dd>Directions for opening this plan</dd></div>
-        <div><dt>Stays private</dt><dd>Your sign-in details and approval controls</dd></div>
-      </dl>
     </form>
   </dialog>`;
 };
@@ -1148,7 +1141,7 @@ const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; det
   if (order.status === "codex_reviewing") return { label: `${agenticName()} is working`, title: `${agenticName()} is working through what you shared.`, detail: `You can still add or correct something. ${agenticName()} will use your newest information before proposing a plan.` };
   if (order.status === "clarification_required") return { label: "Your answer needed", title: `${agenticName()} needs one decision before it can continue.`, detail: "Only you can answer this. Finite will add your answer to the plan." };
   if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: `${agenticName()} has turned your request into a brief.`, detail: "Check it below. Nothing becomes your plan until you approve it." };
-  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: `Use ${agenticName()} to continue.`, detail: "Your approved brief is ready to become a plan. Nothing is activated until you review and approve the exact plan." };
+  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: `Use ${agenticName()} to continue.`, detail: "Your approved brief is ready to become a plan." };
   if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
@@ -1220,7 +1213,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           <small>Need a change? Open “Add or correct something” below.</small>
         </section>` : ""}
           ${order.status === "interpretation_confirmed" && !planDraftMarkup ? `<section class="arrival-continue" aria-labelledby="arrival_continue_title">
-            <div><p class="eyebrow">Next step / continue with ${escapeHtml(agenticName())}</p><h2 id="arrival_continue_title">Brief confirmed. Use ${escapeHtml(agenticName())} to continue.</h2><p>Your approved brief is ready. ${escapeHtml(agenticName())} can now construct the plan for you to review. Nothing is activated until you approve the exact plan.</p></div>
+            <div><p class="eyebrow">Next step / continue with ${escapeHtml(agenticName())}</p><h2 id="arrival_continue_title">Brief confirmed. Use ${escapeHtml(agenticName())} to continue.</h2><p>Your approved brief is ready. ${escapeHtml(agenticName())} can now construct the plan for you to review.</p></div>
             <button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Use ${escapeHtml(agenticName())} to continue</button>
           </section>` : ""}
           ${planDraftMarkup}

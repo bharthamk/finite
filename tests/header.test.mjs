@@ -149,6 +149,10 @@ test("arrival prioritizes the next action and keeps secondary review tools side 
   assert.match(source, /Brief confirmed\. Use \$\{escapeHtml\(agenticName\(\)\)\} to continue\./);
   assert.match(source, /data-action="open-codex-handoff" aria-haspopup="dialog">Use \$\{escapeHtml\(agenticName\(\)\)\} to continue/);
   assert.doesNotMatch(source, /Brief confirmed\. Codex may construct a plan/);
+  assert.doesNotMatch(source, /Nothing is activated until you approve the exact plan/);
+  assert.doesNotMatch(source, /class="codex-handoff-boundary"/);
+  assert.doesNotMatch(source, /<dt>Finite site<\/dt>|<dt>Your plan<\/dt>|<dt>Copied<\/dt>|<dt>Stays private<\/dt>/);
+  assert.doesNotMatch(handoffSource, /display name you chose in Finite/);
   assert.match(source, /!question && order\.status !== "proposed_plan_ready" && order\.status !== "interpretation_confirmed" && !planDraftMarkup/);
   assert.match(source, /<\/section>\s*\$\{message[^]*?<details class="arrival-order-source">/);
   assert.match(source, /<div class="arrival-working-grid">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);

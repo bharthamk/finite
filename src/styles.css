@@ -292,11 +292,6 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .codex-handoff-prompt textarea { width:100%; min-height:245px; resize:vertical; border:1px solid var(--ink); border-radius:0; padding:18px; color:#d8e3df; background:var(--deep); font:400 .72rem/1.6 "DM Mono",monospace; }
 .codex-handoff-actions { display:grid; grid-template-columns:minmax(240px,360px) 1fr; gap:20px; align-items:center; margin-top:16px; }
 .codex-handoff-actions p { margin:0; color:var(--muted); font-size:.78rem; line-height:1.5; }
-.codex-handoff-boundary { display:grid; grid-template-columns:1fr 1fr; margin:34px 0 0; border-top:1px solid var(--line); }
-.codex-handoff-boundary>div { padding:17px 18px 0 0; overflow:hidden; }
-.codex-handoff-boundary>div:nth-child(even) { padding-left:18px; border-left:1px solid var(--line); }
-.codex-handoff-boundary dt { color:var(--muted); font:500 .62rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
-.codex-handoff-boundary dd { margin:7px 0 0; overflow-wrap:anywhere; font-size:.78rem; font-weight:600; }
 
 .entry-shell { min-height:100vh; width:100%; display:grid; place-items:center; padding:clamp(24px,6vw,80px); background:radial-gradient(circle at 82% 18%,var(--accent-soft),transparent 28%),var(--paper); }
 .entry-card { width:min(1040px,100%); padding:clamp(30px,6vw,78px); border:1px solid var(--ink); background:var(--panel); box-shadow:18px 18px 0 var(--deep); }
@@ -1044,8 +1039,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .codex-handoff-steps li { min-height:auto; }
   .codex-handoff-steps li+li { border-left:0; border-top:1px solid var(--line); }
   .codex-handoff-steps p { margin-top:10px; }
-  .codex-handoff-actions,.codex-handoff-boundary { grid-template-columns:1fr; }
-  .codex-handoff-boundary>div:nth-child(even) { padding-left:0; border-left:0; }
+  .codex-handoff-actions { grid-template-columns:1fr; }
   .codex-handoff-prompt textarea { min-height:300px; }
 }
 

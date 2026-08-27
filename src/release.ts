@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "agentic-name-settings-v80",
+  build: "trimmed-handoff-copy-v81",
 } as const;

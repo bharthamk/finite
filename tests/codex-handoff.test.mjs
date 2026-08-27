@@ -68,7 +68,8 @@ test("a custom agentic name changes presentation without rewriting the Codex ope
   });
   assert.equal(handoff.buttonLabel, "Hand off to Ari");
   assert.equal(handoff.title, "Bring Ari into this plan.");
-  assert.match(handoff.detail, /Ari is the display name/);
+  assert.doesNotMatch(handoff.detail, /display name/i);
+  assert.doesNotMatch(handoff.detail, /Ari/);
   assert.match(handoff.prompt, /Codex operator/);
   assert.doesNotMatch(handoff.prompt, /Ari/);
 });
