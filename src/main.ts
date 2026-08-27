@@ -486,7 +486,8 @@ let themeEditingId: string | null = null;
 let themeDeleteId: string | null = null;
 let skinEditingId: string | null = null;
 let skinDeleteId: string | null = null;
-let shareDialogOpen = false;
+type ShareDialogMode = "closed" | "choose" | "compose" | "signin";
+let shareDialogMode: ShareDialogMode = "closed";
 let shareBusy = false;
 let shareDraft: { label: string; mode: PlanShareMode; sections: PlanShareSection[] } = { label: "Plan update", mode: "live", sections: ["overview"] };
 let sharePreview: PublicPlanProjection | null = null;
@@ -494,6 +495,7 @@ let sharePreviewKey = "";
 let planPublications: PlanPublicationRecord[] = [];
 let newPublicationUrl = "";
 let shareError = "";
+let forceArrivalSurface = false;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
@@ -529,6 +531,8 @@ const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
   </select></label>`;
 };
 
+const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}">Share this plan</button>`;
+
 const shareSelectionKey = (draft = shareDraft): string => JSON.stringify({ label: draft.label.trim(), mode: draft.mode, sections: [...draft.sections].sort() });
 const shareSectionOptions: Array<{ id: PlanShareSection; name: string; description: string }> = [
   { id: "overview", name: "Summary", description: "Plan name, headline, brief, revision and status." },
@@ -539,6 +543,28 @@ const shareSectionOptions: Array<{ id: PlanShareSection; name: string; descripti
 ];
 
 const renderPlanShareDialog = (): string => {
+  const plans = runtime.listPlans().plans as HeaderPlanChoice[];
+  const currentPlans = plans.filter((plan) => !plan.supersededBy);
+  const earlierPlans = plans.filter((plan) => Boolean(plan.supersededBy));
+  if (shareDialogMode === "signin") return `<dialog class="plan-share-dialog plan-share-dialog--choice" data-plan-share-dialog aria-labelledby="plan_share_title">
+    <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Share a plan</p><h2 id="plan_share_title">Sign in to publish a view.</h2><p>A demo kitchen disappears. Sign in first so Finite can keep the plan, its live or frozen pages, and your revocation controls together.</p></header>
+    <div class="plan-share-choice__actions"><a class="button" href="/signin-with-chatgpt?return_to=/">Continue with ChatGPT</a><button type="button" class="text-button" data-action="close-plan-share">Not now</button></div>
+  </dialog>`;
+  if (shareDialogMode === "choose") return `<dialog class="plan-share-dialog plan-share-dialog--choice" data-plan-share-dialog aria-labelledby="plan_share_title">
+    <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Share a plan</p><h2 id="plan_share_title">${plans.length ? "Which plan do you want to share?" : "There isn’t a plan to share yet."}</h2><p>${plans.length ? "Choose an existing plan, then decide exactly what the other person can see." : "Start with the outcome you want. Once the plan exists, you can publish a live page or freeze a one-off view."}</p></header>
+    ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
+    ${plans.length ? `<form class="plan-share-choice" data-share-plan-choice>
+      <label><span>Plan to share</span><select name="planId" required aria-label="Choose a plan to share">
+        <option value="">Choose a plan…</option>
+        ${currentPlans.length ? `<optgroup label="Current plans">${currentPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(plan.name)}</option>`).join("")}</optgroup>` : ""}
+        ${earlierPlans.length ? `<optgroup label="Earlier versions">${earlierPlans.map((plan) => `<option value="${escapeHtml(plan.planId)}">${escapeHtml(plan.name)} · earlier version</option>`).join("")}</optgroup>` : ""}
+      </select></label>
+      <button type="submit" class="button">Choose what to share</button>
+    </form>` : ""}
+    <section class="plan-share-new"><div><p class="eyebrow">${plans.length ? "Not here?" : "First step"}</p><h3>${plans.length ? "The plan you want doesn’t exist yet." : "Create the plan first."}</h3><p>Describe what you are trying to make happen. Finite will keep that new plan separate from anything already here.</p></div><button type="button" class="button button--secondary" data-action="start-plan-from-share">Start a new plan</button></section>
+  </dialog>`;
   const active = planPublications.filter((publication) => !publication.revokedAt);
   return `<dialog class="plan-share-dialog" data-plan-share-dialog aria-labelledby="plan_share_title">
     <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
@@ -814,7 +840,7 @@ const readShareDraft = (form: HTMLFormElement): typeof shareDraft => {
 };
 
 const openPlanShareDialog = async (): Promise<void> => {
-  shareDialogOpen = true;
+  shareDialogMode = "compose";
   shareBusy = true;
   shareError = "";
   newPublicationUrl = "";
@@ -835,6 +861,47 @@ const openPlanShareDialog = async (): Promise<void> => {
   }
   shareBusy = false;
   await render();
+};
+
+const openPlanShareFlow = async (context: "arrival" | "plan"): Promise<void> => {
+  shareError = "";
+  if (authSession.kind !== "account") {
+    shareDialogMode = "signin";
+    await render();
+    return;
+  }
+  if (context === "plan") {
+    await openPlanShareDialog();
+    return;
+  }
+  shareDialogMode = "choose";
+  await render();
+};
+
+const choosePlanToShare = async (form: HTMLFormElement): Promise<void> => {
+  const planId = String(new FormData(form).get("planId") ?? "");
+  if (!planId) return;
+  shareDialogMode = "closed";
+  await openPlan(planId);
+  if (runtime.kernel.profile.planId !== planId) {
+    shareDialogMode = "choose";
+    shareError = "That plan could not be opened safely. Choose it again or start a new plan.";
+    await render();
+    return;
+  }
+  await openPlanShareDialog();
+};
+
+const startPlanFromShare = async (): Promise<void> => {
+  shareDialogMode = "closed";
+  shareError = "";
+  forceArrivalSurface = !isWaitingArrivalStatus(currentArrival()?.status);
+  const target = new URL(location.href);
+  target.searchParams.delete("kitchen");
+  target.searchParams.delete("lab");
+  history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+  await render();
+  root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='rawOutcome']")?.focus();
 };
 
 const submitPlanShare = async (form: HTMLFormElement, intent: "preview" | "publish"): Promise<void> => {
@@ -889,11 +956,13 @@ const revokePlanShare = async (shareId: string): Promise<void> => {
 };
 
 const bindPlanShareInteractions = (): void => {
-  root.querySelector<HTMLButtonElement>("[data-action='open-plan-share']")?.addEventListener("click", () => { void openPlanShareDialog(); });
+  root.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-share']").forEach((button) => button.addEventListener("click", () => { void openPlanShareFlow(button.dataset.shareContext === "plan" ? "plan" : "arrival"); }));
   const dialog = root.querySelector<HTMLDialogElement>("[data-plan-share-dialog]");
-  root.querySelector<HTMLButtonElement>("[data-action='close-plan-share']")?.addEventListener("click", () => { shareDialogOpen = false; dialog?.close(); });
-  dialog?.addEventListener("close", () => { shareDialogOpen = false; });
-  dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogOpen = false; dialog.close(); } });
+  root.querySelectorAll<HTMLElement>("[data-action='close-plan-share']").forEach((button) => button.addEventListener("click", () => { shareDialogMode = "closed"; dialog?.close(); }));
+  dialog?.addEventListener("close", () => { shareDialogMode = "closed"; });
+  dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogMode = "closed"; dialog.close(); } });
+  root.querySelector<HTMLFormElement>("[data-share-plan-choice]")?.addEventListener("submit", (event) => { event.preventDefault(); void choosePlanToShare(event.currentTarget as HTMLFormElement); });
+  root.querySelector<HTMLButtonElement>("[data-action='start-plan-from-share']")?.addEventListener("click", () => { void startPlanFromShare(); });
   root.querySelector<HTMLFormElement>("[data-plan-share-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.shareIntent === "publish" ? "publish" : "preview";
@@ -912,7 +981,7 @@ const bindPlanShareInteractions = (): void => {
       announce("The shared-page link is selected and ready to copy.");
     }
   });
-  if (shareDialogOpen && dialog && !dialog.open) dialog.showModal();
+  if (shareDialogMode !== "closed" && dialog && !dialog.open) dialog.showModal();
 };
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
@@ -940,6 +1009,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       ${renderBrand()}
       ${renderPlanSwitcher("arrival")}
       <div class="header-actions">
+        ${renderShareHeaderAction("arrival")}
         ${order ? renderCodexHandoffButton() : ""}
         ${renderHeaderControls()}
       </div>
@@ -1020,6 +1090,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     </main>
     <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No arrival waiting · accepted plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}
+    ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   bindArrivalInteractions();
@@ -1040,6 +1111,7 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
   const evidence = String(data.get("evidence") ?? "").trim();
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
+  if (arrivalResult.ok) forceArrivalSurface = false;
   busy = false;
   announce(arrivalResult.ok ? "Your order is saved. Codex has not processed it yet." : `The order was not saved: ${arrivalResult.code}`);
   await render();
@@ -1595,7 +1667,7 @@ async function render(): Promise<SurfaceManifest> {
   messageScope = reconciledMessage.scope;
   const manifest = await compileSurfaceManifest(kernel.profile, kernel);
   const params = new URLSearchParams(location.search);
-  const experienceSurface = selectExperienceSurface({
+  const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode: params.get("lab") === "1",
     kitchenMode: params.get("kitchen") === "1",
     hasArrival: isWaitingArrivalStatus(currentArrival()?.status),
@@ -1614,7 +1686,7 @@ async function render(): Promise<SurfaceManifest> {
       ${renderBrand()}
       ${renderPlanSwitcher("plan")}
       <div class="header-actions">
-        ${authSession.kind === "account" ? `<button type="button" class="header-action header-action--share" data-action="open-plan-share">Share this plan</button>` : ""}
+        ${renderShareHeaderAction("plan")}
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
       </div>
@@ -1635,7 +1707,7 @@ async function render(): Promise<SurfaceManifest> {
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
-    ${authSession.kind === "account" ? renderPlanShareDialog() : ""}
+    ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   bindInteractions();

@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "accepted-logo-source-v68",
+  build: "share-from-arrival-v69",
 } as const;

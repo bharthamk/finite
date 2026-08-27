@@ -51,8 +51,17 @@ test("the header plan dropdown uses the durable catalog and guarded switch path"
 });
 
 test("plan sharing publishes a selected plate without registering a kitchen on the shared route", () => {
-  assert.match(source, /data-action="open-plan-share">Share this plan<\/button>/);
+  assert.equal(source.match(/data-action="open-plan-share"/g)?.length, 1);
+  assert.match(source, /renderShareHeaderAction\("arrival"\)/);
+  assert.match(source, /renderShareHeaderAction\("plan"\)/);
+  assert.equal(source.match(/\$\{renderPlanShareDialog\(\)\}/g)?.length, 2);
   assert.match(styles, /html \.header-action--share/);
+  assert.match(source, /Which plan do you want to share\?/);
+  assert.match(source, /There isn’t a plan to share yet\./);
+  assert.match(source, /data-share-plan-choice/);
+  assert.match(source, /data-action="start-plan-from-share">Start a new plan<\/button>/);
+  assert.match(source, /forceArrivalSurface = !isWaitingArrivalStatus/);
+  assert.match(source, /Sign in to publish a view\./);
   assert.match(source, /Live view/);
   assert.match(source, /Frozen snapshot/);
   assert.match(source, /Preview exact page/);
