@@ -16,9 +16,9 @@ test("editable numeric facts are discovered from each plan profile", () => {
   const renovation = profiles.get("renovation");
   const event = profiles.get("event");
   assert(travel && renovation && event);
-  assert.deepEqual(editablePlanFacts(travel, travel.accepted, travel.entities).map((fact) => fact.label), ["Total limit", "Trip length", "Booked days"]);
-  assert.deepEqual(editablePlanFacts(renovation, renovation.accepted, renovation.entities).map((fact) => fact.label), ["Total limit", "Completion day", "Committed handover"]);
-  assert.deepEqual(editablePlanFacts(event, event.accepted, event.entities).map((fact) => fact.label), ["Total limit", "Guest count", "Venue capacity"]);
+  assert.deepEqual(editablePlanFacts(travel, travel.accepted, travel.entities).map((fact) => fact.label), ["Total limit", "Planned cost", "Trip length", "Booked days"]);
+  assert.deepEqual(editablePlanFacts(renovation, renovation.accepted, renovation.entities).map((fact) => fact.label), ["Total limit", "Planned cost", "Completion day", "Committed handover"]);
+  assert.deepEqual(editablePlanFacts(event, event.accepted, event.entities).map((fact) => fact.label), ["Total limit", "Planned cost", "Guest count", "Venue capacity"]);
 });
 
 test("budget math and linked entity changes are projected atomically", () => {
@@ -41,6 +41,17 @@ test("invalid totals and relationship-breaking values are refused", () => {
   assert(event);
   assert.throws(() => projectPlanFactChanges(event, event.accepted, event.entities, [{ factId: "allocations.totalBudgetMinor", value: 200_000 }]), /at least 260000/);
   assert.throws(() => projectPlanFactChanges(event, event.accepted, event.entities, [{ factId: "entities.guest_headcount.count", value: 121 }]), /guest headcount cannot be greater than venue/);
+});
+
+test("planned cost is a generic editable fact and recalculates available money", () => {
+  const event = profiles.get("event");
+  assert(event);
+  const projection = projectPlanFactChanges(event, event.accepted, event.entities, [
+    { factId: "allocations.forecastMinor", value: 90_000 },
+  ]);
+  assert.equal(projection.accepted.forecastMinor, 90_000);
+  assert.equal(projection.accepted.bufferMinor, 30_000);
+  assert.equal(projection.changes[0].label, "Planned cost");
 });
 
 test("one human save commits, receipts, replays and reloads schema-derived values", async () => {

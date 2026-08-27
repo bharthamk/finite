@@ -1708,12 +1708,13 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
   ${renderPlanInputItems("timeline")}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
     ${manifest.stages.map((stage) => {
-      const chosen = planInputsFor("timeline", stage.stageId).some((item) => item.mode === "direct" && item.kind === "decision");
+      const direct = [...planInputsFor("timeline", stage.stageId)].reverse().find((item) => item.mode === "direct") ?? null;
+      const decided = direct?.kind === "decision";
       return `
       <li class="stage stage--${escapeHtml(stage.status)}">
-        <span class="stage__marker">${escapeHtml(chosen ? "Chosen" : stage.marker)}</span>
+        <span class="stage__marker">${escapeHtml(decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(chosen ? "chosen" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
+        <div class="stage__actions"><small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}</div>
       </li>`;
     }).join("")}
@@ -1728,11 +1729,12 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
     ?? manifest.stages.at(-1);
   const timeline = manifest.zones.find((zone) => stageComponents.has(zone.component));
   if (!next) return "";
-  const chosen = planInputsFor("timeline", next.stageId).find((item) => item.mode === "direct" && item.kind === "decision") ?? null;
+  const direct = [...planInputsFor("timeline", next.stageId)].reverse().find((item) => item.mode === "direct") ?? null;
+  const chosen = direct?.kind === "decision";
   return `<section class="managing-next" aria-labelledby="managing_next_title">
-    <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(chosen ? "Chosen" : next.marker)}</span></div>
-    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(chosen?.message ?? next.detail)}</p>${chosen ? "" : renderPlanInputItems("timeline", next.stageId, true)}</div>
-    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}${chosen ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(chosen.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
+    <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(chosen ? "Chosen" : direct ? "Updated" : next.marker)}</span></div>
+    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(direct?.message ?? next.detail)}</p></div>
+    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}${direct ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(direct.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
   </section>`;
 };
 

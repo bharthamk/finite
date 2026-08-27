@@ -10,7 +10,7 @@ import type {
   SurfaceZone,
 } from "./types.js";
 
-type AcceptedCopyChange = { format: string; before: number; after: number };
+type AcceptedCopyChange = { factId: string; format: string; before: number; after: number };
 
 const escapePattern = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -48,14 +48,14 @@ const acceptedCopyChanges = (kernel: FinitePlanKernel): AcceptedCopyChange[] => 
     return change.changes.flatMap((candidate): AcceptedCopyChange[] => {
       if (!candidate || typeof candidate !== "object") return [];
       const record = candidate as Record<string, unknown>;
-      return typeof record.format === "string" && typeof record.before === "number" && typeof record.after === "number"
-        ? [{ format: record.format, before: record.before, after: record.after }]
+      return typeof record.factId === "string" && typeof record.format === "string" && typeof record.before === "number" && typeof record.after === "number"
+        ? [{ factId: record.factId, format: record.format, before: record.before, after: record.after }]
         : [];
     });
   });
 
 export const projectAcceptedPlanCopy = (text: string, kernel: FinitePlanKernel): string => acceptedCopyChanges(kernel)
-  .reduce((projected, change) => change.format === "money"
+  .reduce((projected, change) => change.factId === "allocations.forecastMinor" ? projected : change.format === "money"
     ? projectMoneyCopy(projected, change.before, change.after)
     : projectNumberCopy(projected, change.before, change.after), text);
 

@@ -72,6 +72,16 @@ export const editablePlanFacts = (
     minimum: accepted.spentMinor + accepted.committedMinor + accepted.forecastMinor,
     maximum: boundedMaximum,
     step: 100,
+  }, {
+    factId: "allocations.forecastMinor",
+    label: "Planned cost",
+    selector: "allocations",
+    path: ["forecastMinor"],
+    format: "money",
+    value: accepted.forecastMinor,
+    minimum: 0,
+    maximum: accepted.totalBudgetMinor - accepted.spentMinor - accepted.committedMinor,
+    step: 100,
   }];
   for (const binding of profile.surface.primaryMeasures) {
     const fact = entityFact(binding, entities);
@@ -122,7 +132,10 @@ export const projectPlanFactChanges = (
       continue;
     }
     if (value === fact.value) continue;
-    if (fact.selector === "allocations") afterAccepted.totalBudgetMinor = value;
+    if (fact.selector === "allocations") {
+      const field = fact.path[0];
+      if (field === "totalBudgetMinor" || field === "forecastMinor") afterAccepted[field] = value;
+    }
     else {
       const [entityId, , field] = fact.path;
       if (entityId && field && afterEntities[entityId]) afterEntities[entityId]!.values[field] = value;
