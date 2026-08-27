@@ -29,7 +29,7 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Cancellation | Pre-cancelled work performs nothing; arrival, construction, session, authority and accepted-truth HTTP abort; interrupted commits roll back locally and reconcile remotely | Quality suite | Closed locally; host-signal live injection unavailable |
 | Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation suite; v54 native route transition | Closed live for current route |
 | Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 live receipt; v55 native endurance hash `099938df…` | Closed; per-family comparison is presentation evidence, not a safety gap |
-| Live native proof | Current bounded contract exercised by Codex across the three adaptive families | v54 deployed entry plus v55 native travel/renovation/event shock-to-conclusion run | Closed for operator contract; deployed v55 read-only verification pending |
+| Live native proof | Current bounded contract exercised by Codex across the three adaptive families | v55 native travel/renovation/event run plus deployed seven-tool/entry/validator receipt | Closed |
 | Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 | Reproducible source | Clean build contract, data exclusions, dependency/license inventory, exact deployment provenance | `REPRODUCIBLE_RELEASE.md`; `THIRD_PARTY_LICENSES.md`; clean audit | Closed locally |
@@ -63,16 +63,15 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 9.8/10 | 10/10 | Deploy and read-only verify the fixed seven-tool v55 contract |
+| WebMCP leverage | 10/10 | 10/10 | Closed: adaptive semantic operation, fixed discovery, safe authority and live proof |
 | Execution | 9.3/10 | 9.5/10 | Finish sanitized release reproducibility and judge-access proof |
 | Potential impact | 8.8/10 | 9/10 | Turn the three native family receipts into concise judge-visible evidence during the later UI pass |
 | Creativity and ambition | 9.7/10 | 10/10 | Make the adaptive surface transformation visually undeniable during the later UI pass |
 
 ## Highest-impact open queue
 
-1. Deploy the exact v55 source owner-private and verify the seven-tool registry, one-call canonical entry, marker, and zero-mutation live receipt.
-2. Preserve owner/demo, delayed-edit, stale-handoff, same-revision drift, dropped response, and two-browser concurrency as executable automated demonstrations; do not mutate the owner's live plan merely to repeat proofs already closed against D1.
-3. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
+1. Preserve owner/demo, delayed-edit, stale-handoff, same-revision drift, dropped response, and two-browser concurrency as executable automated demonstrations; do not mutate the owner's live plan merely to repeat proofs already closed against D1.
+2. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
 
 ## Sources governing this scorecard
 

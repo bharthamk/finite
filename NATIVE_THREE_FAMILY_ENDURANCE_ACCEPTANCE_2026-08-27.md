@@ -95,9 +95,31 @@ integrity, authority exclusion, lifecycle conclusion, real-world state, group
 disagreement, fixed-registry endurance, and message-continuity regressions.
 TypeScript and the production Vite/Worker build pass.
 
+## Accepted deployed receipt
+
+Exact implementation source
+`2eeefa03e803cc1f129dbd03f494001e0acb7a46` was pushed to the managed Sites
+`main` branch, packaged after the green build, and saved owner-private as Sites
+version 55:
+
+- version: `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_2b3c2d41e6b48191862e4ef9846d080f`;
+- saved archive: `sha256:108528d33194a502b9c2e0caaf249ce898f00a5a7a17da03fad8242ed22a75ad`, 28 files;
+- deployment: `appgdep_6a8f9398de80819198ef17363d0e2aa5`;
+- live marker: `native-kitchen-endurance-v55`.
+
+A fresh authenticated tab exposed exactly the seven fixed tools. Read-only
+`finite_enter_kitchen` preserved `plan_travel_europe` revision 3 and returned the
+existing returned-draft human question with `acceptedStateChanged:false`.
+`finite_get_effort_receipt` returned hash
+`4b9fac4f2d7f9f31503ce1b45175b59f2d242e7cbf98eb3c2d071b245375199b`,
+one human boundary, zero failures, zero refresh failures and zero accepted
+mutations. A malformed `finite_switch_plan` dispatcher call returned
+`INVALID_ACTION_ARGUMENTS`; the registry remained seven tools and a final
+guarded entry confirmed the owner plan was still revision 3.
+
 ## Remaining external boundary
 
-The source and native journey are competition-grade. Public judging access, a
+The source, native journey, and deployed operator contract are competition-grade. Public judging access, a
 public source repository, and an owner-selected open-source license remain
 external release decisions; this acceptance does not silently make the private
 Site or repository public.
