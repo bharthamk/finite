@@ -47,6 +47,15 @@ export const clearForeignFiniteScopes = (storage: EnumerableStoragePort, current
   return foreign.length;
 };
 
+export const clearFiniteScope = (storage: EnumerableStoragePort, currentScope: string): number => {
+  if (!validScope(currentScope)) throw new Error("A bounded opaque storage scope is required.");
+  const prefix = `finite-scope:${currentScope}:`;
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter((key): key is string => Boolean(key));
+  const scoped = keys.filter((key) => key.startsWith(prefix));
+  for (const key of scoped) storage.removeItem(key);
+  return scoped.length;
+};
+
 export class ScopedStorage implements StoragePort {
   constructor(
     private readonly storage: StoragePort,

@@ -21,7 +21,7 @@ const coreActions = [
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction",
   "finite_apply_confirmed_actual_correction", "finite_stage_option", "finite_reject_staged_option",
   "finite_apply_approved_option", "finite_read_evidence", "finite_get_evidence_policy", "finite_export_plan_receipt",
-  "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile",
+  "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile", "finite_get_reset_preview", "finite_reset_kitchen",
 ] as const;
 
 const zoneContract: Record<SurfaceComponentType, { title: string; selectors: StateSelector[]; required?: boolean }> = {

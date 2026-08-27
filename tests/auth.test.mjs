@@ -13,11 +13,18 @@ class Statement {
 class AuthDb {
   tenants = new Map();
   demos = new Map();
+  resets = new Map();
+  counts = new Map();
   statements = [];
 
   prepare(query) { return new Statement(this, query); }
 
   async first(query, values) {
+    if (query.startsWith("SELECT COUNT(*) AS count FROM ")) {
+      const table = query.match(/^SELECT COUNT\(\*\) AS count FROM ([a-z_]+)/)?.[1];
+      return { count: this.counts.get(values[0])?.[table] ?? 0 };
+    }
+    if (query.includes("FROM tenant_reset_receipts WHERE scope_id")) return this.resets.get(`${values[0]}:${values[1]}`) ?? null;
     if (query.includes("FROM demo_sessions WHERE session_hash")) return this.demos.get(values[0]) ?? null;
     if (query.includes("FROM demo_sessions WHERE scope_id")) return [...this.demos.values()].find((row) => row.scope_id === values[0]) ?? null;
     if (query.includes("FROM tenant_accounts WHERE scope_id")) {
@@ -45,6 +52,18 @@ class AuthDb {
         for (const [key, row] of this.demos) if (row.scope_id === values[0]) this.demos.delete(key);
       } else if (query.startsWith("DELETE FROM tenant_accounts WHERE scope_id")) {
         this.tenants.delete(values[0]);
+      } else if (query.startsWith("DELETE FROM tenant_reset_receipts WHERE scope_id")) {
+        for (const key of this.resets.keys()) if (key.startsWith(`${values[0]}:`)) this.resets.delete(key);
+      } else if (query.startsWith("DELETE FROM ") && query.includes(" WHERE scope_id = ?")) {
+        const table = query.match(/^DELETE FROM ([a-z_]+)/)?.[1];
+        if (table && this.counts.has(values[0])) this.counts.get(values[0])[table] = 0;
+      } else if (query.startsWith("INSERT OR IGNORE INTO tenant_accounts")) {
+        if (!this.tenants.has(values[0])) this.tenants.set(values[0], { scope_id: values[0], user_id_hash: values[1], legacy_scope_adopted: false, created_at: values[2] });
+      } else if (query.startsWith("UPDATE tenant_accounts SET legacy_scope_adopted = 0")) {
+        const row = this.tenants.get(values[0]);
+        if (row) row.legacy_scope_adopted = false;
+      } else if (query.startsWith("INSERT INTO tenant_reset_receipts")) {
+        this.resets.set(`${values[0]}:${values[1]}`, { request_hash: values[2], receipt_json: values[3] });
       }
     }
     return statements.map(() => ({ success: true }));
@@ -153,4 +172,53 @@ test("auth writes reject cross-origin requests before creating a demo", async ()
   assert.equal(response.status, 403);
   assert.equal((await response.json()).code, "CROSS_ORIGIN_WRITE_REFUSED");
   assert.equal(db.demos.size, 0);
+});
+
+test("an authenticated human can preview and permanently reset only the current kitchen", async () => {
+  const db = new AuthDb();
+  const headers = {
+    "oai-authenticated-user-id": "reset-user-123",
+    origin: "https://finite.example",
+    "content-type": "application/json",
+  };
+  const session = await handleAuthRequest(new Request("https://finite.example/api/auth/session", { headers }), db);
+  const scopeId = (await session.json()).session.storageScope;
+  db.tenants.set(scopeId, { scope_id: scopeId, user_id_hash: "reset-user-hash", legacy_scope_adopted: true, created_at: "2026-08-01T00:00:00.000Z" });
+  db.counts.set(scopeId, { arrival_orders: 1, arrival_events: 9, plan_heads: 3, plan_revisions: 5, receipts: 2 });
+
+  const preview = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { headers }), db);
+  const previewBody = await preview.json();
+  assert.equal(previewBody.code, "KITCHEN_RESET_PREVIEW");
+  assert.equal(previewBody.confirmation, "START OVER");
+  assert.equal(previewBody.totalRecords, 20);
+
+  const refused = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { method: "POST", headers, body: JSON.stringify({ confirmation: "start over", idempotencyKey: "reset-one-0001", sourceSurface: "site" }) }), db);
+  assert.equal(refused.status, 422);
+  assert.equal((await refused.json()).code, "KITCHEN_RESET_CONFIRMATION_REQUIRED");
+  assert.equal(db.counts.get(scopeId).arrival_orders, 1);
+
+  const reset = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { method: "POST", headers, body: JSON.stringify({ confirmation: "START OVER", idempotencyKey: "reset-one-0001", sourceSurface: "site" }) }), db);
+  const resetBody = await reset.json();
+  assert.equal(resetBody.code, "KITCHEN_RESET");
+  assert.equal(resetBody.receipt.totalRecords, 20);
+  assert.equal(resetBody.receipt.sourceSurface, "site");
+  assert.equal(db.counts.get(scopeId).arrival_orders, 0);
+  assert.equal(db.counts.get(scopeId).plan_heads, 0);
+  assert.equal(db.tenants.has(scopeId), true);
+  assert.equal(db.tenants.get(scopeId).legacy_scope_adopted, false);
+
+  const replay = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { method: "POST", headers, body: JSON.stringify({ confirmation: "START OVER", idempotencyKey: "reset-one-0001", sourceSurface: "site" }) }), db);
+  assert.equal((await replay.json()).receipt.replay, true);
+});
+
+test("kitchen reset rejects signed-out and cross-origin callers", async () => {
+  const db = new AuthDb();
+  const signedOut = await handleAuthRequest(new Request("https://finite.example/api/auth/reset"), db);
+  assert.equal(signedOut.status, 401);
+  const crossOrigin = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", {
+    method: "POST",
+    headers: { "oai-authenticated-user-id": "reset-user", origin: "https://attacker.example", "content-type": "application/json" },
+    body: JSON.stringify({ confirmation: "START OVER", idempotencyKey: "reset-two-0001", sourceSurface: "codex" }),
+  }), db);
+  assert.equal(crossOrigin.status, 403);
 });

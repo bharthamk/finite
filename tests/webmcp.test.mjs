@@ -189,3 +189,35 @@ test("context switches require the exact current plan guard and return a checksu
   assert.equal(switched.contextReceipt.from.planId, "plan_travel_europe");
   assert.equal(switched.contextReceipt.to.planId, "plan_event_launch");
 });
+
+test("Codex can preview and execute the same guarded kitchen reset only after exact human confirmation", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const calls = [];
+  const reset = {
+    preview: async () => ({ ok: true, code: "KITCHEN_RESET_PREVIEW", confirmation: "START OVER", counts: { plan_heads: 3 }, totalRecords: 3, acceptedStateChanged: false }),
+    reset: async (input) => {
+      calls.push(input);
+      return { ok: true, code: "KITCHEN_RESET", receipt: { receiptVersion: "finite-kitchen-reset.v1", resetId: "reset_test", clearedAt: "2026-08-27T00:00:00.000Z", sourceSurface: "codex", cleared: { plan_heads: 3 }, totalRecords: 3 }, acceptedStateChanged: true };
+    },
+  };
+  let resetCallback = 0;
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, reset, async () => { resetCallback += 1; }).useStableDispatcher();
+  await adapter.register();
+  const opened = await host.execute("finite_open_toolset", { group: "plan_management" });
+  assert(opened.actionNames.includes("finite_get_reset_preview"));
+  assert(opened.actionNames.includes("finite_reset_kitchen"));
+  const preview = await host.execute("finite_invoke", { action: "finite_get_reset_preview", arguments: {} });
+  assert.equal(preview.code, "KITCHEN_RESET_PREVIEW");
+  assert.equal(calls.length, 0);
+  const refused = await host.execute("finite_invoke", { action: "finite_reset_kitchen", arguments: { confirmation: "start over", idempotencyKey: "codex-reset-0001", sourceSurface: "codex" } });
+  assert.equal(refused.code, "INVALID_ACTION_ARGUMENTS");
+  assert.equal(calls.length, 0);
+  const result = await host.execute("finite_invoke", { action: "finite_reset_kitchen", arguments: { confirmation: "START OVER", idempotencyKey: "codex-reset-0001", sourceSurface: "codex" } });
+  assert.equal(result.code, "KITCHEN_RESET");
+  assert.equal(result.dispatchedAction, "finite_reset_kitchen");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { confirmation: "START OVER", idempotencyKey: "codex-reset-0001", sourceSurface: "codex" });
+  assert.equal(resetCallback, 1);
+});

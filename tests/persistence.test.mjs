@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, ScopedStorage } from "../dist-test/src/persistence.js";
+import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, ScopedStorage } from "../dist-test/src/persistence.js";
 
 test("browser persistence is account-scoped even when identities share one origin", () => {
   const browser = new MemoryStorage();
@@ -39,6 +39,21 @@ test("shared-browser startup removes foreign Finite caches without touching unre
   browser.setItem("unrelated-app-key", "preserve-me");
 
   assert.equal(clearForeignFiniteScopes(browser, "user_bbbbbbbbbbbbbbbb"), 1);
+  assert.equal(accountA.getItem("finite-plan.catalog.v1"), null);
+  assert.equal(accountB.getItem("finite-plan.catalog.v1"), "private-b");
+  assert.equal(browser.getItem("unrelated-app-key"), "preserve-me");
+});
+
+test("starting over clears only the current tenant browser namespace", () => {
+  const browser = new MemoryStorage();
+  const accountA = new ScopedStorage(browser, "user_aaaaaaaaaaaaaaaa");
+  const accountB = new ScopedStorage(browser, "user_bbbbbbbbbbbbbbbb");
+  accountA.setItem("finite-plan.catalog.v1", "private-a");
+  accountA.setItem("finite-plan.surface.active-profile", "plan-a");
+  accountB.setItem("finite-plan.catalog.v1", "private-b");
+  browser.setItem("unrelated-app-key", "preserve-me");
+
+  assert.equal(clearFiniteScope(browser, "user_aaaaaaaaaaaaaaaa"), 2);
   assert.equal(accountA.getItem("finite-plan.catalog.v1"), null);
   assert.equal(accountB.getItem("finite-plan.catalog.v1"), "private-b");
   assert.equal(browser.getItem("unrelated-app-key"), "preserve-me");

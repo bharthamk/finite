@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "arrival-human-experience-v57",
+  build: "first-user-reset-v58",
 } as const;

@@ -1,5 +1,5 @@
 import { compileBuiltInProfiles } from "./profiles.js";
-import { clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
+import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, PlanLifecycleStatus, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
@@ -12,6 +12,7 @@ import { finiteRelease } from "./release.js";
 import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
+import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -355,6 +356,7 @@ const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedP
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
+const resetRepository = new HttpKitchenResetRepository();
 let arrivalResult: ArrivalResult = await arrivalRepository.open();
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 await runtime.hydrateAcceptedTruth();
@@ -374,7 +376,11 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     activeEventId: runtime.kernel.activeEventId,
     manifestHash: manifest.manifestHash,
   };
-}, arrivalRepository, true).useBoundedOutputs().useStableDispatcher() : null;
+}, arrivalRepository, true, resetRepository, async () => {
+  clearFiniteScope(localStorage, authSession.storageScope);
+  if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
+  window.setTimeout(() => location.assign("/"), 1_500);
+}).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
   window.finiteEnterKitchen = (input, context) => adapter.enterKitchen(input, context);
@@ -388,12 +394,38 @@ let busy = false;
 let message = "";
 let messageScope = "";
 let draftReturnFormOpen = false;
+let kitchenResetPreview: KitchenResetResult | null = null;
 const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+
+const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span><button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
+
+const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
+
+const renderKitchenResetDialog = (): string => {
+  const total = Number(kitchenResetPreview?.totalRecords ?? 0);
+  const ready = kitchenResetPreview?.ok === true;
+  return `<dialog class="kitchen-reset-dialog" data-kitchen-reset-dialog aria-labelledby="kitchen_reset_title">
+    <form method="dialog" class="kitchen-reset-dialog__close"><button aria-label="Close start-over dialog">×</button></form>
+    <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / this kitchen only</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>This deletes the plans and work in this signed-in Finite kitchen. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system.</p></div>
+    ${ready ? `<dl class="kitchen-reset-dialog__counts">
+      <div><dt>Arrival history</dt><dd>${resetCategoryCount(["arrival_orders", "arrival_events"])}</dd></div>
+      <div><dt>Plans and revisions</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts"])}</dd></div>
+      <div><dt>Construction work</dt><dd>${resetCategoryCount(["construction_packets", "construction_return_reviews"])}</dd></div>
+      <div><dt>Evidence, decisions and receipts</dt><dd>${resetCategoryCount(["evidence_records", "domain_events", "receipts", "operation_log"])}</dd></div>
+      <div><dt>Authority and operator sessions</dt><dd>${resetCategoryCount(["authority_challenges", "challenge_consumptions", "operator_sessions"])}</dd></div>
+    </dl><p class="kitchen-reset-dialog__total"><strong>${total}</strong> durable record${total === 1 ? "" : "s"} will be cleared, plus this tenant's browser cache.</p>` : `<p class="kitchen-reset-dialog__warning">Finite could not verify the exact reset scope. Nothing can be deleted until the preview loads.</p>`}
+    <form data-kitchen-reset-form class="kitchen-reset-dialog__form">
+      <label><span>Type <strong>${kitchenResetConfirmation}</strong> to confirm</span><input name="confirmation" required autocomplete="off" spellcheck="false" pattern="${kitchenResetConfirmation}" ${ready ? "" : "disabled"}></label>
+      <div><button class="button button--danger" type="submit" ${ready && !busy ? "" : "disabled"}>Permanently start over</button><button class="text-button" type="button" data-action="cancel-kitchen-reset">Keep my kitchen</button></div>
+      <small>This cannot be undone. Finite keeps only a non-content reset receipt so an interrupted request cannot delete twice.</small>
+    </form>
+  </dialog>`;
+};
 
 const violationMessage = (code: string): string => ({
   MINIMUM_BUFFER: "This would use more breathing room than you allowed.",
@@ -564,7 +596,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       <div class="identity-cluster">
         ${order ? renderCodexHandoffButton() : ""}
         <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Saved kitchen"}</div>
-        <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
+        ${renderIdentityPill()}
       </div>
     </header>
     <main id="main" class="arrival-main">
@@ -642,7 +674,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
     <footer><p>The human orders. Codex operates. Finite keeps the work exact.</p><span>${order ? `Arrival · version ${order.version}` : "No arrival waiting · accepted plans remain available"}</span></footer>
-    ${renderCodexHandoffDialog()}`;
+    ${renderCodexHandoffDialog()}
+    ${renderKitchenResetDialog()}`;
   bindArrivalInteractions();
 };
 
@@ -704,8 +737,46 @@ const confirmArrivalInterpretation = async (): Promise<void> => {
   await render();
 };
 
+const openKitchenReset = async (): Promise<void> => {
+  if (busy) return;
+  kitchenResetPreview = await resetRepository.preview();
+  if (!kitchenResetPreview.ok) announce("Finite could not verify the reset scope. Nothing was deleted.");
+  await render();
+  const dialog = root.querySelector<HTMLDialogElement>("[data-kitchen-reset-dialog]");
+  dialog?.showModal();
+  dialog?.querySelector<HTMLInputElement>("input[name='confirmation']")?.focus();
+};
+
+const submitKitchenReset = async (form: HTMLFormElement): Promise<void> => {
+  if (busy || !kitchenResetPreview?.ok) return;
+  const confirmation = String(new FormData(form).get("confirmation") ?? "");
+  if (confirmation !== kitchenResetConfirmation) return;
+  busy = true;
+  const submit = form.querySelector<HTMLButtonElement>("button[type='submit']");
+  if (submit) { submit.disabled = true; submit.textContent = "Clearing this kitchen…"; }
+  const result = await resetRepository.reset({ confirmation, idempotencyKey: `site-reset-${crypto.randomUUID()}`, sourceSurface: "site" });
+  if (result.ok && result.code === "KITCHEN_RESET") {
+    clearFiniteScope(localStorage, authSession.storageScope);
+    if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
+    location.assign("/");
+    return;
+  }
+  busy = false;
+  announce(`Nothing was deleted: ${result.code}`);
+  kitchenResetPreview = await resetRepository.preview();
+  await render();
+  root.querySelector<HTMLDialogElement>("[data-kitchen-reset-dialog]")?.showModal();
+};
+
+const bindKitchenResetInteractions = (): void => {
+  root?.querySelector<HTMLButtonElement>("[data-action='open-kitchen-reset']")?.addEventListener("click", () => { void openKitchenReset(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='cancel-kitchen-reset']")?.addEventListener("click", () => root.querySelector<HTMLDialogElement>("[data-kitchen-reset-dialog]")?.close());
+  root?.querySelector<HTMLFormElement>("[data-kitchen-reset-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void submitKitchenReset(event.currentTarget as HTMLFormElement); });
+};
+
 function bindArrivalInteractions(): void {
   bindCodexHandoffInteractions();
+  bindKitchenResetInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
@@ -1064,7 +1135,7 @@ async function render(): Promise<SurfaceManifest> {
       <div class="identity-cluster">
         ${renderCodexHandoffButton()}
         <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Local kitchen"}</div>
-        <div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>
+        ${renderIdentityPill()}
       </div>
     </header>
     <main id="main">
@@ -1082,7 +1153,8 @@ async function render(): Promise<SurfaceManifest> {
       ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three kitchens. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
     <footer><p>Codex operates the kitchen. You choose, approve and consume the result.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
-    ${renderCodexHandoffDialog()}`;
+    ${renderCodexHandoffDialog()}
+    ${renderKitchenResetDialog()}`;
   bindInteractions();
   return manifest;
 }
@@ -1202,6 +1274,7 @@ const confirmExternalAction = async (externalActionChangeId: string): Promise<vo
 
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
+  bindKitchenResetInteractions();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='profile']").forEach((button) => button.addEventListener("click", () => switchProfile(button.dataset.profile as ProfileId)));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());

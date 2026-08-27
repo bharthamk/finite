@@ -4,6 +4,7 @@ import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
 import { assessExternalAction, currencyContract, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
 import { isWaitingArrivalStatus } from "./experience-route.js";
+import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetRepository, type KitchenResetResult } from "./kitchen-reset.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -61,6 +62,8 @@ const parameterDescriptions: Record<string, string> = {
   actionId: "Stable identity for the real-world action being assessed or recorded.",
   action: "Exact semantic action name returned by the currently open bounded manifest.",
   arguments: "Arguments matching the selected semantic action's input schema.",
+  confirmation: `Exact destructive phrase supplied by the human: ${kitchenResetConfirmation}.`,
+  sourceSurface: "Surface where the human requested this permanent reset.",
   actualId: "Canonical actual-ledger entry to correct.",
   actuals: "Known actual ledger entries for the plan draft.",
   allocation: "Finite allocation whose components must conserve the total.",
@@ -256,7 +259,7 @@ const toolsetGroups = {
   decisions: ["finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option", "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction", "finite_stage_plan_lifecycle", "finite_apply_confirmed_plan_lifecycle", "finite_get_group_decisions", "finite_stage_group_decision", "finite_apply_confirmed_group_decision", "finite_get_external_actions", "finite_stage_external_action", "finite_apply_confirmed_external_action"],
   evidence: ["finite_register_evidence", "finite_read_evidence", "finite_get_evidence_policy", "finite_assess_external_action", "finite_get_external_actions", "finite_stage_external_action", "finite_export_plan_receipt"],
   continuity: ["finite_save_operator_session", "finite_list_operator_sessions", "finite_resume_operator_session", "finite_close_operator_session", "finite_resume_human_handoff", "finite_get_effort_receipt"],
-  plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile"],
+  plan_management: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_amendment_blueprint", "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile", "finite_get_reset_preview", "finite_reset_kitchen"],
 } as const;
 type ToolsetGroup = keyof typeof toolsetGroups;
 const toolsetGroupNames = Object.keys(toolsetGroups) as ToolsetGroup[];
@@ -767,7 +770,7 @@ const getChefMenu = async (runtime: FinitePlanRuntime, arrival: ArrivalRepositor
   };
 };
 
-const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository): WebMCPToolDefinition[] => [
+const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
   define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
@@ -791,6 +794,12 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_close_operator_session", title: "Close operator work", description: "Close one exact non-authoritative work packet without changing accepted truth.", inputSchema: objectSchema({ sessionId: string }, ["sessionId"]), execute: (input, context) => runtime.closeOperatorSession(input as never, context) }),
   define({ name: "finite_resume_human_handoff", title: "Resume an exact human handoff", description: "Resume one unexpired, unconsumed human-created authority challenge only after the exact candidate has been independently rebuilt and staged on this device.", inputSchema: objectSchema({ challengeId: string }, ["challengeId"]), execute: (input, context) => runtime.kernel.resumeHumanAuthorityChallenge(input as never, context) }),
   define({ name: "finite_list_plans", title: "List compiled finite plans", description: "Read the active plan, available built-in and human-confirmed plans, and any staged activation awaiting the human.", readOnly: true, execute: () => runtime.listPlans() }),
+  define({ name: "finite_get_reset_preview", title: "Preview a permanent kitchen reset", description: "Read exact same-tenant record counts and the required confirmation phrase before offering a reset. This changes nothing and exposes no other tenant.", readOnly: true, execute: (_input, context) => reset.preview(context) }),
+  define({ name: "finite_reset_kitchen", title: "Permanently start this Finite kitchen over", description: `Permanently delete this authenticated tenant's Finite arrivals, construction work, plans, evidence, decisions, authority records, sessions, events, and receipts while preserving sign-in. Call only after the human explicitly requests the deletion and supplies ${kitchenResetConfirmation} exactly.`, inputSchema: objectSchema({ confirmation: { type: "string", enum: [kitchenResetConfirmation] }, idempotencyKey, sourceSurface: { type: "string", enum: ["codex"] } }, ["confirmation", "idempotencyKey", "sourceSurface"]), execute: async (input, context) => {
+    const result = await reset.reset({ confirmation: String(input.confirmation), idempotencyKey: String(input.idempotencyKey), sourceSurface: "codex" }, context);
+    if (result.ok && result.code === "KITCHEN_RESET") await onKitchenReset(result);
+    return result;
+  } }),
   define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid travel, renovation, or event-family profile plus its fixed fields, conservation law, evidence prerequisites, semantic requirements, bounds, and authority path.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
   define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, including a bounded plan-specific recovery menu, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Arrival construction is bound automatically to the exact current reviewed order. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, moves: { type: "object", maxProperties: 12, additionalProperties: { type: "object" } }, searchPolicy: { type: "object" }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input, context) => {
     const opened = await arrival.open({}, context);
@@ -1039,7 +1048,7 @@ export class FinitePlanWebMCPAdapter {
   private stableDispatcher = false;
   private readonly resultVault = new Map<string, { result: ToolResult; serialized: string; fullHash: string; toolName: string; paths: string[] }>();
 
-  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false) {}
+  constructor(private readonly host: ModelContextHost, private readonly runtime: FinitePlanRuntime, private readonly observer?: WebMCPToolObserver, private readonly arrival: ArrivalRepository = new HttpArrivalRepository(), private readonly entryAlreadyRegistered = false, private readonly reset: KitchenResetRepository = new HttpKitchenResetRepository(), private readonly onKitchenReset: (result: KitchenResetResult) => Promise<void> = async () => {}) {}
 
   useBoundedOutputs(): this {
     this.boundedOutputs = true;
@@ -1230,11 +1239,12 @@ export class FinitePlanWebMCPAdapter {
         const inputHash = await sha256(proofInput(input));
         const result = await tool.execute(input, context);
         const cancelled = String(result.code).startsWith("TOOL_CANCELLED");
+        const kitchenReset = result.code === "KITCHEN_RESET";
         const dispatchedAction = String(result.dispatchedAction ?? "");
         const refreshRouteAfterResponse = !cancelled && routeRefreshToolNames.has(tool.name === "finite_invoke" ? dispatchedAction : tool.name);
         let routedResult: ToolResult = result;
         const effectivelyReadOnly = tool.annotations?.readOnlyHint === true || (tool.name === "finite_invoke" && result.dispatchedReadOnly === true);
-        if (!cancelled && !effectivelyReadOnly && tool.name !== "finite_open_toolset") {
+        if (!cancelled && !kitchenReset && !effectivelyReadOnly && tool.name !== "finite_open_toolset") {
           const entered = await enterKitchen(this.runtime, this.arrival, { entryIntent: "continue_current" }, context);
           if (entered.ok) {
             const packet = record(entered.operatorPacket);
@@ -1243,7 +1253,7 @@ export class FinitePlanWebMCPAdapter {
         }
         routedResult = this.dispatcherResult(routedResult);
         let observed: ToolResult = routedResult;
-        if (this.observer && tool.name !== "finite_open_toolset") {
+        if (this.observer && !kitchenReset && tool.name !== "finite_open_toolset") {
           try {
             const proof = await this.observer({ toolName: tool.name, result: routedResult });
             if (proof) observed = { ...routedResult, surfaceSync: { ok: true, ...proof } };
@@ -1369,7 +1379,7 @@ export class FinitePlanWebMCPAdapter {
       inputSchema: objectSchema({ action: { type: "string", minLength: 1, maxLength: 200 }, arguments: { type: "object" } }, ["action"]),
       execute: (input, context) => this.dispatchAction(input, context),
     });
-    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival), openToolset];
+    this.executableTools = [...coreDefinitions(this.runtime, () => this.refreshContextualTools(), this.arrival, this.reset, this.onKitchenReset), openToolset];
     this.coreTools = this.executableTools.map((tool) => this.instrument(tool));
     this.coreTools.push(readResult, getEffortReceipt, this.instrument(invoke));
     this.entryTool = this.coreTools.find((tool) => tool.name === "finite_enter_kitchen") ?? null;
