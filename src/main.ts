@@ -90,7 +90,7 @@ const renderPublishedPage = (label: string, publishedAt: string, projection: Pub
   document.documentElement.dataset.skin = "quiet";
   root.innerHTML = `<div class="publication-page">
     <header class="publication-header">${renderBrand()}<div><span>${projection.mode === "live" ? "Live view" : "Frozen snapshot"}</span><strong>View only</strong></div></header>
-    <main id="main" class="publication-main"><div class="publication-context"><p>Shared as</p><h2>${escapePublicHtml(label)}</h2><span>Published ${escapePublicHtml(new Date(publishedAt).toLocaleDateString("en-AU", { dateStyle: "long" }))}</span></div>${renderPublicProjection(projection)}</main>
+    <main id="main" class="publication-main"><div class="publication-context"><p>Shared as</p><h2>${escapePublicHtml(label)}</h2><span>Published ${escapePublicHtml(new Date(publishedAt).toLocaleDateString(undefined, { dateStyle: "long" }))}</span></div>${renderPublicProjection(projection)}</main>
     <footer class="publication-footer"><p>This is a read-only page selected and published by the plan owner.</p><span>No editing · no approval controls · no access to the full plan</span></footer>
   </div>`;
 };
@@ -692,21 +692,23 @@ const renderPlanShareDialog = (): string => {
   const active = planPublications.filter((publication) => !publication.revokedAt);
   return `<dialog class="plan-share-dialog" data-plan-share-dialog aria-labelledby="plan_share_title">
     <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
-    <header class="plan-share-dialog__head"><p class="eyebrow">Publish a separate view</p><h2 id="plan_share_title">What should they see?</h2><p>Create a separate read-only page. Choose a live view that tracks accepted changes or freeze exactly what is current now.</p></header>
+    <header class="plan-share-dialog__head"><p class="eyebrow">Share a read-only page</p><h2 id="plan_share_title">Choose what they can see.</h2><p>Pick the parts of this plan that belong on the page. Make it live so accepted changes keep appearing, or freeze it exactly as it is now.</p></header>
     ${newPublicationUrl ? `<section class="plan-share-created" aria-labelledby="plan_share_created"><p class="eyebrow">Page published</p><h3 id="plan_share_created">Your private link is ready.</h3><div><input value="${escapeHtml(newPublicationUrl)}" readonly data-publication-url aria-label="Published plan URL"><button type="button" class="button" data-action="copy-publication-url">Copy link</button></div><p>Anyone with this unguessable link can see only the page preview you approved. Keep or revoke it whenever you like.</p></section>` : ""}
-    <form class="plan-share-form" data-plan-share-form>
-      <label class="plan-share-label"><span>Who or what is this page for?</span><input name="label" maxlength="80" required value="${escapeHtml(shareDraft.label)}" placeholder="Family update, contractor view…"><small>This label appears on the shared page.</small></label>
-      <fieldset class="plan-share-mode"><legend>Should it keep changing?</legend>
-        <label><input type="radio" name="mode" value="live" ${shareDraft.mode === "live" ? "checked" : ""}><span><strong>Live view</strong><small>Selected sections follow the latest accepted revision.</small></span></label>
-        <label><input type="radio" name="mode" value="frozen" ${shareDraft.mode === "frozen" ? "checked" : ""}><span><strong>Frozen snapshot</strong><small>This exact page never changes, even when the plan does.</small></span></label>
-      </fieldset>
-      <fieldset class="plan-share-sections"><legend>Choose what goes on the page</legend>${shareSectionOptions.map((option) => `<label><input type="checkbox" name="sections" value="${option.id}" ${shareDraft.sections.includes(option.id) ? "checked" : ""} ${option.id === "overview" ? "disabled" : ""}><span><strong>${option.name}${option.id === "overview" ? " · always included" : ""}</strong><small>${option.description}</small></span></label>`).join("")}</fieldset>
-      ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
-      <div class="plan-share-actions"><button type="submit" class="button button--secondary" data-share-intent="preview" ${shareBusy ? "disabled" : ""}>Preview exact page</button><button type="submit" class="button" data-share-intent="publish" ${shareBusy || !sharePreview || sharePreviewKey !== shareSelectionKey() ? "disabled" : ""}>Publish this page</button></div>
-    </form>
-    <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Exact preview</p><h3 id="plan_share_preview">Only this page will be shared.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not prepared"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
-    <section class="plan-share-existing" aria-labelledby="plan_share_existing"><header><p class="eyebrow">Published pages</p><h3 id="plan_share_existing">Active views for this plan</h3></header>${active.length ? `<p class="plan-share-existing__note">For privacy, a link can be copied only when it is first published. You can revoke any active page here.</p><ul>${active.map((publication) => `<li><div><strong>${escapeHtml(publication.label)}</strong><span>${publication.mode === "live" ? "Live view" : "Frozen snapshot"} · ${publication.sections.map((section) => shareSectionOptions.find((option) => option.id === section)?.name ?? section).join(", ")}</span><small>Published ${escapeHtml(new Date(publication.createdAt).toLocaleDateString("en-AU", { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-publication="${escapeHtml(publication.shareId)}">Revoke</button></li>`).join("")}</ul>` : `<p>No active pages for this plan.</p>`}</section>
-    <footer class="plan-share-boundary"><strong>Never included</strong><p>Arrival text, evidence, receipts, internal IDs or hashes, Codex tools, editing and approval controls.</p></footer>
+    <div class="plan-share-workspace">
+      <form class="plan-share-form" data-plan-share-form>
+        <label class="plan-share-label"><span>Name this shared page</span><input name="label" maxlength="80" required value="${escapeHtml(shareDraft.label)}" placeholder="Family update, contractor view…"><small>This name helps you recognise the link later.</small></label>
+        <fieldset class="plan-share-mode"><legend>Should it keep changing?</legend>
+          <label><input type="radio" name="mode" value="live" ${shareDraft.mode === "live" ? "checked" : ""}><span><strong>Live</strong><small>Follows accepted changes.</small></span></label>
+          <label><input type="radio" name="mode" value="frozen" ${shareDraft.mode === "frozen" ? "checked" : ""}><span><strong>Frozen</strong><small>Never changes.</small></span></label>
+        </fieldset>
+        <fieldset class="plan-share-sections"><legend>What goes on the page?</legend>${shareSectionOptions.map((option) => `<label><input type="checkbox" name="sections" value="${option.id}" ${shareDraft.sections.includes(option.id) ? "checked" : ""} ${option.id === "overview" ? "disabled" : ""}><span><strong>${option.name}${option.id === "overview" ? " · always" : ""}</strong><small>${option.description}</small></span></label>`).join("")}</fieldset>
+        ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
+        <div class="plan-share-actions"><button type="submit" class="button button--secondary" data-share-intent="preview" ${shareBusy ? "disabled" : ""}>Update preview</button><button type="submit" class="button" data-share-intent="publish" ${shareBusy || !sharePreview || sharePreviewKey !== shareSelectionKey() ? "disabled" : ""}>Publish this page</button><small data-share-preview-state>${sharePreview && sharePreviewKey === shareSelectionKey() ? "Preview matches your choices." : "Preview your choices before publishing."}</small></div>
+      </form>
+      <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Their view</p><h3 id="plan_share_preview">This is all they can see.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not ready"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
+    </div>
+    <section class="plan-share-existing" aria-labelledby="plan_share_existing"><header><p class="eyebrow">Links you’ve shared</p><h3 id="plan_share_existing">Active pages</h3></header>${active.length ? `<p class="plan-share-existing__note">For privacy, a link can be copied only when it is first published. You can revoke any active page here.</p><ul>${active.map((publication) => `<li><div><strong>${escapeHtml(publication.label)}</strong><span>${publication.mode === "live" ? "Live view" : "Frozen snapshot"} · ${publication.sections.map((section) => shareSectionOptions.find((option) => option.id === section)?.name ?? section).join(", ")}</span><small>Published ${escapeHtml(new Date(publication.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-publication="${escapeHtml(publication.shareId)}">Revoke</button></li>`).join("")}</ul>` : `<p>You haven’t published a page for this plan yet.</p>`}</section>
+    <footer class="plan-share-boundary"><strong>Stays private</strong><p>Your original request, notes, working details, editing and approval controls.</p></footer>
   </dialog>`;
 };
 
@@ -1091,7 +1093,20 @@ const bindPlanShareInteractions = (): void => {
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogMode = "closed"; dialog.close(); } });
   root.querySelector<HTMLFormElement>("[data-share-plan-choice]")?.addEventListener("submit", (event) => { event.preventDefault(); void choosePlanToShare(event.currentTarget as HTMLFormElement); });
   root.querySelector<HTMLButtonElement>("[data-action='start-plan-from-share']")?.addEventListener("click", () => { void startNewPlan(); });
-  root.querySelector<HTMLFormElement>("[data-plan-share-form]")?.addEventListener("submit", (event) => {
+  const shareForm = root.querySelector<HTMLFormElement>("[data-plan-share-form]");
+  const refreshShareDraftState = (): void => {
+    if (!shareForm) return;
+    shareDraft = readShareDraft(shareForm);
+    newPublicationUrl = "";
+    const matchesPreview = Boolean(sharePreview) && sharePreviewKey === shareSelectionKey();
+    const publishButton = shareForm.querySelector<HTMLButtonElement>("[data-share-intent='publish']");
+    if (publishButton) publishButton.disabled = shareBusy || !matchesPreview;
+    const previewState = shareForm.querySelector<HTMLElement>("[data-share-preview-state]");
+    if (previewState) previewState.textContent = matchesPreview ? "Preview matches your choices." : "Choices changed — update the preview.";
+  };
+  shareForm?.addEventListener("input", refreshShareDraftState);
+  shareForm?.addEventListener("change", refreshShareDraftState);
+  shareForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.shareIntent === "publish" ? "publish" : "preview";
     void submitPlanShare(event.currentTarget as HTMLFormElement, intent);

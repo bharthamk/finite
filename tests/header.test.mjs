@@ -101,9 +101,15 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(source, /Sign in to publish a view\./);
   assert.match(source, /Live view/);
   assert.match(source, /Frozen snapshot/);
-  assert.match(source, /Preview exact page/);
+  assert.match(source, /data-share-intent="preview"[^>]*>Update preview/);
   assert.match(source, /Publish this page/);
-  assert.match(source, /Never included/);
+  assert.match(source, /class="plan-share-workspace"/);
+  assert.match(source, /This is all they can see\./);
+  assert.match(source, /Choices changed — update the preview\./);
+  assert.match(source, /shareForm\?\.addEventListener\("change", refreshShareDraftState\)/);
+  assert.match(styles, /\.plan-share-workspace \{ display:grid; grid-template-columns:/);
+  assert.match(styles, /\.plan-share-preview \{ position:sticky;/);
+  assert.match(source, /Stays private/);
   assert.match(source, /No editing · no approval controls · no access to the full plan/);
   assert.match(shell, /!location\.pathname\.startsWith\("\/share\/"\)/);
   assert.match(styles, /\.publication-page/);
@@ -117,7 +123,7 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   ]) assert.doesNotMatch(source, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   assert.doesNotMatch(handoffSource, /Bring Codex into the kitchen\.|points to the kitchen and the correct first tool/);
   assert.doesNotMatch(consumerServerCopy, /available in (?:this|a signed-in) kitchen|resetting a kitchen|clear this Finite kitchen/i);
-  assert.match(source, /Only this page will be shared\./);
+  assert.match(source, /This is all they can see\./);
   assert.match(source, /Same plan\. Same saved starting point\./);
   assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan\./);
 });

@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "trimmed-handoff-copy-v81",
+  build: "share-preview-workspace-v82",
 } as const;
