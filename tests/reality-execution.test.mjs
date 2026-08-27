@@ -83,6 +83,7 @@ test("dropped commit responses recover both new ledgers with the same determinis
     const repository = {
       initialize: (...args) => durable.initialize(...args),
       load: (...args) => durable.load(...args),
+      createAuthorityChallenge: (...args) => durable.createAuthorityChallenge(...args),
       async commit(...args) {
         const result = await durable.commit(...args);
         if (loseNextResponse) { loseNextResponse = false; throw new Error("injected response loss after durable commit"); }

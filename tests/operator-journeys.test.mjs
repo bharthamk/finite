@@ -129,6 +129,7 @@ for (const [profileId, scenario] of Object.entries(scenarios)) {
     assert.equal(applied.operationProof.before.revision, 1);
     assert.equal(applied.operationProof.after.revision, 2);
     await verifyOperationProof(applied, "finite_apply_approved_option");
+    await adapter.waitForRouteSettlement();
 
     scenario.assertOutcome(runtime.kernel);
     assert.equal(allocationTotal(runtime.kernel.accepted), runtime.kernel.accepted.totalBudgetMinor);

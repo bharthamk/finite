@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The accepted v55 gate is 140/140 tests, no pending D1 migration, a successful
+The accepted v56 gate is 148/148 tests, no pending D1 migration, a successful
 TypeScript check, a successful Vite client/Worker build, and zero runtime audit
 findings from `npm audit --omit=dev`.
 

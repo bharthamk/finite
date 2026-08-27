@@ -5,7 +5,7 @@ import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.j
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter } from "../dist-test/src/webmcp.js";
-import { handleArrivalRequest } from "../dist-test/worker/arrival.js";
+import { acceptedPlanHeadIsCurrent, handleArrivalRequest } from "../dist-test/worker/arrival.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -224,6 +224,29 @@ test("arrival API refuses missing identity and cross-origin writes before touchi
   const crossOrigin = await handleArrivalRequest(new Request("https://finite.example/api/arrivals", { method: "POST", headers: { origin: "https://attacker.example", "content-type": "application/json", "oai-authenticated-user-id": "user-a" }, body: "{}" }), unavailableDb);
   assert.equal(crossOrigin.status, 403);
   assert.equal((await crossOrigin.json()).code, "CROSS_ORIGIN_WRITE_REFUSED");
+});
+
+test("an arrival can close only against the exact durable accepted plan head", async () => {
+  const rows = new Map();
+  const db = {
+    prepare() {
+      const values = [];
+      return {
+        bind(...next) { values.push(...next); return this; },
+        async first() { return rows.get(`${values[0]}:${values[1]}`) ?? null; },
+      };
+    },
+  };
+  const scopeId = "user_arrival_head_test";
+  const planId = "plan_trip_exact";
+  const profileHash = "a".repeat(64);
+  assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, false);
+  rows.set(`${scopeId}:${planId}`, { profile_hash: profileHash, revision: 2 });
+  assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, false);
+  rows.set(`${scopeId}:${planId}`, { profile_hash: "b".repeat(64), revision: 3 });
+  assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, false);
+  rows.set(`${scopeId}:${planId}`, { profile_hash: profileHash, revision: 3 });
+  assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, true);
 });
 
 test("kitchen entry distinguishes no waiting order from an unreadable arrival service", async () => {

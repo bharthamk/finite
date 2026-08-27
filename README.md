@@ -46,10 +46,13 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Failure-atomic accepted-state persistence: option, actual-correction, and preference commits restore memory, pending work, authority, receipts, and idempotency maps if the snapshot write fails, then permit exact retry.
 - Transactional D1 accepted truth: plan heads, immutable revision snapshots, receipts, domain events, and accepted evidence commit behind an async repository boundary with optimistic concurrency and deterministic retry identity.
 - Cross-browser restore from D1 with client-side profile, finite-total, receipt, evidence, lineage, and snapshot-hash verification; browser snapshots are now only a best-effort cache when the remote repository is present.
-- Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and the first owner atomically adopts the prior `owner-private-v1` lineage once while later tenants receive empty namespaces.
+- Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and every new account/demo starts empty. Automatic “first account wins” legacy adoption has been removed; any future legacy transfer must be an explicit audited owner operation.
+- Account-scoped browser persistence: snapshots, custom-plan catalog, construction work, activation receipts, and active selection are namespaced by a server-derived opaque scope, so two identities sharing one browser origin cannot see or initialize from one another's cache.
+- Durable custom-plan catalog truth: D1 persists the complete validated compiler definition, evidence bundle, activation lineage, and receipt needed to reconstruct a custom adaptive plan on a browser-empty device.
 - Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, tenant data, and authority traces are purged on end or expiry.
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
-- Five-minute exact-command human handoff challenges can be resumed only after independent candidate reconstruction and are consumed in the same D1 transaction as the accepted commit.
+- Five-minute exact-command human challenges now bind every accepted mutation—options, corrections, preference changes, lifecycle, group decisions, external-action truth, and plan activation—and are consumed in the same D1 transaction as the accepted commit.
+- Production responses carry a consistent CSP, opener/resource isolation, permissions policy, no-referrer, and MIME-sniffing protections; production source maps are not published.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
 - Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
@@ -96,7 +99,7 @@ available rather than being silently overwritten.
 Construction work has a separate persistence law. The latest typed intake or
 compiled draft is saved in the authenticated tenant as an expiring,
 checksum-bound packet so Codex can safely resume after reload or on another
-browser surface. Browser storage is only a cache and one-time migration source.
+browser surface. Browser storage is only an account-scoped cache. An already-adopted historical owner may copy its own inert pre-scope browser cache once; no new account receives legacy server data automatically.
 The consumer's confirmation is never part of that packet and must be recreated
 on the restored exact hashes. Arrival-built construction also binds the exact
 human-order id, version, and checksum. If the order advances, arrival
@@ -129,7 +132,7 @@ testing, not basic Site Tools availability.
 - `worker/arrival.ts` — same-origin D1 arrival API with append-only human input, labelled Codex interpretation, operator checkpoints, and fail-closed order-version guards.
 - `src/construction-packet.ts` and `worker/construction-packet.ts` — authenticated cross-surface construction repository, server integrity and source guards, authority exclusion, and discard tombstones.
 - `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
-- `src/persistence.ts` — accepted snapshot, plan catalog, evidence bundle, and activation-receipt storage.
+- `src/persistence.ts` — account-scoped accepted snapshot, plan catalog, evidence bundle, construction, and activation-receipt cache storage.
 - `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
 - `src/operator-policy.ts` — explicit AUD ledger law, external execution-state ladder, 24-rule human-reality contract, and named group decision protocols.
 - `src/release.ts` — single release marker consumed by both the client and Worker shell.
@@ -164,5 +167,6 @@ testing, not basic Site Tools availability.
 - `WEBMCP_ROUTE_AND_EFFORT_ACCEPTANCE_2026-08-27.md` — post-response route replacement, legacy unregister-cancellation proof, arrival route arbitration, and hash-verifiable operator-effort evaluation.
 - `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
 - `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
-- `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — authenticated tenancy, one-time legacy adoption, expiring operator sessions, exact human challenges, cross-device family journeys, and isolation/replay/expiry proof.
+- `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — historical authenticated-tenancy and cross-device proof; its automatic legacy-adoption rule is explicitly superseded by the fresh-eyes release.
+- `FRESH_EYES_INTEGRITY_ACCEPTANCE_2026-08-27.md` — whole-codebase review, account isolation, durable custom-plan portability, generalized authority, arrival integrity, cleanup, security headers, deterministic endurance, and release proof.
 - `AUTH_ENTRY_ACCEPTANCE_2026-08-26.md` — provider-owned login, first-use kitchen provisioning, isolated demo lifecycle, signed-out WebMCP boundary, and portable OIDC release contract.

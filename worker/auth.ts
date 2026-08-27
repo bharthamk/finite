@@ -67,6 +67,8 @@ const purgeDemoScope = async (db: D1Database, scopeId: string): Promise<void> =>
   await db.batch([
     db.prepare("DELETE FROM arrival_events WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM arrival_orders WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM construction_return_reviews WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM construction_packets WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM challenge_consumptions WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM authority_challenges WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM operator_sessions WHERE scope_id = ?").bind(scopeId),
@@ -75,11 +77,18 @@ const purgeDemoScope = async (db: D1Database, scopeId: string): Promise<void> =>
     db.prepare("DELETE FROM domain_events WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM receipts WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM activation_receipts WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM plan_catalog WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM plan_revisions WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM plan_heads WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM demo_sessions WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM tenant_accounts WHERE scope_id = ?").bind(scopeId),
   ]);
+};
+
+const purgeExpiredDemoScopes = async (db: D1Database): Promise<void> => {
+  const expired = await db.prepare("SELECT scope_id FROM demo_sessions WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 10")
+    .bind(new Date().toISOString()).all<{ scope_id: string }>();
+  for (const row of expired.results) await purgeDemoScope(db, row.scope_id);
 };
 
 const accountPrincipal = (request: Request): FinitePrincipal | null => {
@@ -123,26 +132,36 @@ export const resolveRequestPrincipal = async (request: Request, db: D1Database):
   };
 };
 
-const publicSession = (principal: FinitePrincipal | null): JsonRecord => principal ? {
-  ok: true,
-  code: principal.kind === "demo" ? "DEMO_SESSION" : "AUTHENTICATED_SESSION",
-  session: {
-    kind: principal.kind,
-    provider: principal.provider,
-    displayName: principal.displayName,
-    email: principal.email,
-    expiresAt: principal.expiresAt,
-  },
-} : {
-  ok: true,
-  code: "SIGNED_OUT",
-  session: null,
-  signInPath: "/signin-with-chatgpt",
+export const principalStorageScope = async (principal: FinitePrincipal): Promise<{ scopeId: string; userIdHash: string }> => {
+  const userIdHash = await authSha256(principal.tenantIdentity);
+  return { scopeId: `${principal.kind === "demo" ? "demo" : "user"}_${userIdHash.slice(0, 32)}`, userIdHash };
+};
+
+const publicSession = async (principal: FinitePrincipal | null, db: D1Database): Promise<JsonRecord> => {
+  if (!principal) return { ok: true, code: "SIGNED_OUT", session: null, signInPath: "/signin-with-chatgpt" };
+  const { scopeId } = await principalStorageScope(principal);
+  const adopted = principal.kind === "account"
+    ? await db.prepare("SELECT scope_id FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1").bind(scopeId).first()
+    : null;
+  return {
+    ok: true,
+    code: principal.kind === "demo" ? "DEMO_SESSION" : "AUTHENTICATED_SESSION",
+    session: {
+      kind: principal.kind,
+      provider: principal.provider,
+      displayName: principal.displayName,
+      email: principal.email,
+      expiresAt: principal.expiresAt,
+      storageScope: scopeId,
+      legacyBrowserCacheEligible: Boolean(adopted),
+    },
+  };
 };
 
 const createDemoSession = async (request: Request, db: D1Database): Promise<Response> => {
+  await purgeExpiredDemoScopes(db);
   const existing = await resolveRequestPrincipal(request, db);
-  if (existing) return response(200, publicSession(existing));
+  if (existing) return response(200, await publicSession(existing, db));
   const token = randomToken();
   const sessionHash = await authSha256({ demoToken: token });
   const identityHash = await authSha256({ demoSessionHash: sessionHash });
@@ -158,7 +177,7 @@ const createDemoSession = async (request: Request, db: D1Database): Promise<Resp
   return response(201, {
     ok: true,
     code: "DEMO_SESSION_CREATED",
-    session: { kind: "demo", provider: "demo", displayName: "Demo diner", email: null, expiresAt },
+    session: { kind: "demo", provider: "demo", displayName: "Demo diner", email: null, expiresAt, storageScope: scopeId, legacyBrowserCacheEligible: false },
   }, { "set-cookie": demoCookie(token, demoTtlSeconds) });
 };
 
@@ -178,7 +197,7 @@ export const handleAuthRequest = async (request: Request, db: D1Database): Promi
   if (!url.pathname.startsWith("/api/auth/")) return null;
   if (request.method !== "GET" && !sameOriginWrite(request)) return response(403, { ok: false, code: "CROSS_ORIGIN_WRITE_REFUSED", message: "Finite writes must be same-origin." });
   try {
-    if (request.method === "GET" && url.pathname === "/api/auth/session") return response(200, publicSession(await resolveRequestPrincipal(request, db)));
+    if (request.method === "GET" && url.pathname === "/api/auth/session") return response(200, await publicSession(await resolveRequestPrincipal(request, db), db));
     if (request.method === "POST" && url.pathname === "/api/auth/demo") return createDemoSession(request, db);
     if (request.method === "POST" && url.pathname === "/api/auth/demo/end") return endDemoSession(request, db);
     return response(405, { ok: false, code: "METHOD_NOT_ALLOWED", message: "Unsupported authentication operation." });

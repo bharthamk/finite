@@ -92,6 +92,22 @@ export const activationReceipts = sqliteTable("activation_receipts", {
   index("idx_activation_receipts_scope_target").on(table.scopeId, table.toPlanId),
 ]);
 
+export const planCatalog = sqliteTable("plan_catalog", {
+  scopeId: text("scope_id").notNull(),
+  planId: text("plan_id").notNull(),
+  profileId: text("profile_id").notNull(),
+  profileHash: text("profile_hash").notNull(),
+  definitionJson: text("definition_json").notNull(),
+  evidenceJson: text("evidence_json").notNull(),
+  lineageJson: text("lineage_json"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.planId] }),
+  index("idx_plan_catalog_scope_profile").on(table.scopeId, table.profileId),
+  index("idx_plan_catalog_scope_updated").on(table.scopeId, table.updatedAt),
+]);
+
 export const operationLog = sqliteTable("operation_log", {
   scopeId: text("scope_id").notNull(),
   operationHash: text("operation_hash").notNull(),

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
-import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
-import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
-import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
+import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
+import { compileBuiltInProfiles, getProfileDefinition } from "../dist-test/src/profiles.js";
+import { compileCatalogEntries, FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { handleAcceptedTruthRequest } from "../dist-test/worker/accepted-truth.js";
 
 const makeRuntime = (profiles, profileId, repository, storage = new MemoryStorage()) =>
@@ -166,6 +166,48 @@ test("a revision-two browser cache loads the authoritative head before attemptin
   assert.equal(hydrated.code, "ACCEPTED_TRUTH_CURRENT");
   assert.equal(cachedReload.kernel.acceptedTruth.status, "ready");
   assert.equal(cachedReload.kernel.revision, 2);
+});
+
+test("a custom compiled plan is reconstructable from durable catalog truth on a browser-empty device", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const repository = new MemoryAcceptedTruthRepository();
+  const firstStorage = new MemoryStorage();
+  const firstCatalog = new PlanCatalogStore(firstStorage);
+  const first = new FinitePlanRuntime(profiles, new PlanSnapshotStore(firstStorage), "travel", firstCatalog, [], () => new Date("2026-08-26T00:00:00.000Z"), repository);
+  assert.equal((await first.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_INITIALIZED");
+
+  const definition = getProfileDefinition("event");
+  definition.planId = "plan_event_durable_catalog";
+  definition.name = "Durable catalog event";
+  definition.surface.hero = { eyebrow: "Durable event", title: "A custom surface follows the plan.", brief: "This exact compiled surface must survive an empty browser." };
+  const staged = await first.stagePlanDraft(definition);
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED");
+  const confirmed = first.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  const activated = await first.activateConfirmedPlanDraft({
+    draftId: staged.draft.draftId,
+    confirmationId: confirmed.confirmation.confirmationId,
+    expectedPlanId: "plan_travel_europe",
+    expectedRevision: 1,
+    idempotencyKey: "durable-catalog-activation-0001",
+  });
+  assert.equal(activated.code, "PLAN_ACTIVATED");
+
+  const remoteCatalog = await repository.listCatalog();
+  const customEntry = remoteCatalog.entries.find((entry) => entry.definition.planId === definition.planId);
+  assert(customEntry);
+  assert.equal(customEntry.definition.surface.hero.title, "A custom surface follows the plan.");
+
+  const emptyBrowser = new MemoryStorage();
+  const emptyCatalog = new PlanCatalogStore(emptyBrowser);
+  for (const entry of remoteCatalog.entries) emptyCatalog.save(entry.definition, entry.evidenceRecords, entry.lineage);
+  for (const receipt of remoteCatalog.activationReceipts) emptyCatalog.saveActivationReceipt(receipt);
+  const compiled = await compileCatalogEntries(emptyCatalog.load(), emptyCatalog.loadActivationReceipts());
+  const second = new FinitePlanRuntime(profiles, new PlanSnapshotStore(emptyBrowser), definition.planId, emptyCatalog, compiled, () => new Date("2026-08-26T00:01:00.000Z"), repository);
+  assert.equal(second.kernel.profile.surface.hero.title, "A custom surface follows the plan.");
+  assert.equal((await second.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_CURRENT");
+  assert.equal(second.kernel.profile.planId, definition.planId);
+  assert.equal(second.kernel.accepted.totalBudgetMinor, 300_000);
+  assert.equal(second.kernel.accepted.bufferMinor, 40_000);
 });
 
 for (const profileId of ["travel", "renovation", "event"]) {

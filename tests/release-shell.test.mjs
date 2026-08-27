@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { finiteRelease, serveFiniteReleaseShell } from "../dist-test/worker/index.js";
+import { finiteRelease, serveFiniteReleaseShell, withSecurityHeaders } from "../dist-test/worker/index.js";
 
 const oldHtml = `<!doctype html><html><head><meta name="finite-build" content="old" /><link rel="stylesheet" href="/assets/index-old.css"><title>Finite</title></head><body><script type="module" src="/assets/index-old.js"></script></body></html>`;
 
@@ -24,4 +24,16 @@ test("the Worker serves one no-store release shell from the single release sourc
 
 test("release-shell selection ignores non-page routes", async () => {
   assert.equal(await serveFiniteReleaseShell(new Request("https://finite.example/api/anything"), new ReleaseAssets()), null);
+});
+
+test("every Worker response receives the production isolation and content-security contract", async () => {
+  const response = withSecurityHeaders(new Response("ok", { headers: { "content-type": "text/plain" } }));
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
+  assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
+  assert.equal(response.headers.get("origin-agent-cluster"), "?1");
+  assert.match(response.headers.get("permissions-policy"), /tools=\(self\)/);
+  assert.match(response.headers.get("content-security-policy"), /object-src 'none'/);
+  assert.equal(await response.text(), "ok");
 });

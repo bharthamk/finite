@@ -1,6 +1,6 @@
 import { clone, sha256 } from "./crypto.js";
 import { externalActionStatuses } from "./operator-policy.js";
-import type { CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanSnapshot, Receipt } from "./types.js";
+import type { CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanCatalogEntry, PlanSnapshot, Receipt } from "./types.js";
 
 export const acceptedTruthScope = "authenticated-user-v1";
 
@@ -34,7 +34,7 @@ export interface AuthorityChallenge {
   planId: string;
   profileHash: string;
   revision: number;
-  targetType: "plan_option";
+  targetType: AuthorityTargetType;
   targetId: string;
   contentHash: string;
   authorityId: string;
@@ -42,6 +42,43 @@ export interface AuthorityChallenge {
   createdAt: string;
   expiresAt: string;
 }
+
+export type AuthorityTargetType = Receipt["receiptType"] | "plan_activation";
+
+export interface DurablePlanCatalog {
+  entries: PlanCatalogEntry[];
+  activationReceipts: PlanActivationReceipt[];
+}
+
+const asRecord = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const receiptAuthorityBinding = (receipt: Receipt): { targetType: Receipt["receiptType"]; targetId: string; contentHash: string; authorityId: string } | null => {
+  const payload = asRecord(receipt.payload);
+  const eventKey = ({ actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Partial<Record<Receipt["receiptType"], string>>)[receipt.receiptType];
+  const event = eventKey ? asRecord(payload[eventKey]) : {};
+  const targetId = receipt.receiptType === "plan_option" ? payload.candidateId
+    : receipt.receiptType === "actual_correction" ? event.correctionId
+      : receipt.receiptType === "preference_change" ? event.preferenceChangeId
+        : receipt.receiptType === "plan_lifecycle" ? event.lifecycleChangeId
+          : receipt.receiptType === "group_decision" ? event.groupDecisionId
+            : event.externalActionChangeId;
+  const contentHash = receipt.receiptType === "plan_option" ? payload.contentHash : event.contentHash;
+  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : event.confirmationId;
+  return typeof targetId === "string" && typeof contentHash === "string" && typeof authorityId === "string" ? { targetType: receipt.receiptType, targetId, contentHash, authorityId } : null;
+};
+
+const catalogIntegrityIssues = async (entry: PlanCatalogEntry | undefined, snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt): Promise<string[]> => {
+  if (!entry) return ["durable plan catalog entry required"];
+  const issues: string[] = [];
+  if (entry.definition.planId !== snapshot.planId || entry.definition.profileId !== snapshot.profileId || await sha256(entry.definition) !== snapshot.profileHash) issues.push("catalog definition does not match compiled profile identity");
+  for (const evidence of entry.evidenceRecords) {
+    const { evidenceId: _evidenceId, recordHash, ...base } = evidence;
+    if (await sha256({ content: evidence.content }) !== evidence.contentHash) issues.push("catalog evidence content hash mismatch");
+    if (await sha256(base) !== recordHash) issues.push("catalog evidence provenance hash mismatch");
+  }
+  if (activationReceipt && (!entry.lineage || entry.lineage.activationReceiptId !== activationReceipt.receiptId || entry.lineage.activationKind !== activationReceipt.activationKind)) issues.push("catalog lineage does not match activation receipt");
+  return [...new Set(issues)];
+};
 
 export interface OperatorSession {
   sessionVersion: "finite-plan-operator-session.v1";
@@ -82,8 +119,9 @@ export class AcceptedTruthRepositoryError extends Error {
 export type RepositoryRequestContext = { signal?: AbortSignal };
 
 export interface AcceptedTruthRepository {
-  initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
+  initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, catalogEntry?: PlanCatalogEntry, authorityChallengeId?: string | null, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
   load(planId: string, profileHash: string, context?: RepositoryRequestContext): Promise<AcceptedTruthEnvelope | null>;
+  listCatalog?(context?: RepositoryRequestContext): Promise<DurablePlanCatalog>;
   commit(input: {
     expectedRevision: number;
     previousSnapshotHash: string;
@@ -93,6 +131,7 @@ export interface AcceptedTruthRepository {
     operationProof?: Record<string, unknown> | null;
   }, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
   createAuthorityChallenge?(input: {
+    targetType: AuthorityTargetType;
     planId: string;
     profileHash: string;
     revision: number;
@@ -227,16 +266,22 @@ const decodeJson = async <T>(response: Response): Promise<T> => {
 export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
   constructor(private readonly baseUrl = "/api/accepted-truth") {}
 
-  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
+  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, catalogEntry?: PlanCatalogEntry, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
     const envelope = await createAcceptedTruthEnvelope(snapshot, null);
-    const activationRequestHash = activationReceipt ? await sha256({ envelope, activationReceipt }) : null;
+    const activationRequestHash = activationReceipt ? await sha256({ envelope, activationReceipt, catalogEntry: catalogEntry ?? null, authorityChallengeId }) : null;
     const response = await fetch(`${this.baseUrl}/initialize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ envelope, activationReceipt: activationReceipt ? clone(activationReceipt) : null, activationRequestHash }),
+      body: JSON.stringify({ envelope, activationReceipt: activationReceipt ? clone(activationReceipt) : null, catalogEntry: catalogEntry ? clone(catalogEntry) : null, authorityChallengeId, activationRequestHash }),
       ...(context.signal ? { signal: context.signal } : {}),
     });
     return decodeJson<AcceptedTruthCommitResult>(response);
+  }
+
+  async listCatalog(context: RepositoryRequestContext = {}): Promise<DurablePlanCatalog> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/plan-catalog`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
+    const payload = await decodeJson<{ ok: true; entries: PlanCatalogEntry[]; activationReceipts: PlanActivationReceipt[] }>(response);
+    return { entries: clone(payload.entries), activationReceipts: clone(payload.activationReceipts) };
   }
 
   async load(planId: string, profileHash: string, context: RepositoryRequestContext = {}): Promise<AcceptedTruthEnvelope | null> {
@@ -257,11 +302,11 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
     return decodeJson<AcceptedTruthCommitResult>(response);
   }
 
-  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
+  async createAuthorityChallenge(input: { targetType: AuthorityTargetType; planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
     const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, targetType: "plan_option", ttlSeconds: 300 }),
+      body: JSON.stringify({ ...input, ttlSeconds: 300 }),
       ...(context.signal ? { signal: context.signal } : {}),
     });
     return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
@@ -300,12 +345,15 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
   private readonly challenges = new Map<string, AuthorityChallenge>();
   private readonly consumedChallenges = new Map<string, string>();
   private readonly sessions = new Map<string, OperatorSession>();
+  private readonly catalog = new Map<string, PlanCatalogEntry>();
 
   constructor(private readonly now: () => Date = () => new Date()) {}
 
-  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt): Promise<AcceptedTruthCommitResult> {
+  async initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, catalogEntry?: PlanCatalogEntry, authorityChallengeId: string | null = null): Promise<AcceptedTruthCommitResult> {
+    const catalogIssues = await catalogIntegrityIssues(catalogEntry, snapshot, activationReceipt);
+    if (catalogIssues.length) throw new AcceptedTruthRepositoryError("PLAN_CATALOG_INTEGRITY_FAILED", "Durable plan catalog entry failed validation.", { issues: catalogIssues });
     const proposed = await createAcceptedTruthEnvelope(snapshot, null);
-    const activationRequestHash = activationReceipt ? await sha256({ envelope: proposed, activationReceipt }) : null;
+    const activationRequestHash = activationReceipt ? await sha256({ envelope: proposed, activationReceipt, catalogEntry: catalogEntry ?? null, authorityChallengeId }) : null;
     if (activationReceipt) {
       const replay = this.activations.get(activationReceipt.idempotencyKey);
       if (replay) {
@@ -313,16 +361,29 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
         return { ...clone(replay.result), code: "ACCEPTED_TRUTH_CURRENT", replay: true };
       }
       if (!await activationReceiptIntegrity(activationReceipt)) throw new AcceptedTruthRepositoryError("ACTIVATION_RECEIPT_INTEGRITY_FAILED", "Activation receipt failed checksum validation.");
+      const challenge = authorityChallengeId ? this.challenges.get(authorityChallengeId) : null;
+      if (!challenge) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_REQUIRED", "A live human authority challenge is required for plan activation.");
+      if (Date.parse(challenge.expiresAt) <= this.now().getTime()) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_EXPIRED", "The human authority challenge expired.");
+      if (this.consumedChallenges.has(challenge.challengeId)) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_CONSUMED", "The human authority challenge was already consumed.");
+      const expectedCommandHash = await sha256({ targetType: "plan_activation", targetId: activationReceipt.draftId, planId: activationReceipt.fromPlanId, profileHash: challenge.profileHash, revision: activationReceipt.baseRevision, contentHash: activationReceipt.contentHash, authorityId: activationReceipt.confirmationId });
+      if (challenge.targetType !== "plan_activation" || challenge.planId !== activationReceipt.fromPlanId || challenge.revision !== activationReceipt.baseRevision || challenge.targetId !== activationReceipt.draftId || challenge.contentHash !== activationReceipt.contentHash || challenge.authorityId !== activationReceipt.confirmationId || challenge.commandHash !== expectedCommandHash) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_MISMATCH", "The human authority challenge does not bind this exact plan activation.");
     }
     const existing = this.heads.get(snapshot.planId);
     if (existing) {
       if (existing.profileHash !== snapshot.profileHash) throw new AcceptedTruthRepositoryError("ACCEPTED_PROFILE_CONFLICT", "The durable plan id is bound to a different profile hash.", { revision: existing.revision, profileHash: existing.profileHash });
+      if (catalogEntry) this.catalog.set(snapshot.planId, clone(catalogEntry));
       return { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: clone(existing), receipt: activationReceipt ? clone(activationReceipt) : null, requestHash: activationRequestHash, replay: true };
     }
     this.heads.set(snapshot.planId, clone(proposed));
+    if (catalogEntry) this.catalog.set(snapshot.planId, clone(catalogEntry));
     const result: AcceptedTruthCommitResult = { ok: true, code: "ACCEPTED_TRUTH_INITIALIZED", envelope: clone(proposed), receipt: activationReceipt ? clone(activationReceipt) : null, requestHash: activationRequestHash, replay: false };
     if (activationReceipt && activationRequestHash) this.activations.set(activationReceipt.idempotencyKey, { requestHash: activationRequestHash, result: clone(result) });
+    if (activationReceipt && authorityChallengeId) this.consumedChallenges.set(authorityChallengeId, activationReceipt.receiptId);
     return result;
+  }
+
+  async listCatalog(): Promise<DurablePlanCatalog> {
+    return { entries: [...this.catalog.values()].map(clone), activationReceipts: [...this.activations.values()].map(({ result }) => clone(result.receipt)).filter((receipt): receipt is PlanActivationReceipt => Boolean(receipt && "draftId" in receipt)) };
   }
 
   async load(planId: string, profileHash: string): Promise<AcceptedTruthEnvelope | null> {
@@ -340,15 +401,16 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
       if (replay.requestHash !== request.requestHash) throw new AcceptedTruthRepositoryError("IDEMPOTENCY_KEY_REUSED", "Accepted-truth idempotency key was reused with different content.");
       return { ...clone(replay.result), code: "ACCEPTED_TRUTH_REPLAY", replay: true };
     }
-    if (request.receipt.receiptType === "plan_option") {
+    const binding = receiptAuthorityBinding(request.receipt);
+    if (binding) {
       const challengeId = request.authorityChallengeId;
       const challenge = challengeId ? this.challenges.get(challengeId) : null;
       if (!challenge) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_REQUIRED", "A live human authority challenge is required.");
       if (Date.parse(challenge.expiresAt) <= this.now().getTime()) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_EXPIRED", "The human authority challenge expired.");
       if (this.consumedChallenges.has(challenge.challengeId)) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_CONSUMED", "The human authority challenge was already consumed.");
-      const expectedCommandHash = await sha256({ targetType: "plan_option", targetId: request.receipt.payload.candidateId, planId: request.envelope.planId, profileHash: request.envelope.profileHash, revision: request.expectedRevision, contentHash: request.receipt.payload.contentHash, authorityId: request.receipt.payload.approvalId });
+      const expectedCommandHash = await sha256({ ...binding, planId: request.envelope.planId, profileHash: request.envelope.profileHash, revision: request.expectedRevision });
       if (challenge.commandHash !== expectedCommandHash) throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_MISMATCH", "The human authority challenge does not bind this exact command.");
-    }
+    } else throw new AcceptedTruthRepositoryError("AUTHORITY_CHALLENGE_REQUIRED", "The accepted receipt has no exact human authority binding.");
     const current = this.heads.get(request.envelope.planId);
     if (!current) throw new AcceptedTruthRepositoryError("ACCEPTED_TRUTH_NOT_INITIALIZED", "The plan must be initialized before committing a revision.");
     if (current.profileHash !== request.envelope.profileHash) throw new AcceptedTruthRepositoryError("ACCEPTED_PROFILE_CONFLICT", "The durable profile hash changed.", { revision: current.revision, profileHash: current.profileHash });
@@ -364,14 +426,14 @@ export class MemoryAcceptedTruthRepository implements AcceptedTruthRepository {
     return result;
   }
 
-  async createAuthorityChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }): Promise<AuthorityChallenge> {
-    const commandHash = await sha256({ targetType: "plan_option", ...input });
+  async createAuthorityChallenge(input: { targetType: AuthorityTargetType; planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string }): Promise<AuthorityChallenge> {
+    const commandHash = await sha256(input);
     const challengeId = `authority_${commandHash.slice(0, 16)}`;
     const existing = this.challenges.get(challengeId);
     if (existing) return clone(existing);
     const now = this.now();
     const createdAt = now.toISOString();
-    const challenge: AuthorityChallenge = { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, targetType: "plan_option", ...clone(input), commandHash, createdAt, expiresAt: new Date(now.getTime() + 300_000).toISOString() };
+    const challenge: AuthorityChallenge = { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, ...clone(input), commandHash, createdAt, expiresAt: new Date(now.getTime() + 300_000).toISOString() };
     this.challenges.set(challengeId, clone(challenge));
     return challenge;
   }

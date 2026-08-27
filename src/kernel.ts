@@ -271,7 +271,7 @@ export class FinitePlanKernel {
     this.restore(snapshot);
   }
 
-  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt, context: RepositoryRequestContext = {}): Promise<ToolResult> {
+  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt, catalogEntry?: import("./types.js").PlanCatalogEntry, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}): Promise<ToolResult> {
     if (!this.acceptedRepository) return { ok: true, code: "LOCAL_ACCEPTED_TRUTH", acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     const localIssues = await snapshotIntegrityIssues(this.profile, this.snapshot());
     if (localIssues.length) {
@@ -282,7 +282,7 @@ export class FinitePlanKernel {
       const existing = await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash, context);
       const result = existing
         ? { ok: true as const, code: "ACCEPTED_TRUTH_CURRENT" as const, envelope: existing, receipt: null, requestHash: null, replay: true }
-        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt, context);
+        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt, catalogEntry, authorityChallengeId, context);
       const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
       const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
       if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
@@ -961,7 +961,7 @@ export class FinitePlanKernel {
     const approval: HumanApproval = { approvalId: makeId("approval"), candidateId, planId: this.profile.planId, revision: this.revision, contentHash: integrity.canonical.contentHash, warningsAcknowledged: clone(warningsAcknowledged), source: "human_action" };
     if (this.acceptedRepository?.createAuthorityChallenge) {
       try {
-        const challenge = await this.acceptedRepository.createAuthorityChallenge({ planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, targetId: candidateId, contentHash: integrity.canonical.contentHash, authorityId: approval.approvalId });
+        const challenge = await this.acceptedRepository.createAuthorityChallenge({ targetType: "plan_option", planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, targetId: candidateId, contentHash: integrity.canonical.contentHash, authorityId: approval.approvalId });
         approval.authorityChallengeId = challenge.challengeId;
       } catch (error) {
         return { ok: false, code: "HUMAN_AUTHORITY_CHALLENGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, next: "The option remains staged. Retry the human approval action while the authenticated handoff service is available." };
@@ -969,6 +969,18 @@ export class FinitePlanKernel {
     }
     this.approval = approval;
     return { ok: true, code: "HUMAN_APPROVAL_RECORDED", approval: clone(this.approval), acceptedStateChanged: false };
+  }
+
+  private async createConfirmationChallenge(targetType: Receipt["receiptType"], targetId: string, contentHash: string, authorityId: string, context: RepositoryRequestContext): Promise<string | ToolResult | null> {
+    if (!this.acceptedRepository?.createAuthorityChallenge) return null;
+    try {
+      const challenge = await this.acceptedRepository.createAuthorityChallenge({ targetType, planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, targetId, contentHash, authorityId }, context);
+      const expectedCommandHash = await sha256({ targetType, targetId, planId: this.profile.planId, profileHash: this.profile.profileHash, revision: this.revision, contentHash, authorityId });
+      if (challenge.targetType !== targetType || challenge.targetId !== targetId || challenge.planId !== this.profile.planId || challenge.profileHash !== this.profile.profileHash || challenge.revision !== this.revision || challenge.contentHash !== contentHash || challenge.authorityId !== authorityId || challenge.commandHash !== expectedCommandHash) return { ok: false, code: "AUTHORITY_CHALLENGE_MISMATCH", acceptedStateChanged: false };
+      return challenge.challengeId;
+    } catch (error) {
+      return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "HUMAN_AUTHORITY_CHALLENGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+    }
   }
 
   async resumeHumanAuthorityChallenge({ challengeId }: { challengeId: string }, context: RepositoryRequestContext = {}): Promise<ToolResult> {
@@ -1060,6 +1072,8 @@ export class FinitePlanKernel {
     const confirmation = this.preferenceConfirmation;
     if (!pending || pending.preferenceChangeId !== preferenceChangeId) return { ok: false, code: "PREFERENCE_CHANGE_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("preference_change", preferenceChangeId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
     const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.preferenceWeights = clone(pending.after);
@@ -1069,7 +1083,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("preference_change", fromRevision, idempotencyKey, { preferenceEvent: event, acceptedPreferenceWeights: clone(this.preferenceWeights) });
     this.preferenceIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "preference_change", receipt, null, context);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "preference_change", receipt, authorityChallenge, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "PREFERENCE_CHANGE_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1102,6 +1116,8 @@ export class FinitePlanKernel {
     const confirmation = this.lifecycleConfirmation;
     if (!pending || pending.lifecycleChangeId !== lifecycleChangeId) return { ok: false, code: "PLAN_LIFECYCLE_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("plan_lifecycle", lifecycleChangeId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
     const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.lifecycleStatus = pending.after;
@@ -1111,7 +1127,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("plan_lifecycle", fromRevision, idempotencyKey, { lifecycleEvent: event, lifecycle: { status: this.lifecycleStatus } });
     this.lifecycleIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_lifecycle", receipt, null, context);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "plan_lifecycle", receipt, authorityChallenge, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "PLAN_LIFECYCLE_APPLIED", lifecycle: { status: this.lifecycleStatus }, receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1153,6 +1169,8 @@ export class FinitePlanKernel {
     const confirmation = this.groupDecisionConfirmation;
     if (!pending || pending.groupDecisionId !== groupDecisionId) return { ok: false, code: "GROUP_DECISION_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("group_decision", groupDecisionId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
     const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.revision += 1;
@@ -1161,7 +1179,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("group_decision", fromRevision, idempotencyKey, { groupDecisionEvent: event });
     this.groupDecisionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "group_decision", receipt, null, context);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "group_decision", receipt, authorityChallenge, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "GROUP_DECISION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }
@@ -1210,6 +1228,8 @@ export class FinitePlanKernel {
     const confirmation = this.externalActionConfirmation;
     if (!pending || pending.externalActionChangeId !== externalActionChangeId) return { ok: false, code: "EXTERNAL_ACTION_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("external_action", externalActionChangeId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
     const checkpoint = this.checkpoint();
     const fromRevision = this.revision;
     this.revision += 1;
@@ -1218,7 +1238,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("external_action", fromRevision, idempotencyKey, { externalActionEvent: event });
     this.externalActionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "external_action", receipt, null, context);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "external_action", receipt, authorityChallenge, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "EXTERNAL_ACTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true, externalActionPerformedByFinite: false };
   }
@@ -1259,6 +1279,8 @@ export class FinitePlanKernel {
     const confirmation = this.correctionConfirmation;
     if (!pending || pending.correctionId !== correctionId) return { ok: false, code: "CORRECTION_NOT_STAGED", acceptedStateChanged: false };
     if (!confirmation || confirmation.confirmationId !== confirmationId || confirmation.contentHash !== pending.contentHash || confirmation.revision !== this.revision) return { ok: false, code: "CONFIRMATION_MISSING_OR_MISMATCHED", acceptedStateChanged: false };
+    const authorityChallenge = await this.createConfirmationChallenge("actual_correction", correctionId, pending.contentHash, confirmationId, context);
+    if (authorityChallenge && typeof authorityChallenge !== "string") return authorityChallenge;
     const currentActual = this.currentActuals().find((item) => item.actualId === pending.actualId);
     if (!currentActual || currentActual.currentAmountMinor !== pending.priorAmountMinor) return { ok: false, code: "ACTUAL_CHANGED_SINCE_STAGING", acceptedStateChanged: false };
     const checkpoint = this.checkpoint();
@@ -1271,7 +1293,7 @@ export class FinitePlanKernel {
     const receipt = await this.makeReceipt("actual_correction", fromRevision, idempotencyKey, { correctionEvent: event, accepted: clone(this.accepted) });
     this.correctionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();
-    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "actual_correction", receipt, null, context);
+    const storageFailure = await this.persistAcceptedOrRollback(checkpoint, "actual_correction", receipt, authorityChallenge, context);
     if (storageFailure) return storageFailure;
     return { ok: true, code: "ACTUAL_CORRECTION_APPLIED", receipt: clone(receipt), acceptedStateChanged: true };
   }

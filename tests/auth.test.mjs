@@ -7,7 +7,7 @@ class Statement {
   constructor(db, query, values = []) { this.db = db; this.query = query; this.values = values; }
   bind(...values) { return new Statement(this.db, this.query, values); }
   first() { return this.db.first(this.query, this.values); }
-  async all() { return { results: [] }; }
+  all() { return this.db.all(this.query, this.values); }
 }
 
 class AuthDb {
@@ -22,10 +22,15 @@ class AuthDb {
     if (query.includes("FROM demo_sessions WHERE scope_id")) return [...this.demos.values()].find((row) => row.scope_id === values[0]) ?? null;
     if (query.includes("FROM tenant_accounts WHERE scope_id")) {
       const row = this.tenants.get(values[0]);
-      return row && (!values[1] || row.user_id_hash === values[1]) ? { scope_id: row.scope_id } : null;
+      return row && (!values[1] || row.user_id_hash === values[1]) ? { scope_id: row.scope_id, legacy_scope_adopted: row.legacy_scope_adopted ? 1 : 0 } : null;
     }
     if (query.includes("FROM plan_heads")) return null;
     return null;
+  }
+
+  async all(query, values) {
+    if (query.includes("FROM demo_sessions WHERE expires_at <=")) return { results: [...this.demos.values()].filter((row) => row.expires_at <= values[0]).slice(0, 10).map(({ scope_id }) => ({ scope_id })) };
+    return { results: [] };
   }
 
   async batch(statements) {
@@ -59,8 +64,26 @@ test("Sites identity supplies first-use account registration without a Finite cr
   assert.deepEqual(await response.json(), {
     ok: true,
     code: "AUTHENTICATED_SESSION",
-    session: { kind: "account", provider: "chatgpt", displayName: "Dinner Guest", email: "diner@example.com", expiresAt: null },
+    session: {
+      kind: "account",
+      provider: "chatgpt",
+      displayName: "Dinner Guest",
+      email: "diner@example.com",
+      expiresAt: null,
+      storageScope: "user_6ecc4cd33b3921198473dd4b6786dd68",
+      legacyBrowserCacheEligible: false,
+    },
   });
+});
+
+test("new accounts never inherit the legacy owner namespace implicitly", async () => {
+  const db = new AuthDb();
+  const headers = { "oai-authenticated-user-id": "new-user-with-no-legacy-authority" };
+  const response = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/plan_travel_europe?profileHash=hash", { headers }), db);
+  assert.equal(response.status, 404);
+  assert.equal(db.tenants.size, 1);
+  assert.equal([...db.tenants.values()][0].legacy_scope_adopted, false);
+  assert.equal(db.statements.some(({ query }) => query.includes("owner-private-v1") || query.includes("legacy_scope_adopted = 1")), false);
 });
 
 test("signed-out visitors receive an official ChatGPT route and can create an isolated expiring demo", async () => {
@@ -74,6 +97,9 @@ test("signed-out visitors receive an official ChatGPT route and can create an is
     body: "{}",
   }), db);
   assert.equal(created.status, 201);
+  const createdPayload = await created.clone().json();
+  assert.match(createdPayload.session.storageScope, /^demo_[a-f0-9]{32}$/);
+  assert.equal(createdPayload.session.legacyBrowserCacheEligible, false);
   assert.match(created.headers.get("set-cookie"), /^finite_demo=.+HttpOnly; Secure; SameSite=Lax; Max-Age=86400$/);
   assert.equal(db.tenants.size, 1);
   assert.equal([...db.tenants.values()][0].legacy_scope_adopted, false);
@@ -102,9 +128,23 @@ test("ending or expiring a demo destroys its tenant namespace and bearer cookie"
   assert.equal(db.tenants.size, 0);
   assert.equal(db.statements.some(({ query }) => query === "DELETE FROM arrival_events WHERE scope_id = ?"), true);
   assert.equal(db.statements.some(({ query }) => query === "DELETE FROM arrival_orders WHERE scope_id = ?"), true);
+  assert.equal(db.statements.some(({ query }) => query === "DELETE FROM construction_return_reviews WHERE scope_id = ?"), true);
+  assert.equal(db.statements.some(({ query }) => query === "DELETE FROM construction_packets WHERE scope_id = ?"), true);
+  assert.equal(db.statements.some(({ query }) => query === "DELETE FROM plan_catalog WHERE scope_id = ?"), true);
 
   const after = await handleAuthRequest(new Request("https://finite.example/api/auth/session", { headers: { cookie } }), db);
   assert.equal((await after.json()).code, "SIGNED_OUT");
+});
+
+test("creating a demo opportunistically purges abandoned expired demo namespaces", async () => {
+  const db = new AuthDb();
+  db.tenants.set("demo_expired_scope", { scope_id: "demo_expired_scope", user_id_hash: "expired", legacy_scope_adopted: false, created_at: "2026-08-01T00:00:00.000Z" });
+  db.demos.set("expired_session_hash", { session_hash: "expired_session_hash", scope_id: "demo_expired_scope", created_at: "2026-08-01T00:00:00.000Z", expires_at: "2026-08-02T00:00:00.000Z" });
+
+  const response = await handleAuthRequest(new Request("https://finite.example/api/auth/demo", { method: "POST", headers: { origin: "https://finite.example" } }), db);
+  assert.equal(response.status, 201);
+  assert.equal(db.tenants.has("demo_expired_scope"), false);
+  assert.equal([...db.demos.values()].some(({ scope_id }) => scope_id === "demo_expired_scope"), false);
 });
 
 test("auth writes reject cross-origin requests before creating a demo", async () => {

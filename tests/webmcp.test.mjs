@@ -148,7 +148,8 @@ test("authority-only tools appear after human authority and remain for exact rec
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
   const host = new MemoryModelContext();
-  await new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository()).register();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await adapter.register();
   await host.execute("finite_open_toolset", { group: "planning" });
   assert.equal(host.tools.has("finite_apply_approved_option"), false);
   const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 1, nightlyMinor: 10_000, minimumBufferMinor: 0 });
@@ -168,6 +169,7 @@ test("authority-only tools appear after human authority and remain for exact rec
   const input = { candidateId: candidate.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "authority-discovery-0001" };
   const applied = await host.execute("finite_apply_approved_option", input);
   assert.equal(applied.code, "OPTION_APPLIED");
+  await adapter.waitForRouteSettlement();
   assert.equal(host.tools.has("finite_apply_approved_option"), true);
   assert.equal((await host.execute("finite_apply_approved_option", input)).code, "IDEMPOTENT_REPLAY");
 });

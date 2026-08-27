@@ -13,7 +13,10 @@ class MemoryModelContext {
     options.signal?.addEventListener("abort", () => this.tools.delete(tool.name), { once: true });
   }
   async execute(name, input = {}) {
-    return this.tools.get(name)?.execute(input) ?? { ok: false, code: "TOOL_NOT_FOUND", acceptedStateChanged: false };
+    const direct = this.tools.get(name);
+    if (direct) return direct.execute(input);
+    const dispatcher = this.tools.get("finite_invoke");
+    return dispatcher?.execute({ action: name, arguments: input }) ?? { ok: false, code: "TOOL_NOT_FOUND", acceptedStateChanged: false };
   }
 }
 
@@ -138,7 +141,7 @@ for (const [index, spec] of journeys.entries()) {
     const arrivals = new MemoryArrivalRepository(() => new Date(`2026-08-${String(1 + index).padStart(2, "0")}T10:00:00.000Z`));
     const runtime = new FinitePlanRuntime(profiles, snapshotStore, "travel", catalogStore);
     const host = new MemoryModelContext();
-    await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
+    await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).useStableDispatcher().register();
 
     // Human order → Codex interpretation → one material question → human review.
     await openGroup(host, "arrival");

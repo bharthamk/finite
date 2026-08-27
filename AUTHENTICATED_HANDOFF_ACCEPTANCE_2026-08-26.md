@@ -1,5 +1,7 @@
 # Authenticated cross-device handoff acceptance — 2026-08-26
 
+> Historical receipt: the automatic “first authenticated owner” legacy-adoption rule documented below was removed by `fresh-eyes-integrity-v56`. New identities now always start empty; any legacy transfer requires a separate explicit audited owner operation. The cross-device session, challenge, isolation, replay, and expiry results remain historical proof.
+
 ## Outcome
 
 Finite now has an authenticated operator-continuity layer without adding a

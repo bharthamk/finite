@@ -29,7 +29,7 @@ export default defineConfig(({ command }) => ({
   ],
   build: {
     target: "es2022",
-    sourcemap: true,
+    sourcemap: false,
   },
   server: {
     host: "127.0.0.1",

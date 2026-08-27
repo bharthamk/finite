@@ -1,4 +1,4 @@
-import { authSha256, resolveRequestPrincipal } from "./auth.js";
+import { principalStorageScope, resolveRequestPrincipal } from "./auth.js";
 
 interface D1Result<T = Record<string, unknown>> {
   success: boolean;
@@ -72,6 +72,25 @@ interface ActivationReceipt extends JsonRecord {
   fromPlanId: string;
   toPlanId: string;
   replayChecksum: string;
+  draftId: string;
+  confirmationId: string;
+  contentHash?: string;
+  baseRevision?: number;
+}
+
+interface CatalogEntry extends JsonRecord {
+  definition: JsonRecord;
+  evidenceRecords: JsonRecord[];
+  lineage?: JsonRecord;
+}
+
+interface CatalogRow {
+  plan_id: string;
+  profile_id: string;
+  profile_hash: string;
+  definition_json: string;
+  evidence_json: string;
+  lineage_json: string | null;
 }
 
 interface CommitRequest extends JsonRecord {
@@ -124,7 +143,6 @@ interface HeadRow {
   previous_snapshot_hash: string | null;
 }
 
-const legacyScopeId = "owner-private-v1";
 const contractScopeId = "authenticated-user-v1";
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 
@@ -145,26 +163,14 @@ const sha256 = async (value: unknown): Promise<string> => {
 export const ensureAuthenticatedTenant = async (request: Request, db: D1Database): Promise<string> => {
   const principal = await resolveRequestPrincipal(request, db);
   if (!principal) throw new Error("AUTHENTICATED_USER_REQUIRED");
-  const userIdHash = await authSha256(principal.tenantIdentity);
-  const scopeId = principal.kind === "demo" ? `demo_${userIdHash.slice(0, 32)}` : `user_${userIdHash.slice(0, 32)}`;
+  const { scopeId, userIdHash } = await principalStorageScope(principal);
   const existing = await db.prepare("SELECT scope_id FROM tenant_accounts WHERE scope_id = ? AND user_id_hash = ?")
     .bind(scopeId, userIdHash).first<{ scope_id: string }>();
   if (existing) return scopeId;
   const now = new Date().toISOString();
   const statements = [
-    principal.kind === "account"
-      ? db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM tenant_accounts WHERE legacy_scope_adopted = 1) THEN 0 ELSE 1 END, ?").bind(scopeId, userIdHash, now)
-      : db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) VALUES (?, ?, 0, ?)").bind(scopeId, userIdHash, now),
+    db.prepare("INSERT INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) VALUES (?, ?, 0, ?)").bind(scopeId, userIdHash, now),
   ];
-  if (principal.kind === "account") statements.push(
-    db.prepare("INSERT OR IGNORE INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) SELECT ?, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at FROM plan_heads WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO plan_revisions (scope_id, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at) SELECT ?, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at FROM plan_revisions WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO receipts (scope_id, plan_id, idempotency_key, receipt_id, receipt_type, from_revision, to_revision, replay_checksum, request_hash, response_json, created_at) SELECT ?, plan_id, idempotency_key, receipt_id, receipt_type, from_revision, to_revision, replay_checksum, request_hash, response_json, created_at FROM receipts WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO domain_events (scope_id, event_id, plan_id, receipt_id, event_type, from_revision, to_revision, event_json, created_at) SELECT ?, event_id, plan_id, receipt_id, event_type, from_revision, to_revision, event_json, created_at FROM domain_events WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO evidence_records (scope_id, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at) SELECT ?, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at FROM evidence_records WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO activation_receipts (scope_id, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at) SELECT ?, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at FROM activation_receipts WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-    db.prepare("INSERT OR IGNORE INTO operation_log (scope_id, operation_hash, plan_id, tool_name, result_code, before_revision, after_revision, proof_json, created_at) SELECT ?, operation_hash, plan_id, tool_name, result_code, before_revision, after_revision, proof_json, created_at FROM operation_log WHERE scope_id = ? AND EXISTS (SELECT 1 FROM tenant_accounts WHERE scope_id = ? AND legacy_scope_adopted = 1)").bind(scopeId, legacyScopeId, scopeId),
-  );
   try { await db.batch(statements); }
   catch {
     const concurrent = await db.prepare("SELECT scope_id FROM tenant_accounts WHERE scope_id = ? AND user_id_hash = ?").bind(scopeId, userIdHash).first();
@@ -207,6 +213,53 @@ const activationReceiptValid = async (receipt: ActivationReceipt): Promise<boole
     && receiptId === `plan_activation_${replayChecksum.slice(0, 16)}`
     && await sha256(base) === replayChecksum;
 };
+
+const authorityTargetTypes = new Set(["plan_option", "actual_correction", "preference_change", "plan_lifecycle", "group_decision", "external_action", "plan_activation"]);
+
+const receiptAuthorityBinding = (receipt: Receipt): { targetType: string; targetId: string; contentHash: string; authorityId: string } | null => {
+  const payload = receipt.payload;
+  const eventKey = ({ actual_correction: "correctionEvent", preference_change: "preferenceEvent", plan_lifecycle: "lifecycleEvent", group_decision: "groupDecisionEvent", external_action: "externalActionEvent" } as Record<string, string>)[receipt.receiptType];
+  const event = eventKey && payload[eventKey] && typeof payload[eventKey] === "object" && !Array.isArray(payload[eventKey]) ? payload[eventKey] as JsonRecord : null;
+  const targetId = receipt.receiptType === "plan_option" ? payload.candidateId
+    : receipt.receiptType === "actual_correction" ? event?.correctionId
+      : receipt.receiptType === "preference_change" ? event?.preferenceChangeId
+        : receipt.receiptType === "plan_lifecycle" ? event?.lifecycleChangeId
+          : receipt.receiptType === "group_decision" ? event?.groupDecisionId
+            : receipt.receiptType === "external_action" ? event?.externalActionChangeId : null;
+  const contentHash = receipt.receiptType === "plan_option" ? payload.contentHash : event?.contentHash;
+  const authorityId = receipt.receiptType === "plan_option" ? payload.approvalId : event?.confirmationId;
+  return typeof targetId === "string" && typeof contentHash === "string" && typeof authorityId === "string"
+    ? { targetType: receipt.receiptType, targetId, contentHash, authorityId }
+    : null;
+};
+
+const catalogIssues = async (entry: CatalogEntry | null, envelope: Envelope, activationReceipt: ActivationReceipt | null): Promise<string[]> => {
+  if (!entry || !entry.definition || typeof entry.definition !== "object" || Array.isArray(entry.definition) || !Array.isArray(entry.evidenceRecords)) return ["durable plan catalog entry required"];
+  const issues: string[] = [];
+  if (entry.definition.planId !== envelope.planId || entry.definition.profileId !== envelope.profileId || await sha256(entry.definition) !== envelope.profileHash) issues.push("catalog definition does not match compiled profile identity");
+  for (const evidence of entry.evidenceRecords) {
+    if (typeof evidence.content !== "string" || await sha256({ content: evidence.content }) !== evidence.contentHash) issues.push("catalog evidence content hash mismatch");
+    const { evidenceId: _evidenceId, recordHash, ...base } = evidence;
+    if (typeof recordHash !== "string" || await sha256(base) !== recordHash) issues.push("catalog evidence provenance hash mismatch");
+  }
+  if (activationReceipt) {
+    const lineage = entry.lineage;
+    if (!lineage || lineage.activationReceiptId !== activationReceipt.receiptId || lineage.activationKind !== activationReceipt.activationKind) issues.push("catalog lineage does not match activation receipt");
+  }
+  return [...new Set(issues)];
+};
+
+const catalogUpsert = (db: D1Database, scopeId: string, entry: CatalogEntry, envelope: Envelope, now: string): D1PreparedStatement => db.prepare(`
+  INSERT INTO plan_catalog (scope_id, plan_id, profile_id, profile_hash, definition_json, evidence_json, lineage_json, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(scope_id, plan_id) DO UPDATE SET
+    profile_id = excluded.profile_id,
+    profile_hash = excluded.profile_hash,
+    definition_json = excluded.definition_json,
+    evidence_json = excluded.evidence_json,
+    lineage_json = excluded.lineage_json,
+    updated_at = excluded.updated_at
+`).bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, JSON.stringify(entry.definition), JSON.stringify(entry.evidenceRecords), entry.lineage ? JSON.stringify(entry.lineage) : null, now, now);
 
 const envelopeIssues = async (envelope: Envelope): Promise<string[]> => {
   const issues: string[] = [];
@@ -282,16 +335,33 @@ const loadActivationReplay = async (db: D1Database, scopeId: string, idempotency
   return row ? { requestHash: row.request_hash, receipt: JSON.parse(row.receipt_json) as ActivationReceipt } : null;
 };
 
+const listCatalog = async (db: D1Database, scopeId: string): Promise<Response> => {
+  const entries = await db.prepare("SELECT plan_id, profile_id, profile_hash, definition_json, evidence_json, lineage_json FROM plan_catalog WHERE scope_id = ? ORDER BY updated_at DESC")
+    .bind(scopeId).all<CatalogRow>();
+  const activations = await db.prepare("SELECT receipt_json FROM activation_receipts WHERE scope_id = ? ORDER BY created_at ASC")
+    .bind(scopeId).all<{ receipt_json: string }>();
+  return response(200, {
+    ok: true,
+    code: "PLAN_CATALOG",
+    entries: entries.results.map((row) => ({ definition: JSON.parse(row.definition_json), evidenceRecords: JSON.parse(row.evidence_json), ...(row.lineage_json ? { lineage: JSON.parse(row.lineage_json) } : {}) })),
+    activationReceipts: activations.results.map((row) => JSON.parse(row.receipt_json)),
+  });
+};
+
 const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Promise<Response> => {
   const envelope = body.envelope as Envelope;
   const activationReceipt = body.activationReceipt as ActivationReceipt | null;
+  const catalogEntry = body.catalogEntry as CatalogEntry | null;
+  const authorityChallengeId = typeof body.authorityChallengeId === "string" ? body.authorityChallengeId : null;
   const activationRequestHash = body.activationRequestHash as string | null;
   const issues = await envelopeIssues(envelope);
+  issues.push(...await catalogIssues(catalogEntry, envelope, activationReceipt));
   if (envelope.previousSnapshotHash !== null || envelope.revision !== 1) issues.push("initial accepted truth must begin at revision one without a predecessor");
+  let challenge: ChallengeRow | null = null;
   if (activationReceipt) {
     if (!await activationReceiptValid(activationReceipt)) issues.push("invalid activation receipt checksum");
     if (activationReceipt.toPlanId !== envelope.planId) issues.push("activation target does not match envelope plan");
-    if (activationRequestHash !== await sha256({ envelope, activationReceipt })) issues.push("activation request hash mismatch");
+    if (activationRequestHash !== await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId })) issues.push("activation request hash mismatch");
     const replay = await loadActivationReplay(db, scopeId, activationReceipt.idempotencyKey);
     if (replay) {
       if (replay.requestHash !== activationRequestHash) return errorResponse(409, "IDEMPOTENCY_KEY_REUSED", "Activation idempotency key was reused with different content.");
@@ -299,12 +369,26 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
       if (!current) return errorResponse(500, "ACTIVATION_REPLAY_HEAD_MISSING", "Activation receipt exists without its accepted head.");
       return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, requestHash: activationRequestHash, replay: true });
     }
+    if (!authorityChallengeId) issues.push("live human authority challenge required for plan activation");
+    else {
+      challenge = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
+        .bind(scopeId, authorityChallengeId).first<ChallengeRow>();
+      if (!challenge) issues.push("plan activation authority challenge not found");
+      else {
+        const consumed = await db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, challenge.challenge_id).first();
+        if (consumed) issues.push("plan activation authority challenge already consumed");
+        if (Date.parse(challenge.expires_at) <= Date.now()) issues.push("plan activation authority challenge expired");
+        const expectedCommandHash = await sha256({ targetType: "plan_activation", targetId: activationReceipt.draftId, planId: activationReceipt.fromPlanId, profileHash: challenge.profile_hash, revision: activationReceipt.baseRevision, contentHash: activationReceipt.contentHash, authorityId: activationReceipt.confirmationId });
+        if (challenge.plan_id !== activationReceipt.fromPlanId || challenge.revision !== activationReceipt.baseRevision || challenge.target_type !== "plan_activation" || challenge.target_id !== activationReceipt.draftId || challenge.content_hash !== activationReceipt.contentHash || challenge.authority_id !== activationReceipt.confirmationId || challenge.command_hash !== expectedCommandHash) issues.push("plan activation authority challenge does not bind this exact command");
+      }
+    }
   } else if (activationRequestHash !== null) issues.push("activation request hash present without receipt");
   if (issues.length) return errorResponse(422, "ACCEPTED_TRUTH_INTEGRITY_FAILED", "Initial accepted truth failed validation.", { issues });
 
   const existing = await readHead(db, scopeId, envelope.planId);
   if (existing) {
     if (existing.profileHash !== envelope.profileHash) return errorResponse(409, "ACCEPTED_PROFILE_CONFLICT", "Plan id is already bound to another profile hash.", { currentRevision: existing.revision, currentProfileHash: existing.profileHash });
+    if (catalogEntry) await db.batch([catalogUpsert(db, scopeId, catalogEntry, envelope, new Date().toISOString())]);
     return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: existing, receipt: activationReceipt, requestHash: activationRequestHash, replay: true });
   }
 
@@ -317,9 +401,12 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
       .bind(scopeId, envelope.planId, envelope.revision, envelope.profileId, envelope.profileHash, JSON.stringify(envelope.snapshot), envelope.snapshotHash, null, activationReceipt?.receiptId ?? null, now),
     ...((envelope.snapshot.evidenceRecords ?? []).map((evidence) => db.prepare("INSERT OR IGNORE INTO evidence_records (scope_id, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(scopeId, envelope.planId, evidence.evidenceId, evidence.recordHash, evidence.contentHash, envelope.revision, JSON.stringify(evidence), now))),
+    catalogUpsert(db, scopeId, catalogEntry!, envelope, now),
   ];
   if (activationReceipt && activationRequestHash) statements.push(db.prepare("INSERT INTO activation_receipts (scope_id, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(scopeId, activationReceipt.idempotencyKey, activationReceipt.receiptId, activationReceipt.fromPlanId, activationReceipt.toPlanId, activationRequestHash, JSON.stringify(activationReceipt), now));
+  if (challenge && activationReceipt) statements.push(db.prepare("INSERT INTO challenge_consumptions (scope_id, challenge_id, plan_id, receipt_id, request_hash, consumed_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(scopeId, challenge.challenge_id, activationReceipt.toPlanId, activationReceipt.receiptId, activationRequestHash, now));
   try {
     await db.batch(statements);
     return response(201, result);
@@ -341,7 +428,9 @@ const commit = async (db: D1Database, scopeId: string, request: CommitRequest): 
 
   const issues = await envelopeIssues(request.envelope);
   let challenge: ChallengeRow | null = null;
-  if (request.receipt.receiptType === "plan_option") {
+  const authorityBinding = receiptAuthorityBinding(request.receipt);
+  if (!authorityBinding) issues.push("accepted receipt has no exact human-authority binding");
+  else {
     if (!request.authorityChallengeId) issues.push("live human authority challenge required");
     else {
       challenge = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
@@ -351,8 +440,8 @@ const commit = async (db: D1Database, scopeId: string, request: CommitRequest): 
         const consumed = await db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, challenge.challenge_id).first();
         if (consumed) issues.push("human authority challenge already consumed");
         if (Date.parse(challenge.expires_at) <= Date.now()) issues.push("human authority challenge expired");
-        const expectedCommandHash = await sha256({ targetType: "plan_option", targetId: request.receipt.payload.candidateId, planId: request.envelope.planId, profileHash: request.envelope.profileHash, revision: request.expectedRevision, contentHash: request.receipt.payload.contentHash, authorityId: request.receipt.payload.approvalId });
-        if (challenge.plan_id !== request.envelope.planId || challenge.profile_hash !== request.envelope.profileHash || challenge.revision !== request.expectedRevision || challenge.target_type !== "plan_option" || challenge.target_id !== request.receipt.payload.candidateId || challenge.content_hash !== request.receipt.payload.contentHash || challenge.command_hash !== expectedCommandHash) issues.push("human authority challenge does not bind this exact command");
+        const expectedCommandHash = await sha256({ ...authorityBinding, planId: request.envelope.planId, profileHash: request.envelope.profileHash, revision: request.expectedRevision });
+        if (challenge.plan_id !== request.envelope.planId || challenge.profile_hash !== request.envelope.profileHash || challenge.revision !== request.expectedRevision || challenge.target_type !== authorityBinding.targetType || challenge.target_id !== authorityBinding.targetId || challenge.content_hash !== authorityBinding.contentHash || challenge.authority_id !== authorityBinding.authorityId || challenge.command_hash !== expectedCommandHash) issues.push("human authority challenge does not bind this exact command");
       }
     }
   }
@@ -481,7 +570,7 @@ const createAuthorityChallenge = async (db: D1Database, scopeId: string, body: J
   const targetId = String(body.targetId ?? "");
   const contentHash = String(body.contentHash ?? "");
   const authorityId = String(body.authorityId ?? "");
-  if (!planId || !profileHash || !Number.isInteger(revision) || revision < 1 || targetType !== "plan_option" || !targetId || !contentHash || !authorityId) return errorResponse(422, "AUTHORITY_CHALLENGE_INPUT_INVALID", "Human authority challenge input is invalid.");
+  if (!planId || !profileHash || !Number.isInteger(revision) || revision < 1 || !authorityTargetTypes.has(targetType) || !targetId || !contentHash || !authorityId) return errorResponse(422, "AUTHORITY_CHALLENGE_INPUT_INVALID", "Human authority challenge input is invalid.");
   const head = await readHead(db, scopeId, planId);
   if (!head || head.profileHash !== profileHash || head.revision !== revision) return errorResponse(409, "AUTHORITY_CHALLENGE_BASE_STALE", "Human authority must bind current accepted truth.");
   const commandHash = await sha256({ targetType, targetId, planId, profileHash, revision, contentHash, authorityId });
@@ -514,10 +603,11 @@ const loadAuthorityChallenge = async (db: D1Database, scopeId: string, challenge
 
 export const handleAcceptedTruthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith("/api/accepted-truth") && !url.pathname.startsWith("/api/operator-sessions") && !url.pathname.startsWith("/api/authority-challenges")) return null;
+  if (!url.pathname.startsWith("/api/accepted-truth") && !url.pathname.startsWith("/api/operator-sessions") && !url.pathname.startsWith("/api/authority-challenges") && url.pathname !== "/api/plan-catalog") return null;
   if (request.method !== "GET" && !sameOriginWrite(request)) return errorResponse(403, "CROSS_ORIGIN_WRITE_REFUSED", "Finite writes must be same-origin.");
   try {
     const scopeId = await ensureAuthenticatedTenant(request, db);
+    if (request.method === "GET" && url.pathname === "/api/plan-catalog") return listCatalog(db, scopeId);
     if (request.method === "POST" && url.pathname === "/api/operator-sessions") return createOperatorSession(db, scopeId, await parseJson(request));
     if (request.method === "GET" && url.pathname === "/api/operator-sessions") return listOperatorSessions(db, scopeId);
     if (request.method === "POST" && url.pathname === "/api/authority-challenges") return createAuthorityChallenge(db, scopeId, await parseJson(request));

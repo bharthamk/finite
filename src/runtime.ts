@@ -82,8 +82,18 @@ export class FinitePlanRuntime {
     return this.activationReceipts.size > 0;
   }
 
+  private durableCatalogEntry(planId = this.kernel.profile.planId): PlanCatalogEntry | undefined {
+    const entry = this.plans.get(planId);
+    if (!entry) return undefined;
+    return {
+      definition: profileDefinition(entry.profile),
+      evidenceRecords: clone(entry.evidenceRecords),
+      ...(entry.lineage ? { lineage: clone(entry.lineage) } : {}),
+    };
+  }
+
   async hydrateAcceptedTruth(context: RuntimeRequestContext = {}): Promise<ToolResult> {
-    return this.kernel.hydrateAcceptedTruth(undefined, context);
+    return this.kernel.hydrateAcceptedTruth(undefined, this.durableCatalogEntry(), null, context);
   }
 
   async hydrateConstructionPacket(context: RuntimeRequestContext = {}): Promise<ToolResult> {
@@ -1082,6 +1092,8 @@ export class FinitePlanRuntime {
       profileHash: draft.profile.profileHash,
       draftId,
       confirmationId,
+      contentHash: draft.contentHash,
+      baseRevision: expectedRevision,
       activationKind: draft.amendment ? "amendment" as const : "new_plan" as const,
       sourceArrival: clone(draft.sourceArrival),
       ...(draft.amendment ? { supersedesPlanId: draft.amendment.supersedesPlanId, supersedesProfileHash: draft.amendment.supersedesProfileHash, diffHash: draft.amendment.diffHash } : {}),
@@ -1095,7 +1107,17 @@ export class FinitePlanRuntime {
       diffHash: draft.amendment?.diffHash ?? null,
       activationReceiptId: receipt.receiptId,
     };
-    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt, context);
+    let authorityChallengeId: string | null = null;
+    if (this.acceptedRepository?.createAuthorityChallenge) {
+      try {
+        const challenge = await this.acceptedRepository.createAuthorityChallenge({ targetType: "plan_activation", planId: fromPlanId, profileHash: priorKernel.profile.profileHash, revision: expectedRevision, targetId: draftId, contentHash: draft.contentHash, authorityId: confirmationId }, context);
+        authorityChallengeId = challenge.challengeId;
+      } catch (error) {
+        return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "PLAN_ACTIVATION_AUTHORITY_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+      }
+    }
+    const catalogEntry: PlanCatalogEntry = { definition: profileDefinition(draft.profile), evidenceRecords: clone(draft.evidenceRecords), lineage };
+    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt, catalogEntry, authorityChallengeId, context);
     if (!remoteInitialization.ok) return {
       ok: false,
       code: "PLAN_ACTIVATION_DURABLE_TRUTH_FAILED",

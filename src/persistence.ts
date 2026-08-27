@@ -7,6 +7,11 @@ export interface StoragePort {
   removeItem(key: string): void;
 }
 
+export interface EnumerableStoragePort extends StoragePort {
+  readonly length: number;
+  key(index: number): string | null;
+}
+
 export class MemoryStorage implements StoragePort {
   readonly values = new Map<string, string>();
 
@@ -20,6 +25,50 @@ export class MemoryStorage implements StoragePort {
 
   removeItem(key: string): void {
     this.values.delete(key);
+  }
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+}
+
+const validScope = (scope: string): boolean => /^[a-zA-Z0-9_-]{8,100}$/.test(scope);
+
+export const clearForeignFiniteScopes = (storage: EnumerableStoragePort, currentScope: string): number => {
+  if (!validScope(currentScope)) throw new Error("A bounded opaque storage scope is required.");
+  const ownPrefix = `finite-scope:${currentScope}:`;
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter((key): key is string => Boolean(key));
+  const foreign = keys.filter((key) => key.startsWith("finite-scope:") && !key.startsWith(ownPrefix));
+  for (const key of foreign) storage.removeItem(key);
+  return foreign.length;
+};
+
+export class ScopedStorage implements StoragePort {
+  constructor(
+    private readonly storage: StoragePort,
+    private readonly scope: string,
+  ) {
+    if (!validScope(scope)) throw new Error("A bounded opaque storage scope is required.");
+  }
+
+  private key(key: string): string {
+    return `finite-scope:${this.scope}:${key}`;
+  }
+
+  getItem(key: string): string | null {
+    return this.storage.getItem(this.key(key));
+  }
+
+  setItem(key: string, value: string): void {
+    this.storage.setItem(this.key(key), value);
+  }
+
+  removeItem(key: string): void {
+    this.storage.removeItem(this.key(key));
   }
 }
 

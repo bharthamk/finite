@@ -11,6 +11,9 @@ Authentication answers **who is at the hatch**. Finite authorization maps that v
 - The raw provider subject is never stored. D1 stores only a SHA-256-derived identity key and opaque scope id.
 - Every accepted plan, revision, receipt, evidence record, operator packet, and authority challenge remains scoped by that server-derived tenant id.
 - Browser input and user-controlled headers never select a tenant.
+- Every newly provisioned account and demo begins with an empty namespace. Finite does not copy a historical owner namespace to whichever account happens to arrive first.
+- Historical lineage transfer, if ever needed in a self-hosted deployment, is an explicit audited administrator operation outside the ordinary sign-in path.
+- Browser persistence uses the server-derived opaque scope too, preventing identities that share one browser origin from reading or initializing from one another's cache.
 
 ## Supported deployment shapes
 
@@ -24,7 +27,7 @@ Finite owns no OAuth client, secret, callback, token refresh, password, or recov
 
 A signed-out visitor may explicitly create a 24-hour demo session. The server generates an unguessable opaque bearer token, sends it only in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie, hashes it before storage, and creates a fresh `demo_…` tenant.
 
-Demo tenants never adopt or copy an authenticated user's lineage. Ending the demo or encountering it after expiry purges its complete tenant namespace. No demo authority is transferable to a signed-in account.
+Demo tenants never adopt or copy an authenticated user's lineage. Ending the demo or encountering it after expiry purges its complete tenant namespace, including arrivals, construction packets/returns, custom catalog entries, accepted revisions, receipts, challenges, and operation logs. Creating a later demo opportunistically garbage-collects abandoned expired namespaces. No demo authority is transferable to a signed-in account.
 
 ### Portable self-hosting
 

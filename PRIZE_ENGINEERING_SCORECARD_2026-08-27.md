@@ -34,7 +34,7 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 | Reproducible source | Clean build contract, data exclusions, dependency/license inventory, exact deployment provenance | `REPRODUCIBLE_RELEASE.md`; `THIRD_PARTY_LICENSES.md`; clean audit | Closed locally |
 
-Current regression baseline: **140/140 tests pass** after the native three-family endurance, fixed document-lifetime dispatcher, cross-project construction, feedback provenance, experience-route, and state-scoped message tranches.
+Current regression baseline: **148/148 tests pass** after the fresh-eyes integrity tranche added account-scoped browser persistence and foreign-cache removal, durable custom-plan catalog reconstruction, exact arrival/head binding, generalized authority challenges, complete demo garbage collection, production response isolation, and coverage-instrumented fixed-dispatcher endurance.
 
 ## Measured baseline and correction
 

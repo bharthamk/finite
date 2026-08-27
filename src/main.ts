@@ -1,5 +1,5 @@
 import { compileBuiltInProfiles } from "./profiles.js";
-import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
+import { clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, resolveSurfaceBinding } from "./surface.js";
 import type { Candidate, PlanLifecycleStatus, ProfileId, Receipt, SurfaceManifest, SurfaceZone } from "./types.js";
@@ -27,6 +27,8 @@ interface FiniteAuthSession {
   displayName: string;
   email: string | null;
   expiresAt: string | null;
+  storageScope: string;
+  legacyBrowserCacheEligible: boolean;
 }
 
 interface FiniteAuthStatus {
@@ -201,12 +203,12 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
               <span>Current build</span>
               <strong>Active engineering</strong>
               <dl>
-                <div><dt>Contract gate</dt><dd>61 / 61 passing</dd></div>
+                <div><dt>Contract gate</dt><dd>Full suite passing</dd></div>
                 <div><dt>Plan families</dt><dd>3 compiled</dd></div>
-                <div><dt>Live tools</dt><dd>45 page-scoped</dd></div>
+                <div><dt>Live tools</dt><dd>7 native + adaptive menus</dd></div>
                 <div><dt>Audience</dt><dd>Owner-private</dd></div>
               </dl>
-              <small>Verified 26 August 2026</small>
+              <small>Verified 27 August 2026</small>
             </aside>
           </div>
 
@@ -317,14 +319,40 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
 const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
 
 const profiles = await compileBuiltInProfiles();
-const store = new PlanSnapshotStore(localStorage);
-const catalogStore = new PlanCatalogStore(localStorage);
+clearForeignFiniteScopes(localStorage, authSession.storageScope);
+const scopedStorage = new ScopedStorage(localStorage, authSession.storageScope);
+const legacyCacheOwnerKey = "finite-plan.browser-cache-owner.v1";
+if (authSession.legacyBrowserCacheEligible) {
+  const claimedBy = localStorage.getItem(legacyCacheOwnerKey);
+  if (!claimedBy || claimedBy === authSession.storageScope) {
+    const legacyKeys = ["finite-plan.catalog.v1", "finite-plan.activation-receipts.v1", "finite-plan.construction.v1", "finite-plan.surface.active-profile"];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("finite-plan.v1:")) legacyKeys.push(key);
+    }
+    for (const key of [...new Set(legacyKeys)]) {
+      const value = localStorage.getItem(key);
+      if (value !== null) {
+        if (scopedStorage.getItem(key) === null) scopedStorage.setItem(key, value);
+        localStorage.removeItem(key);
+      }
+    }
+    localStorage.setItem(legacyCacheOwnerKey, authSession.storageScope);
+  }
+}
+const store = new PlanSnapshotStore(scopedStorage);
+const catalogStore = new PlanCatalogStore(scopedStorage);
+const acceptedRepository = new HttpAcceptedTruthRepository();
+try {
+  const remoteCatalog = await acceptedRepository.listCatalog();
+  for (const entry of remoteCatalog.entries) catalogStore.save(entry.definition, entry.evidenceRecords, entry.lineage);
+  for (const receipt of remoteCatalog.activationReceipts) catalogStore.saveActivationReceipt(receipt);
+} catch { /* Scoped cache remains a safe availability fallback; accepted heads still verify every consequential write. */ }
 const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
-const savedProfile = localStorage.getItem("finite-plan.surface.active-profile");
+const savedProfile = scopedStorage.getItem("finite-plan.surface.active-profile");
 const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
 const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
-const acceptedRepository = new HttpAcceptedTruthRepository();
 const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
 let arrivalResult: ArrivalResult = await arrivalRepository.open();
@@ -335,7 +363,7 @@ await runtime.resumeConstructionPacket();
 const modelContext = document.modelContext;
 window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
-  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
   return {
@@ -1085,7 +1113,7 @@ const switchProfile = async (profileId: ProfileId): Promise<void> => {
     await render();
     return;
   }
-  localStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   await adapter?.refreshContextualTools();
   await seedDecision();
   busy = false;

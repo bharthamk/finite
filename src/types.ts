@@ -409,6 +409,8 @@ export interface PlanActivationReceipt {
   profileHash: string;
   draftId: string;
   confirmationId: string;
+  contentHash?: string;
+  baseRevision?: number;
   replayChecksum: string;
   activationKind?: "new_plan" | "amendment";
   supersedesPlanId?: string;

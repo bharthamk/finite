@@ -411,6 +411,16 @@ const reviewInterpretation = async (db: D1Database, scopeId: string, order: Arri
   }, "ARRIVAL_INTERPRETATION_REVIEWED");
 };
 
+export const acceptedPlanHeadIsCurrent = async (db: D1Database, scopeId: string, planId: string, profileHash: string, revision: number): Promise<{ matches: boolean; currentProfileHash: string | null; currentRevision: number | null }> => {
+  const head = await db.prepare("SELECT profile_hash, revision FROM plan_heads WHERE scope_id = ? AND plan_id = ?")
+    .bind(scopeId, planId).first<{ profile_hash: string; revision: number }>();
+  return {
+    matches: Boolean(head && head.profile_hash === profileHash && head.revision === revision),
+    currentProfileHash: head?.profile_hash ?? null,
+    currentRevision: head?.revision ?? null,
+  };
+};
+
 const acceptPlan = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
   const expectedVersion = Number(body.expectedVersion);
   const expectedChecksum = String(body.expectedChecksum ?? "");
@@ -421,6 +431,8 @@ const acceptPlan = async (db: D1Database, scopeId: string, order: ArrivalOrder, 
   if (!/^[a-z0-9][a-z0-9_-]{2,100}$/.test(planId) || !/^[a-f0-9]{64}$/.test(profileHash) || !Number.isInteger(planRevision) || planRevision < 1) return errorResponse(422, "ARRIVAL_PLAN_BINDING_INVALID", "The accepted plan binding is invalid.");
   if (order.version !== expectedVersion || order.checksum !== expectedChecksum) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The arrival changed before its plan binding was recorded.", currentVersion: order.version, currentChecksum: order.checksum }, 409);
   if (order.status !== "interpretation_confirmed" || !order.interpretation?.complete) return openedResponse(db, scopeId, order, "ARRIVAL_NOT_ACCEPTABLE", undefined, { ok: false, message: "Only a reviewed complete interpretation can be bound to an activated plan." }, 409);
+  const acceptedHead = await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, planRevision);
+  if (!acceptedHead.matches) return openedResponse(db, scopeId, order, "ARRIVAL_ACCEPTED_PLAN_NOT_CURRENT", undefined, { ok: false, message: "The arrival can close only against the exact durable accepted plan head.", currentPlanRevision: acceptedHead.currentRevision, currentProfileHash: acceptedHead.currentProfileHash }, 409);
   return mutateOrder(db, scopeId, order, expectedVersion, { status: "accepted", lastOperatorCheckpoint: expectedVersion + 1 }, {
     eventType: "plan_activated", actor: "codex", sourceSurface: "codex", payload: { planId, profileHash, planRevision },
   }, "ARRIVAL_PLAN_ACCEPTED");

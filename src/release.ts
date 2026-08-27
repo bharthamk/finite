@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "native-kitchen-endurance-v55",
+  build: "fresh-eyes-integrity-v56",
 } as const;
