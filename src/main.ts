@@ -1977,7 +1977,12 @@ async function render(): Promise<SurfaceManifest> {
     return manifest;
   }
   const receipt = kernel.receipts.at(-1);
-  const spentPercent = Math.round(((kernel.accepted.spentMinor + kernel.accepted.committedMinor) / kernel.accepted.totalBudgetMinor) * 100);
+  const spentOrCommittedMinor = kernel.accepted.spentMinor + kernel.accepted.committedMinor;
+  const leadSummary = manifest.summaryFields.find((binding) => binding.format !== "money");
+  const leadSummaryRaw = leadSummary ? resolveSurfaceBinding(kernel, leadSummary) : null;
+  const leadSummaryValue = leadSummary
+    ? leadSummary.format === "days" && typeof leadSummaryRaw === "number" ? `${leadSummaryRaw} days` : String(leadSummaryRaw ?? "—")
+    : null;
   surfaceRoot.dataset.profile = kernel.profile.profileId;
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
@@ -1995,10 +2000,15 @@ async function render(): Promise<SurfaceManifest> {
       ${renderLifecycleRail(lifecycleStageForPlan(kernel.lifecycleStatus))}
     </div>
     <main id="main">
-      <div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>${kernel.lifecycleStatus === "active" ? "This plan is open for change." : `This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.`}</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>
+      ${kernel.lifecycleStatus === "active" ? "" : `<div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>`}
       <section class="hero">
-        <div class="hero__copy"><p class="eyebrow">${escapeHtml(kernel.profile.surface.hero.eyebrow)}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p><div class="brief-card"><span>You asked for</span><p>${escapeHtml(manifest.decisionFocus ?? kernel.profile.surface.hero.brief)}</p></div></div>
-        <aside class="plan-orbit" aria-label="Current finite plan summary"><div class="orbit-number"><span>Total plan</span><strong>${money(kernel.accepted.totalBudgetMinor)}</strong></div><div class="orbit-ring" style="--used:${spentPercent}%"><div><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span></div></div><p>${spentPercent}% spent or committed. Every option below keeps the same finite total.</p></aside>
+        <div class="hero__copy"><p class="eyebrow">Current plan</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div>
+        <dl class="hero-summary" aria-label="Plan at a glance">
+          ${leadSummary && leadSummaryValue !== null ? `<div><dt>${escapeHtml(leadSummary.label)}</dt><dd>${escapeHtml(leadSummaryValue)}</dd></div>` : ""}
+          <div><dt>Total limit</dt><dd>${money(kernel.accepted.totalBudgetMinor)}</dd></div>
+          <div><dt>Spent or committed</dt><dd>${money(spentOrCommittedMinor)}</dd></div>
+          <div><dt>Available</dt><dd>${money(kernel.accepted.bufferMinor)}</dd></div>
+        </dl>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
       ${renderLifecycleControl()}
@@ -2143,9 +2153,11 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
   planActivationError = "";
-  announce(arrivalClosed
-    ? "Plan approved and ready. You are now in Managing."
-    : "Your plan is active. Finite is still syncing the completed starting request.");
+  if (arrivalClosed) {
+    message = "";
+    messageScope = currentMessageScope();
+    announcer.textContent = "Plan approved. Managing is ready.";
+  } else announce("Your plan is active. Finite is still syncing the completed starting request.");
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
 };

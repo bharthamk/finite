@@ -230,9 +230,25 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /idempotencyKey: `human-plan-activation:\$\{draftId\}:\$\{confirmation\.confirmationId\}`/);
   assert.match(source, /arrivalRepository\.acceptPlan\(\{/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
-  assert.match(source, /Plan approved and ready\. You are now in Managing\./);
+  assert.match(source, /announcer\.textContent = "Plan approved\. Managing is ready\."/);
   assert.match(source, /Starting your plan…/);
   assert.match(source, /Continue to Managing/);
+  assert.doesNotMatch(source, /Plan approved and ready\. You are now in Managing\./);
   assert.doesNotMatch(source, /Plan approved\. \$\{escapeHtml\(agenticName\(\)\)\} can now put it into action\./);
   assert.doesNotMatch(source, /Exact plan draft confirmed\. Codex may now activate it/);
+});
+
+test("Managing starts compactly with one brief and a readable summary", () => {
+  assert.match(source, /<p class="eyebrow">Current plan<\/p>/);
+  assert.match(source, /<dl class="hero-summary" aria-label="Plan at a glance">/);
+  assert.match(source, /<dt>Total limit<\/dt>/);
+  assert.match(source, /<dt>Spent or committed<\/dt>/);
+  assert.match(source, /<dt>Available<\/dt>/);
+  assert.match(source, /kernel\.lifecycleStatus === "active" \? "" : `<div class="plan-status-strip/);
+  assert.doesNotMatch(source, /<div class="brief-card">/);
+  assert.doesNotMatch(source, /<aside class="plan-orbit"/);
+  assert.doesNotMatch(source, /<span>You asked for<\/span>/);
+  assert.match(styles, /\.hero \{ padding:38px 0 34px;/);
+  assert.match(styles, /\.hero-summary \{[^}]*grid-template-columns:repeat\(auto-fit,minmax\(150px,1fr\)\)/);
+  assert.doesNotMatch(styles, /\.orbit-ring \{/);
 });
