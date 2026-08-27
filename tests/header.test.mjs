@@ -75,6 +75,7 @@ test("the header plan dropdown creates and opens plans from every private produc
   assert.match(source, /filter\(\(plan\) => persistedPlanIds\.has\(plan\.planId\) \|\| \(surface === "plan" && plan\.active\)\)/);
   assert.match(source, /filter\(\(plan\) => persistedPlanIds\.has\(plan\.planId\)\)/);
   assert.match(source, /persistedPlanIds\.add\(runtime\.kernel\.profile\.planId\)/);
+  assert.match(source, /if \(envelope && envelope\.revision > 0\) persistedPlanIds\.add\(plan\.planId\)/);
   assert.match(source, /data-action="plan-switch" aria-label="Open a Finite plan"/);
   assert.match(source, /<option value="\$\{newPlanChoice\}">＋ Create a new plan…<\/option>/);
   assert.match(source, /optgroup label="Current plans"/);

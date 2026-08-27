@@ -473,6 +473,7 @@ const refreshPlanDisplayNames = async (): Promise<void> => {
     try {
       const envelope = await acceptedRepository.load(plan.planId, plan.profileHash);
       const receipts = envelope?.snapshot.receipts ?? [];
+      if (envelope && envelope.revision > 0) persistedPlanIds.add(plan.planId);
       planDisplayNames.set(plan.planId, projectAcceptedPlanCopyFromReceipts(plan.name, receipts));
     } catch { planDisplayNames.set(plan.planId, plan.name); }
   }));
