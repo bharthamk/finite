@@ -27,6 +27,12 @@ test("the product header contains actions instead of unexplained internal state"
   assert.match(styles, /@media \(max-width:1180px\) and \(min-width:981px\)/);
 });
 
+test("cold navigation shows a useful loading state instead of an empty page", () => {
+  assert.match(shell, /class="app-loading" role="status" aria-label="Opening Finite"/);
+  assert.match(shell, /Opening your plans…/);
+  assert.match(styles, /\.app-loading \{ min-height:100vh;/);
+});
+
 test("private product surfaces show the plan lifecycle without pretending it is percentage complete", () => {
   for (const label of ["Starting", "Planning", "Managing", "Wrapping up"]) assert.match(source, new RegExp(`label: "${label}"`));
   assert.match(source, /aria-label="Plan lifecycle"/);
@@ -193,7 +199,7 @@ test("settings provides a durable Agentic name preference with Codex as the hone
 
 test("human writing fields use the browser language for native spellcheck while control text opts out", () => {
   assert.match(shell, /<html lang="en">/);
-  assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true"><\/div>/);
+  assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true">/);
   assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
   assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
   assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 4);
