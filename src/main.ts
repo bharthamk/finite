@@ -414,6 +414,7 @@ try {
   for (const receipt of remoteCatalog.activationReceipts) catalogStore.saveActivationReceipt(receipt);
 } catch { /* Scoped cache remains a safe availability fallback; accepted heads still verify every consequential write. */ }
 const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
+const persistedPlanIds = new Set(catalogEntries.map((entry) => entry.profile.planId));
 const savedProfile = scopedStorage.getItem("finite-plan.surface.active-profile");
 const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
@@ -531,6 +532,7 @@ const modelContext = document.modelContext;
 window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED"].includes(result.code)) persistedPlanIds.add(runtime.kernel.profile.planId);
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await syncAdaptiveChecklist(); }
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
@@ -688,7 +690,7 @@ type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string
 const newPlanChoice = "__new_plan__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {
-  const plans = runtime.listPlans().plans as HeaderPlanChoice[];
+  const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId));
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : planDisplayNames.get(plan.planId) ?? plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
@@ -740,7 +742,7 @@ const shareSectionOptions: Array<{ id: PlanShareSection; name: string; descripti
 ];
 
 const renderPlanShareDialog = (): string => {
-  const plans = runtime.listPlans().plans as HeaderPlanChoice[];
+  const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId));
   const currentPlans = plans.filter((plan) => !plan.supersededBy);
   const earlierPlans = plans.filter((plan) => Boolean(plan.supersededBy));
   if (shareDialogMode === "signin") return `<dialog class="plan-share-dialog plan-share-dialog--choice" data-plan-share-dialog aria-labelledby="plan_share_title">
@@ -2506,6 +2508,7 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
     arrivalClosed = completion.ok;
   }
   arrivalResult = await arrivalRepository.open();
+  persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   await adapter?.refreshContextualTools();
   forceArrivalSurface = false;
