@@ -397,3 +397,61 @@ export const planInputReceipts = sqliteTable("plan_input_receipts", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_plan_input_receipts_scope_created").on(table.scopeId, table.createdAt),
 ]);
+
+export const planChecklistItems = sqliteTable("plan_checklist_items", {
+  scopeId: text("scope_id").notNull(),
+  itemId: text("item_id").notNull(),
+  planId: text("plan_id").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  section: text("section").notNull(),
+  contextId: text("context_id"),
+  contextLabel: text("context_label"),
+  label: text("label").notNull(),
+  origin: text("origin").notNull(),
+  sourceRef: text("source_ref"),
+  status: text("status").default("open").notNull(),
+  position: integer("position").default(0).notNull(),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.itemId] }),
+  uniqueIndex("idx_plan_checklist_scope_plan_source").on(table.scopeId, table.planId, table.sourceRef),
+  index("idx_plan_checklist_scope_plan_position").on(table.scopeId, table.planId, table.position, table.createdAt),
+]);
+
+export const planAttachments = sqliteTable("plan_attachments", {
+  scopeId: text("scope_id").notNull(),
+  attachmentId: text("attachment_id").notNull(),
+  planId: text("plan_id").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  section: text("section").notNull(),
+  contextId: text("context_id"),
+  contextLabel: text("context_label"),
+  kind: text("kind").notNull(),
+  label: text("label").notNull(),
+  noteText: text("note_text"),
+  linkUrl: text("link_url"),
+  objectKey: text("object_key"),
+  fileName: text("file_name"),
+  contentType: text("content_type"),
+  sizeBytes: integer("size_bytes"),
+  sourceSurface: text("source_surface").notNull(),
+  status: text("status").default("active").notNull(),
+  createdAt: text("created_at").notNull(),
+  removedAt: text("removed_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.attachmentId] }),
+  index("idx_plan_attachments_scope_plan_status_created").on(table.scopeId, table.planId, table.status, table.createdAt),
+]);
+
+export const planWorkReceipts = sqliteTable("plan_work_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_plan_work_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

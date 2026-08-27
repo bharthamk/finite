@@ -18,6 +18,7 @@ import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, ski
 import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
+import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -419,6 +420,7 @@ const themeRepository = new HttpThemeRepository();
 const skinRepository = new HttpSkinRepository();
 const settingsRepository = new HttpSettingsRepository();
 const planInputRepository = new HttpPlanInputRepository();
+const planWorkRepository = new HttpPlanWorkRepository();
 let accountSettings: AgentSettings = defaultAgentSettings();
 try {
   const loadedSettings = await settingsRepository.load();
@@ -459,11 +461,30 @@ await runtime.hydrateAcceptedTruth();
 await runtime.hydrateConstructionPacket();
 await runtime.resumeConstructionPacket();
 let planInputs: PlanInputRecord[] = [];
+let checklistItems: ChecklistItem[] = [];
+let planAttachments: PlanAttachment[] = [];
 const refreshPlanInputs = async (): Promise<void> => {
   const result = await planInputRepository.list({ planId: runtime.kernel.profile.planId });
   planInputs = result.ok ? result.inputs : [];
 };
 try { await refreshPlanInputs(); } catch { planInputs = []; }
+const refreshPlanWork = async (): Promise<void> => {
+  const result = await planWorkRepository.list(runtime.kernel.profile.planId);
+  checklistItems = result.ok ? result.checklist : [];
+  planAttachments = result.ok ? result.attachments : [];
+};
+try { await refreshPlanWork(); } catch { checklistItems = []; planAttachments = []; }
+const syncAdaptiveChecklist = async (): Promise<void> => {
+  const manifest = await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel);
+  for (const [position, stage] of manifest.stages.entries()) {
+    const sourceRef = `stage:${stage.stageId}`;
+    const existing = checklistItems.find((item) => item.sourceRef === sourceRef);
+    if (existing?.baseCurrent && existing.label === stage.detail && existing.contextLabel === stage.label) continue;
+    const result = await planWorkRepository.addChecklist({ planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "timeline", contextId: stage.stageId, contextLabel: stage.label, label: stage.detail, origin: "adaptive", sourceRef, position, idempotencyKey: `checklist-sync-${runtime.kernel.revision}-${stage.stageId}`, sourceSurface: "site" });
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; }
+  }
+};
+try { await syncAdaptiveChecklist(); } catch { /* The plan remains usable if its suggested checklist cannot be synced yet. */ }
 let forceArrivalSurface = false;
 let newPlanDraftMode = false;
 let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
@@ -475,6 +496,7 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     await runtime.hydrateConstructionPacket();
     await runtime.resumeConstructionPacket();
     await refreshPlanInputs();
+    await refreshPlanWork();
   }
   if (request.surface !== "current") {
     forceArrivalSurface = request.surface === "arrival";
@@ -492,7 +514,7 @@ const modelContext = document.modelContext;
 window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
-  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) await refreshPlanInputs();
+  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await syncAdaptiveChecklist(); }
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
   const guidedView = result.code === "VIEW_GUIDED" ? applyCodexSpotlight(result.guide as FiniteGuideViewRequest) : null;
@@ -517,6 +539,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   await refreshSkinCatalog();
 }, planInputRepository, async (result) => {
   planInputs = result.inputs;
+}, planWorkRepository, async (result: PlanWorkResult) => {
+  checklistItems = result.checklist;
+  planAttachments = result.attachments;
 }).withGuideView(guideView).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
@@ -538,6 +563,10 @@ let planInputBusy = false;
 let planInputError = "";
 let planInputEditingId: string | null = null;
 let planInputContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
+let attachmentDialogOpen = false;
+let planWorkBusy = false;
+let planWorkError = "";
+let attachmentContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
 let planFactDialogOpen = false;
 let planFactBusy = false;
 let planFactError = "";
@@ -1704,6 +1733,57 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
   </article>`).join("")}</div>`;
 };
 
+const checklistFor = (section: PlanInputSection, contextId: string | null = null): ChecklistItem[] => checklistItems.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
+const attachmentsFor = (section: PlanInputSection, contextId: string | null = null): PlanAttachment[] => planAttachments.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
+const attachmentKindLabel = (kind: PlanAttachment["kind"]): string => ({ image: "Image", file: "File", link: "Link", note: "Note" })[kind];
+const formatFileSize = (bytes: number | null): string => bytes === null ? "" : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+const renderAttachmentItems = (items: PlanAttachment[], compact = false): string => {
+  if (!items.length) return "";
+  return `<div class="plan-attachments${compact ? " plan-attachments--compact" : ""}">${items.map((item) => `<article class="plan-attachment plan-attachment--${escapeHtml(item.kind)}">
+    ${item.kind === "image" && item.contentUrl ? `<a class="plan-attachment__thumb" href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(item.contentUrl)}" alt=""></a>` : `<span class="plan-attachment__icon" aria-hidden="true">${item.kind === "link" ? "↗" : item.kind === "note" ? "≡" : "↓"}</span>`}
+    <div><span>${escapeHtml(attachmentKindLabel(item.kind))}${item.contextLabel ? ` · ${escapeHtml(item.contextLabel)}` : ""}</span>${item.linkUrl ? `<a href="${escapeHtml(item.linkUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : item.contentUrl ? `<a href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : `<strong>${escapeHtml(item.label)}</strong>`}${item.noteText ? `<p>${escapeHtml(item.noteText)}</p>` : ""}${item.sizeBytes ? `<small>${escapeHtml(formatFileSize(item.sizeBytes))}</small>` : ""}</div>
+    <button type="button" data-action="remove-attachment" data-attachment-id="${escapeHtml(item.attachmentId)}" aria-label="Remove ${escapeHtml(item.label)}">Remove</button>
+  </article>`).join("")}</div>`;
+};
+
+const renderPlanWork = (): string => {
+  const open = checklistItems.filter((item) => item.status === "open");
+  const done = checklistItems.filter((item) => item.status === "done");
+  return `<section class="plan-work" aria-label="Plan progress and attachments">
+    <article class="plan-work__checklist">
+      <header><div><p class="eyebrow">Progress</p><h2>To do</h2></div><span>${done.length}/${checklistItems.length} done</span></header>
+      <div class="checklist-items">${[...open, ...done].map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>
+      <form class="checklist-add" data-checklist-add><label><span class="sr-only">Add something to do</span><input name="label" type="text" maxlength="240" placeholder="Add something to do…" required></label><button type="submit" ${planWorkBusy ? "disabled" : ""}>Add</button></form>
+    </article>
+    <article class="plan-work__attachments">
+      <header><div><p class="eyebrow">Reference material</p><h2>Files &amp; links</h2></div><button type="button" data-action="open-attachment" data-attachment-section="general">+ Add</button></header>
+      ${planAttachments.length ? renderAttachmentItems(planAttachments) : `<button type="button" class="attachment-empty" data-action="open-attachment" data-attachment-section="general"><span>＋</span><strong>Add a file, image, note or link</strong></button>`}
+    </article>
+  </section>`;
+};
+
+const renderAttachmentDialog = (manifest: SurfaceManifest): string => `<dialog class="plan-input-dialog attachment-dialog" aria-labelledby="attachment_title">
+  <button type="button" class="dialog-close" data-action="close-attachment" aria-label="Close">×</button>
+  <form data-attachment-form>
+    <header><p class="eyebrow">Add to this plan</p><h2 id="attachment_title">Files, pictures, links or notes</h2></header>
+    <div class="attachment-dialog__fields">
+      <label><span>Where does it belong?</span><select name="location">
+        <option value="general" ${attachmentContext.section === "general" ? "selected" : ""}>Whole plan</option>
+        <option value="money" ${attachmentContext.section === "money" ? "selected" : ""}>Money</option>
+        <option value="boundaries" ${attachmentContext.section === "boundaries" ? "selected" : ""}>Boundaries</option>
+        ${manifest.stages.map((stage) => `<option value="timeline:${escapeHtml(stage.stageId)}" ${attachmentContext.section === "timeline" && attachmentContext.contextId === stage.stageId ? "selected" : ""}>${escapeHtml(stage.label)}</option>`).join("")}
+      </select></label>
+      <label class="attachment-upload"><span>Upload files or pictures</span><input name="files" type="file" multiple><small>Up to 10 MB each</small></label>
+      <div class="attachment-dialog__or"><span>or add information</span></div>
+      <label><span>Link</span><input name="link" type="url" maxlength="2000" placeholder="https://…"></label>
+      <label><span>Name for the link</span><input name="linkLabel" type="text" maxlength="160" placeholder="Optional"></label>
+      <label class="attachment-note"><span>Note or information</span><textarea name="note" maxlength="5000" placeholder="Paste details, a reference number, instructions…"></textarea></label>
+    </div>
+    ${planWorkError ? `<p class="plan-input-dialog__error" role="alert">${escapeHtml(planWorkError)}</p>` : ""}
+    <div class="plan-input-dialog__actions"><button class="button" type="submit" ${planWorkBusy ? "disabled" : ""}>${planWorkBusy ? "Adding…" : "Add to plan"}</button><button class="text-button" type="button" data-action="close-attachment">Cancel</button></div>
+  </form>
+</dialog>`;
+
 const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["component"]): string => `
   ${renderPlanInputItems("timeline")}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
@@ -1714,8 +1794,8 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       <li class="stage stage--${escapeHtml(stage.status)}">
         <span class="stage__marker">${escapeHtml(decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions"><small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button></div>
-        <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}</div>
+        <div class="stage__actions"><small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
+        <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
     }).join("")}
   </ol>`;
@@ -2133,6 +2213,7 @@ async function render(): Promise<SurfaceManifest> {
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
       ${renderNextStep(manifest)}
+      ${renderPlanWork()}
       ${renderHumanRealityControl()}
       ${renderPlanDraft()}
       <div class="surface-grid">${managingZones.map((zone) => renderZone(manifest, zone)).join("")}</div>
@@ -2143,10 +2224,12 @@ async function render(): Promise<SurfaceManifest> {
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderPlanInputDialog()}
+    ${renderAttachmentDialog(manifest)}
     ${renderPlanFactDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   if (planInputDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-input-dialog")?.showModal();
+  if (attachmentDialogOpen) root?.querySelector<HTMLDialogElement>(".attachment-dialog")?.showModal();
   if (planFactDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-fact-dialog")?.showModal();
   enableNativeWritingAssistance();
   bindInteractions();
@@ -2437,6 +2520,86 @@ const handlePlanInput = async (inputId: string): Promise<void> => {
   await render();
 };
 
+const addChecklistItem = async (form: HTMLFormElement): Promise<void> => {
+  if (planWorkBusy) return;
+  const label = String(new FormData(form).get("label") ?? "").trim();
+  if (!label) return;
+  planWorkBusy = true;
+  try {
+    const result = await planWorkRepository.addChecklist({ planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "general", contextId: null, contextLabel: null, label, origin: "human", sourceRef: null, position: checklistItems.length + 100, idempotencyKey: `checklist-add-site-${crypto.randomUUID()}`, sourceSurface: "site" });
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce("Added to your list."); }
+    else announce(result.issues?.join(" ") || result.message || "That item could not be added.");
+  } catch { announce("That item could not be added."); }
+  planWorkBusy = false;
+  await render();
+};
+
+const toggleChecklistItem = async (itemId: string, done: boolean): Promise<void> => {
+  if (planWorkBusy) return;
+  const item = checklistItems.find((candidate) => candidate.itemId === itemId);
+  if (!item) return;
+  planWorkBusy = true;
+  try {
+    const result = await planWorkRepository.setChecklist({ itemId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, status: done ? "done" : "open", idempotencyKey: `checklist-${done ? "done" : "reopen"}-site-${crypto.randomUUID()}`, sourceSurface: "site" });
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce(done ? "Ticked off." : "Put back on the list."); }
+    else announce(result.message || "That item could not be updated.");
+  } catch { announce("That item could not be updated."); }
+  planWorkBusy = false;
+  await render();
+};
+
+const openAttachmentDialog = async (button: HTMLButtonElement): Promise<void> => {
+  attachmentContext = { section: (button.dataset.attachmentSection || "general") as PlanInputSection, contextId: button.dataset.attachmentContext || null, contextLabel: button.dataset.attachmentLabel || null };
+  planWorkError = "";
+  attachmentDialogOpen = true;
+  await render();
+};
+
+const saveAttachments = async (form: HTMLFormElement): Promise<void> => {
+  if (planWorkBusy) return;
+  const data = new FormData(form);
+  const location = String(data.get("location") ?? "general");
+  const [rawSection, rawContext] = location.split(":", 2);
+  const section = rawSection as PlanInputSection;
+  const select = form.elements.namedItem("location") as HTMLSelectElement;
+  const contextId = section === "timeline" ? rawContext || null : null;
+  const contextLabel = section === "timeline" ? select.selectedOptions[0]?.textContent?.trim() || null : null;
+  const files = Array.from((form.elements.namedItem("files") as HTMLInputElement).files ?? []);
+  const link = String(data.get("link") ?? "").trim();
+  const linkLabel = String(data.get("linkLabel") ?? "").trim();
+  const note = String(data.get("note") ?? "").trim();
+  if (!files.length && !link && !note) { planWorkError = "Choose a file or add a link or note."; await render(); return; }
+  planWorkBusy = true;
+  planWorkError = "";
+  await render();
+  try {
+    const common = { planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section, contextId, contextLabel, sourceSurface: "site" as const };
+    const results: PlanWorkResult[] = [];
+    for (const file of files) results.push(await planWorkRepository.uploadAttachment({ ...common, file, idempotencyKey: `attachment-upload-site-${crypto.randomUUID()}` }));
+    if (link) results.push(await planWorkRepository.addTextAttachment({ ...common, kind: "link", label: linkLabel, value: link, idempotencyKey: `attachment-link-site-${crypto.randomUUID()}` }));
+    if (note) results.push(await planWorkRepository.addTextAttachment({ ...common, kind: "note", label: contextLabel ? `${contextLabel} note` : "Note", value: note, idempotencyKey: `attachment-note-site-${crypto.randomUUID()}` }));
+    const failure = results.find((result) => !result.ok);
+    const latest = [...results].reverse().find((result) => result.ok);
+    if (latest) { checklistItems = latest.checklist; planAttachments = latest.attachments; }
+    if (failure) planWorkError = failure.issues?.join(" ") || failure.message || "One of those items could not be added.";
+    else { attachmentDialogOpen = false; announce(results.length === 1 ? "Added to the plan." : `${results.length} items added to the plan.`); }
+  } catch { planWorkError = "Those items could not be added."; }
+  planWorkBusy = false;
+  await render();
+};
+
+const removeAttachment = async (attachmentId: string): Promise<void> => {
+  if (planWorkBusy || !attachmentId) return;
+  planWorkBusy = true;
+  try {
+    const result = await planWorkRepository.removeAttachment({ attachmentId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "general", contextId: null, contextLabel: null, idempotencyKey: `attachment-remove-site-${crypto.randomUUID()}`, sourceSurface: "site" });
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce("Attachment removed."); }
+    else announce(result.message || "That attachment could not be removed.");
+  } catch { announce("That attachment could not be removed."); }
+  planWorkBusy = false;
+  await render();
+};
+
 const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
   if (planFactBusy) return;
   const facts = new Map(currentEditablePlanFacts().map((fact) => [fact.factId, fact]));
@@ -2494,6 +2657,12 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputError = ""; await render(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-input-form]")?.addEventListener("submit", (event) => { event.preventDefault(); const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null; const mode: PlanInputMode = submitter?.value === "codex" ? "codex" : "direct"; void savePlanInput(event.currentTarget as HTMLFormElement, mode); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']").forEach((button) => button.addEventListener("click", () => { void handlePlanInput(String(button.dataset.planInputId ?? "")); }));
+  root?.querySelector<HTMLFormElement>("[data-checklist-add]")?.addEventListener("submit", (event) => { event.preventDefault(); void addChecklistItem(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLInputElement>("[data-action='toggle-checklist']").forEach((input) => input.addEventListener("change", () => { void toggleChecklistItem(String(input.dataset.checklistId ?? ""), input.checked); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-attachment']").forEach((button) => button.addEventListener("click", () => { void openAttachmentDialog(button); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-attachment']").forEach((button) => button.addEventListener("click", async () => { attachmentDialogOpen = false; planWorkError = ""; await render(); }));
+  root?.querySelector<HTMLFormElement>("[data-attachment-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void saveAttachments(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='remove-attachment']").forEach((button) => button.addEventListener("click", () => { void removeAttachment(String(button.dataset.attachmentId ?? "")); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactError = ""; planFactDialogOpen = true; await render(); root.querySelector<HTMLInputElement>("[data-plan-fact-form] input")?.focus(); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactDialogOpen = false; planFactError = ""; await render(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-fact-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void savePlanFacts(event.currentTarget as HTMLFormElement); });

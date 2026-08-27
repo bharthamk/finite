@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "planned-cost-and-live-next-v94",
+  build: "adaptive-checklists-and-attachments-v95",
 } as const;

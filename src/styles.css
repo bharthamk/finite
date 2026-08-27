@@ -655,6 +655,51 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .managing-next__actions button { padding:10px 12px; border:1px solid rgba(255,255,255,.45); background:transparent; cursor:pointer; }
 .managing-next__actions button:hover { color:var(--deep); background:var(--signal); border-color:var(--signal); }
 
+.plan-work { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(360px,.9fr); gap:1px; margin-top:28px; border:1px solid var(--line); background:var(--line); }
+.plan-work>article { min-width:0; padding:26px 28px; background:var(--panel); }
+.plan-work article>header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:20px; }
+.plan-work article>header .eyebrow { margin:0 0 5px; color:var(--accent); }
+.plan-work article>header h2 { margin:0; font-size:1.65rem; font-weight:500; letter-spacing:-.04em; }
+.plan-work article>header>span { color:var(--muted); font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.plan-work article>header>button { padding:8px 10px; border:1px solid var(--ink); color:var(--ink); background:transparent; font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
+.checklist-items { display:grid; gap:1px; background:var(--line); }
+.checklist-item { display:grid; grid-template-columns:22px 1fr; gap:12px; align-items:start; padding:13px 14px; background:var(--paper); cursor:pointer; }
+.checklist-item input { width:18px; height:18px; margin:1px 0 0; accent-color:var(--accent); }
+.checklist-item span { display:grid; gap:4px; }
+.checklist-item strong { font-size:.92rem; font-weight:600; line-height:1.4; }
+.checklist-item small { color:var(--muted); font:500 .62rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.checklist-item.is-done { color:var(--muted); }
+.checklist-item.is-done strong { text-decoration:line-through; text-decoration-thickness:1px; }
+.checklist-add { display:grid; grid-template-columns:1fr auto; margin-top:12px; }
+.checklist-add input { width:100%; min-height:42px; padding:10px 12px; border:1px solid var(--line); color:var(--ink); background:var(--paper); font:inherit; }
+.checklist-add button { min-width:70px; border:0; color:var(--on-deep); background:var(--deep); font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
+.attachment-empty { width:100%; min-height:118px; display:grid; place-items:center; gap:6px; border:1px dashed var(--line); color:var(--muted); background:transparent; cursor:pointer; }
+.attachment-empty span { font-size:1.6rem; font-weight:300; }
+.attachment-empty strong { font-size:.82rem; }
+.plan-attachments { display:grid; gap:8px; }
+.plan-attachment { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:12px; align-items:start; padding:11px 0; border-bottom:1px solid var(--line); }
+.plan-attachment__icon,.plan-attachment__thumb { width:40px; height:40px; display:grid; place-items:center; color:var(--accent); background:var(--accent-soft); text-decoration:none; overflow:hidden; }
+.plan-attachment__thumb img { width:100%; height:100%; object-fit:cover; }
+.plan-attachment>div { min-width:0; display:grid; gap:4px; }
+.plan-attachment>div>span { color:var(--muted); font:500 .58rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.plan-attachment>div>a,.plan-attachment>div>strong { color:var(--ink); font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
+.plan-attachment p { margin:2px 0 0; color:var(--ink); font-size:.85rem; line-height:1.45; white-space:pre-line; }
+.plan-attachment small { color:var(--muted); }
+.plan-attachment>button { border:0; border-bottom:1px solid currentColor; padding:3px 0; color:var(--muted); background:transparent; font:600 .56rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
+.plan-attachments--compact { margin-top:12px; }
+.plan-attachments--compact .plan-attachment { grid-template-columns:32px minmax(0,1fr) auto; padding:9px 0; }
+.plan-attachments--compact .plan-attachment__icon,.plan-attachments--compact .plan-attachment__thumb { width:32px; height:32px; }
+.attachment-dialog__fields { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:32px; }
+.attachment-dialog__fields label { display:grid; gap:8px; }
+.attachment-dialog__fields label>span { color:var(--muted); font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.attachment-dialog__fields input,.attachment-dialog__fields select,.attachment-dialog__fields textarea { width:100%; padding:13px 14px; border:1px solid var(--line); color:var(--ink); background:var(--panel); font:inherit; }
+.attachment-dialog__fields>label:first-child,.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:1/-1; }
+.attachment-upload { padding:20px; border:1px dashed var(--line); }
+.attachment-upload small { color:var(--muted); }
+.attachment-dialog__or { display:flex; align-items:center; gap:14px; color:var(--muted); font:600 .6rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.attachment-dialog__or::before,.attachment-dialog__or::after { content:""; height:1px; flex:1; background:var(--line); }
+.attachment-note textarea { min-height:110px; resize:vertical; }
+
 .pending-badge { display:inline-block; margin-left:8px; padding:4px 7px; border:1px solid currentColor; color:var(--accent); font:600 .6rem/1 "DM Mono",monospace; letter-spacing:.03em; text-transform:uppercase; vertical-align:middle; }
 .plan-input-items { display:grid; gap:10px; margin-top:18px; }
 .plan-input-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:22px; align-items:center; padding:14px 16px; border-left:4px solid var(--accent); background:color-mix(in srgb,var(--accent-soft) 55%,var(--panel)); }
@@ -1078,6 +1123,10 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .plan-input-dialog__message { grid-column:auto; }
   .plan-input-dialog__actions { align-items:stretch; flex-direction:column; }
   .plan-input-dialog__actions .button,.plan-input-dialog__actions .text-button { width:100%; text-align:center; }
+  .plan-work { grid-template-columns:1fr; }
+  .plan-work>article { padding:22px 18px; }
+  .attachment-dialog__fields { grid-template-columns:1fr; }
+  .attachment-dialog__fields>label:first-child,.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:auto; }
   .surface-grid { display:block; padding-top:30px; }
   .zone { margin-bottom:14px; padding:22px 18px; }
   .zone__heading { display:block; }

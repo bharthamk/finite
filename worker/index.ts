@@ -7,6 +7,7 @@ import { handleSkinRequest } from "./skins.js";
 import { handlePlanShareRequest } from "./plan-shares.js";
 import { handleSettingsRequest } from "./settings.js";
 import { handlePlanInputRequest } from "./plan-inputs.js";
+import { handlePlanWorkRequest, type FiniteFilesBucket } from "./plan-work.js";
 import { finiteRelease } from "../src/release.js";
 
 interface AssetsBinding {
@@ -16,6 +17,7 @@ interface AssetsBinding {
 interface WorkerEnvironment {
   ASSETS: AssetsBinding;
   DB: D1Database;
+  FILES?: FiniteFilesBucket;
 }
 
 export { finiteRelease };
@@ -70,6 +72,8 @@ export default {
     if (settingsResponse) return withSecurityHeaders(settingsResponse);
     const planInputResponse = await handlePlanInputRequest(request, environment.DB);
     if (planInputResponse) return withSecurityHeaders(planInputResponse);
+    const planWorkResponse = await handlePlanWorkRequest(request, environment.DB, environment.FILES);
+    if (planWorkResponse) return withSecurityHeaders(planWorkResponse);
     const themeResponse = await handleThemeRequest(request, environment.DB);
     if (themeResponse) return withSecurityHeaders(themeResponse);
     const skinResponse = await handleSkinRequest(request, environment.DB);
