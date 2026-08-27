@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "../dist-test/src/arrival-presentation.js";
+import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList } from "../dist-test/src/arrival-presentation.js";
 
 test("arrival interpretation renders consumer language without raw JSON or internal paths", () => {
   const rendered = renderHumanValue({
@@ -50,4 +50,31 @@ test("long nested and mixed-language arrival input remains consumer text rather 
   assert.equal(rendered.includes("facts.secret"), false);
   assert.equal(rendered.includes("{"), false);
   assert.equal(rendered.includes("}"), false);
+});
+
+test("an incomplete interpretation falls back to supplied arrival facts and the active question", () => {
+  const sources = interpretationSourcesForDisplay({
+    rawOutcome: "Create a dinner for some friends.",
+    structured: {
+      deadline: "A Monday night in the next few months",
+      finiteLimit: "$20 per head or $200 total",
+      hardConstraint: "It must be on a Monday night",
+    },
+  }, {});
+  assert.deepEqual(sources, {
+    outcome: "Create a dinner for some friends.",
+    when: "A Monday night in the next few months",
+    whatIsLimited: "$20 per head or $200 total",
+    mustNotChange: "It must be on a Monday night",
+  });
+  assert.equal(hasInterpretationDetail(sources), true);
+  assert.equal(hasInterpretationDetail({}), false);
+  assert.deepEqual(interpretationNeedsForDisplay([], {
+    questionId: "q1",
+    prompt: "Roughly how many people should Finite plan dinner for?",
+    answerKind: "text",
+    fieldPaths: [],
+    choices: [],
+    stagedAt: "2026-08-28T00:00:00.000Z",
+  }), ["Roughly how many people should Finite plan dinner for?"]);
 });

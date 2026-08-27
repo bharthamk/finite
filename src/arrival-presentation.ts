@@ -1,4 +1,4 @@
-import type { ArrivalInput } from "./arrival.js";
+import type { ArrivalClarification, ArrivalInput, ArrivalOrder } from "./arrival.js";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -60,6 +60,36 @@ export const renderHumanValue = (value: unknown, key = "", parent: Record<string
 export const renderTextList = (items: string[], empty: string): string => items.length
   ? `<ul class="interpretation-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
   : `<p class="interpretation-empty">${escapeHtml(empty)}</p>`;
+
+const presentText = (value: unknown): string | null => {
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return null;
+};
+
+export const hasInterpretationDetail = (value: Record<string, unknown>): boolean => Object.values(value).some((entry) => {
+  if (Array.isArray(entry)) return entry.length > 0;
+  if (entry !== null && typeof entry === "object") return hasInterpretationDetail(entry as Record<string, unknown>);
+  return presentText(entry) !== null;
+});
+
+export const interpretationSourcesForDisplay = (
+  order: Pick<ArrivalOrder, "rawOutcome" | "structured">,
+  known: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (hasInterpretationDetail(known)) return known;
+  return Object.fromEntries([
+    ["outcome", presentText(order.rawOutcome)],
+    ["when", presentText(order.structured.deadline)],
+    ["whatIsLimited", presentText(order.structured.finiteLimit)],
+    ["mustNotChange", presentText(order.structured.hardConstraint)],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1])));
+};
+
+export const interpretationNeedsForDisplay = (
+  missing: string[],
+  question: ArrivalClarification | null,
+): string[] => missing.length ? missing : question?.prompt ? [question.prompt] : [];
 
 export const inputKindLabel = (kind: ArrivalInput["kind"]): string => ({
   detail: "Detail",

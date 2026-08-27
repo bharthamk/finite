@@ -9,7 +9,7 @@ import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
-import { humanLabel, inputKindLabel, inputSurfaceLabel, renderHumanValue, renderTextList } from "./arrival-presentation.js";
+import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
@@ -1118,6 +1118,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const status = order ? arrivalStatus(order) : null;
   const interpretation = order?.interpretation;
   const question = order?.pendingClarification;
+  const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
+  const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
   const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
   surfaceRoot.dataset.profile = "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
@@ -1183,10 +1185,10 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         ${interpretation ? `<details class="arrival-interpretation">
           <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex’s working interpretation</p><h2>Review what Codex understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
           <div class="arrival-interpretation__grid">
-            <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(humanLabel(interpretation.inferredFamily ?? "Still being worked out"))}</strong><p>This is Codex’s suggestion. Correct it before you approve the brief if it does not fit.</p></article>
-            <article><span>What I’m working from</span>${renderHumanValue(interpretation.known)}</article>
-            <article><span>What Codex currently thinks</span>${renderHumanValue(interpretation.inferred)}<p class="interpretation-note">These are working assumptions, not facts you supplied.</p></article>
-            <article><span>What I still need</span>${renderTextList(interpretation.missing, "Nothing currently blocking")}</article>
+            <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? "This is Codex’s suggestion. Correct it before you approve the brief if it does not fit." : "Codex will name the plan type once it has enough information."}</p></article>
+            <article><span>What I’m working from</span>${renderHumanValue(interpretationSources)}</article>
+            <article><span>What Codex currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
+            <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : "Codex is still working through the request.")}</article>
             ${interpretation.dependencies?.length ? `<article><span>Work still outside the brief</span><ul class="interpretation-list">${interpretation.dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong><small class="interpretation-provenance">${escapeHtml(humanLabel(dependency.kind))} · ${escapeHtml(humanLabel(dependency.status))}${dependency.blocking ? " · blocking" : ""}</small>${dependency.detail ? `<p>${escapeHtml(dependency.detail)}</p>` : ""}</li>`).join("")}</ul></article>` : ""}
             ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
           </div>
