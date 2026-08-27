@@ -690,7 +690,7 @@ type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string
 const newPlanChoice = "__new_plan__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {
-  const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId));
+  const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId) || (surface === "plan" && plan.active));
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : planDisplayNames.get(plan.planId) ?? plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
