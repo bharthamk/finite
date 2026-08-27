@@ -445,7 +445,19 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
-const renderIdentityPill = (): string => `<div class="identity-pill"><span>${escapeHtml(authSession.displayName)}</span>${authSession.kind === "account" ? `<button type="button" data-action="open-theme-settings" aria-label="Appearance settings">Appearance</button>` : ""}<button type="button" data-action="open-kitchen-reset">Start over</button>${authSession.kind === "demo" ? `<button data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}</div>`;
+const renderHeaderControls = (): string => {
+  const accountName = authSession.displayName.trim() || (authSession.kind === "demo" ? "Demo kitchen" : "Finite account");
+  const initial = Array.from(accountName)[0]?.toLocaleUpperCase() ?? "F";
+  return `${authSession.kind === "account" ? `<button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
+    <details class="account-menu">
+      <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__name">${escapeHtml(accountName)}</span><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
+      <div class="account-menu__popover">
+        <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
+        <button type="button" data-action="open-kitchen-reset">Start over</button>
+        ${authSession.kind === "demo" ? `<button type="button" data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}
+      </div>
+    </details>`;
+};
 
 const resetCategoryCount = (names: string[]): number => names.reduce((sum, name) => sum + Number(kitchenResetPreview?.counts?.[name] ?? 0), 0);
 
@@ -716,11 +728,9 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   surfaceRoot.innerHTML = `
     <header class="site-header arrival-header">
       <a class="brand" href="#main" aria-label="Finite home"><span>finite</span><i></i></a>
-      <p class="arrival-header__mode">Arrival / a new finite plan</p>
-      <div class="identity-cluster">
+      <div class="header-actions">
         ${order ? renderCodexHandoffButton() : ""}
-        <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Saved kitchen"}</div>
-        ${renderIdentityPill()}
+        ${renderHeaderControls()}
       </div>
     </header>
     <main id="main" class="arrival-main">
@@ -1394,10 +1404,9 @@ async function render(): Promise<SurfaceManifest> {
       <nav class="profile-nav" aria-label="Demonstration plan">
         ${(["travel", "renovation", "event"] as ProfileId[]).map((profileId) => `<button data-action="profile" data-profile="${profileId}" aria-pressed="${kernel.profile.profileId === profileId}">${profileId === "event" ? "Launch event" : profileId}</button>`).join("")}
       </nav>
-      <div class="identity-cluster">
+      <div class="header-actions">
         ${renderCodexHandoffButton()}
-        <div class="operator-status"><span></span>${modelContext ? "Codex browser present" : "Local kitchen"}</div>
-        ${renderIdentityPill()}
+        ${renderHeaderControls()}
       </div>
     </header>
     <main id="main">
