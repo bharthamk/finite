@@ -57,3 +57,18 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
   assert.equal(handoff.prompt.includes("orderId"), false);
   assert.match(handoff.detail, /this Codex task/i);
 });
+
+test("a custom agentic name changes presentation without rewriting the Codex operator protocol", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    agenticName: "Ari",
+    order,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 3, snapshotHash: "c".repeat(64) },
+  });
+  assert.equal(handoff.buttonLabel, "Hand off to Ari");
+  assert.equal(handoff.title, "Bring Ari into this plan.");
+  assert.match(handoff.detail, /Ari is the display name/);
+  assert.match(handoff.prompt, /Codex operator/);
+  assert.doesNotMatch(handoff.prompt, /Ari/);
+});

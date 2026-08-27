@@ -5,6 +5,7 @@ import { handleConstructionPacketRequest } from "./construction-packet.js";
 import { handleThemeRequest } from "./themes.js";
 import { handleSkinRequest } from "./skins.js";
 import { handlePlanShareRequest } from "./plan-shares.js";
+import { handleSettingsRequest } from "./settings.js";
 import { finiteRelease } from "../src/release.js";
 
 interface AssetsBinding {
@@ -64,6 +65,8 @@ export default {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
     const authResponse = await handleAuthRequest(request, environment.DB);
     if (authResponse) return withSecurityHeaders(authResponse);
+    const settingsResponse = await handleSettingsRequest(request, environment.DB);
+    if (settingsResponse) return withSecurityHeaders(settingsResponse);
     const themeResponse = await handleThemeRequest(request, environment.DB);
     if (themeResponse) return withSecurityHeaders(themeResponse);
     const skinResponse = await handleSkinRequest(request, environment.DB);

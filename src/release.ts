@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "arrival-next-action-layout-v79",
+  build: "agentic-name-settings-v80",
 } as const;

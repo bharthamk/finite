@@ -15,7 +15,7 @@ test("the product header contains actions instead of unexplained internal state"
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
     assert.doesNotMatch(source, new RegExp(obsoleteLabel));
   }
-  assert.equal(source.match(/class="header-actions"/g)?.length, 2);
+  assert.equal(source.match(/class="header-actions"/g)?.length, 3);
   assert.match(source, /class="header-action" data-action="open-theme-settings">Appearance<\/button>/);
   assert.match(source, /<details class="account-menu">/);
   assert.doesNotMatch(source, /class="account-menu__name"/);
@@ -45,7 +45,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 5);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 6);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -64,6 +64,7 @@ test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /<details class="account-menu__how">/);
   assert.match(source, /<summary>How Finite works<\/summary>/);
   assert.match(source, /Think of Finite as the kitchen behind your plan/);
+  assert.match(source, /<a href="\$\{escapeHtml\(settingsPath\)\}">Settings<\/a>/);
 });
 
 test("the header plan dropdown creates and opens plans from both product surfaces", () => {
@@ -118,7 +119,7 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   assert.doesNotMatch(consumerServerCopy, /available in (?:this|a signed-in) kitchen|resetting a kitchen|clear this Finite kitchen/i);
   assert.match(source, /Only this page will be shared\./);
   assert.match(source, /Same plan\. Same saved starting point\./);
-  assert.match(source, /Codex works through the plan\./);
+  assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan\./);
 });
 
 test("arrival shows the complete human starting point without protocol language or overlay-prone disclosure sizing", () => {
@@ -144,12 +145,28 @@ test("arrival prioritizes the next action and keeps secondary review tools side 
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
   assert.match(source, /Next step \/ review your brief/);
-  assert.match(source, /!question && order\.status !== "proposed_plan_ready" && !planDraftMarkup/);
+  assert.match(source, /order\.status === "interpretation_confirmed" && !planDraftMarkup/);
+  assert.match(source, /Brief confirmed\. Use \$\{escapeHtml\(agenticName\(\)\)\} to continue\./);
+  assert.match(source, /data-action="open-codex-handoff" aria-haspopup="dialog">Use \$\{escapeHtml\(agenticName\(\)\)\} to continue/);
+  assert.doesNotMatch(source, /Brief confirmed\. Codex may construct a plan/);
+  assert.match(source, /!question && order\.status !== "proposed_plan_ready" && order\.status !== "interpretation_confirmed" && !planDraftMarkup/);
   assert.match(source, /<\/section>\s*\$\{message[^]*?<details class="arrival-order-source">/);
   assert.match(source, /<div class="arrival-working-grid">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff \{ grid-template-columns:1fr; \}/);
+  assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
+});
+
+test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
+  assert.match(source, /params\.get\("settings"\) === "1"/);
+  assert.match(source, /<p class="eyebrow">Agentic name<\/p>/);
+  assert.match(source, /What should Finite call your agent\?/);
+  assert.match(source, /The default is Codex\./);
+  assert.match(source, /name="agenticName" type="text" required maxlength="40"/);
+  assert.match(source, /It does not change the underlying agent, model, permissions, or approval boundaries\./);
+  assert.match(source, /data-action="reset-agentic-name"/);
+  assert.match(styles, /\.settings-main/);
+  assert.match(styles, /\.agentic-name-form/);
 });
 
 test("human writing fields use the browser language for native spellcheck while control text opts out", () => {
@@ -157,7 +174,7 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true"><\/div>/);
   assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
   assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
-  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 2);
+  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 3);
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });
@@ -171,7 +188,7 @@ test("Follow Codex is a human-controlled top-bar permission with bounded accessi
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
-  assert.match(source, /Codex is showing \$\{descriptor\.label\}/);
+  assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.follow-codex-toggle\[aria-pressed="true"\]/);

@@ -3,6 +3,7 @@ import type { ArrivalOrder } from "./arrival.js";
 export interface CodexHandoffContext {
   siteOrigin: string;
   inline: boolean;
+  agenticName?: string;
   entryIntent?: "start_new" | "continue_current" | "resume_handoff";
   order: Pick<ArrivalOrder, "orderId" | "version" | "status" | "lastOperatorCheckpoint" | "checksum"> | null;
   plan: { planId: string; profileId: string; profileHash: string; revision: number; snapshotHash: string | null };
@@ -33,10 +34,9 @@ const cleanOrigin = (value: string): string => {
   return parsed.origin;
 };
 
-const buttonLabel = (): string => "Hand off to Codex";
-
 export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff => {
   const siteOrigin = cleanOrigin(context.siteOrigin);
+  const agenticName = context.agenticName?.trim() || "Codex";
   const order = context.order;
   const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
   const toolInput = {
@@ -70,11 +70,11 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
 
   return {
     handoffVersion: "finite-codex-handoff.v1",
-    buttonLabel: buttonLabel(),
-    title: order ? "Bring Codex into this plan." : "Start this with Codex.",
+    buttonLabel: `Hand off to ${agenticName}`,
+    title: order ? `Bring ${agenticName} into this plan.` : `Start this with ${agenticName}.`,
     detail: context.inline
-      ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
-      : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",
+      ? `Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools. ${agenticName} is the display name you chose in Finite.`
+      : `Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in. ${agenticName} is the display name you chose in Finite.`,
     prompt,
     copiedPayload: {
       siteOrigin,

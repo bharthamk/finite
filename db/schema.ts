@@ -349,3 +349,20 @@ export const planShares = sqliteTable("plan_shares", {
   uniqueIndex("idx_plan_shares_token_hash").on(table.tokenHash),
   index("idx_plan_shares_scope_plan_created").on(table.scopeId, table.planId, table.createdAt),
 ]);
+
+export const tenantSettings = sqliteTable("tenant_settings", {
+  scopeId: text("scope_id").primaryKey(),
+  agenticName: text("agentic_name").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const tenantSettingsReceipts = sqliteTable("tenant_settings_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_tenant_settings_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

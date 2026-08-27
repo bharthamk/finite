@@ -16,6 +16,7 @@ import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenReset
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
 import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, skinTraitKeys, type SkinCatalogResult, type SkinDefinition, type SkinRecipe, type SkinResult } from "./skin.js";
 import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
+import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -414,6 +415,13 @@ const arrivalRepository = new HttpArrivalRepository();
 const resetRepository = new HttpKitchenResetRepository();
 const themeRepository = new HttpThemeRepository();
 const skinRepository = new HttpSkinRepository();
+const settingsRepository = new HttpSettingsRepository();
+let accountSettings: AgentSettings = defaultAgentSettings();
+try {
+  const loadedSettings = await settingsRepository.load();
+  if (loadedSettings.ok) accountSettings = loadedSettings.settings;
+} catch { /* The default name keeps the plan usable if account preferences are temporarily unavailable. */ }
+const agenticName = (): string => accountSettings.agenticName || defaultAgenticName;
 let themeCatalog: ThemeCatalogResult;
 try {
   themeCatalog = await themeRepository.list();
@@ -509,6 +517,9 @@ if (hotModule) hotModule.dispose(() => adapter?.dispose());
 let busy = false;
 let message = "";
 let messageScope = "";
+let settingsBusy = false;
+let settingsMessage = "";
+let settingsError = "";
 let draftReturnFormOpen = false;
 let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
@@ -535,6 +546,9 @@ const escapeHtml = (value: unknown): string => String(value ?? "")
 const renderHeaderControls = (): string => {
   const accountName = authSession.displayName.trim() || (authSession.kind === "demo" ? "Finite demo" : "Finite account");
   const initial = Array.from(accountName)[0]?.toLocaleUpperCase() ?? "F";
+  const settingsTarget = new URL(location.href);
+  settingsTarget.searchParams.set("settings", "1");
+  const settingsPath = `${settingsTarget.pathname}${settingsTarget.search}${settingsTarget.hash}`;
   return `${authSession.kind === "account" ? `<button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
     <details class="account-menu">
       <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
@@ -542,23 +556,24 @@ const renderHeaderControls = (): string => {
         <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
         <details class="account-menu__how">
           <summary>How Finite works</summary>
-          <div><p>Think of Finite as the kitchen behind your plan: you describe the outcome, Codex works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>Codex keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
+          <div><p>Think of Finite as the kitchen behind your plan: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
         </details>
+        <a href="${escapeHtml(settingsPath)}">Settings</a>
         <button type="button" data-action="open-kitchen-reset">Start over</button>
         ${authSession.kind === "demo" ? `<button type="button" data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}
       </div>
     </details>`;
 };
 
-const renderFollowCodexButton = (): string => `<button type="button" class="follow-codex-toggle" data-action="toggle-follow-codex" aria-pressed="${followCodexEnabled}" title="${followCodexEnabled ? "Codex may refresh, move and highlight this Finite view" : "Allow Codex to refresh, move and highlight this Finite view"}"><span class="follow-codex-toggle__signal" aria-hidden="true"></span><span class="follow-codex-toggle__wide">${followCodexEnabled ? "Following Codex" : "Follow Codex"}</span><span class="follow-codex-toggle__short">${followCodexEnabled ? "Following" : "Follow"}</span></button>`;
+const renderFollowCodexButton = (): string => `<button type="button" class="follow-codex-toggle" data-action="toggle-follow-codex" aria-pressed="${followCodexEnabled}" title="${escapeHtml(followCodexEnabled ? `${agenticName()} may refresh, move and highlight this Finite view` : `Allow ${agenticName()} to refresh, move and highlight this Finite view`)}"><span class="follow-codex-toggle__signal" aria-hidden="true"></span><span class="follow-codex-toggle__wide">${followCodexEnabled ? `Following ${escapeHtml(agenticName())}` : `Follow ${escapeHtml(agenticName())}`}</span><span class="follow-codex-toggle__short">${followCodexEnabled ? "Following" : "Follow"}</span></button>`;
 
 const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
   top: { label: "the top of this page", selectors: [".arrival-compose", ".arrival-order-head", ".hero"] },
   starting_point: { label: "your starting point", selectors: [".arrival-order", ".arrival-order-source"] },
   status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
-  question: { label: "Codex's question", selectors: [".arrival-question"] },
+  question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
   review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
-  interpretation: { label: "Codex's working interpretation", selectors: [".arrival-interpretation"] },
+  interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity"] },
   plan_summary: { label: "the plan summary", selectors: [".hero", ".plan-orbit"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
@@ -578,14 +593,14 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   const element = descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
   const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
   if (!element) {
-    announce(`Codex refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
+    announce(`${agenticName()} refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
     return { target: request.target, found: false, surface };
   }
   const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
   if (disclosure) disclosure.open = true;
   element.setAttribute("data-codex-spotlight", "true");
   element.scrollIntoView({ behavior: "smooth", block: "center" });
-  announce(`Codex is showing ${descriptor.label}.`);
+  announce(`${agenticName()} is showing ${descriptor.label}.`);
   spotlightTimer = window.setTimeout(() => { element.removeAttribute("data-codex-spotlight"); spotlightTimer = null; }, 7_000);
   return { target: request.target, found: true, surface };
 };
@@ -595,7 +610,7 @@ const bindFollowCodexInteractions = (): void => {
     followCodexEnabled = !followCodexEnabled;
     if (followCodexEnabled) scopedStorage.setItem("finite-plan.follow-codex", "true");
     else { scopedStorage.removeItem("finite-plan.follow-codex"); clearCodexSpotlight(); }
-    announce(followCodexEnabled ? "Follow Codex is on. Codex may refresh, move and highlight this Finite view." : "Follow Codex is off. Codex can keep working, but cannot move this view.");
+    announce(followCodexEnabled ? `Follow ${agenticName()} is on. ${agenticName()} may refresh, move and highlight this Finite view.` : `Follow ${agenticName()} is off. ${agenticName()} can keep working, but cannot move this view.`);
     await render();
   });
 };
@@ -868,6 +883,7 @@ const pendingDraftMatchesArrival = (): boolean => {
 const currentCodexHandoff = () => createCodexHandoff({
   siteOrigin: location.origin,
   inline: Boolean(modelContext),
+  agenticName: agenticName(),
   order: currentArrival(),
   entryIntent: currentArrival()
     ? "resume_handoff"
@@ -895,18 +911,18 @@ const renderCodexHandoffDialog = (): string => {
     <form method="dialog" class="codex-handoff-sheet">
       <header>
         <div><p class="eyebrow">Operator handoff / no account connection</p><h2 id="codex_handoff_title">${escapeHtml(handoff.title)}</h2></div>
-        <button class="codex-handoff-close" value="close" aria-label="Close Codex handoff">×</button>
+        <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
       <p class="codex-handoff-lede">${escapeHtml(handoff.detail)}</p>
       <ol class="codex-handoff-steps">
-        <li><span>01</span><p>Open your Codex task.</p></li>
+        <li><span>01</span><p>Open your Codex task for ${escapeHtml(agenticName())}.</p></li>
         <li><span>02</span><p>Paste the introduction below.</p></li>
-        <li><span>03</span><p>Codex opens Finite and reads the live plan.</p></li>
+        <li><span>03</span><p>${escapeHtml(agenticName())} opens Finite and reads the live plan.</p></li>
       </ol>
-      <label class="codex-handoff-prompt"><span>What Codex receives</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label>
+      <label class="codex-handoff-prompt"><span>What ${escapeHtml(agenticName())} receives</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label>
       <div class="codex-handoff-actions">
         <button type="button" class="button" data-action="copy-codex-handoff">Copy handoff prompt</button>
-        <p data-codex-handoff-status>Nothing has been sent to Codex yet.</p>
+        <p data-codex-handoff-status>Nothing has been sent to ${escapeHtml(agenticName())} yet.</p>
       </div>
       <dl class="codex-handoff-boundary">
         <div><dt>Finite site</dt><dd>${escapeHtml(handoff.copiedPayload.siteOrigin)}</dd></div>
@@ -928,9 +944,9 @@ const bindCodexHandoffInteractions = (): void => {
     const status = root.querySelector<HTMLElement>("[data-codex-handoff-status]");
     try {
       await navigator.clipboard.writeText(prompt);
-      button.textContent = "Copied — open Codex";
-      if (status) status.textContent = "Copied. Nothing has been sent or connected; paste it into Codex when you are ready.";
-      announce("Codex handoff copied. Nothing has been sent yet.");
+      button.textContent = `Copied — open ${agenticName()}`;
+      if (status) status.textContent = `Copied. Nothing has been sent or connected; paste it into Codex for ${agenticName()} when you are ready.`;
+      announce(`${agenticName()} handoff copied. Nothing has been sent yet.`);
     } catch {
       const textarea = root.querySelector<HTMLTextAreaElement>("[data-codex-handoff-prompt]");
       textarea?.focus();
@@ -1127,12 +1143,12 @@ const renderOriginalRequest = (order: ArrivalOrder): string => {
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
   if (order.status === "waiting_for_codex") return modelContext
-    ? { label: "Saved · ready for Codex", title: "Your starting point is saved.", detail: "Add anything else whenever you like. Codex will work from everything you have shared." }
-    : { label: "Saved · ready for Codex", title: "Your starting point is saved.", detail: "Open Codex when you are ready and ask it to continue this plan. It will work from everything you have shared." };
-  if (order.status === "codex_reviewing") return { label: "Codex is working", title: "Codex is working through what you shared.", detail: "You can still add or correct something. Codex will use your newest information before proposing a plan." };
-  if (order.status === "clarification_required") return { label: "Your answer needed", title: "Codex needs one decision before it can continue.", detail: "Only you can answer this. Finite will add your answer to the plan." };
-  if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: "Codex has turned your request into a brief.", detail: "Check it below. Nothing becomes your plan until you approve it." };
-  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: "Codex can now build the plan.", detail: "You approved the brief, not any booking, purchase, or outside action." };
+    ? { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Add anything else whenever you like. ${agenticName()} will work from everything you have shared.` }
+    : { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Open Codex for ${agenticName()} when you are ready and ask it to continue this plan. It will work from everything you have shared.` };
+  if (order.status === "codex_reviewing") return { label: `${agenticName()} is working`, title: `${agenticName()} is working through what you shared.`, detail: `You can still add or correct something. ${agenticName()} will use your newest information before proposing a plan.` };
+  if (order.status === "clarification_required") return { label: "Your answer needed", title: `${agenticName()} needs one decision before it can continue.`, detail: "Only you can answer this. Finite will add your answer to the plan." };
+  if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: `${agenticName()} has turned your request into a brief.`, detail: "Check it below. Nothing becomes your plan until you approve it." };
+  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: `Use ${agenticName()} to continue.`, detail: "Your approved brief is ready to become a plan. Nothing is activated until you review and approve the exact plan." };
   if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
@@ -1169,7 +1185,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <p class="eyebrow">Start with the outcome</p>
             <h1 id="arrival_title">What are you trying to make <em>happen?</em></h1>
             <p class="arrival-compose__lede">Tell Finite in your own language. One sentence is enough. You do not need to choose a plan type, build a dashboard, or know every detail yet.</p>
-            <p class="arrival-compose__promise"><span>Your words stay intact.</span> Codex interprets them later; Finite does not pretend the work has already started.</p>
+            <p class="arrival-compose__promise"><span>Your words stay intact.</span> ${escapeHtml(agenticName())} interprets them later; Finite does not pretend the work has already started.</p>
           </div>
           <form class="arrival-order" data-arrival-form="create">
             <div class="arrival-order__head"><p class="eyebrow">Your starting point</p><span>Only this is required</span></div>
@@ -1190,21 +1206,25 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
               </div>
             </details>
-            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button><p>Saved first. Interpreted only when Codex opens it.</p></div>
+            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button><p>Saved first. Interpreted only when ${escapeHtml(agenticName())} opens it.</p></div>
           </form>
-          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with Codex</strong><small>Same plan. Same saved starting point.</small></button>
+          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with ${escapeHtml(agenticName())}</strong><small>Same plan. Same saved starting point.</small></button>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
         <section class="arrival-primary-action" aria-label="What happens next">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
-          ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. Codex will not guess it for you.</small></section>` : ""}
+          ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. ${escapeHtml(agenticName())} will not guess it for you.</small></section>` : ""}
         ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
-          <div><p class="eyebrow">Next step / review your brief</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. Codex will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
+          <div><p class="eyebrow">Next step / review your brief</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. ${escapeHtml(agenticName())} will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
           <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
           <small>Need a change? Open “Add or correct something” below.</small>
         </section>` : ""}
+          ${order.status === "interpretation_confirmed" && !planDraftMarkup ? `<section class="arrival-continue" aria-labelledby="arrival_continue_title">
+            <div><p class="eyebrow">Next step / continue with ${escapeHtml(agenticName())}</p><h2 id="arrival_continue_title">Brief confirmed. Use ${escapeHtml(agenticName())} to continue.</h2><p>Your approved brief is ready. ${escapeHtml(agenticName())} can now construct the plan for you to review. Nothing is activated until you approve the exact plan.</p></div>
+            <button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Use ${escapeHtml(agenticName())} to continue</button>
+          </section>` : ""}
           ${planDraftMarkup}
-          ${!question && order.status !== "proposed_plan_ready" && !planDraftMarkup ? `<aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>` : ""}
+          ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup ? `<aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>` : ""}
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         <details class="arrival-order-source">
@@ -1213,19 +1233,19 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         </details>
         <div class="arrival-working-grid">
           ${interpretation ? `<details class="arrival-interpretation">
-            <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex’s working interpretation</p><h2>Review what Codex understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
+            <summary class="arrival-interpretation__head"><div><p class="eyebrow">${escapeHtml(agenticName())}’s working interpretation</p><h2>Review what ${escapeHtml(agenticName())} understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
             <div class="arrival-interpretation__grid">
-              <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? "This is Codex’s suggestion. Correct it before you approve the brief if it does not fit." : "Codex will name the plan type once it has enough information."}</p></article>
+              <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? `This is ${escapeHtml(agenticName())}’s suggestion. Correct it before you approve the brief if it does not fit.` : `${escapeHtml(agenticName())} will name the plan type once it has enough information.`}</p></article>
               <article><span>What I’m working from</span>${renderHumanValue(interpretationSources)}</article>
-              <article><span>What Codex currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
-              <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : "Codex is still working through the request.")}</article>
+              <article><span>What ${escapeHtml(agenticName())} currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
+              <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : `${agenticName()} is still working through the request.`)}</article>
               ${interpretation.dependencies?.length ? `<article><span>Work still outside the brief</span><ul class="interpretation-list">${interpretation.dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong><small class="interpretation-provenance">${escapeHtml(humanLabel(dependency.kind))} · ${escapeHtml(humanLabel(dependency.status))}${dependency.blocking ? " · blocking" : ""}</small>${dependency.detail ? `<p>${escapeHtml(dependency.detail)}</p>` : ""}</li>`).join("")}</ul></article>` : ""}
               ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
             </div>
           </details>` : `<div class="arrival-working-grid__placeholder" aria-hidden="true"></div>`}
           <details class="arrival-continuity">
             <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
-            <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>Use this whenever something changes or you remember another detail. Codex will work from the newest information you have given.</p></div>
+            <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something ${escapeHtml(agenticName())} must know.</h2><p>Use this whenever something changes or you remember another detail. ${escapeHtml(agenticName())} will work from the newest information you have given.</p></div>
               <form data-arrival-form="append">
                 <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
                 <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
@@ -1238,7 +1258,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>You define the outcome. Codex works through the plan. Finite keeps it together as things change.</p><span>${order ? "Your starting point is saved" : "No request waiting · your plans remain available"}</span></footer>
+    <footer><p>You define the outcome. ${escapeHtml(agenticName())} works through the plan. Finite keeps it together as things change.</p><span>${order ? "Your starting point is saved" : "No request waiting · your plans remain available"}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
@@ -1264,7 +1284,7 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
   if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
-  announce(arrivalResult.ok ? "Your request is saved. Codex has not processed it yet." : `The request was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? `Your request is saved. ${agenticName()} has not processed it yet.` : `The request was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1285,7 +1305,7 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
-  announce(arrivalResult.ok ? (answer ? "Your answer is saved. Codex will use it when continuing the plan." : "Your update is saved. Codex will work from your newest information.") : `The update was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (answer ? `Your answer is saved. ${agenticName()} will use it when continuing the plan.` : `Your update is saved. ${agenticName()} will work from your newest information.`) : `The update was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1302,7 +1322,7 @@ const confirmArrivalInterpretation = async (): Promise<void> => {
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
-  announce(arrivalResult.ok ? "Brief confirmed. Codex may construct a plan, but no plan is activated yet." : `The brief was not confirmed: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? `Brief confirmed. Use ${agenticName()} to continue.` : `The brief was not confirmed: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1813,6 +1833,80 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><p class="eyebrow">${escapeHtml(manifest.nouns.plan)}</p><h2>${escapeHtml(zone.title)}</h2></div>${body}</section>`;
 };
 
+const settingsReturnPath = (): string => {
+  const target = new URL(location.href);
+  target.searchParams.delete("settings");
+  return `${target.pathname}${target.search}${target.hash}`;
+};
+
+function renderSettings(): void {
+  const canPersist = authSession.kind === "account";
+  surfaceRoot.dataset.profile = "settings";
+  surfaceRoot.setAttribute("aria-busy", String(settingsBusy));
+  surfaceRoot.innerHTML = `
+    <div class="private-top-shell private-top-shell--settings">
+      <header class="site-header settings-header">
+        ${renderBrand()}
+        <a class="settings-back" href="${escapeHtml(settingsReturnPath())}">← Back to plan</a>
+        <div class="header-actions">${renderHeaderControls()}</div>
+      </header>
+    </div>
+    <main id="main" class="settings-main">
+      <header class="settings-hero"><p class="eyebrow">Your Finite account</p><h1>Settings</h1><p>Choose how Finite feels and speaks while the underlying safeguards stay the same.</p></header>
+      <section class="settings-section" aria-labelledby="agentic_name_title">
+        <div class="settings-section__intro"><p class="eyebrow">Agentic name</p><h2 id="agentic_name_title">What should Finite call your agent?</h2><p>This name appears throughout your private plan workspace. The default is Codex.</p></div>
+        <form class="agentic-name-form" data-agentic-name-form>
+          <label><span>Agentic name</span><input name="agenticName" type="text" required maxlength="40" value="${escapeHtml(agenticName())}" autocomplete="off" ${canPersist ? "" : "disabled"}></label>
+          <p class="agentic-name-form__boundary">This changes the name Finite shows. It does not change the underlying agent, model, permissions, or approval boundaries.</p>
+          ${settingsError ? `<p class="settings-feedback is-error" role="alert">${escapeHtml(settingsError)}</p>` : ""}
+          ${settingsMessage ? `<p class="settings-feedback is-success" role="status">${escapeHtml(settingsMessage)}</p>` : ""}
+          ${canPersist ? `<div class="agentic-name-form__actions"><button class="button" type="submit" ${settingsBusy ? "disabled" : ""}>Save name</button><button class="text-button" type="button" data-action="reset-agentic-name" ${settingsBusy || agenticName() === defaultAgenticName ? "disabled" : ""}>Reset to Codex</button></div>` : `<p class="settings-signin">Sign in with ChatGPT to save account settings across visits.</p>`}
+        </form>
+      </section>
+    </main>
+    <footer><p>Finite keeps your plans and your preferences separate.</p><span>Account settings</span></footer>
+    ${renderKitchenResetDialog()}
+    ${renderThemeSettingsDialog()}`;
+  enableNativeWritingAssistance();
+  bindSettingsInteractions();
+}
+
+const saveAgenticName = async (name: string): Promise<void> => {
+  const validation = validateAgenticName(name);
+  settingsError = validation.ok ? "" : validation.issues.join(" ");
+  settingsMessage = "";
+  if (!validation.ok || settingsBusy) { await render(); return; }
+  settingsBusy = true;
+  await render();
+  try {
+    const result = await settingsRepository.save({ agenticName: validation.name, idempotencyKey: `site-settings-${crypto.randomUUID()}`, sourceSurface: "site" });
+    if (!result.ok) settingsError = result.issues?.join(" ") || result.message || "That name could not be saved.";
+    else {
+      accountSettings = result.settings;
+      settingsMessage = `Saved. Finite will now call your agent ${accountSettings.agenticName}.`;
+      announce(settingsMessage);
+    }
+  } catch { settingsError = "That name could not be saved. Your previous setting is unchanged."; }
+  settingsBusy = false;
+  await render();
+};
+
+function bindSettingsInteractions(): void {
+  bindKitchenResetInteractions();
+  bindThemeSettingsInteractions();
+  root?.querySelector<HTMLFormElement>("[data-agentic-name-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    void saveAgenticName(String(new FormData(form).get("agenticName") ?? ""));
+  });
+  root?.querySelector<HTMLButtonElement>("[data-action='reset-agentic-name']")?.addEventListener("click", () => { void saveAgenticName(defaultAgenticName); });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
+    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (response.ok) location.reload();
+    else announce("The demo session could not be ended safely.");
+  });
+}
+
 async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
   const reconciledMessage = reconcileScopedSurfaceMessage({ message, scope: messageScope }, currentMessageScope());
@@ -1821,6 +1915,10 @@ async function render(): Promise<SurfaceManifest> {
   messageScope = reconciledMessage.scope;
   const manifest = await compileSurfaceManifest(kernel.profile, kernel);
   const params = new URLSearchParams(location.search);
+  if (params.get("settings") === "1") {
+    renderSettings();
+    return manifest;
+  }
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode: params.get("lab") === "1",
     kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
@@ -1863,7 +1961,7 @@ async function render(): Promise<SurfaceManifest> {
       <div class="surface-grid">${manifest.zones.map((zone) => renderZone(manifest, zone)).join("")}</div>
       ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>Codex works through the plan. You choose and approve every consequential change.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
+    <footer><p>${escapeHtml(agenticName())} works through the plan. You choose and approve every consequential change.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
