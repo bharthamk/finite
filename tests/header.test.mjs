@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const logo = readFileSync(new URL("../public/finite-mark.svg", import.meta.url), "utf8");
 
 test("the product header contains actions instead of unexplained internal state", () => {
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
@@ -22,6 +23,8 @@ test("every product surface uses the accepted reroute-f identity", () => {
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
+  assert.match(logo, /<circle cx="17" cy="41" r="7" fill="#f05232"\/>/);
+  assert.doesNotMatch(logo, /<circle cx="32" cy="41"/);
 });
 
 test("account and destructive actions live in a labelled account menu", () => {
@@ -43,7 +46,8 @@ test("the header plan dropdown uses the durable catalog and guarded switch path"
 });
 
 test("plan sharing publishes a selected plate without registering a kitchen on the shared route", () => {
-  assert.match(source, /data-action="open-plan-share">Share<\/button>/);
+  assert.match(source, /data-action="open-plan-share">Share this plan<\/button>/);
+  assert.match(styles, /html \.header-action--share/);
   assert.match(source, /Live view/);
   assert.match(source, /Frozen snapshot/);
   assert.match(source, /Preview exact page/);

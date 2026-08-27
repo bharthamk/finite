@@ -1614,7 +1614,7 @@ async function render(): Promise<SurfaceManifest> {
       ${renderBrand()}
       ${renderPlanSwitcher("plan")}
       <div class="header-actions">
-        ${authSession.kind === "account" ? `<button type="button" class="header-action header-action--share" data-action="open-plan-share">Share</button>` : ""}
+        ${authSession.kind === "account" ? `<button type="button" class="header-action header-action--share" data-action="open-plan-share">Share this plan</button>` : ""}
         ${renderCodexHandoffButton()}
         ${renderHeaderControls()}
       </div>
