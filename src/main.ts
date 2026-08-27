@@ -491,7 +491,13 @@ const renderSkinCard = (skin: SkinDefinition): string => {
   const current = skin.skinId === skinCatalog.activeSkinId;
   const confirmingDelete = skin.skinId === skinDeleteId;
   return `<article class="skin-card skin-card--${escapeHtml(skin.skinId)}${current ? " is-current" : ""}" data-skin-card="${escapeHtml(skin.skinId)}">
-    <div class="skin-card__sample" aria-hidden="true"><span>Finite</span><i></i><b>Make room.</b><small>One plan, calmly held.</small></div>
+    <div class="skin-card__sample skin-preview skin-preview--type-${skin.recipe.typeStyle} skin-preview--heading-${skin.recipe.headingScale} skin-preview--density-${skin.recipe.density} skin-preview--corner-${skin.recipe.cornerStyle} skin-preview--border-${skin.recipe.borderStyle} skin-preview--shadow-${skin.recipe.shadowStyle} skin-preview--control-${skin.recipe.controlStyle} skin-preview--panel-${skin.recipe.panelStyle} skin-preview--motion-${skin.recipe.motionStyle}" role="img" aria-label="${escapeHtml(skin.name)} example showing the same Paris travel plan">
+      <div class="skin-preview__bar"><span><i class="skin-preview__motion" aria-hidden="true"></i>Travel plan</span><em>On track</em></div>
+      <h4>Paris without overruns.</h4>
+      <p>Seven days · A$8,400 cap</p>
+      <div class="skin-preview__panel"><small>Room to move</small><strong>A$1,260</strong><i>15% held back</i></div>
+      <b class="skin-preview__control">Review plan</b>
+    </div>
     <div class="skin-card__copy"><span>${skin.kind === "built_in" ? "Finite skin" : "Your skin"}</span><h3>${escapeHtml(skin.name)}</h3><p>${escapeHtml(skin.description)}</p></div>
     <button type="button" data-skin-apply="${escapeHtml(skin.skinId)}" ${current || busy ? "disabled" : ""}>${current ? "Current" : "Use skin"}</button>
     ${skin.kind === "custom" ? `<div class="skin-card__custom">${confirmingDelete ? `<button type="button" class="is-danger" data-skin-delete-confirm="${escapeHtml(skin.skinId)}">Delete permanently</button><button type="button" data-action="cancel-skin-delete">Keep</button>` : `<button type="button" data-skin-edit="${escapeHtml(skin.skinId)}">Edit</button><button type="button" data-skin-delete="${escapeHtml(skin.skinId)}">Delete</button>`}</div>` : ""}
@@ -517,7 +523,7 @@ const renderThemeSettingsDialog = (): string => {
   return `<dialog class="theme-settings-dialog" data-theme-settings-dialog aria-labelledby="theme_settings_title">
     <form method="dialog" class="theme-settings-dialog__close"><button aria-label="Close appearance settings">×</button></form>
     <header class="theme-settings-dialog__head"><p class="eyebrow">Appearance / this kitchen</p><h2 id="theme_settings_title">Choose how Finite feels.</h2><p>Skins change Finite’s visual character without moving its layout. Palettes set colour independently. Plan identity, authority and accepted truth stay unchanged.</p></header>
-    <section class="appearance-section" aria-labelledby="skin_heading"><div class="appearance-section__head"><p class="eyebrow">01 / Skin</p><h3 id="skin_heading">Visual character</h3><p>Typography, scale, spacing, edges, depth, controls, panels and motion.</p></div><div class="skin-gallery">${allSkins().map(renderSkinCard).join("")}</div></section>
+    <section class="appearance-section" aria-labelledby="skin_heading"><div class="appearance-section__head"><p class="eyebrow">01 / Skin</p><h3 id="skin_heading">Visual character</h3><p>Each choice shows the same Finite plan, so you can compare typography, hierarchy, panels and controls before applying it.</p></div><div class="skin-gallery">${allSkins().map(renderSkinCard).join("")}</div></section>
     <details class="theme-maker skin-maker" ${editingSkin ? "open" : ""}>
       <summary><span>${editingSkin ? "Editing your skin" : "Custom skin"}</span><strong>${editingSkin ? escapeHtml(skinDraft.name) : "Compose a recipe"}</strong><small>Bounded visual traits</small></summary>
       <form data-skin-custom-form>

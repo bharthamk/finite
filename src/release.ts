@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "appearance-skins-v60",
+  build: "skin-selector-examples-v61",
 } as const;

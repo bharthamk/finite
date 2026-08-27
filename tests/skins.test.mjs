@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { builtInSkins, skinTraitKeys, validateSkinDraft } from "../dist-test/src/skin.js";
 import { handleSkinRequest } from "../dist-test/worker/skins.js";
 
@@ -54,6 +55,15 @@ test("skin validation rejects missing, unknown, and arbitrary presentation input
   assert.equal(invalid.ok, false);
   assert(invalid.issues.some((issue) => issue.includes("typeStyle")));
   assert.deepEqual(skinTraitKeys.length, 9);
+});
+
+test("the selector compares every skin with one representative Finite plan example", () => {
+  const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+  assert.match(source, /Paris without overruns\./);
+  assert.match(source, /Seven days · A\$8,400 cap/);
+  assert.match(source, /Room to move/);
+  assert.match(source, /Review plan/);
+  for (const trait of skinTraitKeys) assert.match(source, new RegExp(`skin\\.recipe\\.${trait}`));
 });
 
 test("an authenticated account can save, replay, apply, list, and delete a custom skin", async () => {
