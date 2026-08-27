@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "complete-request-plain-copy-v72",
+  build: "native-writing-assistance-v73",
 } as const;

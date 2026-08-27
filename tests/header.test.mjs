@@ -117,3 +117,10 @@ test("arrival shows the complete human starting point without protocol language 
   assert.doesNotMatch(styles, /\.arrival-order-source summary \{[^}]*min-height:100%/);
   assert.match(styles, /\.arrival-order-source__content p \{[^}]*overflow-wrap:anywhere/);
 });
+
+test("human writing fields inherit native Australian-English spellcheck while control text opts out", () => {
+  assert.match(shell, /<html lang="en-AU">/);
+  assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true"><\/div>/);
+  assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
+  assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
+});
