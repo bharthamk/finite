@@ -135,9 +135,21 @@ test("arrival shows the complete human starting point without protocol language 
     "invalidates stale staging", "checkpointed your latest update", "Request v", "Request · version",
     "Codex interpretation / not human fact", "planning grammar", "invalidate this proposal automatically",
   ]) assert.doesNotMatch(source, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
-  assert.match(styles, /\.arrival-order-head \{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(styles, /\.arrival-order-source \{[^}]*margin-top:16px/);
   assert.doesNotMatch(styles, /\.arrival-order-source summary \{[^}]*min-height:100%/);
   assert.match(styles, /\.arrival-order-source__content p \{[^}]*overflow-wrap:anywhere/);
+});
+
+test("arrival prioritizes the next action and keeps secondary review tools side by side", () => {
+  assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
+  assert.match(source, /Next step \/ answer one question/);
+  assert.match(source, /Next step \/ review your brief/);
+  assert.match(source, /!question && order\.status !== "proposed_plan_ready" && !planDraftMarkup/);
+  assert.match(source, /<\/section>\s*\$\{message[^]*?<details class="arrival-order-source">/);
+  assert.match(source, /<div class="arrival-working-grid">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);
+  assert.match(source, /<details class="arrival-continuity">/);
+  assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff \{ grid-template-columns:1fr; \}/);
 });
 
 test("human writing fields use the browser language for native spellcheck while control text opts out", () => {

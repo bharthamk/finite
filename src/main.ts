@@ -1145,6 +1145,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
   const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
   const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
+  const planDraftMarkup = order ? renderPlanDraft() : "";
   surfaceRoot.dataset.profile = "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
@@ -1194,43 +1195,45 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with Codex</strong><small>Same plan. Same saved starting point.</small></button>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
-        <section class="arrival-order-head" aria-label="Arrival status">
+        <section class="arrival-primary-action" aria-label="What happens next">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
-          <details class="arrival-order-source">
-            <summary><span>Your starting point</span><strong>See everything you originally shared</strong></summary>
-            ${renderOriginalRequest(order)}
-          </details>
-          <aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>
-        </section>
-        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
-        ${question ? `<section class="arrival-question"><p class="eyebrow">One question from Codex</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. Codex will not guess it for you.</small></section>` : ""}
+          ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. Codex will not guess it for you.</small></section>` : ""}
         ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
-          <div><p class="eyebrow">Your brief / ready for review</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. Codex will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
+          <div><p class="eyebrow">Next step / review your brief</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. Codex will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
           <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
           <small>Need a change? Open “Add or correct something” below.</small>
         </section>` : ""}
-        ${interpretation ? `<details class="arrival-interpretation">
-          <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex’s working interpretation</p><h2>Review what Codex understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
-          <div class="arrival-interpretation__grid">
-            <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? "This is Codex’s suggestion. Correct it before you approve the brief if it does not fit." : "Codex will name the plan type once it has enough information."}</p></article>
-            <article><span>What I’m working from</span>${renderHumanValue(interpretationSources)}</article>
-            <article><span>What Codex currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
-            <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : "Codex is still working through the request.")}</article>
-            ${interpretation.dependencies?.length ? `<article><span>Work still outside the brief</span><ul class="interpretation-list">${interpretation.dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong><small class="interpretation-provenance">${escapeHtml(humanLabel(dependency.kind))} · ${escapeHtml(humanLabel(dependency.status))}${dependency.blocking ? " · blocking" : ""}</small>${dependency.detail ? `<p>${escapeHtml(dependency.detail)}</p>` : ""}</li>`).join("")}</ul></article>` : ""}
-            ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
-          </div>
-        </details>` : ""}
-        ${renderPlanDraft()}
-        <details class="arrival-continuity">
-          <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
-          <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>Use this whenever something changes or you remember another detail. Codex will work from the newest information you have given.</p></div>
-            <form data-arrival-form="append">
-              <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
-              <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
-              <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to request</button>
-            </form>
-          </div>
+          ${planDraftMarkup}
+          ${!question && order.status !== "proposed_plan_ready" && !planDraftMarkup ? `<aside class="arrival-state"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div></aside>` : ""}
+        </section>
+        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+        <details class="arrival-order-source">
+          <summary><span>Your starting point</span><strong>See everything you originally shared</strong></summary>
+          ${renderOriginalRequest(order)}
         </details>
+        <div class="arrival-working-grid">
+          ${interpretation ? `<details class="arrival-interpretation">
+            <summary class="arrival-interpretation__head"><div><p class="eyebrow">Codex’s working interpretation</p><h2>Review what Codex understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
+            <div class="arrival-interpretation__grid">
+              <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? "This is Codex’s suggestion. Correct it before you approve the brief if it does not fit." : "Codex will name the plan type once it has enough information."}</p></article>
+              <article><span>What I’m working from</span>${renderHumanValue(interpretationSources)}</article>
+              <article><span>What Codex currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
+              <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : "Codex is still working through the request.")}</article>
+              ${interpretation.dependencies?.length ? `<article><span>Work still outside the brief</span><ul class="interpretation-list">${interpretation.dependencies.map((dependency) => `<li><strong>${escapeHtml(dependency.title)}</strong><small class="interpretation-provenance">${escapeHtml(humanLabel(dependency.kind))} · ${escapeHtml(humanLabel(dependency.status))}${dependency.blocking ? " · blocking" : ""}</small>${dependency.detail ? `<p>${escapeHtml(dependency.detail)}</p>` : ""}</li>`).join("")}</ul></article>` : ""}
+              ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
+            </div>
+          </details>` : `<div class="arrival-working-grid__placeholder" aria-hidden="true"></div>`}
+          <details class="arrival-continuity">
+            <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
+            <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add something Codex must know.</h2><p>Use this whenever something changes or you remember another detail. Codex will work from the newest information you have given.</p></div>
+              <form data-arrival-form="append">
+                <label><span>Kind</span><select name="kind"><option value="detail">Detail</option><option value="constraint">Hard constraint</option><option value="preference">Preference</option><option value="commitment">Commitment</option><option value="correction">Correction</option><option value="evidence_reference">Evidence reference</option></select></label>
+                <label><span>What changed or was missing?</span><textarea name="detail" required maxlength="2000" placeholder="Add the fact in your own words"></textarea></label>
+                <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to request</button>
+              </form>
+            </div>
+          </details>
+        </div>
         ${inputTrail.length ? `<details class="arrival-history"><summary>Recent details you supplied</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))} · ${escapeHtml(inputSurfaceLabel(input.sourceSurface))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol></details>` : ""}
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}

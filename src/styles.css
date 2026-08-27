@@ -353,8 +353,9 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .arrival-order__actions { display:grid; grid-template-columns:minmax(230px,330px) 1fr; align-items:center; gap:18px; margin-top:28px; }
 .arrival-order__actions p { margin:0; color:var(--muted); font-size:.72rem; line-height:1.5; }
 .arrival-order__submit { margin:0; }
-.arrival-order-head { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; align-items:start; padding:18px 0; border-bottom:1px solid var(--ink); }
-.arrival-order-source { min-width:0; overflow:hidden; border:1px solid var(--line); background:rgba(255,255,255,.42); }
+.arrival-primary-action { padding:18px 0 0; }
+.arrival-primary-action>.arrival-question,.arrival-primary-action>.arrival-review,.arrival-primary-action>.arrival-state { margin-top:0; }
+.arrival-order-source { min-width:0; margin-top:16px; overflow:hidden; border:1px solid var(--line); background:rgba(255,255,255,.42); }
 .arrival-order-source summary { display:grid; align-content:center; gap:9px; padding:18px 20px; cursor:pointer; list-style:none; }
 .arrival-order-source summary::-webkit-details-marker { display:none; }
 .arrival-order-source summary::after { content:"+"; grid-column:2; grid-row:1/3; align-self:center; color:var(--accent); font-size:1.5rem; }
@@ -366,6 +367,17 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .arrival-order-source__content>div+div { border-top:1px solid var(--line); }
 .arrival-order-source__content span { display:block; margin-bottom:7px; color:var(--muted); font:500 .62rem/1.2 "DM Mono",monospace; letter-spacing:.05em; text-transform:uppercase; }
 .arrival-order-source__content p { margin:0; color:#35413e; font-size:.9rem; line-height:1.55; overflow-wrap:anywhere; white-space:pre-wrap; }
+.arrival-working-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:16px; margin-top:16px; }
+.arrival-working-grid>.arrival-interpretation,.arrival-working-grid>.arrival-continuity { min-width:0; margin-top:0; }
+.arrival-working-grid__placeholder+.arrival-continuity { grid-column:1/-1; }
+.arrival-working-grid .arrival-interpretation__grid,.arrival-working-grid .arrival-continuity__body { grid-template-columns:1fr; }
+.arrival-working-grid .arrival-interpretation__grid article { border-right:0; }
+.arrival-working-grid .arrival-continuity>summary { min-height:88px; grid-template-columns:1fr auto; align-items:start; gap:5px 16px; }
+.arrival-working-grid .arrival-continuity>summary span,.arrival-working-grid .arrival-continuity>summary strong,.arrival-working-grid .arrival-continuity>summary small { grid-column:1; }
+.arrival-working-grid .arrival-continuity>summary::after { content:"+"; grid-column:2; grid-row:1/4; align-self:center; color:var(--accent); font-size:1.35rem; }
+.arrival-working-grid .arrival-continuity[open]>summary::after { content:"−"; }
+.arrival-working-grid .arrival-continuity__body { gap:24px; padding:24px; }
+.arrival-working-grid .arrival-continuity h2 { font-size:clamp(1.7rem,2.5vw,2.7rem); }
 .arrival-state { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:18px; padding:18px 20px; border:1px solid var(--ink); background:var(--panel); box-shadow:5px 5px 0 var(--accent-soft); }
 .arrival-state>span { display:inline-block; padding:7px 9px; color:var(--on-deep); background:var(--deep); font:500 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 .arrival-state h2 { margin:0 0 5px; font-size:1rem; line-height:1.25; letter-spacing:-.025em; }
@@ -955,7 +967,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; } }
 
 @media (max-width:980px) {
-  .arrival-compose,.arrival-order-head,.arrival-continuity__body,.arrival-handoff { grid-template-columns:1fr; }
+  .arrival-compose,.arrival-working-grid,.arrival-continuity__body,.arrival-handoff { grid-template-columns:1fr; }
   .arrival-compose { min-height:auto; grid-template-areas:"intro" "form" "codex"; grid-template-rows:auto; }
   .arrival-compose__intro { max-width:760px; }
   .arrival-question form { grid-template-columns:1fr; }
@@ -981,12 +993,12 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .arrival-order__actions { grid-template-columns:1fr; }
   .arrival-interpretation__grid article { border-right:0; }
   .interpretation-facts>div { grid-template-columns:1fr; gap:6px; }
-  .arrival-order-head { padding:12px 0; }
+  .arrival-primary-action { padding-top:12px; }
   .arrival-state { grid-template-columns:1fr auto; }
   .arrival-state>div { grid-column:1/-1; grid-row:2; }
   .arrival-continuity>summary { grid-template-columns:1fr auto; }
   .arrival-continuity>summary small { grid-column:1/-1; }
-  .arrival-question,.arrival-continuity,.arrival-handoff { margin-inline:-18px; border-left:0; border-right:0; }
+  .arrival-question,.arrival-handoff { margin-inline:-18px; border-left:0; border-right:0; }
   .arrival-handoff dl { grid-template-columns:1fr; }
   .arrival-handoff dl>div+div { padding-left:0; border-left:0; }
   .arrival-history li { grid-template-columns:1fr; gap:8px; }

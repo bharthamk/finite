@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "plan-lifecycle-rail-v78",
+  build: "arrival-next-action-layout-v79",
 } as const;
