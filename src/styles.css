@@ -688,6 +688,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .plan-input-dialog__error { margin:18px 0 0; padding:12px 14px; color:#6d2c24; background:#f3dfd8; }
 .plan-input-dialog__actions { display:flex; align-items:center; gap:18px; margin-top:26px; }
 .plan-input-dialog__actions .button--secondary { color:var(--ink); background:transparent; }
+.plan-input-dialog__actions .text-button { color:var(--muted); }
 
 .service-message { margin-top:26px; padding:14px 18px; color:var(--deep); background:var(--signal); border-left:4px solid var(--deep); font-weight:600; }
 .plan-status-strip { display:flex; align-items:center; gap:.65rem; margin:.45rem 0 .75rem; padding:.55rem .75rem; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.38); font-size:.78rem; }
