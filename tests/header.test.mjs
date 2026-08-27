@@ -25,6 +25,23 @@ test("the product header contains actions instead of unexplained internal state"
   assert.match(styles, /@media \(max-width:1180px\) and \(min-width:981px\)/);
 });
 
+test("private product surfaces show the plan lifecycle without pretending it is percentage complete", () => {
+  for (const label of ["Starting", "Planning", "Managing", "Wrapping up"]) assert.match(source, new RegExp(`label: "${label}"`));
+  assert.match(source, /aria-label="Plan lifecycle"/);
+  assert.match(source, /aria-current="step"/);
+  assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 2);
+  assert.match(source, /renderLifecycleRail\(order \? "planning" : "starting"\)/);
+  assert.match(source, /status === "completed" \|\| status === "abandoned" \? "wrapping" : "managing"/);
+  assert.match(source, /detail: "Day-to-day use"/);
+  assert.match(source, /stage\.id === "managing" \? " · core"/);
+  assert.doesNotMatch(source, /plan-lifecycle[^\n]*(?:percent|%)/i);
+  assert.match(styles, /\.private-top-shell \{ position:sticky; top:0;/);
+  assert.match(styles, /\.plan-lifecycle ol \{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.plan-lifecycle__step\.is-current/);
+  assert.match(styles, /\.plan-lifecycle__step\.is-complete/);
+  assert.match(styles, /\.plan-lifecycle__step\.is-core/);
+});
+
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);

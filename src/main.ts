@@ -618,6 +618,30 @@ const renderPlanSwitcher = (surface: "arrival" | "plan"): string => {
 
 const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}">Share this plan</button>`;
 
+type FiniteLifecycleStage = "starting" | "planning" | "managing" | "wrapping";
+const finiteLifecycleStages: Array<{ id: FiniteLifecycleStage; label: string; detail: string }> = [
+  { id: "starting", label: "Starting", detail: "Outcome and limits" },
+  { id: "planning", label: "Planning", detail: "Build the plan" },
+  { id: "managing", label: "Managing", detail: "Day-to-day use" },
+  { id: "wrapping", label: "Wrapping up", detail: "Finish or pause" },
+];
+
+const lifecycleStageForPlan = (status: PlanLifecycleStatus): FiniteLifecycleStage =>
+  status === "completed" || status === "abandoned" ? "wrapping" : "managing";
+
+const renderLifecycleRail = (current: FiniteLifecycleStage): string => {
+  const currentIndex = finiteLifecycleStages.findIndex((stage) => stage.id === current);
+  return `<nav class="plan-lifecycle" aria-label="Plan lifecycle">
+    <ol>${finiteLifecycleStages.map((stage, index) => {
+      const state = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
+      return `<li class="plan-lifecycle__step is-${state}${stage.id === "managing" ? " is-core" : ""}" ${state === "current" ? 'aria-current="step"' : ""}>
+        <span class="plan-lifecycle__marker" aria-hidden="true">${state === "complete" ? "✓" : index + 1}</span>
+        <span class="plan-lifecycle__copy"><strong>${stage.label}</strong><small>${stage.detail}${stage.id === "managing" ? " · core" : ""}</small></span>
+      </li>`;
+    }).join("")}</ol>
+  </nav>`;
+};
+
 const shareSelectionKey = (draft = shareDraft): string => JSON.stringify({ label: draft.label.trim(), mode: draft.mode, sections: [...draft.sections].sort() });
 const shareSectionOptions: Array<{ id: PlanShareSection; name: string; description: string }> = [
   { id: "overview", name: "Summary", description: "Plan name, headline, brief, revision and status." },
@@ -1124,16 +1148,19 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   surfaceRoot.dataset.profile = "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
-    <header class="site-header arrival-header">
-      ${renderBrand()}
-      ${renderPlanSwitcher("arrival")}
-      ${renderShareHeaderAction("arrival")}
-      <div class="header-actions">
-        ${renderFollowCodexButton()}
-        ${order ? renderCodexHandoffButton() : ""}
-        ${renderHeaderControls()}
-      </div>
-    </header>
+    <div class="private-top-shell">
+      <header class="site-header arrival-header">
+        ${renderBrand()}
+        ${renderPlanSwitcher("arrival")}
+        ${renderShareHeaderAction("arrival")}
+        <div class="header-actions">
+          ${renderFollowCodexButton()}
+          ${order ? renderCodexHandoffButton() : ""}
+          ${renderHeaderControls()}
+        </div>
+      </header>
+      ${renderLifecycleRail(order ? "planning" : "starting")}
+    </div>
     <main id="main" class="arrival-main">
       ${!order ? `
         <section class="arrival-compose" aria-labelledby="arrival_title">
@@ -1806,16 +1833,19 @@ async function render(): Promise<SurfaceManifest> {
   surfaceRoot.dataset.profile = kernel.profile.profileId;
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
-    <header class="site-header">
-      ${renderBrand()}
-      ${renderPlanSwitcher("plan")}
-      ${renderShareHeaderAction("plan")}
-      <div class="header-actions">
-        ${renderFollowCodexButton()}
-        ${renderCodexHandoffButton()}
-        ${renderHeaderControls()}
-      </div>
-    </header>
+    <div class="private-top-shell">
+      <header class="site-header">
+        ${renderBrand()}
+        ${renderPlanSwitcher("plan")}
+        ${renderShareHeaderAction("plan")}
+        <div class="header-actions">
+          ${renderFollowCodexButton()}
+          ${renderCodexHandoffButton()}
+          ${renderHeaderControls()}
+        </div>
+      </header>
+      ${renderLifecycleRail(lifecycleStageForPlan(kernel.lifecycleStatus))}
+    </div>
     <main id="main">
       <div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>${kernel.lifecycleStatus === "active" ? "This plan is open for change." : `This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.`}</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>
       <section class="hero">
