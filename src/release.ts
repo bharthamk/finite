@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "adaptive-calendar-workspace-v122",
+  build: "real-trip-manual-workspace-v123",
 } as const;

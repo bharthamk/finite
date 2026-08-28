@@ -258,6 +258,9 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-calendar__layout \{ display:grid; grid-template-columns:minmax\(0,1fr\) minmax\(290px,360px\)/);
   assert.match(styles, /\.starter-calendar__month table \{/);
   assert.match(styles, /\.starter-calendar__selection \{ position:sticky;/);
+  assert.match(source, /field\.inputType === "url"/);
+  assert.match(source, /Open website/);
+  assert.match(styles, /\.starter-module--stays \.starter-module__records \{ grid-template-columns:repeat\(auto-fit,minmax\(260px,360px\)\); justify-content:start; \}/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
 });

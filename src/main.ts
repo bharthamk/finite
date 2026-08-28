@@ -1432,7 +1432,11 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}${provisional ? " is-provisional" : ""}`;
       return `<article class="${recordClass}" draggable="true" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
         <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
-        ${visibleFields.length ? `<dl>${visibleFields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(item.fields[field.fieldId])}</dd></div>`).join("")}</dl>` : ""}
+        ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
+          const value = String(item.fields[field.fieldId] ?? "");
+          const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open website <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
+          return `<div><dt>${escapeHtml(field.label)}</dt><dd>${renderedValue}</dd></div>`;
+        }).join("")}</dl>` : ""}
         <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
       </article>`;
     };

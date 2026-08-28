@@ -115,6 +115,12 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   assert.deepEqual(starter.sections.map((section) => section.label), ["Calendar", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Northern Italy"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "London").fields.start, "2026-09-15");
+  assert.ok(starter.sections.find((section) => section.sectionId === "itinerary").fields.some((field) => field.fieldId === "kind" && field.inputType === "select"));
+  assert.ok(starter.sections.find((section) => section.sectionId === "itinerary").fields.some((field) => field.fieldId === "reference" && field.inputType === "url"));
+  assert.ok(starter.sections.find((section) => section.sectionId === "stays").fields.some((field) => field.fieldId === "website" && field.inputType === "url"));
+  assert.ok(starter.sections.find((section) => section.sectionId === "stays").fields.some((field) => field.fieldId === "bookingStatus"));
+  assert.ok(starter.sections.find((section) => section.sectionId === "stays").fields.some((field) => field.fieldId === "totalBudget"));
+  assert.ok(starter.sections.find((section) => section.sectionId === "transport").fields.some((field) => field.fieldId === "endTime"));
   assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
   assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.fields.amount === "10000" && item.fields.moneyRole === "limit"));
   assert.equal(starter.overview.start, "2026-09-15");
