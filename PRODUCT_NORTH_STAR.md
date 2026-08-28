@@ -36,20 +36,24 @@ finite picture, and retain the only consequential approval. Codex develops and
 coheres the order when the human wants the meal cooked; it is not a gate to
 seeing or shaping what they already accepted.
 
-A reviewed brief therefore yields a lightweight starter plan immediately. It
-is deliberately cheaper and less detailed than a Codex-constructed plan, but
-it is still an actual plan rather than planning guidance. It carries the
-domain records the human expects to shape—for travel, destinations, flights and
-transport, dates, money, fixed commitments, and open ideas—with equivalent
-sections for other plan families. Known facts, working choices and unresolved
-items remain distinguishable. The human may preview it before accepting the
-brief and then use it as a full manual planning workspace: add, edit, remove and
-reorder schedule records; maintain family-specific places, stays, transport,
-resources and requirements; adjust overall, daily and item-level money; and
-manage a to-do list. Codex remains the optional route for research, insight,
-detailed construction, reconciliation, and replanning. The difference between
-the manual and Codex-developed plan is the depth and quality of populated
-content—not whether the human has usable controls.
+Arrival has two explicit paths: **Give Codex my plan** or **Build it myself**.
+There is no separate interpretation-confirmation tollbooth. On the Codex path,
+Codex turns the supplied facts and source-labelled working assumptions into a
+populated rough plan. On the manual path, Finite opens the same complete
+planning workspace immediately without invented Codex content. From either
+path the human may add, edit, remove and reorder schedule records; maintain
+family-specific places, stays, transport, resources and requirements; adjust
+overall, daily and item-level money; manage a to-do list; add a local note or
+Codex request to any section; or talk to Codex about the whole plan.
+
+The Codex-created rough plan is centering, not a researched recommendation. It
+may use clearly labelled first-pass timing, cost and routing assumptions, but
+never presents training-data estimates as live fares, availability, legal or
+visa advice, or confirmed bookings. Codex remains the route for research,
+insight, detailed construction, reconciliation and replanning. Consequential
+plan activation and external action remain separately human-authorized. The
+difference between the manual and Codex-developed plan is the depth and quality
+of populated content—not whether the human has usable controls.
 
 Codex performs the interpretive work:
 
@@ -130,11 +134,11 @@ time model, actions, and decision presentation adapt to the outcome.
 ## The core transaction
 
 1. The human states the desired outcome or reports that reality changed.
-2. Codex opens the entire verified kitchen and asks only for genuinely missing
-   facts.
-3. The human reviews the interpreted brief and immediately receives a
-   lightweight, editable starter plan; no second Codex turn is required merely
-   to see or shape it.
+2. The human chooses whether Codex should build the first rough plan or whether
+   to open the complete manual workspace immediately.
+3. On the Codex path, Codex opens the verified kitchen, asks only for genuinely
+   missing human judgments, and returns a populated editable rough plan without
+   a separate brief-confirmation step.
 4. Codex may research current external reality; Finite admits it only as
    provenance-bound untrusted evidence.
 5. Finite enumerates or simulates legal moves against exact accepted truth.

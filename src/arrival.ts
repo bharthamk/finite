@@ -3,6 +3,7 @@ import type { ToolResult } from "./types.js";
 
 export type ArrivalSourceSurface = "site" | "codex" | "inline";
 export type ArrivalStatus = "waiting_for_codex" | "codex_reviewing" | "clarification_required" | "proposed_plan_ready" | "interpretation_confirmed" | "awaiting_human_authority" | "accepted" | "closed";
+export const isArrivalDraftReady = (status: ArrivalStatus | string): boolean => status === "proposed_plan_ready" || status === "interpretation_confirmed";
 export type ArrivalInputKind = "detail" | "constraint" | "preference" | "commitment" | "answer" | "evidence_reference" | "correction";
 export type ArrivalDependencyKind = "operator_research" | "human_coordination" | "external_evidence" | "human_decision";
 export type ArrivalDependencyStatus = "open" | "resolved" | "deferred";
@@ -180,8 +181,7 @@ const humanEventTypes = new Set<ArrivalEvent["eventType"]>(["human_order_created
 const nextInstruction = (order: ArrivalOrder, unprocessed: number): string => {
   if (unprocessed > 0) return `Process ${unprocessed} human-supplied update${unprocessed === 1 ? "" : "s"}, then checkpoint exact order version ${order.version} before staging operator work.`;
   if (order.status === "clarification_required") return "Wait for the human answer; do not infer it or treat the staged question as accepted truth.";
-  if (order.status === "proposed_plan_ready") return "Present the proposed plan on the Site for human review. Codex cannot supply human authority.";
-  if (order.status === "interpretation_confirmed") return "The human reviewed this exact interpretation. Begin plan construction from its profile blueprint; this review is not plan activation authority.";
+  if (isArrivalDraftReady(order.status)) return "The editable rough plan is ready. Continue construction or research without treating it as plan activation or external-action authority.";
   return "Continue from the exact order version shown; re-open before staging if any delay or parallel edit is possible.";
 };
 

@@ -593,7 +593,6 @@ let planFactBusy = false;
 let planFactError = "";
 let draftReturnFormOpen = false;
 let planActivationError = "";
-let starterDraftPreviewOpen = false;
 let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
 let themeEditingId: string | null = null;
@@ -1223,7 +1222,7 @@ const renderOriginalRequest = (order: ArrivalOrder): string => {
   return `<div class="arrival-order-source__content">${[...fields, ...references].map((field) => `<div><span>${escapeHtml(field.label)}</span><p>${escapeHtml(field.value)}</p></div>`).join("")}</div>`;
 };
 
-const starterSourceLabels = { request: "Your request", known: "Reviewed fact", working: "Rough choice", human: "Changed by you", open: "Still open" } as const;
+const starterSourceLabels = { request: "Your request", known: "From your plan", working: "Codex rough choice", starter: "Rough assumption", human: "Changed by you", open: "Still open" } as const;
 
 const renderStarterField = (field: import("./arrival-presentation.js").StarterPlanField, value: unknown = "", namePrefix = "field_"): string => {
   const safeValue = String(value ?? "");
@@ -1240,9 +1239,8 @@ const starterAmount = (value: unknown): number => {
 
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
-  if (!starter || !order.interpretation) return "";
-  const confirmed = order.status === "interpretation_confirmed";
-  const previewOnly = order.status === "proposed_plan_ready";
+  if (!starter) return "";
+  const manual = order.structured.planningMode === "manual" && !order.interpretation?.complete;
   const moneyItems = starter.sections.find((section) => section.sectionId === "money")?.items ?? [];
   const limit = moneyItems.filter((item) => item.fields.moneyRole === "limit").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
   const daily = moneyItems.filter((item) => item.fields.moneyRole === "daily").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
@@ -1254,39 +1252,43 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       const title = String(item.fields.title || item.label);
       const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
       const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}`;
-      return `<article class="${recordClass}" draggable="${previewOnly ? "false" : "true"}" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
-        <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" ${previewOnly ? "disabled" : ""} aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
+      return `<article class="${recordClass}" draggable="true" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
+        <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(item.fields[field.fieldId])}</dd></div>`).join("")}</dl>` : ""}
-        ${previewOnly ? "" : `<details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div><div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>`}
+        <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div><div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
       </article>`;
     }).join("");
+    const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
     return `<section class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
       <header class="starter-module__header"><div><p class="eyebrow">${escapeHtml(starter.familyLabel)} workspace</p><h3 id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3><p>${escapeHtml(section.description)}</p></div><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</span></header>
       <div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
-      ${previewOnly ? "" : `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div><button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`}
+      ${comments}
+      <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div><button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
+      <details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details></div>
     </section>`;
   }).join("");
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
-      <div><p class="eyebrow">${previewOnly ? "Rough plan preview" : "Your editable rough plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
-      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to edit") : "Your changes saved"}</span>${!previewOnly ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Develop with ${escapeHtml(agenticName())}</button><small>Research, compare options, or reconcile the whole plan</small>` : ""}</div>
+      <div><p class="eyebrow">Your editable rough plan</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
+      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><small>Research, compare, draft, or rework any part</small></div>
     </header>
-    <div class="starter-plan__notice"><strong>Use this plan now.</strong><p>It is built from the brief you accepted. Edit, delete, tick off, or drag its records whenever you want; none of those controls require ${escapeHtml(agenticName())}.</p></div>
+    <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     <section class="starter-plan__money-strip" aria-label="Current finite picture"><div><span>Overall limit</span><strong>${limit ? escapeHtml(money(limit)) : "Add limit"}</strong></div><div><span>Planned so far</span><strong>${planned ? escapeHtml(money(planned)) : "Add costs"}</strong></div><div><span>Daily target</span><strong>${daily ? escapeHtml(money(daily)) : "Add daily spend"}</strong></div><div><span>Unallocated</span><strong>${limit ? escapeHtml(money(limit - planned)) : "—"}</strong></div></section>
     <div class="starter-workspace">${modules}</div>
-    ${previewOnly ? `<div class="starter-plan__preview-footer"><p>Accept the brief above to keep this rough plan and use all editing controls.</p></div>` : confirmed ? "" : `<div class="starter-plan__preview-footer"><p>Your manual changes are saved. The reviewed brief is now out of date, but the plan remains editable while you decide whether to reconcile it.</p></div>`}
+    ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
   </section>`;
 };
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
+  if (order.status === "waiting_for_codex" && order.structured.planningMode === "manual" && !order.interpretation) return { label: "Manual plan", title: "Your planning workspace is ready.", detail: `Build the whole plan yourself, or bring in ${agenticName()} whenever useful.` };
   if (order.status === "waiting_for_codex" && order.interpretation?.complete) return { label: "Draft updated", title: "Your starter plan includes your latest change.", detail: `Keep shaping it here or ask ${agenticName()} to develop the updated draft when you are ready.` };
   if (order.status === "waiting_for_codex") return modelContext
     ? { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Add anything else whenever you like. ${agenticName()} will work from everything you have shared.` }
     : { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Open Codex for ${agenticName()} when you are ready and ask it to continue this plan. It will work from everything you have shared.` };
   if (order.status === "codex_reviewing") return { label: `${agenticName()} is working`, title: `${agenticName()} is working through what you shared.`, detail: `You can still add or correct something. ${agenticName()} will use your newest information before proposing a plan.` };
   if (order.status === "clarification_required") return { label: "Your answer needed", title: `${agenticName()} needs one decision before it can continue.`, detail: "Only you can answer this. Finite will add your answer to the plan." };
-  if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: `${agenticName()} has turned your request into a brief.`, detail: "Check it below. Nothing becomes your plan until you approve it." };
-  if (order.status === "interpretation_confirmed") return { label: "Brief accepted", title: "Your starter plan is ready.", detail: `Review or change it yourself. Ask ${agenticName()} to develop it only when you want a more detailed working plan.` };
+  if (order.status === "proposed_plan_ready") return { label: "Rough plan ready", title: `${agenticName()} has built a first-pass plan.`, detail: `Edit it yourself, comment on a section, or ask ${agenticName()} to research and develop it.` };
+  if (order.status === "interpretation_confirmed") return { label: "Rough plan ready", title: "Your editable plan is ready.", detail: `Change it yourself or ask ${agenticName()} to develop any part.` };
   if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
@@ -1301,7 +1303,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
   const planDraftMarkup = order ? renderPlanDraft() : "";
   const starterPlanMarkup = order ? renderStarterPlan(order) : "";
-  const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup && (starterDraftPreviewOpen || order?.status !== "proposed_plan_ready"));
+  const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup);
   surfaceRoot.dataset.profile = "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
@@ -1345,19 +1347,13 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
               </div>
             </details>
-            <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" ${busy ? "disabled" : ""}>Save this starting point</button></div>
+            <div class="arrival-order__actions arrival-order__actions--paths"><button class="button arrival-order__submit" type="submit" name="planningMode" value="codex" ${busy ? "disabled" : ""}><span>Give ${escapeHtml(agenticName())} my plan</span><small>Build me a populated rough draft</small></button><button class="text-button arrival-order__manual" type="submit" name="planningMode" value="manual" ${busy ? "disabled" : ""}><span>Build it myself</span><small>Open the full workspace now</small></button></div>
           </form>
-          <button type="button" class="arrival-codex-start" data-action="open-codex-handoff" aria-haspopup="dialog"><span>Prefer to talk it through?</span><strong>Start with ${escapeHtml(agenticName())}</strong><small>Same plan. Same saved starting point.</small></button>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
         <section class="arrival-primary-action" aria-label="What happens next">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
           ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. ${escapeHtml(agenticName())} will not guess it for you.</small></section>` : ""}
-        ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
-          <div><p class="eyebrow">Next step / review your brief</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. ${escapeHtml(agenticName())} will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
-          <div class="arrival-review__actions"><button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Accept brief and open draft</button><button class="text-button" type="button" data-action="toggle-starter-draft">${showStarterPlan ? "Hide draft plan" : "View draft plan"}</button></div>
-          <small>You can preview the lightweight plan first, or accept now and keep shaping it yourself.</small>
-        </section>` : ""}
           ${showStarterPlan ? starterPlanMarkup : ""}
           ${planDraftMarkup}
           ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup && !showStarterPlan ? `<section class="arrival-state arrival-state--action"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div>${order.status === "waiting_for_codex" ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Continue in ${escapeHtml(agenticName())}</button>` : ""}</section>` : ""}
@@ -1369,9 +1365,9 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         </details>
         <div class="arrival-working-grid">
           ${interpretation ? `<details class="arrival-interpretation">
-            <summary class="arrival-interpretation__head"><div><p class="eyebrow">${escapeHtml(agenticName())}’s working interpretation</p><h2>Review what ${escapeHtml(agenticName())} understood and assumed</h2></div><span>${interpretation.complete ? "Ready to review" : "Work in progress"}</span></summary>
+            <summary class="arrival-interpretation__head"><div><p class="eyebrow">${escapeHtml(agenticName())}’s working interpretation</p><h2>See what shaped the rough plan</h2></div><span>${interpretation.complete ? "Used in rough plan" : "Work in progress"}</span></summary>
             <div class="arrival-interpretation__grid">
-              <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? `This is ${escapeHtml(agenticName())}’s suggestion. Correct it before you approve the brief if it does not fit.` : `${escapeHtml(agenticName())} will name the plan type once it has enough information.`}</p></article>
+              <article class="arrival-interpretation__family"><span>Type of plan</span><strong>${escapeHtml(interpretation.inferredFamily ? humanLabel(interpretation.inferredFamily) : "Not classified yet")}</strong><p>${interpretation.inferredFamily ? `This is ${escapeHtml(agenticName())}’s working classification. You can keep editing even if it changes.` : `${escapeHtml(agenticName())} will name the plan type once it has enough information.`}</p></article>
               <article><span>What I’m working from</span>${renderHumanValue(interpretationSources)}</article>
               <article><span>What ${escapeHtml(agenticName())} currently understands</span>${hasInterpretationDetail(interpretation.inferred) ? renderHumanValue(interpretation.inferred) : `<p class="interpretation-summary">${escapeHtml(interpretation.summary)}</p>`}<p class="interpretation-note">Anything beyond the facts you supplied is still a working interpretation.</p></article>
               <article><span>What I still need</span>${renderTextList(interpretationNeeds, interpretation.complete ? "Nothing else is needed for this brief." : `${agenticName()} is still working through the request.`)}</article>
@@ -1407,7 +1403,7 @@ const refreshArrival = async (): Promise<void> => {
   arrivalResult = await arrivalRepository.open();
 };
 
-const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
+const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" | "manual"): Promise<void> => {
   if (busy) return;
   const data = new FormData(form);
   const rawOutcome = String(data.get("rawOutcome") ?? "").trim();
@@ -1415,13 +1411,14 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   busy = true;
   announce("Saving your starting point…");
   await render();
-  const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
+  const structured = { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)) };
   const evidence = String(data.get("evidence") ?? "").trim();
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
-  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; starterDraftPreviewOpen = false; }
+  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
-  announce(arrivalResult.ok ? `Your request is saved. ${agenticName()} has not processed it yet.` : `The request was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (planningMode === "manual" ? "Your manual planning workspace is ready." : `Your plan is saved and ready for ${agenticName()} to draft.`) : `The request was not saved: ${arrivalResult.code}`);
   await render();
+  if (arrivalResult.ok && planningMode === "codex") root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promise<void> => {
@@ -1433,7 +1430,6 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   const label = String(data.get("label") ?? "").trim();
   const value = draftEdit ? label : detail;
   if (!value) return;
-  if (draftEdit) starterDraftPreviewOpen = true;
   busy = true;
   announce("Adding your update…");
   await render();
@@ -1461,10 +1457,9 @@ const workspaceFieldsFromForm = (form: HTMLFormElement): Record<string, string |
   .filter(([key]) => key.startsWith("field_"))
   .map(([key, value]) => [key.slice(6), String(value).trim()]));
 
-const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<void> => {
+const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<boolean> => {
   const order = currentArrival();
-  if (!order || busy) return;
-  starterDraftPreviewOpen = true;
+  if (!order || busy) return false;
   busy = true;
   announce("Saving your plan…");
   await render();
@@ -1472,6 +1467,7 @@ const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "de
   busy = false;
   announce(arrivalResult.ok ? message : `The plan was not updated: ${arrivalResult.code}`);
   await render();
+  return arrivalResult.ok;
 };
 
 const addWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
@@ -1486,9 +1482,9 @@ const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
 };
 
-const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan.");
+const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan."); };
 
-const toggleWorkspaceRecord = async (record: HTMLElement): Promise<void> => saveWorkspaceMutation({ workspaceOperation: "toggle", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, done: !record.classList.contains("is-done") }, "detail", record.classList.contains("is-done") ? "The task is open again." : "The task is complete.");
+const toggleWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "toggle", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, done: !record.classList.contains("is-done") }, "detail", record.classList.contains("is-done") ? "The task is open again." : "The task is complete."); };
 
 const reorderWorkspaceRecords = async (module: HTMLElement, draggedId: string, targetId: string): Promise<void> => {
   const order = [...module.querySelectorAll<HTMLElement>("[data-workspace-record]")].map((record) => record.dataset.recordId ?? "").filter(Boolean);
@@ -1500,22 +1496,11 @@ const reorderWorkspaceRecords = async (module: HTMLElement, draggedId: string, t
   await saveWorkspaceMutation({ workspaceOperation: "reorder", moduleId: module.dataset.workspaceModule, recordOrder: order }, "correction", "The plan order is updated.");
 };
 
-const confirmArrivalInterpretation = async (): Promise<void> => {
-  const order = currentArrival();
-  if (!order || order.status !== "proposed_plan_ready" || busy) return;
-  busy = true;
-  announce("Approving the brief…");
-  await render();
-  arrivalResult = await arrivalRepository.reviewInterpretation({
-    orderId: order.orderId,
-    expectedVersion: order.version,
-    expectedChecksum: order.checksum,
-    sourceSurface: modelContext ? "inline" : "site",
-  });
-  if (arrivalResult.ok) starterDraftPreviewOpen = true;
-  busy = false;
-  announce(arrivalResult.ok ? "Brief accepted. Your starter plan is ready to review and edit." : `The brief was not confirmed: ${arrivalResult.code}`);
-  await render();
+const addWorkspaceComment = async (form: HTMLFormElement, forCodex: boolean): Promise<void> => {
+  const comment = String(new FormData(form).get("comment") ?? "").trim();
+  if (!comment) return;
+  const saved = await saveWorkspaceMutation({ workspaceOperation: "note", moduleId: form.dataset.moduleId, recordId: `comment_${crypto.randomUUID().replaceAll("-", "")}`, comment, forCodex }, "detail", forCodex ? `Your section request is saved for ${agenticName()}.` : "Your section note is saved.");
+  if (saved && forCodex) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const openKitchenReset = async (): Promise<void> => {
@@ -1700,11 +1685,20 @@ function bindArrivalInteractions(): void {
   bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
-  root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "manual" ? "manual" : "codex";
+    void submitArrivalOrder(event.currentTarget as HTMLFormElement, mode);
+  });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-comment']").forEach((form) => form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const forCodex = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "codex";
+    void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
+  }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void deleteWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {
@@ -1714,12 +1708,6 @@ function bindArrivalInteractions(): void {
     record.addEventListener("drop", (event) => { event.preventDefault(); const moduleId = event.dataTransfer?.getData("application/x-finite-module") ?? ""; if (moduleId !== record.dataset.moduleId) return; const module = record.closest<HTMLElement>("[data-workspace-module]"); if (module) void reorderWorkspaceRecords(module, event.dataTransfer?.getData("text/plain") ?? "", record.dataset.recordId ?? ""); });
   });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
-  root?.querySelector<HTMLButtonElement>("[data-action='confirm-arrival-interpretation']")?.addEventListener("click", () => { void confirmArrivalInterpretation(); });
-  root?.querySelector<HTMLButtonElement>("[data-action='toggle-starter-draft']")?.addEventListener("click", async () => {
-    starterDraftPreviewOpen = !starterDraftPreviewOpen;
-    await render();
-    if (starterDraftPreviewOpen) root.querySelector<HTMLElement>("[data-starter-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
   root?.querySelectorAll<HTMLButtonElement>("[data-arrival-example]").forEach((button) => button.addEventListener("click", () => {
     const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='rawOutcome']");
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }

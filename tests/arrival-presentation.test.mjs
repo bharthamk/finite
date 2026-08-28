@@ -111,10 +111,10 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
     checksum: "a".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.equal(starter.title, "Travel starter plan");
+  assert.equal(starter.title, "Travel rough plan");
   assert.deepEqual(starter.sections.map((section) => section.label), ["Route & calendar", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
-  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Departure Date", "Northern Italy"]);
-  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "Departure Date").fields.start, "15 September");
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Northern Italy"]);
+  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "London").fields.start, "2026-09-15");
   assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
   assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.fields.amount === "10000" && item.fields.moneyRole === "limit"));
   assert.equal(starter.sections.find((section) => section.sectionId === "requirements").items[0].fields.notes, "Wedding in Lyon");
@@ -149,7 +149,7 @@ test("human draft edits remain visible and mark the starter interpretation for r
     checksum: "b".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.equal(starter.title, "Event starter plan");
+  assert.equal(starter.title, "Event rough plan");
   assert.equal(starter.interpretationIsCurrent, false);
   assert.equal(starter.laterHumanInputs[0].payload.detail, "Twelve guests, not ten.");
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "scope").items[0], {
@@ -172,7 +172,25 @@ test("manual workspace operations add, edit, reorder, complete and remove record
     lastOperatorCheckpoint: 6, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:05.000Z", checksum: "c".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.itemId), ["manual_b", "manual_a"]);
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.filter((item) => item.itemId.startsWith("manual_")).map((item) => item.itemId), ["manual_b", "manual_a"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items[0].fields.start, "2026-09-15");
-  assert.equal(starter.sections.find((section) => section.sectionId === "tasks").items[0].fields.done, true);
+  assert.equal(starter.sections.find((section) => section.sectionId === "tasks").items.find((item) => item.itemId === "task_a").fields.done, true);
+});
+
+test("manual mode opens the full workspace without an interpretation and keeps section notes and Codex requests", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_manual", version: 4, status: "waiting_for_codex", rawOutcome: "Plan a flexible Europe trip.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
+    inputs: [
+      { inputId: "arrival_input_arrival_manual_2", kind: "detail", payload: { workspaceOperation: "add", moduleId: "itinerary", recordId: "manual_berlin", label: "Berlin", fields: { title: "Berlin", location: "Berlin" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:00.000Z" },
+      { inputId: "arrival_input_arrival_manual_3", kind: "detail", payload: { workspaceOperation: "note", moduleId: "itinerary", recordId: "comment_1", comment: "Move this after Munich", forCodex: false }, sourceSurface: "site", createdAt: "2026-08-28T00:00:01.000Z" },
+      { inputId: "arrival_input_arrival_manual_4", kind: "detail", payload: { workspaceOperation: "note", moduleId: "money", recordId: "comment_2", comment: "Research a safer daily allowance", forCodex: true }, sourceSurface: "site", createdAt: "2026-08-28T00:00:02.000Z" },
+    ],
+    interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:02.000Z", checksum: "d".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.title, "Travel rough plan");
+  assert.equal(starter.sections.length, 6);
+  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items[0].fields.location, "Berlin");
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").comments, [{ commentId: "comment_1", text: "Move this after Munich", forCodex: false }]);
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "money").comments, [{ commentId: "comment_2", text: "Research a safer daily allowance", forCodex: true }]);
 });

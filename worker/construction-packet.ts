@@ -35,6 +35,8 @@ interface ArrivalRow {
   packet_checksum: string;
 }
 
+const arrivalDraftReady = (status: string | undefined): boolean => status === "proposed_plan_ready" || status === "interpretation_confirmed";
+
 interface ReturnReviewRow {
   return_id: string;
   packet_id: string;
@@ -197,8 +199,8 @@ const savePacket = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
     .bind(scopeId).first<ArrivalRow>();
   const source = sourceArrival(packet);
   const amendment = record(record(packet.payload).amendment);
-  if (arrival?.status === "interpretation_confirmed" && !source && !Object.keys(amendment).length) return errorResponse(409, "CONSTRUCTION_ARRIVAL_BINDING_REQUIRED", "The active reviewed order requires an exact arrival-bound construction packet.");
-  if (source && (!arrival || source.orderId !== arrival.order_id || source.orderVersion !== arrival.version || source.orderChecksum !== arrival.packet_checksum || arrival.status !== "interpretation_confirmed")) return errorResponse(409, "CONSTRUCTION_ARRIVAL_STALE", "Construction work does not match the current reviewed human order.", { currentOrderId: arrival?.order_id ?? null, currentOrderVersion: arrival?.version ?? null, currentOrderChecksum: arrival?.packet_checksum ?? null, currentOrderStatus: arrival?.status ?? null });
+  if (arrivalDraftReady(arrival?.status) && !source && !Object.keys(amendment).length) return errorResponse(409, "CONSTRUCTION_ARRIVAL_BINDING_REQUIRED", "The active rough plan requires an exact arrival-bound construction packet.");
+  if (source && (!arrival || source.orderId !== arrival.order_id || source.orderVersion !== arrival.version || source.orderChecksum !== arrival.packet_checksum || !arrivalDraftReady(arrival.status))) return errorResponse(409, "CONSTRUCTION_ARRIVAL_STALE", "Construction work does not match the current rough plan.", { currentOrderId: arrival?.order_id ?? null, currentOrderVersion: arrival?.version ?? null, currentOrderChecksum: arrival?.packet_checksum ?? null, currentOrderStatus: arrival?.status ?? null });
 
   const existing = await loadRow(db, scopeId);
   const returnReview = await loadReturnRow(db, scopeId);

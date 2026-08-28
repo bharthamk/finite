@@ -196,33 +196,24 @@ for (const inferredFamily of ["travel", "event", "renovation", "custom_relocatio
   });
 }
 
-test("a complete interpretation stops at human review instead of entering plan tools", async () => {
+test("a complete interpretation opens the editable rough-plan construction route without a confirmation gate", async () => {
   const { arrivals, host } = await setup("renovation");
   const created = await arrivals.create({ idempotencyKey: "complete-interpretation-0001", rawOutcome: "Renovate the kitchen within the confirmed brief.", sourceSurface: "site" });
   const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
   const interpreted = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "renovation", summary: "A bounded kitchen renovation with all construction inputs present.", missing: [], contradictions: [], complete: true });
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
-  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_interpretation_ready");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, null);
-  assert.equal(entered.operatorPacket.nextAction.requiresHuman, true);
-  assert.match(entered.operatorPacket.nextAction.exactQuestion, /capture what you want/i);
-  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_review_interpretation");
+  assert.equal(interpreted.order.status, "proposed_plan_ready");
+  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_construction_ready");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_get_plan_blueprint");
+  assert.equal(entered.operatorPacket.nextAction.requiresHuman, false);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_develop_rough_plan");
   assert.equal(entered.acceptedStateChanged, false);
-
-  const reviewed = await arrivals.reviewInterpretation({ orderId: interpreted.order.orderId, expectedVersion: interpreted.order.version, expectedChecksum: interpreted.order.checksum, sourceSurface: "site" });
-  assert.equal(reviewed.order.status, "interpretation_confirmed");
-  const construction = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
-  assert.equal(construction.operatorPacket.nextAction.stage, "arrival_construction_ready");
-  assert.equal(construction.operatorPacket.nextAction.nextTool, "finite_get_plan_blueprint");
-  assert.deepEqual(construction.operatorPacket.nextAction.knownArgs, { profileId: "renovation" });
-  assert.equal(construction.operatorPacket.nextAction.requiresHuman, false);
-  assert.equal(construction.operatorPacket.nextAction.authorityPresent, false);
-  assert.equal(construction.operatorPacket.chefMenu.items[0].menuItemId, "arrival_compile_reviewed_brief");
-  assert.equal(construction.operatorPacket.chefMenu.items[0].nextTool, "finite_get_plan_blueprint");
-  assert.equal(construction.plan.role, "source_guard_only");
-  assert.equal("consumerOutcome" in construction.plan, false);
-  assert.match(construction.plan.note, /not the human's newly reviewed order/i);
-  assert.equal(construction.acceptedStateChanged, false);
+  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { profileId: "renovation" });
+  assert.equal(entered.operatorPacket.nextAction.authorityPresent, false);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].nextTool, "finite_get_plan_blueprint");
+  assert.equal(entered.plan.role, "source_guard_only");
+  assert.equal("consumerOutcome" in entered.plan, false);
+  assert.equal(entered.acceptedStateChanged, false);
 });
 
 test("confirmed arrival resumes an existing construction packet instead of restarting from the example blueprint", async () => {

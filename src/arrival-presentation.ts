@@ -103,7 +103,7 @@ export const inputKindLabel = (kind: ArrivalInput["kind"]): string => ({
 
 export const inputSurfaceLabel = (surface: ArrivalInput["sourceSurface"]): string => surface === "codex" ? "added with Codex" : "added on this page";
 
-export type StarterPlanItemSource = "request" | "known" | "working" | "human" | "open";
+export type StarterPlanItemSource = "request" | "known" | "working" | "starter" | "human" | "open";
 
 export interface StarterPlanField {
   fieldId: string;
@@ -128,6 +128,7 @@ export interface StarterPlanSection {
   variant: "calendar" | "stays" | "transport" | "money" | "requirements" | "checklist" | "cards";
   fields: StarterPlanField[];
   items: StarterPlanItem[];
+  comments: Array<{ commentId: string; text: string; forCodex: boolean }>;
 }
 
 export interface StarterPlanPresentation {
@@ -148,7 +149,7 @@ const starterFamily = (value: string | null | undefined): StarterPlanPresentatio
   return "general";
 };
 
-type StarterSectionDefinition = Omit<StarterPlanSection, "items"> & { keywords: string[] };
+type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "comments"> & { keywords: string[] };
 
 const field = (fieldId: string, label: string, inputType: StarterPlanField["inputType"] = "text", placeholder = "", options?: StarterPlanField["options"]): StarterPlanField => ({ fieldId, label, inputType, ...(placeholder ? { placeholder } : {}), ...(options ? { options } : {}) });
 const statusOptions = [{ value: "open", label: "Not started" }, { value: "in_progress", label: "In progress" }, { value: "ready", label: "Ready" }];
@@ -240,6 +241,90 @@ const fieldsForFact = (sectionId: string, fact: FlatPlanFact, value = fact.value
   return { title: fact.label, notes: text };
 };
 
+const dateIso = (value: string, fallbackYear: number): string => {
+  const text = value.trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const timestamp = Date.parse(`${/\b20\d{2}\b/.test(text) ? text : `${text} ${fallbackYear}`} UTC`);
+  if (!Number.isFinite(timestamp)) return "";
+  return new Date(timestamp).toISOString().slice(0, 10);
+};
+
+const addDays = (value: string, days: number): string => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const travelAllowance = (location: string): { daily: number; nightly: number } => {
+  const normalized = location.toLowerCase();
+  const rates: Array<[RegExp, number, number]> = [
+    [/london/, 150, 170], [/paris/, 140, 160], [/munich/, 130, 150], [/berlin/, 120, 135], [/helsinki|finland/, 135, 145],
+    [/tallinn|estonia/, 95, 105], [/budapest|hungary/, 85, 90], [/krak|warsaw|poland/, 80, 85], [/tirana|albania/, 75, 75],
+    [/prague/, 90, 100], [/vienna/, 115, 125],
+  ];
+  const match = rates.find(([pattern]) => pattern.test(normalized));
+  return match ? { daily: match[1], nightly: match[2] } : { daily: 110, nightly: 120 };
+};
+
+const seedRoughPlan = (
+  family: StarterPlanPresentation["family"],
+  order: ArrivalOrder,
+  sectionItems: Map<string, StarterPlanItem[]>,
+  addItem: (sectionId: string, item: StarterPlanItem) => void,
+): void => {
+  const seed = (sectionId: string, itemId: string, label: string, fields: Record<string, string | boolean>): void => addItem(sectionId, { itemId: `starter_${itemId}`, label, fields, source: "starter" });
+  const tasks = sectionItems.get("tasks") ?? [];
+  const requirements = sectionItems.get("requirements") ?? [];
+  if (family === "travel") {
+    const itinerary = sectionItems.get("itinerary") ?? [];
+    const year = Number(`${order.rawOutcome} ${order.interpretation?.summary ?? ""}`.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const dateOnly = itinerary.filter((item) => !String(item.fields.location ?? "").trim() && String(item.fields.start ?? "").trim());
+    const firstDate = dateIso(String(dateOnly[0]?.fields.start ?? ""), year);
+    dateOnly.forEach((item) => itinerary.splice(itinerary.indexOf(item), 1));
+    let locations = itinerary.filter((item) => String(item.fields.location ?? "").trim() && !/leaving from|origin/i.test(item.label));
+    const sourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""} ${JSON.stringify(order.interpretation?.known ?? {})} ${JSON.stringify(order.interpretation?.inferred ?? {})}`;
+    if (!locations.length) {
+      const hints: Array<[RegExp, string]> = [[/oktoberfest/i, "Munich"], [/budapest|hungary/i, "Budapest"], [/poland/i, "Kraków"], [/estonia/i, "Tallinn"], [/finland/i, "Helsinki"], [/albania/i, "Tirana"], [/germany/i, "Berlin"], [/france/i, "Paris"], [/italy/i, "Milan"]];
+      const inferredStops = hints.filter(([pattern]) => pattern.test(sourceText)).map(([, location]) => location);
+      const fallbackStops = inferredStops.length ? inferredStops : /europe/i.test(sourceText) ? ["Berlin", "Prague", "Vienna"] : ["First destination"];
+      fallbackStops.forEach((location, index) => seed("itinerary", `route_${index}`, location, { title: location, location, notes: "Rough first-pass stop — change or remove it." }));
+      locations = sectionItems.get("itinerary")!.filter((item) => String(item.fields.location ?? "").trim());
+    }
+    locations.forEach((item, index) => {
+      const location = String(item.fields.location || item.fields.title);
+      const allowance = travelAllowance(location);
+      if (!item.fields.start && firstDate) item.fields.start = addDays(firstDate, index * 4);
+      if (!item.fields.end && item.fields.start) item.fields.end = addDays(String(item.fields.start), 3);
+      if (!item.fields.dailyBudget) item.fields.dailyBudget = String(allowance.daily);
+      if (!item.fields.currency) item.fields.currency = "AUD";
+      item.fields.notes = `${String(item.fields.notes ?? "").trim()}${item.fields.notes ? " · " : ""}Rough timing and daily allowance; not live checked.`;
+      if (item.source !== "human") item.source = "starter";
+      seed("stays", `stay_${index}`, `Flexible mid-range stay · ${location}`, { title: "Flexible mid-range stay", location, start: String(item.fields.start ?? ""), end: String(item.fields.end ?? ""), nightlyBudget: String(allowance.nightly), currency: "AUD", notes: "Indicative planning allowance; no availability has been checked." });
+    });
+    const routeLocations = locations.map((item) => String(item.fields.location || item.fields.title));
+    const origin = itinerary.find((item) => /leaving from|origin/i.test(item.label))?.fields.location;
+    if (routeLocations.length && !(sectionItems.get("transport") ?? []).length) {
+      seed("transport", "arrival_flight", `Flight to ${routeLocations[0]}`, { title: "Long-haul flight option", from: String(origin || "Home airport"), to: routeLocations[0]!, start: firstDate, provider: "To compare", cost: String(/australia|gold coast|brisbane|sydney|melbourne/i.test(String(origin)) ? 1500 : 900), currency: "AUD", notes: "Rough one-way allowance; no fare or seat has been checked." });
+    }
+    routeLocations.slice(0, -1).forEach((location, index) => seed("transport", `leg_${index}`, `${location} → ${routeLocations[index + 1]}`, { title: "Intercity transport", from: location, to: routeLocations[index + 1]!, start: String(locations[index]?.fields.end ?? ""), provider: "Rail / coach / low-cost flight", cost: "80", currency: "AUD", notes: "Rough allowance; mode, timetable and availability are open." }));
+    const allowances = locations.map((item) => travelAllowance(String(item.fields.location || item.fields.title)));
+    if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "daily")) seed("money", "daily_spend", "Daily spending allowance", { title: "Daily spending allowance", amount: String(Math.round(allowances.reduce((sum, item) => sum + item.daily, 0) / Math.max(1, allowances.length))), currency: "AUD", moneyRole: "daily", notes: "Average first-pass allowance across the rough route." });
+    seed("money", "stay_allowance", "Accommodation allowance", { title: "Accommodation allowance", amount: String(allowances.reduce((sum, item) => sum + item.nightly * 4, 0)), currency: "AUD", moneyRole: "cost", notes: "Four rough nights per stop; edit dates or stays to replace this centering estimate." });
+    (["passport:Passport validity check", "visa:Visa and entry-requirement check", "insurance:Travel insurance"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!requirements.some((item) => String(item.fields.title).toLowerCase().includes(id))) seed("requirements", id, title, { title, status: "open", notes: "Required check; not legal or live entry advice." }); });
+    (["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
+    return;
+  }
+  const schedule = sectionItems.get("schedule") ?? [];
+  if (!schedule.length) {
+    const labels = family === "renovation" ? ["Confirm scope", "Design and quotes", "Order and prepare", "Build", "Handover"] : family === "event" ? ["Confirm venue and people", "Book key suppliers", "Prepare programme", "Run the event", "Close out"] : ["Confirm the outcome", "Prepare", "Deliver", "Review"];
+    labels.forEach((label, index) => seed("schedule", `phase_${index}`, label, { title: label, notes: "Rough first-pass stage — change or reorder it." }));
+  }
+  if (!requirements.length) seed("requirements", "key_requirement", family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", { title: family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", status: "open", notes: "First-pass requirement; verify before committing." });
+  ["Confirm the rough sequence", "Add known costs and dates", "Check the next external dependency"].forEach((title, index) => { if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", `general_${index}`, title, { title, done: false, notes: "Useful next step." }); });
+};
+
 const inputVersion = (input: ArrivalInput): number => {
   const match = input.inputId.match(/_(\d+)$/);
   return match ? Number(match[1]) : 0;
@@ -247,16 +332,18 @@ const inputVersion = (input: ArrivalInput): number => {
 
 export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
   const interpretation = order.interpretation;
-  if (!interpretation?.complete) return null;
-  const family = starterFamily(interpretation.inferredFamily);
-  const basedOnVersion = interpretation.basedOnVersion ?? order.version;
+  const manual = order.structured.planningMode === "manual";
+  if (!interpretation?.complete && !manual) return null;
+  const family = starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
+  const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion);
   const openItems = [...new Set([
-    ...interpretation.dependencies.filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
-    ...interpretation.missing.map((item) => item.trim()),
+    ...(interpretation?.dependencies ?? []).filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
+    ...(interpretation?.missing ?? []).map((item) => item.trim()),
   ].filter(Boolean))];
   const definitions = starterSections[family];
   const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
+  const sectionComments = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ commentId: string; text: string; forCodex: boolean }>]));
   const addItem = (sectionId: string, item: StarterPlanItem): void => {
     const resolved = sectionItems.has(sectionId) ? sectionId : sectionAliases[sectionId] && sectionItems.has(sectionAliases[sectionId]!) ? sectionAliases[sectionId]! : definitions[0]!.sectionId;
     const items = sectionItems.get(resolved)!;
@@ -274,10 +361,13 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     values.forEach((value, valueIndex) => addItem(sectionId, { itemId: `${prefix}_${index}_${valueIndex}`, label: fact.label, fields: fieldsForFact(sectionId, fact, value), source }));
   });
   addFacts(requestFacts, "request", "request");
-  addFacts(flattenPlanFacts(interpretation.known), "known", "known");
-  addFacts(flattenPlanFacts(interpretation.inferred), "working", "working");
+  addFacts(flattenPlanFacts(interpretation?.known ?? {}), "known", "known");
+  addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
-  laterHumanInputs.forEach((input, index) => {
+  if (interpretation?.complete) seedRoughPlan(family, order, sectionItems, addItem);
+  const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));
+  const presentationInputs = [...workspaceInputs, ...laterHumanInputs.filter((input) => !safePayloadText(input.payload, "workspaceOperation"))];
+  presentationInputs.forEach((input, index) => {
     const operation = safePayloadText(input.payload, "workspaceOperation");
     if (operation) {
       const rawSection = safePayloadText(input.payload, "moduleId");
@@ -285,6 +375,11 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       const recordId = safePayloadText(input.payload, "recordId");
       const items = sectionItems.get(sectionId);
       if (!items) return;
+      if (operation === "note") {
+        const text = safePayloadText(input.payload, "comment");
+        if (text) sectionComments.get(sectionId)?.push({ commentId: recordId || `comment_${index}`, text, forCodex: input.payload.forCodex === true });
+        return;
+      }
       if (operation === "add") addItem(sectionId, { itemId: recordId || `human_${index}`, label: safePayloadText(input.payload, "label") || "Plan item", fields: safeFields(input.payload.fields), source: "human" });
       if (operation === "update") {
         const item = items.find((candidate) => candidate.itemId === recordId);
@@ -313,9 +408,9 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
-    title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} starter plan`,
-    brief: interpretation.summary,
-    sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [] })),
+    title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} rough plan`,
+    brief: interpretation?.summary ?? order.rawOutcome,
+    sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [] })),
     laterHumanInputs,
     interpretationIsCurrent: laterHumanInputs.length === 0,
   };

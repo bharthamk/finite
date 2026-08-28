@@ -142,7 +142,8 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   assert.doesNotMatch(handoffSource, /Bring Codex into the kitchen\.|points to the kitchen and the correct first tool/);
   assert.doesNotMatch(consumerServerCopy, /available in (?:this|a signed-in) kitchen|resetting a kitchen|clear this Finite kitchen/i);
   assert.match(source, /This is all they can see\./);
-  assert.match(source, /Same plan\. Same saved starting point\./);
+  assert.match(source, /Give \$\{escapeHtml\(agenticName\(\)\)\} my plan/);
+  assert.match(source, /Build it myself/);
   assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan\./);
 });
 
@@ -165,23 +166,27 @@ test("arrival shows the complete human starting point without protocol language 
   assert.match(styles, /\.arrival-order-source__content p \{[^}]*overflow-wrap:anywhere/);
 });
 
-test("arrival prioritizes the next action and keeps secondary review tools side by side", () => {
+test("arrival offers Codex or manual starts and keeps the rough plan directly editable", () => {
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
-  assert.match(source, /Next step \/ review your brief/);
-  assert.match(source, /Accept brief and open draft/);
-  assert.match(source, /data-action="toggle-starter-draft">\$\{showStarterPlan \? "Hide draft plan" : "View draft plan"\}/);
+  assert.doesNotMatch(source, /Next step \/ review your brief/);
+  assert.doesNotMatch(source, /Accept brief and open draft/);
+  assert.doesNotMatch(source, /confirm-arrival-interpretation|toggle-starter-draft/);
+  assert.match(source, /name="planningMode" value="codex"/);
+  assert.match(source, /name="planningMode" value="manual"/);
   assert.match(source, /const showStarterPlan = Boolean\(starterPlanMarkup && !planDraftMarkup/);
   assert.match(source, /data-arrival-form="workspace-add"/);
   assert.match(source, /data-arrival-form="workspace-update"/);
   assert.match(source, /data-action="workspace-delete"/);
   assert.match(source, /data-action="workspace-toggle"/);
+  assert.match(source, /data-arrival-form="workspace-comment"/);
+  assert.match(source, /Ask \$\{escapeHtml\(agenticName\(\)\)\}/);
   assert.match(source, /workspaceOperation: "reorder"/);
-  assert.match(source, /draggable="\$\{previewOnly \? "false" : "true"\}"/);
-  assert.match(source, /Use this plan now\./);
-  assert.match(source, /none of those controls require \$\{escapeHtml\(agenticName\(\)\)\}/);
+  assert.match(source, /draggable="true"/);
+  assert.match(source, /This is a first-pass plan, not a researched recommendation\./);
+  assert.match(source, /Build this plan your way\./);
   assert.doesNotMatch(source, /This is useful now\.|is deliberately lightweight|is only needed/);
-  assert.match(source, /Develop with \$\{escapeHtml\(agenticName\(\)\)\}/);
+  assert.match(source, /Talk to \$\{escapeHtml\(agenticName\(\)\)\}/);
   assert.doesNotMatch(source, /The chef handoff carries this saved draft/);
   assert.doesNotMatch(source, /Brief confirmed\. Use \$\{escapeHtml\(agenticName\(\)\)\} to continue\./);
   assert.doesNotMatch(source, /Brief confirmed\. Codex may construct a plan/);

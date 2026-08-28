@@ -1,5 +1,5 @@
 import { sha256 } from "./crypto.js";
-import { HttpArrivalRepository, type ArrivalInputKind, type ArrivalOrientation, type ArrivalRepository } from "./arrival.js";
+import { HttpArrivalRepository, isArrivalDraftReady, type ArrivalInputKind, type ArrivalOrientation, type ArrivalRepository } from "./arrival.js";
 import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
 import { assessExternalAction, currencyContract, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
@@ -472,15 +472,15 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
     requiresHuman: true, exactQuestion: orientation.order.pendingClarification.prompt, targetId: orientation.order.orderId, authorityPresent: false,
   };
   const interpretation = orientation.order.interpretation;
-  if (orientation.order.status === "interpretation_confirmed" && interpretation && orientation.interpretationIsCurrent) {
+  if (isArrivalDraftReady(orientation.order.status) && interpretation && orientation.interpretationIsCurrent) {
     const profileId = interpretation.inferredFamily && builtInArrivalFamilies.has(interpretation.inferredFamily) ? interpretation.inferredFamily : null;
     return {
       actionVersion: "finite-next-action.v1",
       stage: profileId ? "arrival_construction_ready" : "arrival_construction_family_required",
-      reason: profileId ? "The human reviewed this exact interpretation. Codex can now load the compiler contract and construct a non-authoritative plan draft." : "The human reviewed the interpretation, but Codex must select a supported compiler route before constructing the plan.",
+      reason: profileId ? "The editable rough plan is current. Codex can load the compiler contract and continue non-authoritative plan development." : "The rough plan is current, but Codex must select a supported compiler route before continuing.",
       nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities",
       knownArgs: profileId ? { profileId } : {},
-      derivedArgs: [{ argument: "profileId", source: "reviewed_interpretation", provenance: { interpretationBasedOnVersion: orientation.interpretationBasedOnVersion } }],
+      derivedArgs: [{ argument: "profileId", source: "current_rough_plan", provenance: { interpretationBasedOnVersion: orientation.interpretationBasedOnVersion } }],
       missingInputs: [],
       requiresHuman: false,
       exactQuestion: null,
@@ -546,13 +546,13 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
       { menuItemId: "arrival_revise_brief", rank: 3, kind: "human_decision", title: "Revise the outcome or finite limits", offer: "Correct the brief if the gaps reveal that the desired outcome, deadline, or limit should change.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_append_arrival_input", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion, kind: "correction" }, missingInputs: [{ argument: "payload", source: "human", reason: "Only the human can revise the order." }], tradeoffs: ["The interpretation will be rebuilt from the new human state"], evidence: { status: "not_required", refs: [] } },
     ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
   }
-  if (orientation?.order.status === "interpretation_confirmed" && orientation.order.interpretation && orientation.interpretationIsCurrent) {
+  if (orientation && isArrivalDraftReady(orientation.order.status) && orientation.order.interpretation && orientation.interpretationIsCurrent) {
     const profileId = orientation.order.interpretation.inferredFamily && builtInArrivalFamilies.has(orientation.order.interpretation.inferredFamily) ? orientation.order.interpretation.inferredFamily : null;
     return { menuVersion: "finite-chef-menu.v1", basis, items: [
-      { menuItemId: "arrival_compile_reviewed_brief", rank: 1, kind: "operator_action", title: "Build from the reviewed brief", offer: "Load the exact compiler contract, then turn the reviewed interpretation into typed construction inputs.", status: "ready", viability: "not_yet_tested", nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities", knownArgs: profileId ? { profileId } : {}, missingInputs: [], tradeoffs: ["Construction remains non-authoritative until a compiled draft is separately confirmed"], evidence: { status: "available", refs: [] } },
+      { menuItemId: "arrival_develop_rough_plan", rank: 1, kind: "operator_action", title: "Develop the rough plan", offer: "Load the exact compiler contract, then turn the current rough plan into typed construction inputs.", status: "ready", viability: "not_yet_tested", nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities", knownArgs: profileId ? { profileId } : {}, missingInputs: [], tradeoffs: ["Construction remains non-authoritative until a compiled draft is separately confirmed"], evidence: { status: "available", refs: [] } },
       { menuItemId: "arrival_research_dependencies", rank: 2, kind: "suggested_route", title: "Research unresolved dependencies", offer: "Use the saved research queue for dates, transport and evidence without turning results into human facts.", status: "research_required", viability: "not_yet_tested", nextTool: "finite_get_evidence_policy", knownArgs: {}, missingInputs: [], tradeoffs: ["Live evidence may narrow the plan before drafting"], evidence: { status: "required", refs: [] } },
       { menuItemId: "arrival_preserve_activation_boundary", rank: 3, kind: "operator_action", title: "Keep activation separate", offer: "Construct and validate first; return the exact compiled draft to the Site for a later human activation decision.", status: "blocked", viability: "not_yet_tested", nextTool: null, knownArgs: {}, missingInputs: [{ argument: "compiled_draft", source: "canonical", reason: "A plan cannot be authorized before it exists." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
-    ], law: "Review releases the interpretation to plan construction. It is never plan activation authority." };
+    ], law: "A rough plan may be developed without approval. It is never plan activation or external-action authority." };
   }
   if (orientation?.order.interpretation?.complete && orientation.interpretationIsCurrent) {
     return { menuVersion: "finite-chef-menu.v1", basis, items: [
@@ -692,11 +692,11 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       : planNextAction(plan);
   const constructionPacket = record(record(plan.work).construction);
   const constructionCurrent = orientation ? constructionMatchesArrival(constructionPacket, orientation) : true;
-  if (orientation?.order.status === "interpretation_confirmed" && orientation.interpretationIsCurrent) {
+  if (orientation && isArrivalDraftReady(orientation.order.status) && orientation.interpretationIsCurrent) {
     const planRoute = record(record(plan.work).route);
     if ((planRoute.stage === "awaiting_human" || planRoute.stage === "human_confirmed" || planRoute.stage === "draft_returned") && constructionCurrent) nextAction = planNextAction(plan);
     else if (constructionPacket.kind === "intake" && String(constructionPacket.assessmentCode).startsWith("INTAKE_FACTS_COMPLETE")) nextAction = {
-      actionVersion: "finite-next-action.v1", stage: "construction_intake_ready", reason: "The reviewed order has a complete checksum-bound construction packet ready for clean compilation.",
+      actionVersion: "finite-next-action.v1", stage: "construction_intake_ready", reason: "The current rough plan has a complete checksum-bound construction packet ready for clean compilation.",
       nextTool: "finite_compile_intake_to_draft", knownArgs: { packetId: constructionPacket.packetId, expectedChecksum: constructionPacket.checksum }, derivedArgs: [], missingInputs: [], requiresHuman: false, exactQuestion: null, targetId: constructionPacket.packetId, authorityPresent: false,
     };
     else if (constructionPacket.kind === "intake") nextAction = {
@@ -707,7 +707,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   let chefMenu = orientation || entryIntent === "start_new"
     ? arrivalChefMenu(orientation)
     : plan.chefMenu;
-  if (orientation?.order.status === "interpretation_confirmed" && orientation.interpretationIsCurrent && constructionCurrent && nextAction.stage !== "arrival_construction_ready") {
+  if (orientation && isArrivalDraftReady(orientation.order.status) && orientation.interpretationIsCurrent && constructionCurrent && nextAction.stage !== "arrival_construction_ready") {
     const currentMenu = record(chefMenu);
     const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
     const waitingForHuman = nextAction.stage === "awaiting_human";
@@ -736,7 +736,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       : { ...constructionPacket, status: "stale_arrival", staleReason: "The human order advanced after this packet was compiled.", currentArrival: exactArrivalBinding(orientation!), sourceArrival: constructionPacket.sourceArrival ?? null };
   const focusedPlan = constructionFocused ? {
     role: "source_guard_only",
-    note: "This accepted plan is the persistence and concurrency base for construction. It is not the human's newly reviewed order and its consumer outcome, menu, moves, and sample surface are intentionally omitted.",
+    note: "This accepted plan is the persistence and concurrency base for construction. It is not the human's current rough plan, and its consumer outcome, menu, moves, and sample surface are intentionally omitted.",
     active: plan.active,
     authority: plan.authority,
     persistence: plan.persistence,
@@ -917,14 +917,14 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
     return result;
   } }),
   define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid travel, renovation, or event-family profile plus its fixed fields, conservation law, evidence prerequisites, semantic requirements, bounds, and authority path.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
-  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, including a bounded plan-specific recovery menu, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Arrival construction is bound automatically to the exact current reviewed order. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, moves: { type: "object", maxProperties: 12, additionalProperties: { type: "object" } }, searchPolicy: { type: "object" }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input, context) => {
+  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, including a bounded plan-specific recovery menu, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Arrival construction is bound automatically to the exact current rough plan. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, moves: { type: "object", maxProperties: 12, additionalProperties: { type: "object" } }, searchPolicy: { type: "object" }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input, context) => {
     const opened = await arrival.open({}, context);
     if (opened.ok && opened.orientation) {
       const orientation = opened.orientation;
-      if (orientation.order.status !== "interpretation_confirmed" || !orientation.interpretationIsCurrent) return { ok: false, code: "ARRIVAL_NOT_READY_FOR_CONSTRUCTION", currentArrival: exactArrivalBinding(orientation), acceptedStateChanged: false, next: "Reconcile the latest human input and obtain review of the replacement interpretation before compiling another draft." };
+      if (!isArrivalDraftReady(orientation.order.status) || !orientation.interpretationIsCurrent) return { ok: false, code: "ARRIVAL_NOT_READY_FOR_CONSTRUCTION", currentArrival: exactArrivalBinding(orientation), acceptedStateChanged: false, next: "Reconcile the latest human input before compiling another draft." };
       const supplied = record(input.sourceArrival);
       const current = exactArrivalBinding(orientation);
-      if (Object.keys(supplied).length && (String(supplied.orderId) !== current.orderId || Number(supplied.orderVersion) !== current.orderVersion || String(supplied.orderChecksum) !== current.orderChecksum)) return { ok: false, code: "ARRIVAL_CONSTRUCTION_GUARD_MISMATCH", suppliedArrival: supplied, currentArrival: current, acceptedStateChanged: false, next: "Re-enter the kitchen and rebuild from the canonical reviewed order." };
+      if (Object.keys(supplied).length && (String(supplied.orderId) !== current.orderId || Number(supplied.orderVersion) !== current.orderVersion || String(supplied.orderChecksum) !== current.orderChecksum)) return { ok: false, code: "ARRIVAL_CONSTRUCTION_GUARD_MISMATCH", suppliedArrival: supplied, currentArrival: current, acceptedStateChanged: false, next: "Re-enter the kitchen and rebuild from the canonical rough plan." };
       return runtime.assessPlanIntake({ ...input, sourceArrival: current }, context);
     }
     return runtime.assessPlanIntake(input, context);
@@ -1518,7 +1518,7 @@ export class FinitePlanWebMCPAdapter {
     this.advertisedCoreTools = persistent;
     if (this.stableDispatcher) {
       const opened = await this.arrival.open();
-      this.activeToolset = !opened.ok || !opened.order ? "arrival" : !isWaitingArrivalStatus(opened.order.status) ? "planning" : opened.order.status === "interpretation_confirmed" ? "construction" : "arrival";
+      this.activeToolset = !opened.ok || !opened.order ? "arrival" : !isWaitingArrivalStatus(opened.order.status) ? "planning" : isArrivalDraftReady(opened.order.status) ? "construction" : "arrival";
       this.effort.maxAdvertisedTools = Math.max(this.effort.maxAdvertisedTools, this.inventory().length);
     } else await this.refreshRouteTools();
     return this.inventory();
@@ -1554,7 +1554,7 @@ export class FinitePlanWebMCPAdapter {
     if (stage === "no_valid_option") return "planning";
     if (stage === "arrival_construction_ready" || stage === "arrival_construction_family_required" || stage === "draft_returned") return "construction";
     if (stage === "awaiting_human" && targetId.startsWith("plan_draft_")) return "plan_management";
-    if (isWaitingArrivalStatus(arrivalStatus)) return arrivalStatus === "interpretation_confirmed" ? "construction" : "arrival";
+    if (isWaitingArrivalStatus(arrivalStatus)) return isArrivalDraftReady(arrivalStatus) ? "construction" : "arrival";
     if (stage === "options_available" || stage === "awaiting_human" || stage === "human_approved" || stage === "human_confirmed" || stage === "plan_inactive") return "decisions";
     if (stage === "menu_ready") {
       const intendedTools = Array.isArray(nextAction.intendedTools) ? nextAction.intendedTools.map(String) : [];
@@ -1579,7 +1579,7 @@ export class FinitePlanWebMCPAdapter {
     const opened = await this.arrival.open();
     if (!opened.ok || !opened.order) return "arrival";
     if (!isWaitingArrivalStatus(opened.order.status)) return "planning";
-    if (opened.order.status === "interpretation_confirmed") return "construction";
+    if (isArrivalDraftReady(opened.order.status)) return "construction";
     return "arrival";
   }
 
