@@ -238,7 +238,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.doesNotMatch(source, /return `<section class="starter-module/);
   assert.match(styles, /\.starter-module>summary \{/);
   assert.match(styles, /\.starter-module\[open\]>summary/);
-  for (const moduleId of ["itinerary", "stays", "transport", "money", "requirements", "tasks"]) assert.match(styles, new RegExp(`data-workspace-module="${moduleId}"`));
+  for (const moduleId of ["itinerary", "people", "stays", "transport", "money", "requirements", "tasks"]) assert.match(styles, new RegExp(`data-workspace-module="${moduleId}"`));
   assert.match(styles, /--module-tone:/);
   assert.match(styles, /--module-mark:/);
   assert.match(styles, /border-left:6px solid var\(--module-mark\)/);
@@ -254,6 +254,15 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /travel: "Locations & activities"/);
   assert.match(source, /data-action='calendar-view'/);
   assert.match(source, /data-action='select-calendar-item'/);
+  assert.match(source, /data-action='calendar-filter'/);
+  assert.match(source, /captureWorkspaceUiState/);
+  assert.match(source, /restoreWorkspaceUiState/);
+  assert.match(source, /data-action="open-related-record"/);
+  assert.match(source, /Live plan roll-up/);
+  assert.match(source, /Automatically summed from/);
+  assert.match(styles, /\.starter-calendar__filters/);
+  assert.match(styles, /\.starter-record__relationships/);
+  assert.match(styles, /\.starter-cost-rollup/);
   assert.match(source, /\[data-workspace-record\], \[data-record-context\]/);
   assert.match(styles, /\.starter-calendar__layout \{ display:grid; grid-template-columns:minmax\(0,1fr\) minmax\(290px,360px\)/);
   assert.match(styles, /\.starter-calendar__month table \{/);

@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "real-trip-manual-workspace-v123",
+  build: "a-plus-manual-plan-workspace-v124",
 } as const;

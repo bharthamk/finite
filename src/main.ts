@@ -574,6 +574,18 @@ const hotModule = (import.meta as ImportMeta & { hot?: { dispose(callback: () =>
 if (hotModule) hotModule.dispose(() => adapter?.dispose());
 
 let busy = false;
+type WorkspaceUiState = {
+  openModules: Set<string>;
+  calendarViews: Map<string, "calendar" | "list">;
+  calendarSelections: Map<string, string>;
+  calendarFilters: Map<string, string>;
+};
+const workspaceUiState: WorkspaceUiState = {
+  openModules: new Set(),
+  calendarViews: new Map(),
+  calendarSelections: new Map(),
+  calendarFilters: new Map(),
+};
 let message = "";
 let messageScope = "";
 let settingsBusy = false;
@@ -1229,7 +1241,7 @@ const renderStarterField = (field: import("./arrival-presentation.js").StarterPl
   if (field.inputType === "select") return `<label><span>${escapeHtml(field.label)}</span><select name="${namePrefix}${escapeHtml(field.fieldId)}">${(field.options ?? []).map((option) => `<option value="${escapeHtml(option.value)}" ${safeValue === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
   if (field.inputType === "textarea") return `<label><span>${escapeHtml(field.label)}</span><textarea name="${namePrefix}${escapeHtml(field.fieldId)}" maxlength="2000" placeholder="${escapeHtml(field.placeholder ?? "")}">${escapeHtml(safeValue)}</textarea></label>`;
   const actualType = field.inputType === "date" && safeValue && !/^\d{4}-\d{2}-\d{2}$/.test(safeValue) ? "text" : field.inputType;
-  return `<label><span>${escapeHtml(field.label)}</span><input name="${namePrefix}${escapeHtml(field.fieldId)}" type="${actualType}" ${field.fieldId === "title" ? "required" : ""} maxlength="${field.inputType === "number" ? "20" : "240"}" value="${escapeHtml(safeValue)}" placeholder="${escapeHtml(field.placeholder ?? "")}"></label>`;
+  return `<label><span>${escapeHtml(field.label)}</span><input name="${namePrefix}${escapeHtml(field.fieldId)}" type="${actualType}" ${field.fieldId === "title" ? "required" : ""} ${field.inputType === "number" ? "step=\"any\" inputmode=\"decimal\"" : ""} maxlength="${field.inputType === "number" ? "20" : "240"}" value="${escapeHtml(safeValue)}" placeholder="${escapeHtml(field.placeholder ?? "")}"></label>`;
 };
 
 const starterAmount = (value: unknown): number => {
@@ -1258,6 +1270,8 @@ const calendarEntryNoun = (family: import("./arrival-presentation.js").StarterPl
   event: "Events & activities",
   general: "Scheduled items",
 })[family];
+
+const calendarFilterOptions = [{ value: "location", label: "Locations" }, { value: "activity", label: "Activities" }, { value: "event", label: "Events" }, { value: "travel", label: "Travel days" }, { value: "milestone", label: "Milestones" }];
 
 const renderCalendarMonths = (
   section: import("./arrival-presentation.js").StarterPlanSection,
@@ -1294,10 +1308,12 @@ const renderCalendarMonths = (
         const end = entry.end && entry.end >= entry.start ? entry.end : entry.start;
         return date >= entry.start && date <= end;
       });
-      const entries = active.map(({ item }) => {
+      const entries = active.map(({ item, start }) => {
         const title = String(item.fields.title || item.label);
         const provisional = starterItemIsProvisional(item);
-        return `<button class="starter-calendar__event${provisional ? " is-provisional" : ""}" type="button" data-action="select-calendar-item" data-record-id="${escapeHtml(item.itemId)}" aria-pressed="${item.itemId === selectedId}" title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span></button>`;
+        const kind = String(item.fields.kind || "location");
+        const continuation = key !== calendarDateKey(start);
+        return `<button class="starter-calendar__event starter-calendar__event--${escapeHtml(kind)}${continuation ? " is-continuation" : ""}${provisional ? " is-provisional" : ""}" type="button" data-action="select-calendar-item" data-calendar-kind="${escapeHtml(kind)}" data-record-id="${escapeHtml(item.itemId)}" aria-label="${escapeHtml(continuation ? `${title}, continues` : title)}" aria-pressed="${item.itemId === selectedId}" title="${escapeHtml(title)}"><span>${continuation ? "↳" : escapeHtml(title)}</span></button>`;
       }).join("");
       return `<td data-calendar-date="${key}"><time datetime="${key}">${dayNumber}</time>${entries}</td>`;
     });
@@ -1329,19 +1345,51 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const nights = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 86_400_000)) : 0;
   const duration = Number.isFinite(startMs) ? overview.singleDay || !Number.isFinite(endMs) ? "1 day" : `${nights + 1} ${nights === 0 ? "day" : "days"}${nights ? ` · ${nights} ${nights === 1 ? "night" : "nights"}` : ""}` : "Dates open";
   const scheduleSection = starter.sections.find((section) => section.sectionId === "itinerary" || section.sectionId === "schedule");
+  const staysSection = starter.sections.find((section) => section.sectionId === "stays");
+  const transportSection = starter.sections.find((section) => section.sectionId === "transport");
+  const peopleSection = starter.sections.find((section) => section.sectionId === "people");
+  const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel", "germany", "hungary", "poland", "ireland", "finland", "latvia", "estonia", "lithuania", "luxembourg"].includes(token)) ?? [];
+  const samePlace = (left: unknown, right: unknown): boolean => {
+    const leftTokens = normalizePlace(left);
+    const rightTokens = normalizePlace(right);
+    return leftTokens.some((token) => rightTokens.includes(token));
+  };
+  const rangeOverlaps = (leftStart: unknown, leftEnd: unknown, rightStart: unknown, rightEnd: unknown): boolean => {
+    const aStart = calendarDate(leftStart)?.getTime();
+    const bStart = calendarDate(rightStart)?.getTime();
+    if (!aStart || !bStart) return true;
+    const aEnd = calendarDate(leftEnd)?.getTime() ?? aStart;
+    const bEnd = calendarDate(rightEnd)?.getTime() ?? bStart;
+    return aStart <= bEnd && bStart <= aEnd;
+  };
+  const calendarLocations = scheduleSection?.items.filter((item) => String(item.fields.kind || "location") === "location") ?? [];
+  const calendarMatches = (location: unknown, start?: unknown, end?: unknown) => calendarLocations.filter((candidate) => samePlace(location, candidate.fields.location || candidate.fields.title) && rangeOverlaps(start, end, candidate.fields.start, candidate.fields.end));
+  const stayTotal = (item: import("./arrival-presentation.js").StarterPlanItem): number => {
+    const explicit = starterAmount(item.fields.totalBudget);
+    if (explicit) return explicit;
+    const checkIn = calendarDate(item.fields.start)?.getTime();
+    const checkOut = calendarDate(item.fields.end)?.getTime();
+    const stayNights = checkIn && checkOut ? Math.max(0, Math.round((checkOut - checkIn) / 86_400_000)) : 0;
+    return starterAmount(item.fields.nightlyBudget) * stayNights;
+  };
+  const staysRecorded = staysSection?.items.reduce((sum, item) => sum + stayTotal(item), 0) ?? 0;
+  const transportRecorded = transportSection?.items.reduce((sum, item) => sum + starterAmount(item.fields.cost), 0) ?? 0;
+  const recordedCosts = staysRecorded + transportRecorded;
   const taskItems = starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
   const openTasks = taskItems.filter((item) => item.fields.done !== true).length;
   const openRequirements = starter.sections.find((section) => section.sectionId === "requirements")?.items.filter((item) => item.fields.status !== "ready").length ?? 0;
-  const openItems = openTasks + openRequirements;
+  const openPeople = peopleSection?.items.filter((item) => String(item.fields.status || "tentative") !== "confirmed").length ?? 0;
+  const openItems = openTasks + openRequirements + openPeople;
   const allocationDelta = limit - overview.categoryAllocated;
   const allocationLabel = !limit ? "Add total budget" : allocationDelta >= 0 ? `${money(allocationDelta)} unallocated` : `${money(Math.abs(allocationDelta))} over budget`;
   const allocationClass = limit && overview.categoryPercent > 100 ? " is-over" : "";
   const dateRange = overview.start
     ? `${dateLabel(overview.start)}${overview.end && !overview.singleDay ? ` – ${dateLabel(overview.end)}` : ""}`
     : "Dates open";
+  const scheduleCount = starter.family === "travel" ? scheduleSection?.items.filter((item) => String(item.fields.kind || "location") === "location").length ?? 0 : scheduleSection?.items.length ?? 0;
   const timingDetail = overview.includeTime
     ? `${overview.startTime || "Start open"}${overview.endTime ? ` – ${overview.endTime}` : ""}${overview.timeZone ? ` · ${overview.timeZone}` : ""}`
-    : overview.singleDay ? "Single-day plan" : `${scheduleSection?.items.length ?? 0} ${starter.family === "travel" ? "stops" : "stages"}`;
+    : overview.singleDay ? "Single-day plan" : `${scheduleCount} ${starter.family === "travel" ? "stops" : "stages"}`;
   const splitDetail = overview.categories.slice(0, 2).map((item) => {
     const amount = starterAmount(item.fields.amount);
     const percentage = limit > 0 ? (amount / limit) * 100 : 0;
@@ -1376,7 +1424,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <article class="starter-report-card${overview.budgetProvisional ? " is-provisional" : ""}">
         <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="budget" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${limit ? escapeHtml(money(limit)) : "Not set"}</strong>
-        <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated</small>
+        <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated${recordedCosts ? ` · ${escapeHtml(money(recordedCosts))} in linked records` : ""}</small>
       </article>
       <article class="starter-report-card${allocationClass}${splitProvisional ? " is-provisional" : ""}">
         <header><span>Budget split</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit budget split"><span aria-hidden="true">✎</span></button></header>
@@ -1430,6 +1478,23 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
       const provisional = starterItemIsProvisional(item);
       const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}${provisional ? " is-provisional" : ""}`;
+      let relationshipMarkup = "";
+      if (scheduleSection && section.sectionId === "stays") {
+        const related = calendarMatches(item.fields.location, item.fields.start, item.fields.end);
+        relationshipMarkup = related.length
+          ? `<div class="starter-record__relationships"><span>Calendar link</span>${related.slice(0, 2).map((record) => `<button type="button" data-action="open-related-record" data-module-id="${escapeHtml(scheduleSection.sectionId)}" data-record-id="${escapeHtml(record.itemId)}">${escapeHtml(String(record.fields.title || record.label))}</button>`).join("")}</div>`
+          : `<p class="starter-record__warning">No matching calendar stop for this location and date window.</p>`;
+      }
+      if (scheduleSection && section.sectionId === "transport") {
+        const from = calendarMatches(item.fields.from)[0];
+        const to = calendarMatches(item.fields.to)[0];
+        const links = [from, to].filter(Boolean) as import("./arrival-presentation.js").StarterPlanItem[];
+        relationshipMarkup = `<div class="starter-record__relationships"><span>Route link</span>${links.map((record) => `<button type="button" data-action="open-related-record" data-module-id="${escapeHtml(scheduleSection.sectionId)}" data-record-id="${escapeHtml(record.itemId)}">${escapeHtml(String(record.fields.title || record.label))}</button>`).join("")}${links.length < 2 ? `<small>Check ${from ? "destination" : to ? "origin" : "origin and destination"} against Calendar.</small>` : ""}</div>`;
+      }
+      if (scheduleSection && section.sectionId === "people") {
+        const related = calendarMatches(item.fields.location, item.fields.start, item.fields.end);
+        relationshipMarkup = `<div class="starter-record__relationships"><span>Plan dependency</span>${related.slice(0, 2).map((record) => `<button type="button" data-action="open-related-record" data-module-id="${escapeHtml(scheduleSection.sectionId)}" data-record-id="${escapeHtml(record.itemId)}">${escapeHtml(String(record.fields.title || record.label))}</button>`).join("")}${String(item.fields.status || "tentative") !== "confirmed" ? `<small>Dates are not confirmed yet.</small>` : ""}</div>`;
+      }
       return `<article class="${recordClass}" draggable="true" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
         <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
@@ -1437,10 +1502,25 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open website <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
           return `<div><dt>${escapeHtml(field.label)}</dt><dd>${renderedValue}</dd></div>`;
         }).join("")}</dl>` : ""}
+        ${relationshipMarkup}
         <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
       </article>`;
     };
     const items = section.items.map(renderRecord).join("");
+    const unresolvedPeople = peopleSection?.items.filter((item) => String(item.fields.status || "tentative") !== "confirmed").length ?? 0;
+    const unlinkedStays = staysSection?.items.filter((item) => !calendarMatches(item.fields.location, item.fields.start, item.fields.end).length).length ?? 0;
+    const unlinkedTransportEnds = transportSection?.items.reduce((count, item) => count + (calendarMatches(item.fields.from).length ? 0 : 1) + (calendarMatches(item.fields.to).length ? 0 : 1), 0) ?? 0;
+    const moduleWarningCount = section.sectionId === "people" ? unresolvedPeople : section.sectionId === "stays" ? unlinkedStays : section.sectionId === "transport" ? unlinkedTransportEnds : 0;
+    const moduleCountMarkup = `<b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</b>`;
+    const categoryAmount = (pattern: RegExp): number => starter.sections.find((candidate) => candidate.sectionId === "money")?.items.filter((item) => item.fields.moneyRole === "cost").filter((item) => pattern.test(String(item.fields.title || item.label))).reduce((sum, item) => sum + starterAmount(item.fields.amount), 0) ?? 0;
+    const accommodationEnvelope = categoryAmount(/accommodation|stay|lodg/i);
+    const transportEnvelope = categoryAmount(/flight|transport|rail|coach|ferry/i);
+    const pricedRecords = [...(staysSection?.items ?? []), ...(transportSection?.items ?? [])];
+    const pricedStates = ["quote", "booked", "paid"].map((state) => ({ state, count: pricedRecords.filter((item) => item.fields.priceState === state).length })).filter((entry) => entry.count);
+    const moduleInsight = section.sectionId === "money" ? `<section class="starter-cost-rollup" aria-label="Costs from plan records">
+      <header><div><span>Live plan roll-up</span><strong>${escapeHtml(money(recordedCosts))}</strong></div><p>Automatically summed from ${staysSection?.items.length ?? 0} stays and ${transportSection?.items.length ?? 0} transport records. Budget categories remain editable envelopes.</p></header>
+      <div><article><span>Stays</span><strong>${escapeHtml(money(staysRecorded))}</strong><small>${accommodationEnvelope ? `${escapeHtml(money(accommodationEnvelope))} envelope · ${escapeHtml(money(Math.abs(accommodationEnvelope - staysRecorded)))} ${accommodationEnvelope >= staysRecorded ? "headroom" : "over"}` : "No accommodation envelope"}</small></article><article><span>Transport</span><strong>${escapeHtml(money(transportRecorded))}</strong><small>${transportEnvelope ? `${escapeHtml(money(transportEnvelope))} envelope · ${escapeHtml(money(Math.abs(transportEnvelope - transportRecorded)))} ${transportEnvelope >= transportRecorded ? "headroom" : "over"}` : "No transport envelope"}</small></article><article><span>Price confidence</span><strong>${pricedStates.length ? pricedStates.map((entry) => `${entry.count} ${entry.state}`).join(" · ") : "Allowances only"}</strong><small>Add a checked date, local price and conversion when a live quote arrives.</small></article></div>
+    </section>` : section.sectionId === "people" && !section.items.length ? `<div class="starter-module__empty-callout"><strong>Make people-shaped dependencies explicit.</strong><p>Add each companion, host or appointment once, then connect decisions through location and dates.</p></div>` : "";
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
     const entryNoun = section.variant === "calendar" ? calendarEntryNoun(starter.family) : section.label;
     const addControl = `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(entryNoun.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`;
@@ -1462,18 +1542,19 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         </article>`;
       }).join("");
       return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
-        <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">Calendar</strong><small>${escapeHtml(section.description)}</small></div><b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</b></summary>
+        <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">Calendar</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
         <div class="starter-module__body">
           <div class="starter-calendar__toolbar"><div><span>View</span><strong>${escapeHtml(entryNoun)}</strong></div><div class="starter-calendar__view-toggle" role="group" aria-label="Calendar display"><button type="button" data-action="calendar-view" data-calendar-view="calendar" aria-pressed="true">Calendar</button><button type="button" data-action="calendar-view" data-calendar-view="list" aria-pressed="false">List</button></div></div>
-          <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item to place it on the calendar.</p></div>`}${addControl}</aside></div></div>
-          <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>${addControl}</div>
-          ${comments}<div class="starter-module__controls starter-module__controls--calendar">${commentControl}</div>
+          <div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>
+          <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item below to place it on the calendar.</p></div>`}</aside></div></div>
+          <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div></div>
+          ${comments}<div class="starter-module__controls starter-module__controls--calendar">${addControl}${commentControl}</div>
         </div>
       </details>`;
     }
     return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
-      <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div><b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</b></summary>
-      <div class="starter-module__body"><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
+      <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
+      <div class="starter-module__body">${moduleInsight}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
         ${comments}
         <div class="starter-module__controls">${addControl}${commentControl}</div>
       </div>
@@ -1609,6 +1690,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     ${renderThemeSettingsDialog()}`;
   enableNativeWritingAssistance();
   bindArrivalInteractions();
+  restoreWorkspaceUiState();
 };
 
 const refreshArrival = async (): Promise<void> => {
@@ -1674,14 +1756,62 @@ const workspaceFieldsFromForm = (form: HTMLFormElement): Record<string, string |
   return fields;
 };
 
+const captureWorkspaceUiState = (): void => {
+  root?.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]").forEach((module) => {
+    const moduleId = module.dataset.workspaceModule ?? "";
+    if (!moduleId) return;
+    if (module.open) workspaceUiState.openModules.add(moduleId);
+    else workspaceUiState.openModules.delete(moduleId);
+    const selected = module.querySelector<HTMLButtonElement>("[data-action='select-calendar-item'][aria-pressed='true']")?.dataset.recordId;
+    if (selected) workspaceUiState.calendarSelections.set(moduleId, selected);
+    const view = module.querySelector<HTMLButtonElement>("[data-action='calendar-view'][aria-pressed='true']")?.dataset.calendarView;
+    if (view === "calendar" || view === "list") workspaceUiState.calendarViews.set(moduleId, view);
+    const filter = module.querySelector<HTMLButtonElement>("[data-action='calendar-filter'][aria-pressed='true']")?.dataset.calendarKind;
+    if (filter) workspaceUiState.calendarFilters.set(moduleId, filter);
+  });
+};
+
+const applyCalendarView = (module: HTMLElement, view: "calendar" | "list"): void => {
+  module.querySelectorAll<HTMLButtonElement>("[data-action='calendar-view']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.calendarView === view)));
+  module.querySelectorAll<HTMLElement>("[data-calendar-pane]").forEach((pane) => { pane.hidden = pane.dataset.calendarPane !== view; });
+};
+
+const applyCalendarSelection = (module: HTMLElement, recordId: string, focus = false): void => {
+  module.querySelectorAll<HTMLButtonElement>("[data-action='select-calendar-item']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.recordId === recordId)));
+  let selected: HTMLElement | null = null;
+  module.querySelectorAll<HTMLElement>("[data-calendar-detail]").forEach((detail) => {
+    detail.hidden = detail.dataset.recordId !== recordId;
+    if (!detail.hidden) selected = detail;
+  });
+  if (focus) (selected as HTMLElement | null)?.querySelector<HTMLElement>("h4")?.focus({ preventScroll: true });
+};
+
+const applyCalendarFilter = (module: HTMLElement, kind: string): void => {
+  module.querySelectorAll<HTMLButtonElement>("[data-action='calendar-filter']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.calendarKind === kind)));
+  module.querySelectorAll<HTMLElement>("[data-calendar-kind]").forEach((entry) => { entry.hidden = kind !== "all" && entry.dataset.calendarKind !== kind; });
+};
+
+const restoreWorkspaceUiState = (): void => {
+  root?.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]").forEach((module) => {
+    const moduleId = module.dataset.workspaceModule ?? "";
+    module.open = workspaceUiState.openModules.has(moduleId);
+    applyCalendarView(module, workspaceUiState.calendarViews.get(moduleId) ?? "calendar");
+    const selection = workspaceUiState.calendarSelections.get(moduleId);
+    if (selection && module.querySelector(`[data-calendar-detail][data-record-id='${CSS.escape(selection)}']`)) applyCalendarSelection(module, selection);
+    applyCalendarFilter(module, workspaceUiState.calendarFilters.get(moduleId) ?? "all");
+  });
+};
+
 const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<boolean> => {
   const order = currentArrival();
   if (!order || busy) return false;
+  captureWorkspaceUiState();
   busy = true;
   announce("Saving your plan…");
   await render();
   arrivalResult = await arrivalRepository.appendInput({ orderId: order.orderId, expectedVersion: order.version, kind, payload, sourceSurface: modelContext ? "inline" : "site" });
   busy = false;
+  if (arrivalResult.ok && payload.workspaceOperation === "add" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.recordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.recordId);
   announce(arrivalResult.ok ? message : `The plan was not updated: ${arrivalResult.code}`);
   await render();
   return arrivalResult.ok;
@@ -1690,7 +1820,9 @@ const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "de
 const addWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   const fields = workspaceFieldsFromForm(form);
   if (!String(fields.title ?? "").trim()) return;
-  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: form.dataset.moduleId, recordId: `manual_${crypto.randomUUID().replaceAll("-", "")}`, label: fields.title, fields }, "detail", "Added to your plan.");
+  const recordId = `manual_${crypto.randomUUID().replaceAll("-", "")}`;
+  if (form.dataset.moduleId === "itinerary" || form.dataset.moduleId === "schedule") workspaceUiState.calendarSelections.set(form.dataset.moduleId, recordId);
+  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: form.dataset.moduleId, recordId, label: fields.title, fields }, "detail", "Added to your plan.");
 };
 
 const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
@@ -1773,27 +1905,48 @@ const bindWorkspaceOverviewEditors = (): void => {
     const module = [...root.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]")].find((candidate) => candidate.dataset.workspaceModule === moduleId);
     if (!module) return;
     module.open = true;
+    workspaceUiState.openModules.add(moduleId);
     module.scrollIntoView({ behavior: "smooth", block: "start" });
     module.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='calendar-view']").forEach((button) => button.addEventListener("click", () => {
     const module = button.closest<HTMLElement>("[data-workspace-module]");
     if (!module) return;
-    const view = button.dataset.calendarView ?? "calendar";
-    module.querySelectorAll<HTMLButtonElement>("[data-action='calendar-view']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.calendarView === view)));
-    module.querySelectorAll<HTMLElement>("[data-calendar-pane]").forEach((pane) => { pane.hidden = pane.dataset.calendarPane !== view; });
+    const view = button.dataset.calendarView === "list" ? "list" : "calendar";
+    applyCalendarView(module, view);
+    workspaceUiState.calendarViews.set(module.dataset.workspaceModule ?? "", view);
+  }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='calendar-filter']").forEach((button) => button.addEventListener("click", () => {
+    const module = button.closest<HTMLElement>("[data-workspace-module]");
+    if (!module) return;
+    const kind = button.dataset.calendarKind ?? "all";
+    applyCalendarFilter(module, kind);
+    workspaceUiState.calendarFilters.set(module.dataset.workspaceModule ?? "", kind);
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='select-calendar-item']").forEach((button) => button.addEventListener("click", () => {
     const module = button.closest<HTMLElement>("[data-workspace-module]");
     const recordId = button.dataset.recordId ?? "";
     if (!module || !recordId) return;
-    module.querySelectorAll<HTMLButtonElement>("[data-action='select-calendar-item']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.recordId === recordId)));
-    let selected: HTMLElement | null = null;
-    module.querySelectorAll<HTMLElement>("[data-calendar-detail]").forEach((detail) => {
-      detail.hidden = detail.dataset.recordId !== recordId;
-      if (!detail.hidden) selected = detail;
-    });
-    (selected as HTMLElement | null)?.querySelector<HTMLElement>("h4")?.focus({ preventScroll: true });
+    applyCalendarSelection(module, recordId, true);
+    workspaceUiState.calendarSelections.set(module.dataset.workspaceModule ?? "", recordId);
+  }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-related-record']").forEach((button) => button.addEventListener("click", () => {
+    const moduleId = button.dataset.moduleId ?? "";
+    const recordId = button.dataset.recordId ?? "";
+    const module = root.querySelector<HTMLDetailsElement>(`details[data-workspace-module='${CSS.escape(moduleId)}']`);
+    if (!module || !recordId) return;
+    module.open = true;
+    workspaceUiState.openModules.add(moduleId);
+    workspaceUiState.calendarSelections.set(moduleId, recordId);
+    applyCalendarView(module, "calendar");
+    applyCalendarSelection(module, recordId);
+    module.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+  root?.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]").forEach((module) => module.addEventListener("toggle", () => {
+    const moduleId = module.dataset.workspaceModule ?? "";
+    if (!moduleId) return;
+    if (module.open) workspaceUiState.openModules.add(moduleId);
+    else workspaceUiState.openModules.delete(moduleId);
   }));
 };
 
@@ -1816,6 +1969,22 @@ const addWorkspaceComment = async (form: HTMLFormElement, forCodex: boolean): Pr
   if (!comment) return;
   const saved = await saveWorkspaceMutation({ workspaceOperation: "note", moduleId: form.dataset.moduleId, recordId: `comment_${crypto.randomUUID().replaceAll("-", "")}`, comment, forCodex }, "detail", forCodex ? `Your section request is saved for ${agenticName()}.` : "Your section note is saved.");
   if (saved && forCodex) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+};
+
+const bindWorkspaceCurrencyConversions = (): void => {
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add'],[data-arrival-form='workspace-update']").forEach((form) => {
+    const localAmount = form.querySelector<HTMLInputElement>("[name='field_localAmount'],[name='field_localTotal']");
+    const baseRate = form.querySelector<HTMLInputElement>("[name='field_baseRate']");
+    const baseAmount = form.querySelector<HTMLInputElement>("[name='field_cost'],[name='field_totalBudget']");
+    if (!localAmount || !baseRate || !baseAmount) return;
+    const sync = (): void => {
+      const local = Number(localAmount.value);
+      const rate = Number(baseRate.value);
+      if (Number.isFinite(local) && local > 0 && Number.isFinite(rate) && rate > 0) baseAmount.value = (local * rate).toFixed(2).replace(/\.00$/, "");
+    };
+    localAmount.addEventListener("input", sync);
+    baseRate.addEventListener("input", sync);
+  });
 };
 
 const openKitchenReset = async (): Promise<void> => {
@@ -2002,6 +2171,7 @@ function bindArrivalInteractions(): void {
   bindThemeSettingsInteractions();
   bindWorkspaceOverviewEditors();
   bindWorkspaceOverviewToggles();
+  bindWorkspaceCurrencyConversions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const mode = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "manual" ? "manual" : "codex";
