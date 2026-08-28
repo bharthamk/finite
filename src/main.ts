@@ -1226,32 +1226,31 @@ const renderOriginalRequest = (order: ArrivalOrder): string => {
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter || !order.interpretation) return "";
-  const currentDetails = interpretationSourcesForDisplay(order, order.interpretation.known);
-  const workingDetails = hasInterpretationDetail(order.interpretation.inferred) ? order.interpretation.inferred : null;
   const confirmed = order.status === "interpretation_confirmed";
   const previewOnly = order.status === "proposed_plan_ready";
-  const changeReceipt = starter.laterHumanInputs.length ? `<section class="starter-plan__changes" aria-labelledby="starter_plan_changes">
-    <div class="starter-plan__section-heading"><p class="eyebrow">Your changes</p><h3 id="starter_plan_changes">Already added to this draft</h3></div>
-    <ol>${starter.laterHumanInputs.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol>
-  </section>` : "";
+  const sourceLabels = { request: "From your request", known: "From the reviewed brief", working: "Working choice", human: "Added by you", open: "Still open" } as const;
+  const sectionOptions = starter.sections.map((section) => `<option value="${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</option>`).join("");
+  const sections = starter.sections.map((section) => `<section class="starter-plan__section" data-draft-section="${escapeHtml(section.sectionId)}" aria-labelledby="starter_plan_${escapeHtml(section.sectionId)}">
+    <div class="starter-plan__section-heading"><p class="eyebrow">${escapeHtml(starter.familyLabel)} plan</p><h3 id="starter_plan_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3></div>
+    ${section.items.length ? `<ol class="starter-plan__items">${section.items.map((item) => `<li>
+      <div><strong>${escapeHtml(item.label)}</strong>${item.value !== undefined ? renderHumanValue(item.value, item.valueKey, item.valueParent) : ""}</div>
+      <span data-source="${escapeHtml(item.source)}">${escapeHtml(sourceLabels[item.source])}</span>
+    </li>`).join("")}</ol>` : `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}
+  </section>`).join("");
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
       <div><p class="eyebrow">${previewOnly ? "Draft preview" : "Your starter plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
       <span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to shape") : "Updated by you"}</span>
     </header>
     <div class="starter-plan__notice"><strong>Continue with this draft.</strong><p>Review it below, then add or change anything you want. You can ask ${escapeHtml(agenticName())} to develop it further whenever you’re ready.</p></div>
-    <div class="starter-plan__grid">
-      <section class="starter-plan__details" aria-labelledby="starter_plan_details"><div class="starter-plan__section-heading"><p class="eyebrow">Your order</p><h3 id="starter_plan_details">What the plan currently holds</h3></div>${renderHumanValue(currentDetails)}</section>
-      <section class="starter-plan__steps" aria-labelledby="starter_plan_steps"><div class="starter-plan__section-heading"><p class="eyebrow">Basic sequence</p><h3 id="starter_plan_steps">A safe place to start</h3></div><ol>${starter.stages.map((stage, index) => `<li><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(stage.label)}</strong><p>${escapeHtml(stage.detail)}</p></div></li>`).join("")}</ol></section>
-      ${workingDetails ? `<section class="starter-plan__working" aria-labelledby="starter_plan_working"><div class="starter-plan__section-heading"><p class="eyebrow">Working choices</p><h3 id="starter_plan_working">Included from the brief you reviewed</h3></div>${renderHumanValue(workingDetails)}</section>` : ""}
-      ${starter.openItems.length ? `<section class="starter-plan__open" aria-labelledby="starter_plan_open"><div class="starter-plan__section-heading"><p class="eyebrow">Still open</p><h3 id="starter_plan_open">Keep these visible</h3></div><ul>${starter.openItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
-      ${changeReceipt}
-    </div>
+    <div class="starter-plan__grid">${sections}</div>
     <form class="starter-plan__edit" data-arrival-form="draft-edit">
-      <div><p class="eyebrow">Shape it yourself</p><h3>Add or change something in the draft</h3><p>Your edit is saved immediately with this order. It does not book, buy, contact, or commit anything.</p></div>
-      <label><span>Type of change</span><select name="kind"><option value="detail">Add a plan item</option><option value="correction">Correct something</option><option value="constraint">Add a hard limit</option><option value="preference">Add a preference</option><option value="commitment">Record a commitment</option></select></label>
-      <label><span>What should the draft say?</span><textarea name="detail" required maxlength="2000" placeholder="Add the request in your own words"></textarea></label>
-      <button class="button" type="submit" ${busy ? "disabled" : ""}>Save to draft</button>
+      <div><p class="eyebrow">Edit the plan</p><h3>Add an item to this draft</h3><p>Choose where it belongs, then add the real detail. This does not book, buy, contact, or commit anything.</p></div>
+      <label><span>Section</span><select name="draftSection">${sectionOptions}</select></label>
+      <label><span>Item</span><input name="label" required maxlength="160" placeholder="e.g. Paris, QF9 flight, total budget"></label>
+      <label><span>Details</span><textarea name="detail" maxlength="2000" placeholder="Date, amount, booking note, preference, or anything else"></textarea></label>
+      <label><span>Update type</span><select name="kind"><option value="detail">Add item</option><option value="correction">Correct an item</option><option value="commitment">Record a fixed item</option><option value="preference">Add a preference</option><option value="constraint">Add a hard limit</option></select></label>
+      <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to draft</button>
     </form>
     <div class="starter-plan__actions">
       ${confirmed
@@ -1413,9 +1412,11 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   const order = currentArrival();
   if (!order || busy) return;
   const data = new FormData(form);
-  const value = String(data.get(answer ? "answer" : "detail") ?? "").trim();
-  if (!value) return;
   const draftEdit = form.dataset.arrivalForm === "draft-edit";
+  const detail = String(data.get(answer ? "answer" : "detail") ?? "").trim();
+  const label = String(data.get("label") ?? "").trim();
+  const value = draftEdit ? label : detail;
+  if (!value) return;
   if (draftEdit) starterDraftPreviewOpen = true;
   busy = true;
   announce("Adding your update…");
@@ -1424,14 +1425,18 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
     orderId: order.orderId,
     expectedVersion: order.version,
     kind: answer ? "answer" : String(data.get("kind") ?? "detail") as never,
-    payload: answer ? { questionId: order.pendingClarification?.questionId, value } : { text: value },
+    payload: answer
+      ? { questionId: order.pendingClarification?.questionId, value }
+      : draftEdit
+        ? { draftSection: String(data.get("draftSection") ?? "").trim(), label, ...(detail ? { detail } : {}), operation: String(data.get("kind") ?? "detail") === "correction" ? "correct" : "add" }
+        : { text: value },
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
   announce(arrivalResult.ok ? (answer
     ? `Your answer is saved. ${agenticName()} will use it when continuing the plan.`
     : draftEdit
-      ? `Saved to your draft. Keep editing here, or ask ${agenticName()} to reconcile the changes when you are ready.`
+      ? `Added to your draft. Keep editing here, or ask ${agenticName()} to reconcile the changes when you are ready.`
       : `Your update is saved. ${agenticName()} will work from your newest information.`) : `The update was not saved: ${arrivalResult.code}`);
   await render();
 };

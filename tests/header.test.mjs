@@ -173,7 +173,11 @@ test("arrival prioritizes the next action and keeps secondary review tools side 
   assert.match(source, /data-action="toggle-starter-draft">\$\{showStarterPlan \? "Hide draft plan" : "View draft plan"\}/);
   assert.match(source, /const showStarterPlan = Boolean\(starterPlanMarkup && !planDraftMarkup/);
   assert.match(source, /data-arrival-form="draft-edit"/);
-  assert.match(source, />Save to draft<\/button>/);
+  assert.match(source, /name="draftSection"/);
+  assert.match(source, /name="label" required maxlength="160"/);
+  assert.match(source, />Add to draft<\/button>/);
+  assert.match(source, /draftSection: String\(data\.get\("draftSection"\)/);
+  assert.match(source, /operation: String\(data\.get\("kind"\)/);
   assert.match(source, /Continue with this draft\./);
   assert.match(source, /You can ask \$\{escapeHtml\(agenticName\(\)\)\} to develop it further whenever you’re ready\./);
   assert.doesNotMatch(source, /This is useful now\.|is deliberately lightweight|is only needed/);
@@ -189,8 +193,9 @@ test("arrival prioritizes the next action and keeps secondary review tools side 
   assert.match(source, /<div class="arrival-working-grid">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(styles, /\.starter-plan__grid \{[^}]*grid-template-columns:minmax\(0,\.82fr\) minmax\(0,1\.18fr\)/);
-  assert.match(styles, /\.starter-plan__edit \{[^}]*grid-template-columns:minmax\(220px,\.8fr\)/);
+  assert.match(styles, /\.starter-plan__grid \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.starter-plan__items>li/);
+  assert.match(styles, /\.starter-plan__edit \{[^}]*grid-template-columns:minmax\(130px,\.7fr\)/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
 });
 

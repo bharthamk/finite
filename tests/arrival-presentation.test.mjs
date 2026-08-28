@@ -79,7 +79,7 @@ test("an incomplete interpretation falls back to supplied arrival facts and the 
   }), ["Roughly how many people should Finite plan dinner for?"]);
 });
 
-test("a complete brief always yields a lightweight human-usable starter plan without model construction", () => {
+test("a complete travel brief yields an actual domain plan with destinations, travel, dates, money, commitments and open decisions", () => {
   const order = {
     orderVersion: "finite-arrival-order.v1",
     orderId: "arrival_starter_1",
@@ -96,8 +96,8 @@ test("a complete brief always yields a lightweight human-usable starter plan wit
       basedOnVersion: 4,
       inferredFamily: "travel",
       summary: "A flexible Europe plan that protects the fixed visits, event, and A$10,000 ceiling.",
-      known: { budget: "A$10,000" },
-      inferred: {},
+      known: { destinations: ["London", "Paris"], fixedFlight: "QF9 to London", departureDate: "15 September", budget: "A$10,000", confirmedEvent: "Wedding in Lyon" },
+      inferred: { optionalRegion: "Northern Italy" },
       missing: [],
       contradictions: [],
       dependencies: [{ dependencyId: "friend_dates", kind: "human_coordination", title: "Confirm friend visit dates", status: "open", blocking: false, detail: "Friend visit dates are still open.", sourcePaths: ["known.visits"] }],
@@ -112,9 +112,13 @@ test("a complete brief always yields a lightweight human-usable starter plan wit
   };
   const starter = starterPlanForArrival(order);
   assert.equal(starter.title, "Travel starter plan");
-  assert.equal(starter.stages.length, 5);
-  assert.match(starter.stages[0].label, /Protect the fixed parts/);
-  assert.deepEqual(starter.openItems, ["Friend visit dates are still open."]);
+  assert.deepEqual(starter.sections.map((section) => section.label), ["Destinations", "Flights & travel", "Dates & duration", "Money", "Commitments & fixed items", "Open ideas & decisions"]);
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "destinations").items.map((item) => item.value), [["London", "Paris"], "Northern Italy"]);
+  assert.equal(starter.sections.find((section) => section.sectionId === "travel").items[0].value, "QF9 to London");
+  assert.equal(starter.sections.find((section) => section.sectionId === "dates").items[0].value, "15 September");
+  assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.value === "A$10,000"));
+  assert.equal(starter.sections.find((section) => section.sectionId === "commitments").items[0].value, "Wedding in Lyon");
+  assert.ok(starter.sections.find((section) => section.sectionId === "open").items.some((item) => item.label === "Friend visit dates are still open."));
   assert.equal(starter.interpretationIsCurrent, true);
   assert.deepEqual(starter.laterHumanInputs, []);
 });
@@ -129,7 +133,7 @@ test("human draft edits remain visible and mark the starter interpretation for r
     structured: {},
     attachments: [],
     inputs: [
-      { inputId: "arrival_input_arrival_starter_2_7", kind: "correction", payload: { text: "Make it twelve guests, not ten." }, sourceSurface: "site", createdAt: "2026-08-28T00:03:00.000Z" },
+      { inputId: "arrival_input_arrival_starter_2_7", kind: "correction", payload: { draftSection: "people", label: "Guest count", detail: "Twelve guests, not ten.", operation: "correct" }, sourceSurface: "site", createdAt: "2026-08-28T00:03:00.000Z" },
     ],
     pendingClarification: null,
     interpretation: {
@@ -147,5 +151,8 @@ test("human draft edits remain visible and mark the starter interpretation for r
   const starter = starterPlanForArrival(order);
   assert.equal(starter.title, "Event starter plan");
   assert.equal(starter.interpretationIsCurrent, false);
-  assert.equal(starter.laterHumanInputs[0].payload.text, "Make it twelve guests, not ten.");
+  assert.equal(starter.laterHumanInputs[0].payload.detail, "Twelve guests, not ten.");
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "people").items[0], {
+    itemId: "human_0", label: "Guest count", value: "Twelve guests, not ten.", source: "human",
+  });
 });

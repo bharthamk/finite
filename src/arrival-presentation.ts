@@ -103,9 +103,22 @@ export const inputKindLabel = (kind: ArrivalInput["kind"]): string => ({
 
 export const inputSurfaceLabel = (surface: ArrivalInput["sourceSurface"]): string => surface === "codex" ? "added with Codex" : "added on this page";
 
-export interface StarterPlanStage {
+export type StarterPlanItemSource = "request" | "known" | "working" | "human" | "open";
+
+export interface StarterPlanItem {
+  itemId: string;
   label: string;
-  detail: string;
+  value?: unknown;
+  valueKey?: string;
+  valueParent?: Record<string, unknown>;
+  source: StarterPlanItemSource;
+}
+
+export interface StarterPlanSection {
+  sectionId: string;
+  label: string;
+  emptyLabel: string;
+  items: StarterPlanItem[];
 }
 
 export interface StarterPlanPresentation {
@@ -113,8 +126,7 @@ export interface StarterPlanPresentation {
   familyLabel: string;
   title: string;
   brief: string;
-  stages: StarterPlanStage[];
-  openItems: string[];
+  sections: StarterPlanSection[];
   laterHumanInputs: ArrivalInput[];
   interpretationIsCurrent: boolean;
 }
@@ -127,36 +139,60 @@ const starterFamily = (value: string | null | undefined): StarterPlanPresentatio
   return "general";
 };
 
-const starterStages: Record<StarterPlanPresentation["family"], StarterPlanStage[]> = {
+type StarterSectionDefinition = Omit<StarterPlanSection, "items"> & { keywords: string[] };
+
+const starterSections: Record<StarterPlanPresentation["family"], StarterSectionDefinition[]> = {
   travel: [
-    { label: "Protect the fixed parts", detail: "Keep confirmed dates, people, bookings, limits, and non-negotiables visible before choosing the route." },
-    { label: "Shape the route", detail: "Arrange the main stops and leave optional parts movable until their timing and value are clearer." },
-    { label: "Price the working plan", detail: "Add known costs first, keep unknown costs open, and show what remains available as choices change." },
-    { label: "Choose what to commit", detail: "Review the next useful decisions before anything is booked, bought, or promised." },
-    { label: "Keep it current", detail: "Record changes against the plan so the route, timing, and remaining limit stay coherent." },
+    { sectionId: "destinations", label: "Destinations", emptyLabel: "No destinations added yet.", keywords: ["destination", "place", "city", "country", "region", "stop", "visit", "route", "itinerary", "location"] },
+    { sectionId: "travel", label: "Flights & travel", emptyLabel: "No flights or transport added yet.", keywords: ["flight", "airline", "airport", "booking", "transport", "train", "ferry", "car", "connection"] },
+    { sectionId: "dates", label: "Dates & duration", emptyLabel: "No dates or duration added yet.", keywords: ["date", "day", "month", "year", "duration", "night", "week", "time", "window", "deadline", "when"] },
+    { sectionId: "money", label: "Money", emptyLabel: "No budget or costs added yet.", keywords: ["budget", "cost", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "money", "cap"] },
+    { sectionId: "commitments", label: "Commitments & fixed items", emptyLabel: "No fixed commitments added yet.", keywords: ["commitment", "fixed", "booked", "confirmed", "must", "constraint", "nonnegotiable", "hard"] },
+    { sectionId: "open", label: "Open ideas & decisions", emptyLabel: "No open ideas or decisions added yet.", keywords: ["open", "optional", "preference", "idea", "possible", "flexible", "missing", "decision", "dependency"] },
   ],
   renovation: [
-    { label: "Protect the fixed brief", detail: "Keep the outcome, design priorities, committed work, deadline, and hard limits visible." },
-    { label: "Lay out the phases", detail: "Put the work in a useful order without pretending every dependency or date is settled." },
-    { label: "Price what is known", detail: "Record quotes and commitments, leave unknown costs open, and show the remaining room to move." },
-    { label: "Resolve the next dependency", detail: "Make the next choice or evidence need clear before later work becomes expensive to change." },
-    { label: "Track changes to handover", detail: "Keep decisions, scope movement, costs, and completion work aligned as reality changes." },
+    { sectionId: "scope", label: "Spaces & scope", emptyLabel: "No spaces or scope items added yet.", keywords: ["space", "room", "scope", "design", "finish", "outcome", "area"] },
+    { sectionId: "schedule", label: "Phases & dates", emptyLabel: "No phases or dates added yet.", keywords: ["phase", "date", "day", "month", "year", "duration", "schedule", "deadline", "when"] },
+    { sectionId: "money", label: "Budget & costs", emptyLabel: "No budget or costs added yet.", keywords: ["budget", "cost", "quote", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
+    { sectionId: "commitments", label: "Contractors, materials & commitments", emptyLabel: "No contractors, materials or commitments added yet.", keywords: ["contractor", "builder", "supplier", "material", "commitment", "fixed", "booked", "confirmed", "must", "constraint", "hard"] },
+    { sectionId: "open", label: "Open decisions", emptyLabel: "No open decisions added yet.", keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency"] },
   ],
   event: [
-    { label: "Protect the outcome and limits", detail: "Keep the purpose, people, date, capacity, budget, and non-negotiables visible." },
-    { label: "Shape the run of show", detail: "Lay out the major moments and leave details open where an early decision would add false certainty." },
-    { label: "Plan people and suppliers", detail: "Show the next coordination, availability, and evidence needs without marking them as confirmed." },
-    { label: "Price commitments", detail: "Add known costs, keep estimates separate, and show the remaining room as choices change." },
-    { label: "Run and adapt", detail: "Keep the live plan, updates, and final outcome together through delivery and wrap-up." },
+    { sectionId: "programme", label: "Programme", emptyLabel: "No programme items added yet.", keywords: ["programme", "program", "agenda", "schedule", "moment", "activity", "runofshow", "run_of_show"] },
+    { sectionId: "people", label: "Guests & venue", emptyLabel: "No guests or venue details added yet.", keywords: ["guest", "people", "attendee", "capacity", "venue", "location", "place"] },
+    { sectionId: "dates", label: "Dates & timing", emptyLabel: "No dates or timing added yet.", keywords: ["date", "day", "month", "year", "duration", "time", "window", "deadline", "when"] },
+    { sectionId: "money", label: "Budget & costs", emptyLabel: "No budget or costs added yet.", keywords: ["budget", "cost", "quote", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
+    { sectionId: "commitments", label: "Suppliers & commitments", emptyLabel: "No suppliers or commitments added yet.", keywords: ["supplier", "cater", "vendor", "commitment", "fixed", "booked", "confirmed", "must", "constraint", "hard"] },
+    { sectionId: "open", label: "Open decisions", emptyLabel: "No open decisions added yet.", keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency"] },
   ],
   general: [
-    { label: "Protect what must stay true", detail: "Keep the outcome, hard limits, existing commitments, and important preferences visible." },
-    { label: "Break the work into useful parts", detail: "Create a small working sequence without deciding details that are still genuinely open." },
-    { label: "Show the finite picture", detail: "Record what is already used or committed and what remains available to plan." },
-    { label: "Make the next decision clear", detail: "Keep open choices and evidence needs visible before consequential action." },
-    { label: "Keep the plan current", detail: "Add changes as they happen so the working order remains useful." },
+    { sectionId: "items", label: "Plan items", emptyLabel: "No plan items added yet.", keywords: ["outcome", "item", "task", "step", "scope", "deliverable"] },
+    { sectionId: "schedule", label: "Schedule", emptyLabel: "No schedule details added yet.", keywords: ["date", "day", "month", "year", "duration", "time", "window", "schedule", "deadline", "when"] },
+    { sectionId: "money", label: "Resources & costs", emptyLabel: "No resources or costs added yet.", keywords: ["resource", "budget", "cost", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
+    { sectionId: "commitments", label: "Commitments & limits", emptyLabel: "No commitments or limits added yet.", keywords: ["commitment", "fixed", "booked", "confirmed", "must", "constraint", "nonnegotiable", "hard"] },
+    { sectionId: "open", label: "Open decisions", emptyLabel: "No open decisions added yet.", keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency"] },
   ],
 };
+
+type FlatPlanFact = { path: string[]; label: string; value: unknown; valueKey: string; valueParent: Record<string, unknown> };
+
+const flattenPlanFacts = (value: Record<string, unknown>, path: string[] = []): FlatPlanFact[] => Object.entries(value).flatMap(([key, child]) => {
+  if (/^(?:source|questionId|internal.*|.*Path|.*Paths)$/i.test(key) || child === null || child === undefined || child === "") return [];
+  const childPath = [...path, key];
+  if (Array.isArray(child) || typeof child !== "object") return [{ path: childPath, label: humanLabel(key), value: child, valueKey: key, valueParent: value }];
+  const nested = flattenPlanFacts(child as Record<string, unknown>, childPath);
+  return nested.length ? nested : [];
+});
+
+const normalizedPath = (path: string[]): string => path.join(" ").replace(/[^a-z0-9]+/gi, "").toLowerCase();
+
+const sectionForFact = (definitions: StarterSectionDefinition[], path: string[]): string => {
+  const searchable = normalizedPath(path);
+  return definitions.find((definition) => definition.keywords.some((keyword) => searchable.includes(keyword.replace(/[^a-z0-9]+/gi, "").toLowerCase())))?.sectionId
+    ?? definitions[0]!.sectionId;
+};
+
+const safePayloadText = (payload: Record<string, unknown>, key: string): string => typeof payload[key] === "string" ? payload[key].trim() : "";
 
 const inputVersion = (input: ArrivalInput): number => {
   const match = input.inputId.match(/_(\d+)$/);
@@ -173,13 +209,45 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     ...interpretation.dependencies.filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
     ...interpretation.missing.map((item) => item.trim()),
   ].filter(Boolean))];
+  const definitions = starterSections[family];
+  const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
+  const addItem = (sectionId: string, item: StarterPlanItem): void => {
+    const items = sectionItems.get(sectionId) ?? sectionItems.get(definitions[0]!.sectionId)!;
+    const fingerprint = `${item.label.toLowerCase()}|${JSON.stringify(item.value)}`;
+    if (!items.some((existing) => `${existing.label.toLowerCase()}|${JSON.stringify(existing.value)}` === fingerprint)) items.push(item);
+  };
+  const requestFacts = flattenPlanFacts(Object.fromEntries([
+    ["when", order.structured.deadline],
+    ["whatIsLimited", order.structured.finiteLimit],
+    ["mustNotChange", order.structured.hardConstraint],
+  ].filter((entry) => entry[1] !== null && entry[1] !== undefined && entry[1] !== "")));
+  const addFacts = (facts: FlatPlanFact[], source: StarterPlanItemSource, prefix: string): void => facts.forEach((fact, index) => addItem(sectionForFact(definitions, fact.path), {
+    itemId: `${prefix}_${index}`,
+    label: fact.label,
+    value: fact.value,
+    valueKey: fact.valueKey,
+    valueParent: fact.valueParent,
+    source,
+  }));
+  addFacts(requestFacts, "request", "request");
+  addFacts(flattenPlanFacts(interpretation.known), "known", "known");
+  addFacts(flattenPlanFacts(interpretation.inferred), "working", "working");
+  openItems.forEach((item, index) => addItem("open", { itemId: `open_${index}`, label: item, source: "open" }));
+  laterHumanInputs.forEach((input, index) => {
+    const requestedSection = safePayloadText(input.payload, "draftSection");
+    const label = safePayloadText(input.payload, "label") || humanLabel(input.kind);
+    const detail = safePayloadText(input.payload, "detail") || safePayloadText(input.payload, "text") || safePayloadText(input.payload, "value");
+    const sectionId = definitions.some((definition) => definition.sectionId === requestedSection)
+      ? requestedSection
+      : sectionForFact(definitions, [label, detail, input.kind]);
+    addItem(sectionId, { itemId: `human_${index}`, label, ...(detail ? { value: detail } : {}), source: "human" });
+  });
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
     title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} starter plan`,
     brief: interpretation.summary,
-    stages: starterStages[family].map((stage) => ({ ...stage })),
-    openItems,
+    sections: definitions.map(({ sectionId, label, emptyLabel }) => ({ sectionId, label, emptyLabel, items: sectionItems.get(sectionId) ?? [] })),
     laterHumanInputs,
     interpretationIsCurrent: laterHumanInputs.length === 0,
   };

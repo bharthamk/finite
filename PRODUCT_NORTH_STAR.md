@@ -38,10 +38,13 @@ seeing or shaping what they already accepted.
 
 A reviewed brief therefore yields a lightweight starter plan immediately. It
 is deliberately cheaper and less detailed than a Codex-constructed plan, but
-it carries the reviewed outcome, known details, working choices, open items,
-and a safe starting sequence. The human may preview it before accepting the
-brief and keep editing it afterward. Codex remains the optional route for
-interpretation, research, detailed construction, and replanning.
+it is still an actual plan rather than planning guidance. It carries the
+domain records the human expects to shape—for travel, destinations, flights and
+transport, dates, money, fixed commitments, and open ideas—with equivalent
+sections for other plan families. Known facts, working choices and unresolved
+items remain distinguishable. The human may preview it before accepting the
+brief and add records directly afterward. Codex remains the optional route for
+research, insight, detailed construction, reconciliation, and replanning.
 
 Codex performs the interpretive work:
 
