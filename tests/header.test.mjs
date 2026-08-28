@@ -238,6 +238,10 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.doesNotMatch(source, /return `<section class="starter-module/);
   assert.match(styles, /\.starter-module>summary \{/);
   assert.match(styles, /\.starter-module\[open\]>summary/);
+  for (const moduleId of ["itinerary", "stays", "transport", "money", "requirements", "tasks"]) assert.match(styles, new RegExp(`data-workspace-module="${moduleId}"`));
+  assert.match(styles, /--module-tone:/);
+  assert.match(styles, /--module-mark:/);
+  assert.match(styles, /border-left:6px solid var\(--module-mark\)/);
   assert.match(source, /module\.open = true/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);

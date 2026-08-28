@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "todo-card-collapsed-workspace-v120",
+  build: "module-colour-separation-v121",
 } as const;
