@@ -1259,9 +1259,22 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const scheduleSection = starter.sections.find((section) => section.sectionId === "itinerary" || section.sectionId === "schedule");
   const openTasks = starter.sections.find((section) => section.sectionId === "tasks")?.items.filter((item) => item.fields.done !== true).length ?? 0;
   const openRequirements = starter.sections.find((section) => section.sectionId === "requirements")?.items.filter((item) => item.fields.status !== "ready").length ?? 0;
+  const openItems = openTasks + openRequirements;
   const allocationDelta = limit - overview.categoryAllocated;
   const allocationLabel = !limit ? "Add total budget" : allocationDelta >= 0 ? `${money(allocationDelta)} unallocated` : `${money(Math.abs(allocationDelta))} over budget`;
   const allocationClass = limit && overview.categoryPercent > 100 ? " is-over" : "";
+  const dateRange = overview.start
+    ? `${dateLabel(overview.start)}${overview.end && !overview.singleDay ? ` – ${dateLabel(overview.end)}` : ""}`
+    : "Dates open";
+  const timingDetail = overview.includeTime
+    ? `${overview.startTime || "Start open"}${overview.endTime ? ` – ${overview.endTime}` : ""}${overview.timeZone ? ` · ${overview.timeZone}` : ""}`
+    : overview.singleDay ? "Single-day plan" : `${scheduleSection?.items.length ?? 0} ${starter.family === "travel" ? "stops" : "stages"}`;
+  const splitDetail = overview.categories.slice(0, 2).map((item) => {
+    const amount = starterAmount(item.fields.amount);
+    const percentage = limit > 0 ? (amount / limit) * 100 : 0;
+    return `${item.fields.title || item.label} ${percentage.toFixed(0)}%`;
+  }).join(" · ");
+  const availablePercent = limit > 0 ? (Math.abs(allocationDelta) / limit) * 100 : 0;
   const categoryRows = overview.categories.map((item) => {
     const amount = starterAmount(item.fields.amount);
     const percentage = limit > 0 ? (amount / limit) * 100 : 0;
@@ -1276,27 +1289,50 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </article>`;
   }).join("");
   const overviewMarkup = `<details class="starter-plan__overview" open>
-    <summary><div><p class="eyebrow">Plan at a glance</p><strong>Dates, budget and split</strong></div><div class="starter-overview__summary"><span>${escapeHtml(dateLabel(overview.start))}${overview.start && overview.end && !overview.singleDay ? ` → ${escapeHtml(dateLabel(overview.end))}` : ""}</span><strong>${limit ? escapeHtml(money(limit)) : "Budget open"}</strong></div></summary>
-    <div class="starter-overview__body">
-      <form class="starter-overview__settings" data-arrival-form="workspace-overview">
-        <section class="starter-overview__panel starter-overview__dates"><header><span>Dates</span><strong>${escapeHtml(duration)}</strong></header>
-          <div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
-          <div class="starter-overview__toggles"><label><input name="singleDay" type="checkbox" ${overview.singleDay ? "checked" : ""}> Single day</label><label><input name="includeTime" type="checkbox" ${overview.includeTime ? "checked" : ""}> Add times</label></div>
-          <div class="starter-overview__field-grid" data-overview-times ${overview.includeTime ? "" : "hidden"}><label><span>Start time</span><input name="startTime" type="time" value="${escapeHtml(overview.startTime)}"></label><label><span>End time</span><input name="endTime" type="time" value="${escapeHtml(overview.endTime)}"></label><label class="is-wide"><span>Time zone</span><input name="timeZone" maxlength="80" value="${escapeHtml(overview.timeZone)}" placeholder="e.g. Europe/Berlin"></label></div>
-        </section>
-        <section class="starter-overview__panel starter-overview__budget"><header><span>Total budget</span><strong>${limit ? escapeHtml(money(limit)) : "Not set"}</strong></header>
-          <div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
-          <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
-        </section>
-        <button class="button starter-overview__save" type="submit" ${busy ? "disabled" : ""}>Save dates & budget</button>
-      </form>
-      <section class="starter-overview__panel starter-overview__split"><header><div><span>Financial split</span><p>Edit the categories and their set budgets. Percentages may add up to more than 100%.</p></div><strong class="${allocationClass.trim()}">${limit ? `${overview.categoryPercent.toFixed(1)}%` : "—"}</strong></header>
-        <div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
-        <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
-      </section>
-      <section class="starter-overview__signals" aria-label="Key plan signals"><div><span>Duration</span><strong>${escapeHtml(duration)}</strong></div><div><span>${starter.family === "travel" ? "Stops" : starter.family === "event" ? "Programme" : "Plan stages"}</span><strong>${scheduleSection?.items.length ?? 0}</strong></div><div><span>Open to-dos</span><strong>${openTasks}</strong></div><div><span>Open requirements</span><strong>${openRequirements}</strong></div></section>
+    <summary><span>Plan at a glance</span></summary>
+    <div class="starter-report-strip" aria-label="Plan at a glance">
+      <article class="starter-report-card">
+        <header><span>Dates</span><button type="button" data-action="open-overview-editor" data-overview-editor="settings" data-overview-focus="start" aria-label="Edit plan dates"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${escapeHtml(dateRange)}</strong>
+        <small>${escapeHtml(duration)} · ${escapeHtml(timingDetail)}</small>
+      </article>
+      <article class="starter-report-card">
+        <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="settings" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${limit ? escapeHtml(money(limit)) : "Not set"}</strong>
+        <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated</small>
+      </article>
+      <article class="starter-report-card${allocationClass}">
+        <header><span>Budget split</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit budget split"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${limit ? `${overview.categoryPercent.toFixed(0)}%` : "—"}</strong>
+        <small>${overview.categories.length} ${overview.categories.length === 1 ? "category" : "categories"}${splitDetail ? ` · ${escapeHtml(splitDetail)}` : ""}</small>
+      </article>
+      <article class="starter-report-card${allocationClass}">
+        <header><span>${allocationDelta < 0 ? "Over" : "Available"}</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit available budget"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${limit ? escapeHtml(money(Math.abs(allocationDelta))) : "—"}</strong>
+        <small>${limit ? `${availablePercent.toFixed(0)}% ${allocationDelta < 0 ? "over" : "remaining"}` : escapeHtml(allocationLabel)} · ${openItems} open ${openItems === 1 ? "item" : "items"}</small>
+      </article>
     </div>
-  </details>`;
+  </details>
+  <dialog class="starter-overview-dialog" data-overview-dialog="settings" aria-labelledby="overview_settings_title">
+    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close date and budget editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_settings_title">Dates & total budget</h3></header>
+    <form class="starter-overview-dialog__form" data-arrival-form="workspace-overview">
+      <section><h4>Dates</h4><div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
+        <div class="starter-overview__toggles"><label><input name="singleDay" type="checkbox" ${overview.singleDay ? "checked" : ""}> Single day</label><label><input name="includeTime" type="checkbox" ${overview.includeTime ? "checked" : ""}> Add times</label></div>
+        <div class="starter-overview__field-grid" data-overview-times ${overview.includeTime ? "" : "hidden"}><label><span>Start time</span><input name="startTime" type="time" value="${escapeHtml(overview.startTime)}"></label><label><span>End time</span><input name="endTime" type="time" value="${escapeHtml(overview.endTime)}"></label><label class="is-wide"><span>Time zone</span><input name="timeZone" maxlength="80" value="${escapeHtml(overview.timeZone)}" placeholder="e.g. Europe/Berlin"></label></div>
+      </section>
+      <section><h4>Total budget</h4><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
+        <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
+      </section>
+      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button></div>
+    </form>
+  </dialog>
+  <dialog class="starter-overview-dialog starter-overview-dialog--split" data-overview-dialog="split" aria-labelledby="overview_split_title">
+    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close budget split editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_split_title">Budget split</h3><p>Category budgets can intentionally add up to more than 100%.</p></header>
+    <div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
+    <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
+  </dialog>`;
   const modules = starter.sections.map((section) => {
     const items = section.items.map((item, index) => {
       const title = String(item.fields.title || item.label);
@@ -1583,6 +1619,17 @@ const bindWorkspaceOverviewToggles = (): void => {
   sync();
 };
 
+const bindWorkspaceOverviewEditors = (): void => {
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-overview-editor']").forEach((button) => button.addEventListener("click", () => {
+    const dialog = root.querySelector<HTMLDialogElement>(`[data-overview-dialog='${button.dataset.overviewEditor ?? ""}']`);
+    if (!dialog) return;
+    dialog.showModal();
+    const field = button.dataset.overviewFocus ? dialog.querySelector<HTMLInputElement>(`[name='${button.dataset.overviewFocus}']`) : null;
+    (field ?? dialog.querySelector<HTMLElement>("input, button"))?.focus();
+  }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-overview-editor']").forEach((button) => button.addEventListener("click", () => button.closest<HTMLDialogElement>("dialog")?.close()));
+};
+
 const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan."); };
 
 const toggleWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "toggle", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, done: !record.classList.contains("is-done") }, "detail", record.classList.contains("is-done") ? "The task is open again." : "The task is complete."); };
@@ -1786,6 +1833,7 @@ function bindArrivalInteractions(): void {
   bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
+  bindWorkspaceOverviewEditors();
   bindWorkspaceOverviewToggles();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => {
     event.preventDefault();

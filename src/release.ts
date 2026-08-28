@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "white-box-plan-glance-v116",
+  build: "four-card-report-strip-v117",
 } as const;

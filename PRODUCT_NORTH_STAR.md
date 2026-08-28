@@ -46,15 +46,20 @@ family-specific places, stays, transport, resources and requirements; adjust
 overall, daily and item-level money; manage a to-do list; add a local note or
 Codex request to any section; or talk to Codex about the whole plan.
 
-The rough-plan surface opens with a collapsible, editable white-box **Plan at
-a glance** top bar rather than a separate overview workspace.
-It owns the plan-wide from/to window, optional start/end times and time zone,
-single-day shape, total budget and base currency. It also exposes editable
-main-category allocations as both set amounts and percentages of the total.
-Finite may warn when the split exceeds 100%, but it must not prevent the human
-from deliberately modelling an overcommitted plan. Derived duration, scope,
-open-work and requirement signals give centering without becoming a second
-source of truth; edits update the same underlying plan records used below.
+The rough-plan surface opens with a collapsible **Plan at a glance** report,
+not a form or a separate overview workspace. Exactly four compact cards show
+Dates, Total budget, Budget split, and Available/over. Each card has one
+dominant value, quiet sub-metrics, and a pencil control that opens a focused
+editor. The report itself contains no input wall or category ledger.
+
+Those focused editors own the plan-wide from/to window, optional start/end
+times and time zone, single-day shape, total budget and base currency, plus
+editable main-category allocations as both set amounts and percentages of the
+total. Finite may warn when the split exceeds 100%, but it must not prevent the
+human from deliberately modelling an overcommitted plan. Derived duration,
+scope, open-work and requirement signals provide centering without becoming a
+second source of truth; edits update the same underlying plan records used
+below.
 
 The Codex-created rough plan is centering, not a researched recommendation. It
 may use clearly labelled first-pass timing, cost and routing assumptions, but
