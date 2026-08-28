@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "real-plan-parser-repair-v119",
+  build: "todo-card-collapsed-workspace-v120",
 } as const;

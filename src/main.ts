@@ -1263,7 +1263,8 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const nights = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 86_400_000)) : 0;
   const duration = Number.isFinite(startMs) ? overview.singleDay || !Number.isFinite(endMs) ? "1 day" : `${nights + 1} ${nights === 0 ? "day" : "days"}${nights ? ` · ${nights} ${nights === 1 ? "night" : "nights"}` : ""}` : "Dates open";
   const scheduleSection = starter.sections.find((section) => section.sectionId === "itinerary" || section.sectionId === "schedule");
-  const openTasks = starter.sections.find((section) => section.sectionId === "tasks")?.items.filter((item) => item.fields.done !== true).length ?? 0;
+  const taskItems = starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
+  const openTasks = taskItems.filter((item) => item.fields.done !== true).length;
   const openRequirements = starter.sections.find((section) => section.sectionId === "requirements")?.items.filter((item) => item.fields.status !== "ready").length ?? 0;
   const openItems = openTasks + openRequirements;
   const allocationDelta = limit - overview.categoryAllocated;
@@ -1321,6 +1322,11 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         <strong class="starter-report-card__value">${limit ? escapeHtml(money(Math.abs(allocationDelta))) : "—"}</strong>
         <small>${limit ? `${availablePercent.toFixed(0)}% ${allocationDelta < 0 ? "over" : "remaining"}` : escapeHtml(allocationLabel)} · ${openItems} open ${openItems === 1 ? "item" : "items"}</small>
       </article>
+      <article class="starter-report-card">
+        <header><span>To-do</span><button type="button" data-action="open-workspace-module" data-module-id="tasks" aria-label="Open to-do list"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${openTasks}</strong>
+        <small>${openTasks === 1 ? "item" : "items"} remaining · ${taskItems.length} total</small>
+      </article>
     </div>
   </details>
   <dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="dates" aria-labelledby="overview_dates_title">
@@ -1365,13 +1371,14 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       </article>`;
     }).join("");
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
-    return `<section class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
-      <header class="starter-module__header"><div><p class="eyebrow">${escapeHtml(starter.familyLabel)} workspace</p><h3 id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3><p>${escapeHtml(section.description)}</p></div><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</span></header>
-      <div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
-      ${comments}
-      <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
-      <details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details></div>
-    </section>`;
+    return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+      <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div><b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</b></summary>
+      <div class="starter-module__body"><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
+        ${comments}
+        <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
+        <details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details></div>
+      </div>
+    </details>`;
   }).join("");
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
@@ -1662,6 +1669,14 @@ const bindWorkspaceOverviewEditors = (): void => {
     (field ?? dialog.querySelector<HTMLElement>("input, button"))?.focus();
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-overview-editor']").forEach((button) => button.addEventListener("click", () => button.closest<HTMLDialogElement>("dialog")?.close()));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-workspace-module']").forEach((button) => button.addEventListener("click", () => {
+    const moduleId = String(button.dataset.moduleId ?? "");
+    const module = [...root.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]")].find((candidate) => candidate.dataset.workspaceModule === moduleId);
+    if (!module) return;
+    module.open = true;
+    module.scrollIntoView({ behavior: "smooth", block: "start" });
+    module.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+  }));
 };
 
 const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan."); };
