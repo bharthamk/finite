@@ -1239,7 +1239,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <div><p class="eyebrow">${previewOnly ? "Draft preview" : "Your starter plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
       <span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to shape") : "Updated by you"}</span>
     </header>
-    <div class="starter-plan__notice"><strong>This is useful now.</strong><p>It is deliberately lightweight: review it, add requests, or correct it yourself. ${escapeHtml(agenticName())} is only needed when you want the draft developed into a detailed, coherent working plan.</p></div>
+    <div class="starter-plan__notice"><strong>Continue with this draft.</strong><p>Review it below, then add or change anything you want. You can ask ${escapeHtml(agenticName())} to develop it further whenever you’re ready.</p></div>
     <div class="starter-plan__grid">
       <section class="starter-plan__details" aria-labelledby="starter_plan_details"><div class="starter-plan__section-heading"><p class="eyebrow">Your order</p><h3 id="starter_plan_details">What the plan currently holds</h3></div>${renderHumanValue(currentDetails)}</section>
       <section class="starter-plan__steps" aria-labelledby="starter_plan_steps"><div class="starter-plan__section-heading"><p class="eyebrow">Basic sequence</p><h3 id="starter_plan_steps">A safe place to start</h3></div><ol>${starter.stages.map((stage, index) => `<li><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(stage.label)}</strong><p>${escapeHtml(stage.detail)}</p></div></li>`).join("")}</ol></section>

@@ -174,6 +174,9 @@ test("arrival prioritizes the next action and keeps secondary review tools side 
   assert.match(source, /const showStarterPlan = Boolean\(starterPlanMarkup && !planDraftMarkup/);
   assert.match(source, /data-arrival-form="draft-edit"/);
   assert.match(source, />Save to draft<\/button>/);
+  assert.match(source, /Continue with this draft\./);
+  assert.match(source, /You can ask \$\{escapeHtml\(agenticName\(\)\)\} to develop it further whenever you’re ready\./);
+  assert.doesNotMatch(source, /This is useful now\.|is deliberately lightweight|is only needed/);
   assert.match(source, /Ask \$\{escapeHtml\(agenticName\(\)\)\} to develop this plan/);
   assert.doesNotMatch(source, /Brief confirmed\. Use \$\{escapeHtml\(agenticName\(\)\)\} to continue\./);
   assert.doesNotMatch(source, /Brief confirmed\. Codex may construct a plan/);
