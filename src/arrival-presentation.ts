@@ -102,3 +102,85 @@ export const inputKindLabel = (kind: ArrivalInput["kind"]): string => ({
 })[kind];
 
 export const inputSurfaceLabel = (surface: ArrivalInput["sourceSurface"]): string => surface === "codex" ? "added with Codex" : "added on this page";
+
+export interface StarterPlanStage {
+  label: string;
+  detail: string;
+}
+
+export interface StarterPlanPresentation {
+  family: "travel" | "renovation" | "event" | "general";
+  familyLabel: string;
+  title: string;
+  brief: string;
+  stages: StarterPlanStage[];
+  openItems: string[];
+  laterHumanInputs: ArrivalInput[];
+  interpretationIsCurrent: boolean;
+}
+
+const starterFamily = (value: string | null | undefined): StarterPlanPresentation["family"] => {
+  const normalized = String(value ?? "").toLowerCase();
+  if (normalized.includes("travel") || normalized.includes("trip") || normalized.includes("calendar")) return "travel";
+  if (normalized.includes("renovation") || normalized.includes("build") || normalized.includes("phase")) return "renovation";
+  if (normalized.includes("event") || normalized.includes("run_of_show") || normalized.includes("dinner")) return "event";
+  return "general";
+};
+
+const starterStages: Record<StarterPlanPresentation["family"], StarterPlanStage[]> = {
+  travel: [
+    { label: "Protect the fixed parts", detail: "Keep confirmed dates, people, bookings, limits, and non-negotiables visible before choosing the route." },
+    { label: "Shape the route", detail: "Arrange the main stops and leave optional parts movable until their timing and value are clearer." },
+    { label: "Price the working plan", detail: "Add known costs first, keep unknown costs open, and show what remains available as choices change." },
+    { label: "Choose what to commit", detail: "Review the next useful decisions before anything is booked, bought, or promised." },
+    { label: "Keep it current", detail: "Record changes against the plan so the route, timing, and remaining limit stay coherent." },
+  ],
+  renovation: [
+    { label: "Protect the fixed brief", detail: "Keep the outcome, design priorities, committed work, deadline, and hard limits visible." },
+    { label: "Lay out the phases", detail: "Put the work in a useful order without pretending every dependency or date is settled." },
+    { label: "Price what is known", detail: "Record quotes and commitments, leave unknown costs open, and show the remaining room to move." },
+    { label: "Resolve the next dependency", detail: "Make the next choice or evidence need clear before later work becomes expensive to change." },
+    { label: "Track changes to handover", detail: "Keep decisions, scope movement, costs, and completion work aligned as reality changes." },
+  ],
+  event: [
+    { label: "Protect the outcome and limits", detail: "Keep the purpose, people, date, capacity, budget, and non-negotiables visible." },
+    { label: "Shape the run of show", detail: "Lay out the major moments and leave details open where an early decision would add false certainty." },
+    { label: "Plan people and suppliers", detail: "Show the next coordination, availability, and evidence needs without marking them as confirmed." },
+    { label: "Price commitments", detail: "Add known costs, keep estimates separate, and show the remaining room as choices change." },
+    { label: "Run and adapt", detail: "Keep the live plan, updates, and final outcome together through delivery and wrap-up." },
+  ],
+  general: [
+    { label: "Protect what must stay true", detail: "Keep the outcome, hard limits, existing commitments, and important preferences visible." },
+    { label: "Break the work into useful parts", detail: "Create a small working sequence without deciding details that are still genuinely open." },
+    { label: "Show the finite picture", detail: "Record what is already used or committed and what remains available to plan." },
+    { label: "Make the next decision clear", detail: "Keep open choices and evidence needs visible before consequential action." },
+    { label: "Keep the plan current", detail: "Add changes as they happen so the working order remains useful." },
+  ],
+};
+
+const inputVersion = (input: ArrivalInput): number => {
+  const match = input.inputId.match(/_(\d+)$/);
+  return match ? Number(match[1]) : 0;
+};
+
+export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
+  const interpretation = order.interpretation;
+  if (!interpretation?.complete) return null;
+  const family = starterFamily(interpretation.inferredFamily);
+  const basedOnVersion = interpretation.basedOnVersion ?? order.version;
+  const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion);
+  const openItems = [...new Set([
+    ...interpretation.dependencies.filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
+    ...interpretation.missing.map((item) => item.trim()),
+  ].filter(Boolean))];
+  return {
+    family,
+    familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
+    title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} starter plan`,
+    brief: interpretation.summary,
+    stages: starterStages[family].map((stage) => ({ ...stage })),
+    openItems,
+    laterHumanInputs,
+    interpretationIsCurrent: laterHumanInputs.length === 0,
+  };
+};

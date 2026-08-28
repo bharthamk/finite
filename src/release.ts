@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "operator-contract-v109",
+  build: "human-usable-starter-plan-v110",
 } as const;

@@ -25,12 +25,23 @@ The public promise is:
 
 ## The operating model
 
-**Codex is the operator. The human is the consumer.**
+**Codex is the chef. The human owns and shapes the order.**
 
 Most software gives the human appliances to operate and adds AI to make those
 appliances easier to use. Finite gives the agent a kitchen designed for its
-work. The human orders an outcome, supplies preferences and hard constraints,
-judges the plated options, and retains the only consequential approval.
+work, but the kitchen is not the product's only usable surface. The Site is a
+highly useful, customisable ordering surface: the human can always see the
+current menu and draft, make selections, add or correct requests, inspect the
+finite picture, and retain the only consequential approval. Codex develops and
+coheres the order when the human wants the meal cooked; it is not a gate to
+seeing or shaping what they already accepted.
+
+A reviewed brief therefore yields a lightweight starter plan immediately. It
+is deliberately cheaper and less detailed than a Codex-constructed plan, but
+it carries the reviewed outcome, known details, working choices, open items,
+and a safe starting sequence. The human may preview it before accepting the
+brief and keep editing it afterward. Codex remains the optional route for
+interpretation, research, detailed construction, and replanning.
 
 Codex performs the interpretive work:
 
@@ -113,14 +124,17 @@ time model, actions, and decision presentation adapt to the outcome.
 1. The human states the desired outcome or reports that reality changed.
 2. Codex opens the entire verified kitchen and asks only for genuinely missing
    facts.
-3. Codex may research current external reality; Finite admits it only as
+3. The human reviews the interpreted brief and immediately receives a
+   lightweight, editable starter plan; no second Codex turn is required merely
+   to see or shape it.
+4. Codex may research current external reality; Finite admits it only as
    provenance-bound untrusted evidence.
-4. Finite enumerates or simulates legal moves against exact accepted truth.
-5. Codex presents a small set of intelligible, outcome-shaped options.
-6. The human chooses and approves one exact result.
-7. Finite atomically applies it, recompiles the human surface, and emits a
+5. Finite enumerates or simulates legal moves against exact accepted truth.
+6. Codex presents a small set of intelligible, outcome-shaped options.
+7. The human chooses and approves one exact result.
+8. Finite atomically applies it, recompiles the human surface, and emits a
    replayable receipt.
-8. When reality changes again, the loop begins from the new accepted truth.
+9. When reality changes again, the loop begins from the new accepted truth.
 
 ## Signature story
 

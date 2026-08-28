@@ -9,7 +9,7 @@ import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
-import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList } from "./arrival-presentation.js";
+import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
@@ -593,6 +593,7 @@ let planFactBusy = false;
 let planFactError = "";
 let draftReturnFormOpen = false;
 let planActivationError = "";
+let starterDraftPreviewOpen = false;
 let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
 let themeEditingId: string | null = null;
@@ -1222,14 +1223,55 @@ const renderOriginalRequest = (order: ArrivalOrder): string => {
   return `<div class="arrival-order-source__content">${[...fields, ...references].map((field) => `<div><span>${escapeHtml(field.label)}</span><p>${escapeHtml(field.value)}</p></div>`).join("")}</div>`;
 };
 
+const renderStarterPlan = (order: ArrivalOrder): string => {
+  const starter = starterPlanForArrival(order);
+  if (!starter || !order.interpretation) return "";
+  const currentDetails = interpretationSourcesForDisplay(order, order.interpretation.known);
+  const workingDetails = hasInterpretationDetail(order.interpretation.inferred) ? order.interpretation.inferred : null;
+  const confirmed = order.status === "interpretation_confirmed";
+  const previewOnly = order.status === "proposed_plan_ready";
+  const changeReceipt = starter.laterHumanInputs.length ? `<section class="starter-plan__changes" aria-labelledby="starter_plan_changes">
+    <div class="starter-plan__section-heading"><p class="eyebrow">Your changes</p><h3 id="starter_plan_changes">Already added to this draft</h3></div>
+    <ol>${starter.laterHumanInputs.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol>
+  </section>` : "";
+  return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
+    <header class="starter-plan__header">
+      <div><p class="eyebrow">${previewOnly ? "Draft preview" : "Your starter plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
+      <span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to shape") : "Updated by you"}</span>
+    </header>
+    <div class="starter-plan__notice"><strong>This is useful now.</strong><p>It is deliberately lightweight: review it, add requests, or correct it yourself. ${escapeHtml(agenticName())} is only needed when you want the draft developed into a detailed, coherent working plan.</p></div>
+    <div class="starter-plan__grid">
+      <section class="starter-plan__details" aria-labelledby="starter_plan_details"><div class="starter-plan__section-heading"><p class="eyebrow">Your order</p><h3 id="starter_plan_details">What the plan currently holds</h3></div>${renderHumanValue(currentDetails)}</section>
+      <section class="starter-plan__steps" aria-labelledby="starter_plan_steps"><div class="starter-plan__section-heading"><p class="eyebrow">Basic sequence</p><h3 id="starter_plan_steps">A safe place to start</h3></div><ol>${starter.stages.map((stage, index) => `<li><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(stage.label)}</strong><p>${escapeHtml(stage.detail)}</p></div></li>`).join("")}</ol></section>
+      ${workingDetails ? `<section class="starter-plan__working" aria-labelledby="starter_plan_working"><div class="starter-plan__section-heading"><p class="eyebrow">Working choices</p><h3 id="starter_plan_working">Included from the brief you reviewed</h3></div>${renderHumanValue(workingDetails)}</section>` : ""}
+      ${starter.openItems.length ? `<section class="starter-plan__open" aria-labelledby="starter_plan_open"><div class="starter-plan__section-heading"><p class="eyebrow">Still open</p><h3 id="starter_plan_open">Keep these visible</h3></div><ul>${starter.openItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : ""}
+      ${changeReceipt}
+    </div>
+    <form class="starter-plan__edit" data-arrival-form="draft-edit">
+      <div><p class="eyebrow">Shape it yourself</p><h3>Add or change something in the draft</h3><p>Your edit is saved immediately with this order. It does not book, buy, contact, or commit anything.</p></div>
+      <label><span>Type of change</span><select name="kind"><option value="detail">Add a plan item</option><option value="correction">Correct something</option><option value="constraint">Add a hard limit</option><option value="preference">Add a preference</option><option value="commitment">Record a commitment</option></select></label>
+      <label><span>What should the draft say?</span><textarea name="detail" required maxlength="2000" placeholder="Add the request in your own words"></textarea></label>
+      <button class="button" type="submit" ${busy ? "disabled" : ""}>Save to draft</button>
+    </form>
+    <div class="starter-plan__actions">
+      ${confirmed
+        ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Ask ${escapeHtml(agenticName())} to develop this plan</button><p>You can keep editing here first. The chef handoff carries this saved draft and your latest changes when you are ready.</p>`
+        : order.status === "proposed_plan_ready"
+          ? `<p>Like this shape? Accept the brief above. The same starter plan will stay here, ready for you to edit.</p>`
+          : `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Ask ${escapeHtml(agenticName())} to reconcile my changes</button><p>Your edits remain visible here. The brief needs another review before this draft can be developed into an active plan.</p>`}
+    </div>
+  </section>`;
+};
+
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
+  if (order.status === "waiting_for_codex" && order.interpretation?.complete) return { label: "Draft updated", title: "Your starter plan includes your latest change.", detail: `Keep shaping it here or ask ${agenticName()} to develop the updated draft when you are ready.` };
   if (order.status === "waiting_for_codex") return modelContext
     ? { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Add anything else whenever you like. ${agenticName()} will work from everything you have shared.` }
     : { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Open Codex for ${agenticName()} when you are ready and ask it to continue this plan. It will work from everything you have shared.` };
   if (order.status === "codex_reviewing") return { label: `${agenticName()} is working`, title: `${agenticName()} is working through what you shared.`, detail: `You can still add or correct something. ${agenticName()} will use your newest information before proposing a plan.` };
   if (order.status === "clarification_required") return { label: "Your answer needed", title: `${agenticName()} needs one decision before it can continue.`, detail: "Only you can answer this. Finite will add your answer to the plan." };
   if (order.status === "proposed_plan_ready") return { label: "Ready for your review", title: `${agenticName()} has turned your request into a brief.`, detail: "Check it below. Nothing becomes your plan until you approve it." };
-  if (order.status === "interpretation_confirmed") return { label: "Brief approved", title: `Use ${agenticName()} to continue.`, detail: "Your approved brief is ready to become a plan." };
+  if (order.status === "interpretation_confirmed") return { label: "Brief accepted", title: "Your starter plan is ready.", detail: `Review or change it yourself. Ask ${agenticName()} to develop it only when you want a more detailed working plan.` };
   if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
@@ -1243,6 +1285,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
   const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
   const planDraftMarkup = order ? renderPlanDraft() : "";
+  const starterPlanMarkup = order ? renderStarterPlan(order) : "";
+  const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup && (starterDraftPreviewOpen || order?.status !== "proposed_plan_ready"));
   surfaceRoot.dataset.profile = "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
@@ -1296,15 +1340,12 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. ${escapeHtml(agenticName())} will not guess it for you.</small></section>` : ""}
         ${order.status === "proposed_plan_ready" && interpretation ? `<section class="arrival-review" aria-labelledby="arrival_review_title">
           <div><p class="eyebrow">Next step / review your brief</p><h2 id="arrival_review_title">Does this capture what you want me to build?</h2><p class="arrival-review__summary">${escapeHtml(interpretation.summary)}</p><p class="arrival-review__boundary">Approve this only if it captures what you want. ${escapeHtml(agenticName())} will use it to build the plan; it will not book, buy, or contact anyone.</p></div>
-          <button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Yes, build from this brief</button>
-          <small>Need a change? Open “Add or correct something” below.</small>
+          <div class="arrival-review__actions"><button class="button" data-action="confirm-arrival-interpretation" ${busy ? "disabled" : ""}>Accept brief and open draft</button><button class="text-button" type="button" data-action="toggle-starter-draft">${showStarterPlan ? "Hide draft plan" : "View draft plan"}</button></div>
+          <small>You can preview the lightweight plan first, or accept now and keep shaping it yourself.</small>
         </section>` : ""}
-          ${order.status === "interpretation_confirmed" && !planDraftMarkup ? `<section class="arrival-continue" aria-labelledby="arrival_continue_title">
-            <div><p class="eyebrow">Next step / continue with ${escapeHtml(agenticName())}</p><h2 id="arrival_continue_title">Brief confirmed. Use ${escapeHtml(agenticName())} to continue.</h2><p>Your approved brief is ready. ${escapeHtml(agenticName())} can now construct the plan for you to review.</p></div>
-            <button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Use ${escapeHtml(agenticName())} to continue</button>
-          </section>` : ""}
+          ${showStarterPlan ? starterPlanMarkup : ""}
           ${planDraftMarkup}
-          ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup ? `<section class="arrival-state arrival-state--action"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div>${order.status === "waiting_for_codex" ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Continue in ${escapeHtml(agenticName())}</button>` : ""}</section>` : ""}
+          ${!question && order.status !== "proposed_plan_ready" && order.status !== "interpretation_confirmed" && !planDraftMarkup && !showStarterPlan ? `<section class="arrival-state arrival-state--action"><span>${escapeHtml(status?.label)}</span><div><h2>${escapeHtml(status?.title)}</h2><p>${escapeHtml(status?.detail)}</p></div>${order.status === "waiting_for_codex" ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Continue in ${escapeHtml(agenticName())}</button>` : ""}</section>` : ""}
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
         <details class="arrival-order-source">
@@ -1362,7 +1403,7 @@ const submitArrivalOrder = async (form: HTMLFormElement): Promise<void> => {
   const structured = Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value));
   const evidence = String(data.get("evidence") ?? "").trim();
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
-  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
+  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; starterDraftPreviewOpen = false; }
   busy = false;
   announce(arrivalResult.ok ? `Your request is saved. ${agenticName()} has not processed it yet.` : `The request was not saved: ${arrivalResult.code}`);
   await render();
@@ -1374,6 +1415,8 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   const data = new FormData(form);
   const value = String(data.get(answer ? "answer" : "detail") ?? "").trim();
   if (!value) return;
+  const draftEdit = form.dataset.arrivalForm === "draft-edit";
+  if (draftEdit) starterDraftPreviewOpen = true;
   busy = true;
   announce("Adding your update…");
   await render();
@@ -1385,7 +1428,11 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
     sourceSurface: modelContext ? "inline" : "site",
   });
   busy = false;
-  announce(arrivalResult.ok ? (answer ? `Your answer is saved. ${agenticName()} will use it when continuing the plan.` : `Your update is saved. ${agenticName()} will work from your newest information.`) : `The update was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (answer
+    ? `Your answer is saved. ${agenticName()} will use it when continuing the plan.`
+    : draftEdit
+      ? `Saved to your draft. Keep editing here, or ask ${agenticName()} to reconcile the changes when you are ready.`
+      : `Your update is saved. ${agenticName()} will work from your newest information.`) : `The update was not saved: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1401,8 +1448,9 @@ const confirmArrivalInterpretation = async (): Promise<void> => {
     expectedChecksum: order.checksum,
     sourceSurface: modelContext ? "inline" : "site",
   });
+  if (arrivalResult.ok) starterDraftPreviewOpen = true;
   busy = false;
-  announce(arrivalResult.ok ? `Brief confirmed. Use ${agenticName()} to continue.` : `The brief was not confirmed: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? "Brief accepted. Your starter plan is ready to review and edit." : `The brief was not confirmed: ${arrivalResult.code}`);
   await render();
 };
 
@@ -1590,8 +1638,14 @@ function bindArrivalInteractions(): void {
   bindThemeSettingsInteractions();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-arrival-interpretation']")?.addEventListener("click", () => { void confirmArrivalInterpretation(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='toggle-starter-draft']")?.addEventListener("click", async () => {
+    starterDraftPreviewOpen = !starterDraftPreviewOpen;
+    await render();
+    if (starterDraftPreviewOpen) root.querySelector<HTMLElement>("[data-starter-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   root?.querySelectorAll<HTMLButtonElement>("[data-arrival-example]").forEach((button) => button.addEventListener("click", () => {
     const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='rawOutcome']");
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
