@@ -181,7 +181,12 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /data-arrival-form="workspace-option-update"/);
   assert.match(source, /data-action="workspace-option-promote"/);
   assert.match(source, /data-action="workspace-option-delete"/);
-  assert.match(source, /Suggested alternatives stay separate until you add one to the plan./);
+  assert.match(source, /Compare researched or manually added alternatives here\. Nothing changes in the working plan until you choose Add to plan\./);
+  assert.match(source, /data-action="open-record-options"/);
+  assert.match(source, /data-record-options-dialog/);
+  assert.match(source, /data-parent-record-id/);
+  assert.match(source, /Research checked/);
+  assert.match(source, /Research sources/);
   assert.match(source, /data-action="workspace-delete"/);
   assert.match(source, /data-action="workspace-toggle"/);
   assert.match(source, /data-arrival-form="workspace-comment"/);
@@ -205,7 +210,10 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:1fr/);
-  assert.match(styles, /\.starter-module__options/);
+  assert.match(styles, /\.starter-record-options-dialog/);
+  assert.match(styles, /\.starter-record__options-trigger/);
+  assert.match(styles, /\.starter-option__research/);
+  assert.doesNotMatch(styles, /\.starter-module__options/);
   assert.match(styles, /\.starter-option-grid/);
   assert.match(styles, /\.starter-module__records \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\); gap:12px; align-items:start/);
   assert.match(styles, /\.starter-record__edit \{ margin-top:12px;/);

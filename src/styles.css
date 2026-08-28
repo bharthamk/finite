@@ -546,7 +546,7 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-calendar__event.is-provisional span { font-style:italic; }
 .starter-calendar__note { margin:12px 0 0; color:var(--muted); font-size:.72rem; line-height:1.45; }
 .starter-calendar__selection { position:sticky; top:132px; min-width:0; padding:18px; border:1px solid var(--ink); background:var(--panel); }
-.starter-calendar__detail>header { padding-bottom:13px; border-bottom:1px solid var(--line); }
+.starter-calendar__detail>header { display:flex; justify-content:space-between; gap:14px; align-items:start; padding-bottom:13px; border-bottom:1px solid var(--line); }
 .starter-calendar__detail>header div { display:grid; gap:5px; }
 .starter-calendar__detail h4 { margin:0; font-size:1.15rem; overflow-wrap:anywhere; }
 .starter-calendar__detail.is-provisional h4 { font-style:italic; }
@@ -565,11 +565,13 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-record.is-done { color:var(--muted); background:color-mix(in srgb,var(--paper) 75%,var(--line)); }
 .starter-record.is-done h4 { text-decoration:line-through; }
 .starter-record.is-provisional :where(h4,dd) { font-style:italic; }
-.starter-record>header { display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:10px; align-items:start; }
+.starter-record>header { display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; gap:10px; align-items:start; }
 .starter-record__drag { color:var(--muted); font:800 .9rem/1 monospace; letter-spacing:-.25em; }
 .starter-record>header>b { color:var(--accent); font:700 .64rem/1.4 "DM Mono",monospace; }
 .starter-record h4 { margin:0; font-size:.98rem; overflow-wrap:anywhere; }
 .starter-record header small { display:block; margin-top:5px; color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
+.starter-record__options-trigger { display:flex; gap:7px; align-items:center; min-height:30px; padding:5px 7px; border:1px solid var(--ink); color:var(--ink); background:var(--module-tone); cursor:pointer; font:700 .58rem/1 "DM Mono",monospace; text-transform:uppercase; white-space:nowrap; }
+.starter-record__options-trigger b { min-width:20px; padding:4px 5px; color:var(--on-deep); background:var(--deep); font:700 .58rem/1 "DM Mono",monospace; text-align:center; }
 .starter-record__check { width:22px; height:22px; padding:0; border:1px solid var(--ink); color:var(--on-deep); background:transparent; cursor:pointer; }
 .starter-record.is-done .starter-record__check { background:var(--deep); }
 .starter-record dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 14px; margin:12px 0 0; }
@@ -593,17 +595,13 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-record__fields textarea { min-height:76px; resize:vertical; }
 .starter-record__buttons { display:flex; gap:14px; align-items:center; margin-top:14px; }
 .starter-record__buttons .button { min-height:42px; }
-.starter-module__options { margin-top:24px; border:1px solid var(--ink); background:var(--paper); }
-.starter-module__options>summary { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:16px; align-items:center; min-height:68px; padding:14px 16px; cursor:pointer; list-style:none; background:color-mix(in srgb,var(--module-tone) 68%,var(--paper)); }
-.starter-module__options>summary::-webkit-details-marker { display:none; }
-.starter-module__options>summary::after { content:"＋"; color:var(--accent); font:700 1.05rem/1 monospace; }
-.starter-module__options[open]>summary { border-bottom:1px solid var(--ink); }
-.starter-module__options[open]>summary::after { content:"−"; }
-.starter-module__options>summary>div { display:grid; gap:4px; }
-.starter-module__options>summary strong { font-size:.94rem; }
-.starter-module__options>summary small { color:var(--muted); font-size:.7rem; line-height:1.4; }
-.starter-module__options>summary>b { min-width:28px; padding:5px 7px; color:var(--on-deep); background:var(--deep); font:700 .64rem/1 "DM Mono",monospace; text-align:center; }
-.starter-module__options-body { display:grid; gap:16px; padding:16px; }
+.starter-record-options-dialog { position:relative; width:min(980px,calc(100vw - 28px)); max-height:calc(100vh - 28px); padding:clamp(20px,3vw,34px); border:1px solid var(--ink); border-radius:0; color:var(--ink); background:var(--paper); box-shadow:18px 18px 0 color-mix(in srgb,var(--deep) 35%,transparent); overflow:auto; }
+.starter-record-options-dialog::backdrop { background:color-mix(in srgb,var(--deep) 70%,transparent); backdrop-filter:blur(2px); }
+.starter-record-options-dialog>header { padding:0 44px 18px 0; border-bottom:1px solid var(--ink); }
+.starter-record-options-dialog>header h3 { margin:5px 0 0; font-size:clamp(1.45rem,3vw,2.25rem); letter-spacing:-.035em; }
+.starter-record-options-dialog>header>p:not(.eyebrow) { max-width:720px; margin:8px 0 0; color:var(--muted); line-height:1.5; }
+.starter-record-options-dialog>.starter-option-grid { margin-top:18px; }
+.starter-record-options-dialog>.starter-module__option-add { margin-top:18px; }
 .starter-option-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
 .starter-option-grid>.starter-plan__empty { grid-column:1/-1; margin:4px 0; }
 .starter-option { min-width:0; padding:18px; border:1px solid var(--line); border-left:4px solid var(--module-mark); background:var(--panel); }
@@ -621,6 +619,16 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-option dt { color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 .starter-option dd { margin:4px 0 0; font-size:.82rem; line-height:1.4; white-space:pre-line; overflow-wrap:anywhere; }
 .starter-option dd a { color:var(--accent); font-weight:750; text-underline-offset:3px; }
+.starter-option__research { display:grid; gap:8px; margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+.starter-option__research>span { color:var(--muted); font:700 .56rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
+.starter-option__research>div { display:flex; flex-wrap:wrap; gap:7px; }
+.starter-option__research a { padding:6px 8px; border:1px solid var(--line); color:var(--accent); background:var(--module-tone); font-size:.7rem; font-weight:750; text-underline-offset:3px; }
+.starter-option__research-fields { display:grid; grid-template-columns:minmax(180px,.45fr) minmax(0,1fr); gap:12px; margin-top:14px; }
+.starter-option__research-fields label { display:grid; gap:6px; }
+.starter-option__research-fields label>span { color:var(--muted); font:700 .58rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.starter-option__research-fields input,.starter-option__research-fields textarea { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--line); border-radius:0; color:var(--ink); background:var(--paper); font:inherit; }
+.starter-option__research-fields textarea { min-height:82px; resize:vertical; }
+.starter-option__research-fields small { color:var(--muted); font-size:.66rem; line-height:1.4; }
 .starter-option .starter-record__fields,.starter-module__option-add .starter-record__fields { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .starter-module__option-add { border-top:1px dashed var(--line); }
 .starter-module__option-add>summary { padding-top:13px; color:var(--muted); cursor:pointer; font:700 .62rem/1.2 "DM Mono",monospace; letter-spacing:.05em; text-transform:uppercase; }
@@ -1616,6 +1624,8 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .starter-module__records { grid-template-columns:1fr; }
   .starter-record__fields,.starter-record dl,.starter-option dl,.starter-option .starter-record__fields,.starter-module__option-add .starter-record__fields { grid-template-columns:1fr; }
   .starter-record dl>div.is-span,.starter-option dl>div.is-span { grid-column:auto; }
+  .starter-record__options-trigger { grid-column:3/5; justify-self:start; }
+  .starter-option__research-fields { grid-template-columns:1fr; }
   .starter-option>header { flex-direction:column; }
   .starter-option>header .button { width:100%; }
   .starter-record__fields label:has(textarea) { grid-column:auto; }

@@ -105,6 +105,7 @@ test("Codex workspace options are non-authoritative operator work and never beco
     operation: "add",
     moduleId: "transport",
     optionId: "arrive_munich",
+    parentRecordId: "arrival_flight",
     label: "Arrive Munich",
     fields: { title: "Arrive Munich", from: "Australia", to: "Munich", provisional: true },
   });
@@ -118,6 +119,7 @@ test("Codex workspace options are non-authoritative operator work and never beco
   assert.equal(saved.orientation.delta.at(-1).actor, "codex");
   assert.equal(saved.order.inputs.at(-1).payload.workspaceOperation, "option_add");
   assert.equal(saved.order.inputs.at(-1).payload.optionSource, "codex");
+  assert.equal(saved.order.inputs.at(-1).payload.parentRecordId, "arrival_flight");
 });
 
 test("Codex-first, Site-later preserves a staged question and treats the later Site answer as new human input", async () => {

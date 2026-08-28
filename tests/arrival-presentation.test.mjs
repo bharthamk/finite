@@ -253,7 +253,7 @@ test("workspace options stay outside plan maths and records until a person promo
   const order = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_options", version: 10, status: "proposed_plan_ready", rawOutcome: "Plan a flexible Europe trip.", structured: {}, attachments: [], pendingClarification: null,
     inputs: [
-      { inputId: "arrival_option_arrival_options_7", kind: "detail", payload: { workspaceOperation: "option_add", moduleId: "transport", recordId: "option_munich", optionSource: "codex", label: "Arrive Munich", fields: { title: "Arrive Munich", from: "Australia", to: "Munich", cost: "1400", currency: "AUD", provisional: true } }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:00.000Z" },
+      { inputId: "arrival_option_arrival_options_7", kind: "detail", payload: { workspaceOperation: "option_add", moduleId: "transport", recordId: "option_munich", parentRecordId: "arrival_flight", optionSource: "codex", label: "Arrive Munich", fields: { title: "Arrive Munich", from: "Australia", to: "Munich", cost: "1400", currency: "AUD", provisional: true } }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:00.000Z" },
       { inputId: "arrival_option_arrival_options_8", kind: "detail", payload: { workspaceOperation: "option_update", moduleId: "transport", recordId: "option_munich", optionSource: "codex", fields: { notes: "Closest to Oktoberfest." } }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:01.000Z" },
       { inputId: "arrival_input_arrival_options_9", kind: "detail", payload: { workspaceOperation: "option_add", moduleId: "transport", recordId: "option_frankfurt", label: "Arrive Frankfurt", fields: { title: "Arrive Frankfurt", from: "Australia", to: "Frankfurt", cost: "1200", currency: "AUD", provisional: true } }, sourceSurface: "site", createdAt: "2026-08-29T00:00:02.000Z" },
       { inputId: "arrival_input_arrival_options_10", kind: "correction", payload: { workspaceOperation: "option_promote", moduleId: "transport", recordId: "option_frankfurt", targetRecordId: "manual_frankfurt" }, sourceSurface: "site", createdAt: "2026-08-29T00:00:03.000Z" },
@@ -265,6 +265,7 @@ test("workspace options stay outside plan maths and records until a person promo
   const transport = starter.sections.find((section) => section.sectionId === "transport");
   assert.deepEqual(transport.options.map((option) => option.itemId), ["option_munich"]);
   assert.equal(transport.options[0].source, "working");
+  assert.equal(transport.options[0].parentRecordId, "arrival_flight");
   assert.equal(transport.options[0].fields.notes, "Closest to Oktoberfest.");
   assert.equal(transport.items.find((item) => item.itemId === "manual_frankfurt").fields.to, "Frankfurt");
   assert.equal(transport.items.find((item) => item.itemId === "manual_frankfurt").source, "human");

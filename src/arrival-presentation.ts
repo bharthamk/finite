@@ -118,6 +118,7 @@ export interface StarterPlanItem {
   label: string;
   fields: Record<string, string | boolean>;
   source: StarterPlanItemSource;
+  parentRecordId?: string;
 }
 
 export interface StarterPlanSection {
@@ -515,13 +516,14 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
         return;
       }
       if (operation === "add") addItem(sectionId, { itemId: recordId || `human_${index}`, label: safePayloadText(input.payload, "label") || "Plan item", fields: safeFields(input.payload.fields), source: "human" });
-      if (operation === "option_add") addOption(sectionId, { itemId: recordId || `option_${index}`, label: safePayloadText(input.payload, "label") || "Option", fields: safeFields(input.payload.fields), source: input.payload.optionSource === "codex" ? "working" : "human" });
+      if (operation === "option_add") addOption(sectionId, { itemId: recordId || `option_${index}`, label: safePayloadText(input.payload, "label") || "Option", fields: safeFields(input.payload.fields), source: input.payload.optionSource === "codex" ? "working" : "human", ...(safePayloadText(input.payload, "parentRecordId") ? { parentRecordId: safePayloadText(input.payload, "parentRecordId") } : {}) });
       if (operation === "option_update") {
         const option = options?.find((candidate) => candidate.itemId === recordId);
         if (option) {
           option.fields = { ...option.fields, ...safeFields(input.payload.fields) };
           option.label = String(option.fields.title || option.label);
           option.source = input.payload.optionSource === "codex" ? "working" : "human";
+          if (safePayloadText(input.payload, "parentRecordId")) option.parentRecordId = safePayloadText(input.payload, "parentRecordId");
         }
       }
       if (operation === "option_delete") sectionOptions.set(sectionId, (options ?? []).filter((candidate) => candidate.itemId !== recordId));

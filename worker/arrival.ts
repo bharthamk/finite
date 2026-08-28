@@ -303,12 +303,14 @@ const saveWorkspaceOption = async (db: D1Database, scopeId: string, order: Arriv
   const operation = String(body.operation ?? "");
   const moduleId = String(body.moduleId ?? "");
   const optionId = String(body.optionId ?? "");
+  const parentRecordId = String(body.parentRecordId ?? "");
   const label = String(body.label ?? "").trim();
   const rawFields = asRecord(body.fields);
   const fields = Object.fromEntries(Object.entries(rawFields).filter((entry): entry is [string, string | boolean] => typeof entry[1] === "string" || typeof entry[1] === "boolean"));
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
   if (!workspaceOptionOperations.has(operation)) return errorResponse(422, "WORKSPACE_OPTION_OPERATION_INVALID", "The option operation must be add, update, or delete.");
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(moduleId) || !/^[a-zA-Z0-9_-]{1,120}$/.test(optionId)) return errorResponse(422, "WORKSPACE_OPTION_ID_INVALID", "The module and option identities must be bounded stable identifiers.");
+  if (parentRecordId && !/^[a-zA-Z0-9_-]{1,160}$/.test(parentRecordId)) return errorResponse(422, "WORKSPACE_OPTION_PARENT_INVALID", "The parent record identity must be a bounded stable identifier.");
   if (operation === "add" && (!label || label.length > 200 || !String(fields.title ?? "").trim())) return errorResponse(422, "WORKSPACE_OPTION_INVALID", "A new option requires a bounded label and title.");
   if (operation !== "delete" && (!Object.keys(fields).length || Object.keys(fields).length > 40 || stableSerialize(fields).length > 30_000)) return errorResponse(422, "WORKSPACE_OPTION_FIELDS_INVALID", "Option fields must be a bounded set of planning values.");
   const createdAt = new Date().toISOString();
@@ -317,6 +319,7 @@ const saveWorkspaceOption = async (db: D1Database, scopeId: string, order: Arriv
     moduleId,
     recordId: optionId,
     optionSource: "codex",
+    ...(parentRecordId ? { parentRecordId } : {}),
     ...(label ? { label } : {}),
     ...(operation !== "delete" ? { fields } : {}),
   };

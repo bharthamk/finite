@@ -122,7 +122,7 @@ export interface ArrivalRepository {
   list(context?: RepositoryRequestContext): Promise<ArrivalResult>;
   open(input?: { orderId?: string; sinceVersion?: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
-  saveWorkspaceOption(input: { orderId: string; expectedVersion: number; operation: ArrivalWorkspaceOptionOperation; moduleId: string; optionId: string; label?: string; fields?: Record<string, string | boolean> }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  saveWorkspaceOption(input: { orderId: string; expectedVersion: number; operation: ArrivalWorkspaceOptionOperation; moduleId: string; optionId: string; parentRecordId?: string; label?: string; fields?: Record<string, string | boolean> }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   checkpoint(input: { orderId: string; expectedVersion: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
@@ -313,6 +313,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       moduleId: input.moduleId,
       recordId: input.optionId,
       optionSource: "codex",
+      ...(input.parentRecordId ? { parentRecordId: input.parentRecordId } : {}),
       ...(input.label ? { label: input.label } : {}),
       ...(input.fields ? { fields: clone(input.fields) } : {}),
     };
