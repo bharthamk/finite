@@ -207,6 +207,10 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:1fr/);
   assert.match(styles, /\.starter-module__options/);
   assert.match(styles, /\.starter-option-grid/);
+  assert.match(styles, /\.starter-module__records \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.starter-option-grid \{ display:grid; grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(styles, /\.starter-option dl \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(source, /class=\"\$\{layoutClass\}\"/);
   assert.match(source, /<details class="starter-plan__overview" open>/);
   assert.equal(source.match(/<article class="starter-report-card/g)?.length, 5);
   for (const label of ["Dates", "Total budget", "Budget split", "To-do"]) assert.match(source, new RegExp(`>${label}<`));
@@ -276,7 +280,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-calendar__selection \{ position:sticky;/);
   assert.match(source, /field\.inputType === "url"/);
   assert.match(source, /Open website/);
-  assert.match(styles, /\.starter-module--stays \.starter-module__records \{ grid-template-columns:repeat\(auto-fit,minmax\(260px,360px\)\); justify-content:start; \}/);
+  assert.doesNotMatch(styles, /\.starter-module--stays \.starter-module__records \{ grid-template-columns:repeat\(auto-fit/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
 });
