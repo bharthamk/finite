@@ -130,6 +130,44 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   assert.deepEqual(starter.laterHumanInputs, []);
 });
 
+test("real-plan sentence dates and shorthand money produce the intended editable overview", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1",
+    orderId: "arrival_real_language",
+    version: 6,
+    status: "interpretation_confirmed",
+    rawOutcome: "I want to take a trip to Europe from Australia, possibly leaving around the 15th of September this year. I am thinking one month or so and the dates are not set in stone.",
+    structured: {
+      deadline: "Possibly leaving Australia around the 15th of September this year, but it is not set in stone.",
+      finiteLimit: "10k aud absolute max spend.",
+    },
+    attachments: [],
+    inputs: [],
+    pendingClarification: null,
+    interpretation: {
+      basedOnVersion: 4,
+      inferredFamily: "travel",
+      summary: "A roughly one-month Europe trip from 15 September 2026 with an AUD 10,000 ceiling.",
+      known: { destinations: ["Budapest", "Poland", "Finland"] },
+      inferred: { event: "Oktoberfest" },
+      missing: [], contradictions: [], dependencies: [], savedOperatorWork: {}, complete: true,
+      stagedAt: "2026-08-28T00:01:00.000Z",
+    },
+    lastOperatorCheckpoint: 4,
+    createdAt: "2026-08-28T00:00:00.000Z",
+    updatedAt: "2026-08-28T00:02:00.000Z",
+    checksum: "f".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.overview.start, "2026-09-15");
+  assert.equal(starter.overview.end, "2026-10-15");
+  assert.equal(starter.overview.datesProvisional, true);
+  assert.equal(starter.overview.totalBudget, "10000");
+  assert.equal(starter.overview.currency, "AUD");
+  assert.equal(starter.overview.budgetProvisional, false);
+  assert.ok(starter.overview.categoryPercent <= 100);
+});
+
 test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {
   const order = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_overview", version: 5, status: "waiting_for_codex", rawOutcome: "Plan a one-day event.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,

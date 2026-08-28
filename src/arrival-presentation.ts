@@ -247,10 +247,32 @@ const safeFields = (value: unknown): Record<string, string | boolean> => value !
   : {};
 const sectionAliases: Record<string, string> = { destinations: "itinerary", dates: "itinerary", travel: "transport", commitments: "requirements", open: "tasks", programme: "schedule", people: "scope", items: "scope" };
 
+const moneyAmount = (text: string): string => {
+  const candidates = [...text.matchAll(/(?:a\$|aud|us\$|usd|€|eur|£|gbp)?\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*([kmb])?\b/gi)]
+    .map((match) => {
+      const base = Number(match[1]!.replaceAll(",", ""));
+      const multiplier = ({ k: 1_000, m: 1_000_000, b: 1_000_000_000 } as const)[String(match[2] ?? "").toLowerCase() as "k" | "m" | "b"] ?? 1;
+      return base * multiplier;
+    })
+    .filter(Number.isFinite);
+  if (!candidates.length) return "";
+  const amount = candidates.reduce((largest, candidate) => Math.abs(candidate) > Math.abs(largest) ? candidate : largest);
+  return String(Number(amount.toFixed(2)));
+};
+
+const moneyCurrency = (text: string, parent: Record<string, unknown>): string => {
+  if (typeof parent.currencyCode === "string" && parent.currencyCode.trim()) return parent.currencyCode.trim().toUpperCase();
+  if (/a\$|\baud\b/i.test(text)) return "AUD";
+  if (/us\$|\busd\b/i.test(text)) return "USD";
+  if (/€|\beur\b/i.test(text)) return "EUR";
+  if (/£|\bgbp\b/i.test(text)) return "GBP";
+  return "";
+};
+
 const fieldsForFact = (sectionId: string, fact: FlatPlanFact, value = fact.value): Record<string, string | boolean> => {
   const text = plainValue(value, fact.valueKey, fact.valueParent);
   const path = normalizedPath(fact.path);
-  if (sectionId === "money") return { title: fact.label, amount: text.replace(/[^0-9.-]/g, ""), currency: typeof fact.valueParent.currencyCode === "string" ? fact.valueParent.currencyCode : /a\$/i.test(text) ? "AUD" : "", moneyRole: /daily|perday/.test(path) ? "daily" : /limit|budget|maximum|cap/.test(path) ? "limit" : "cost", notes: text };
+  if (sectionId === "money") return { title: fact.label, amount: moneyAmount(text), currency: moneyCurrency(text, fact.valueParent), moneyRole: /daily|perday/.test(path) ? "daily" : /limit|budget|maximum|cap/.test(path) ? "limit" : "cost", notes: text };
   if (sectionId === "tasks") return { title: text === "Not supplied yet" ? fact.label : text, notes: text === fact.label ? "" : fact.label, done: false };
   if (sectionId === "requirements") return { title: /mustnotchange|constraint|commitment/.test(path) ? text : fact.label, status: "open", notes: text };
   if (sectionId === "itinerary" || sectionId === "schedule") return /date|day|month|year|when|deadline|window/.test(path) ? { title: fact.label, start: text, notes: text } : { title: text, location: text, notes: fact.label };
@@ -262,8 +284,16 @@ const fieldsForFact = (sectionId: string, fact: FlatPlanFact, value = fact.value
 const dateIso = (value: string, fallbackYear: number): string => {
   const text = value.trim().replace(/[~≈]/g, " ").replace(/\b(\d{1,2})(?:st|nd|rd|th)\b/gi, "$1").replace(/\b(?:about|around|approximately|approx|roughly|circa)\b/gi, " ").replace(/\s+/g, " ").trim();
   if (!text) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  const timestamp = Date.parse(`${/\b20\d{2}\b/.test(text) ? text : `${text} ${fallbackYear}`} UTC`);
+  const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+  const month = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+  const dayFirst = text.match(new RegExp(`\\b(\\d{1,2})\\s+(?:of\\s+)?(${month})(?:\\s+(20\\d{2}))?\\b`, "i"));
+  const monthFirst = text.match(new RegExp(`\\b(${month})\\s+(\\d{1,2})(?:,?\\s+(20\\d{2}))?\\b`, "i"));
+  const candidate = dayFirst
+    ? `${dayFirst[1]} ${dayFirst[2]} ${dayFirst[3] || fallbackYear}`
+    : monthFirst ? `${monthFirst[2]} ${monthFirst[1]} ${monthFirst[3] || fallbackYear}` : "";
+  if (!candidate) return "";
+  const timestamp = Date.parse(`${candidate} UTC`);
   if (!Number.isFinite(timestamp)) return "";
   return new Date(timestamp).toISOString().slice(0, 10);
 };
