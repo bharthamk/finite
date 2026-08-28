@@ -1241,12 +1241,62 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter) return "";
   const manual = order.structured.planningMode === "manual" && !order.interpretation?.complete;
-  const moneyItems = starter.sections.find((section) => section.sectionId === "money")?.items ?? [];
-  const limit = moneyItems.filter((item) => item.fields.moneyRole === "limit").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
-  const daily = moneyItems.filter((item) => item.fields.moneyRole === "daily").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
-  const planned = starter.sections.flatMap((section) => section.items).reduce((sum, item) => sum + starterAmount(item.fields.cost) + (item.fields.moneyRole === "cost" ? starterAmount(item.fields.amount) : 0), 0);
-  const currency = String(moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
-  const money = (value: number): string => new Intl.NumberFormat("en-AU", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+  const { overview } = starter;
+  const limit = starterAmount(overview.totalBudget);
+  const currency = overview.currency;
+  const money = (value: number): string => {
+    try { return new Intl.NumberFormat("en-AU", { style: "currency", currency, maximumFractionDigits: 0 }).format(value); }
+    catch { return `${currency} ${new Intl.NumberFormat("en-AU", { maximumFractionDigits: 0 }).format(value)}`; }
+  };
+  const dateLabel = (value: string): string => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "Add date";
+    return new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
+  };
+  const startMs = /^\d{4}-\d{2}-\d{2}$/.test(overview.start) ? Date.parse(`${overview.start}T12:00:00Z`) : Number.NaN;
+  const endMs = /^\d{4}-\d{2}-\d{2}$/.test(overview.end) ? Date.parse(`${overview.end}T12:00:00Z`) : Number.NaN;
+  const nights = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 86_400_000)) : 0;
+  const duration = Number.isFinite(startMs) ? overview.singleDay || !Number.isFinite(endMs) ? "1 day" : `${nights + 1} ${nights === 0 ? "day" : "days"}${nights ? ` · ${nights} ${nights === 1 ? "night" : "nights"}` : ""}` : "Dates open";
+  const scheduleSection = starter.sections.find((section) => section.sectionId === "itinerary" || section.sectionId === "schedule");
+  const openTasks = starter.sections.find((section) => section.sectionId === "tasks")?.items.filter((item) => item.fields.done !== true).length ?? 0;
+  const openRequirements = starter.sections.find((section) => section.sectionId === "requirements")?.items.filter((item) => item.fields.status !== "ready").length ?? 0;
+  const allocationDelta = limit - overview.categoryAllocated;
+  const allocationLabel = !limit ? "Add total budget" : allocationDelta >= 0 ? `${money(allocationDelta)} unallocated` : `${money(Math.abs(allocationDelta))} over budget`;
+  const allocationClass = limit && overview.categoryPercent > 100 ? " is-over" : "";
+  const categoryRows = overview.categories.map((item) => {
+    const amount = starterAmount(item.fields.amount);
+    const percentage = limit > 0 ? (amount / limit) * 100 : 0;
+    return `<article class="starter-overview__category${percentage > 100 ? " is-over" : ""}" data-category-record data-module-id="money" data-record-id="${escapeHtml(item.itemId)}">
+      <form data-arrival-form="workspace-category-update" data-module-id="money" data-record-id="${escapeHtml(item.itemId)}">
+        <label><span>Category</span><input name="field_title" required maxlength="120" value="${escapeHtml(item.fields.title || item.label)}"></label>
+        <label><span>Set budget</span><span class="starter-overview__money-input"><b>${escapeHtml(currency)}</b><input name="field_amount" type="number" step="1" min="0" value="${escapeHtml(item.fields.amount)}"></span></label>
+        <input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><input name="field_notes" type="hidden" value="${escapeHtml(item.fields.notes)}">
+        <output><strong>${escapeHtml(money(amount))}</strong><span>${limit ? `${percentage.toFixed(1)}% of total` : "Set a total to see %"}</span></output>
+        <div><button class="text-button" type="submit" ${busy ? "disabled" : ""}>Save</button><button class="text-button" type="button" data-action="workspace-category-delete" ${busy ? "disabled" : ""}>Delete</button></div>
+      </form>
+    </article>`;
+  }).join("");
+  const overviewMarkup = `<details class="starter-plan__overview" open>
+    <summary><div><p class="eyebrow">Plan at a glance</p><h3>Dates, money and scope</h3></div><div class="starter-overview__summary"><span>${escapeHtml(dateLabel(overview.start))}${overview.start && overview.end && !overview.singleDay ? ` → ${escapeHtml(dateLabel(overview.end))}` : ""}</span><strong>${limit ? escapeHtml(money(limit)) : "Budget open"}</strong></div></summary>
+    <div class="starter-overview__body">
+      <form class="starter-overview__settings" data-arrival-form="workspace-overview">
+        <section class="starter-overview__panel starter-overview__dates"><header><span>Dates</span><strong>${escapeHtml(duration)}</strong></header>
+          <div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
+          <div class="starter-overview__toggles"><label><input name="singleDay" type="checkbox" ${overview.singleDay ? "checked" : ""}> Single day</label><label><input name="includeTime" type="checkbox" ${overview.includeTime ? "checked" : ""}> Add times</label></div>
+          <div class="starter-overview__field-grid" data-overview-times ${overview.includeTime ? "" : "hidden"}><label><span>Start time</span><input name="startTime" type="time" value="${escapeHtml(overview.startTime)}"></label><label><span>End time</span><input name="endTime" type="time" value="${escapeHtml(overview.endTime)}"></label><label class="is-wide"><span>Time zone</span><input name="timeZone" maxlength="80" value="${escapeHtml(overview.timeZone)}" placeholder="e.g. Europe/Berlin"></label></div>
+        </section>
+        <section class="starter-overview__panel starter-overview__budget"><header><span>Total budget</span><strong>${limit ? escapeHtml(money(limit)) : "Not set"}</strong></header>
+          <div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
+          <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
+        </section>
+        <button class="button starter-overview__save" type="submit" ${busy ? "disabled" : ""}>Save dates & budget</button>
+      </form>
+      <section class="starter-overview__panel starter-overview__split"><header><div><span>Financial split</span><p>Edit the categories and their set budgets. Percentages may add up to more than 100%.</p></div><strong class="${allocationClass.trim()}">${limit ? `${overview.categoryPercent.toFixed(1)}%` : "—"}</strong></header>
+        <div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
+        <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
+      </section>
+      <section class="starter-overview__signals" aria-label="Key plan signals"><div><span>Duration</span><strong>${escapeHtml(duration)}</strong></div><div><span>${starter.family === "travel" ? "Stops" : starter.family === "event" ? "Programme" : "Plan stages"}</span><strong>${scheduleSection?.items.length ?? 0}</strong></div><div><span>Open to-dos</span><strong>${openTasks}</strong></div><div><span>Open requirements</span><strong>${openRequirements}</strong></div></section>
+    </div>
+  </details>`;
   const modules = starter.sections.map((section) => {
     const items = section.items.map((item, index) => {
       const title = String(item.fields.title || item.label);
@@ -1273,7 +1323,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><small>Research, compare, draft, or rework any part</small></div>
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
-    <section class="starter-plan__money-strip" aria-label="Current finite picture"><div><span>Overall limit</span><strong>${limit ? escapeHtml(money(limit)) : "Add limit"}</strong></div><div><span>Planned so far</span><strong>${planned ? escapeHtml(money(planned)) : "Add costs"}</strong></div><div><span>Daily target</span><strong>${daily ? escapeHtml(money(daily)) : "Add daily spend"}</strong></div><div><span>Unallocated</span><strong>${limit ? escapeHtml(money(limit - planned)) : "—"}</strong></div></section>
+    ${overviewMarkup}
     <div class="starter-workspace">${modules}</div>
     ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
   </section>`;
@@ -1482,6 +1532,57 @@ const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
 };
 
+const saveWorkspaceOverview = async (form: HTMLFormElement): Promise<void> => {
+  const data = new FormData(form);
+  const start = String(data.get("start") ?? "").trim();
+  const singleDay = form.querySelector<HTMLInputElement>("input[name='singleDay']")?.checked === true;
+  const includeTime = form.querySelector<HTMLInputElement>("input[name='includeTime']")?.checked === true;
+  const fields = {
+    start,
+    end: singleDay ? start : String(data.get("end") ?? "").trim(),
+    singleDay,
+    includeTime,
+    startTime: includeTime ? String(data.get("startTime") ?? "").trim() : "",
+    endTime: includeTime ? String(data.get("endTime") ?? "").trim() : "",
+    timeZone: includeTime ? String(data.get("timeZone") ?? "").trim() : "",
+    totalBudget: String(data.get("totalBudget") ?? "").trim(),
+    currency: String(data.get("currency") ?? "AUD").trim().toUpperCase(),
+  };
+  await saveWorkspaceMutation({ workspaceOperation: "overview", moduleId: "overview", fields }, "correction", "Your plan dates and budget are saved.");
+};
+
+const addWorkspaceCategory = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: "money", recordId: `category_${crypto.randomUUID().replaceAll("-", "")}`, label: fields.title, fields }, "detail", "The budget category was added.");
+};
+
+const updateWorkspaceCategory = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: "money", recordId: form.dataset.recordId, fields }, "correction", "The category budget is saved.");
+};
+
+const deleteWorkspaceCategory = async (record: HTMLElement): Promise<void> => {
+  await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: "money", recordId: record.dataset.recordId }, "correction", "The budget category was removed.");
+};
+
+const bindWorkspaceOverviewToggles = (): void => {
+  const form = root?.querySelector<HTMLFormElement>("[data-arrival-form='workspace-overview']");
+  if (!form) return;
+  const singleDay = form.querySelector<HTMLInputElement>("input[name='singleDay']");
+  const includeTime = form.querySelector<HTMLInputElement>("input[name='includeTime']");
+  const endDate = form.querySelector<HTMLElement>("[data-overview-end-date]");
+  const times = form.querySelector<HTMLElement>("[data-overview-times]");
+  const sync = (): void => {
+    if (endDate) endDate.hidden = singleDay?.checked === true;
+    if (times) times.hidden = includeTime?.checked !== true;
+  };
+  singleDay?.addEventListener("change", sync);
+  includeTime?.addEventListener("change", sync);
+  sync();
+};
+
 const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan."); };
 
 const toggleWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "toggle", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, done: !record.classList.contains("is-done") }, "detail", record.classList.contains("is-done") ? "The task is open again." : "The task is complete."); };
@@ -1685,6 +1786,7 @@ function bindArrivalInteractions(): void {
   bindPlanSwitcherInteractions();
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
+  bindWorkspaceOverviewToggles();
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const mode = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "manual" ? "manual" : "codex";
@@ -1694,12 +1796,16 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='workspace-overview']")?.addEventListener("submit", (event) => { event.preventDefault(); void saveWorkspaceOverview(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-comment']").forEach((form) => form.addEventListener("submit", (event) => {
     event.preventDefault();
     const forCodex = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "codex";
     void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void deleteWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-category-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-category-record]"); if (record) void deleteWorkspaceCategory(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {
     record.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", record.dataset.recordId ?? ""); event.dataTransfer?.setData("application/x-finite-module", record.dataset.moduleId ?? ""); record.classList.add("is-dragging"); });

@@ -131,11 +131,27 @@ export interface StarterPlanSection {
   comments: Array<{ commentId: string; text: string; forCodex: boolean }>;
 }
 
+export interface StarterPlanOverview {
+  start: string;
+  end: string;
+  singleDay: boolean;
+  includeTime: boolean;
+  startTime: string;
+  endTime: string;
+  timeZone: string;
+  totalBudget: string;
+  currency: string;
+  categories: StarterPlanItem[];
+  categoryAllocated: number;
+  categoryPercent: number;
+}
+
 export interface StarterPlanPresentation {
   family: "travel" | "renovation" | "event" | "general";
   familyLabel: string;
   title: string;
   brief: string;
+  overview: StarterPlanOverview;
   sections: StarterPlanSection[];
   laterHumanInputs: ArrivalInput[];
   interpretationIsCurrent: boolean;
@@ -311,7 +327,19 @@ const seedRoughPlan = (
     routeLocations.slice(0, -1).forEach((location, index) => seed("transport", `leg_${index}`, `${location} → ${routeLocations[index + 1]}`, { title: "Intercity transport", from: location, to: routeLocations[index + 1]!, start: String(locations[index]?.fields.end ?? ""), provider: "Rail / coach / low-cost flight", cost: "80", currency: "AUD", notes: "Rough allowance; mode, timetable and availability are open." }));
     const allowances = locations.map((item) => travelAllowance(String(item.fields.location || item.fields.title)));
     if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "daily")) seed("money", "daily_spend", "Daily spending allowance", { title: "Daily spending allowance", amount: String(Math.round(allowances.reduce((sum, item) => sum + item.daily, 0) / Math.max(1, allowances.length))), currency: "AUD", moneyRole: "daily", notes: "Average first-pass allowance across the rough route." });
-    seed("money", "stay_allowance", "Accommodation allowance", { title: "Accommodation allowance", amount: String(allowances.reduce((sum, item) => sum + item.nightly * 4, 0)), currency: "AUD", moneyRole: "cost", notes: "Four rough nights per stop; edit dates or stays to replace this centering estimate." });
+    const transportAllowance = (sectionItems.get("transport") ?? []).reduce((sum, item) => sum + Number(item.fields.cost || 0), 0);
+    const stayAllowance = allowances.reduce((sum, item) => sum + item.nightly * 4, 0);
+    const dayAllowance = allowances.reduce((sum, item) => sum + item.daily * 4, 0);
+    const categorySeeds: Array<[string, string, number, string]> = [
+      ["transport_allowance", "Flights & transport", transportAllowance, "Rough transport allocation from the current route; no fares have been checked."],
+      ["stay_allowance", "Accommodation", stayAllowance, "Four rough nights per stop; edit dates or stays to replace this centering estimate."],
+      ["day_allowance", "Food & daily spending", dayAllowance, "Daily allowance multiplied across the rough route."],
+      ["admin_allowance", "Insurance, visas & admin", 300, "Starter allowance only; live requirements and quotes are not checked."],
+    ];
+    const knownLimit = Number((sectionItems.get("money") ?? []).filter((item) => item.fields.moneyRole === "limit").at(-1)?.fields.amount || 0);
+    const remaining = knownLimit - categorySeeds.reduce((sum, item) => sum + item[2], 0);
+    categorySeeds.push(["flexible_allowance", "Experiences & flexible buffer", Math.max(0, remaining), "Uncommitted space for experiences, price movement, or route changes."]);
+    categorySeeds.forEach(([id, title, amount, notes]) => seed("money", id, title, { title, amount: String(Math.round(amount)), currency: "AUD", moneyRole: "cost", notes }));
     (["passport:Passport validity check", "visa:Visa and entry-requirement check", "insurance:Travel insurance"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!requirements.some((item) => String(item.fields.title).toLowerCase().includes(id))) seed("requirements", id, title, { title, status: "open", notes: "Required check; not legal or live entry advice." }); });
     (["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
     return;
@@ -323,6 +351,18 @@ const seedRoughPlan = (
   }
   if (!requirements.length) seed("requirements", "key_requirement", family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", { title: family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", status: "open", notes: "First-pass requirement; verify before committing." });
   ["Confirm the rough sequence", "Add known costs and dates", "Check the next external dependency"].forEach((title, index) => { if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", `general_${index}`, title, { title, done: false, notes: "Useful next step." }); });
+  const moneyItems = sectionItems.get("money") ?? [];
+  if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
+    const limitItem = moneyItems.filter((item) => item.fields.moneyRole === "limit").at(-1);
+    const limit = Number(limitItem?.fields.amount || 0);
+    const currency = String(limitItem?.fields.currency || "AUD");
+    const splits = family === "renovation"
+      ? [["labour", "Labour & trades", 40], ["materials", "Materials & fixtures", 35], ["professional", "Approvals & professional fees", 10], ["contingency", "Contingency", 15]]
+      : family === "event"
+        ? [["venue", "Venue", 25], ["food", "Food & drink", 35], ["production", "Suppliers & production", 25], ["contingency", "Contingency", 15]]
+        : [["delivery", "Core delivery", 50], ["people", "People & resources", 25], ["tools", "Tools & logistics", 15], ["buffer", "Flexible buffer", 10]];
+    splits.forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(limit * Number(percent) / 100)), currency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change the category or amount freely.` }));
+  }
 };
 
 const inputVersion = (input: ArrivalInput): number => {
@@ -344,6 +384,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const definitions = starterSections[family];
   const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionComments = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ commentId: string; text: string; forCodex: boolean }>]));
+  const overviewOverrides: Record<string, string | boolean> = {};
   const addItem = (sectionId: string, item: StarterPlanItem): void => {
     const resolved = sectionItems.has(sectionId) ? sectionId : sectionAliases[sectionId] && sectionItems.has(sectionAliases[sectionId]!) ? sectionAliases[sectionId]! : definitions[0]!.sectionId;
     const items = sectionItems.get(resolved)!;
@@ -370,6 +411,25 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   presentationInputs.forEach((input, index) => {
     const operation = safePayloadText(input.payload, "workspaceOperation");
     if (operation) {
+      if (operation === "overview") {
+        const overviewFields = safeFields(input.payload.fields);
+        Object.assign(overviewOverrides, overviewFields);
+        const totalBudget = typeof overviewFields.totalBudget === "string" ? overviewFields.totalBudget.trim() : "";
+        const currency = typeof overviewFields.currency === "string" ? overviewFields.currency.trim().toUpperCase() : "";
+        const moneyItems = sectionItems.get("money") ?? [];
+        const limitItems = moneyItems.filter((item) => item.fields.moneyRole === "limit");
+        if (totalBudget) {
+          if (limitItems.length) {
+            limitItems.forEach((limitItem) => {
+              limitItem.fields.amount = totalBudget;
+              limitItem.fields.currency = currency || String(limitItem.fields.currency || "AUD");
+              limitItem.source = "human";
+            });
+          } else addItem("money", { itemId: "human_overall_budget", label: "Total budget", fields: { title: "Total budget", amount: totalBudget, currency: currency || "AUD", moneyRole: "limit", notes: "Plan-wide budget set in Plan at a glance." }, source: "human" });
+        }
+        if (currency) moneyItems.forEach((item) => { item.fields.currency = currency; });
+        return;
+      }
       const rawSection = safePayloadText(input.payload, "moduleId");
       const sectionId = sectionItems.has(rawSection) ? rawSection : sectionAliases[rawSection] ?? rawSection;
       const recordId = safePayloadText(input.payload, "recordId");
@@ -405,11 +465,42 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       : sectionForFact(definitions, [label, detail, input.kind]);
     addItem(sectionId, { itemId: `human_${index}`, label, fields: { title: label, ...(detail ? { notes: detail } : {}) }, source: "human" });
   });
+  const allItems = [...sectionItems.values()].flat();
+  const dateValues = allItems.flatMap((item) => [item.fields.start, item.fields.end])
+    .map((value) => String(value ?? ""))
+    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    .sort();
+  const moneyItems = sectionItems.get("money") ?? [];
+  const limitItems = moneyItems.filter((item) => item.fields.moneyRole === "limit");
+  const canonicalLimit = limitItems.find((item) => item.source === "human") ?? limitItems.at(-1);
+  const limit = Number(canonicalLimit?.fields.amount || 0);
+  const categories = moneyItems.filter((item) => item.fields.moneyRole === "cost");
+  const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
+  const totalBudget = String(overviewOverrides.totalBudget || (limit ? String(limit) : ""));
+  const budgetNumber = Number(totalBudget || 0);
+  const singleDay = overviewOverrides.singleDay === true;
+  const start = String(overviewOverrides.start || dateValues[0] || "");
+  const end = singleDay ? start : String(overviewOverrides.end || dateValues.at(-1) || start);
+  const currency = String(overviewOverrides.currency || moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
     title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} rough plan`,
     brief: interpretation?.summary ?? order.rawOutcome,
+    overview: {
+      start,
+      end,
+      singleDay,
+      includeTime: overviewOverrides.includeTime === true,
+      startTime: String(overviewOverrides.startTime || ""),
+      endTime: String(overviewOverrides.endTime || ""),
+      timeZone: String(overviewOverrides.timeZone || ""),
+      totalBudget,
+      currency,
+      categories,
+      categoryAllocated,
+      categoryPercent: budgetNumber > 0 ? (categoryAllocated / budgetNumber) * 100 : 0,
+    },
     sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [] })),
     laterHumanInputs,
     interpretationIsCurrent: laterHumanInputs.length === 0,

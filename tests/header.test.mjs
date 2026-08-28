@@ -200,7 +200,15 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(styles, /\.starter-plan__money-strip/);
+  assert.match(source, /<details class="starter-plan__overview" open>/);
+  assert.match(source, /data-arrival-form="workspace-overview"/);
+  assert.match(source, /name="singleDay" type="checkbox"/);
+  assert.match(source, /name="includeTime" type="checkbox"/);
+  assert.match(source, /data-arrival-form="workspace-category-update"/);
+  assert.match(source, /data-arrival-form="workspace-category-add"/);
+  assert.match(source, /% of total/);
+  assert.doesNotMatch(source, /starter-plan__money-strip/);
+  assert.match(styles, /\.starter-plan__overview/);
   assert.match(styles, /\.starter-module--calendar/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);

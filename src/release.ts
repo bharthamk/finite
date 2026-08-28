@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "dual-path-populated-rough-plan-v114",
+  build: "editable-plan-glance-v115",
 } as const;

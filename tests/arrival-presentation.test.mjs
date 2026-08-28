@@ -117,10 +117,31 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "London").fields.start, "2026-09-15");
   assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
   assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.fields.amount === "10000" && item.fields.moneyRole === "limit"));
+  assert.equal(starter.overview.start, "2026-09-15");
+  assert.equal(starter.overview.totalBudget, "10000");
+  assert.equal(starter.overview.currency, "AUD");
+  assert.deepEqual(starter.overview.categories.map((item) => item.fields.title), ["Flights & transport", "Accommodation", "Food & daily spending", "Insurance, visas & admin", "Experiences & flexible buffer"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "requirements").items[0].fields.notes, "Wedding in Lyon");
   assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.some((item) => item.fields.title === "Friend visit dates are still open."));
   assert.equal(starter.interpretationIsCurrent, true);
   assert.deepEqual(starter.laterHumanInputs, []);
+});
+
+test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_overview", version: 5, status: "waiting_for_codex", rawOutcome: "Plan a one-day event.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
+    inputs: [
+      { inputId: "arrival_input_arrival_overview_2", kind: "correction", payload: { workspaceOperation: "overview", moduleId: "overview", fields: { start: "2026-10-03", end: "2026-10-04", singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "aud" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:00.000Z" },
+      { inputId: "arrival_input_arrival_overview_3", kind: "detail", payload: { workspaceOperation: "add", moduleId: "money", recordId: "category_venue", label: "Venue", fields: { title: "Venue", amount: "750", currency: "AUD", moneyRole: "cost" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:01.000Z" },
+      { inputId: "arrival_input_arrival_overview_4", kind: "detail", payload: { workspaceOperation: "add", moduleId: "money", recordId: "category_food", label: "Food", fields: { title: "Food", amount: "500", currency: "AUD", moneyRole: "cost" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:02.000Z" },
+    ],
+    interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:02.000Z", checksum: "e".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.deepEqual(starter.overview, {
+    start: "2026-10-03", end: "2026-10-03", singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD",
+    categories: starter.overview.categories, categoryAllocated: 1250, categoryPercent: 125,
+  });
 });
 
 test("human draft edits remain visible and mark the starter interpretation for reconciliation", () => {
