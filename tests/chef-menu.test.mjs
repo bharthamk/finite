@@ -94,6 +94,18 @@ test("a waiting human order wins route arbitration over an accepted plan", async
   assert.equal(entered.operatorPacket.nextAction.stage, "arrival_delta_ready");
   assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
   assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { orderId: created.order.orderId, expectedVersion: 1 });
+  assert.deepEqual(entered.operatorPacket.nextAction.requiredArgs, ["orderId", "expectedVersion", "summary"]);
+  assert.equal(entered.operatorPacket.nextAction.knownArgsComplete, false);
+  assert.equal(entered.operatorPacket.nextAction.callReady, false);
+  assert.equal(entered.operatorPacket.nextAction.derivedArgs[0].argument, "summary");
+  assert.equal(entered.operatorPacket.nextAction.derivedArgs[0].source, "canonical_arrival");
+  assert.equal(entered.operatorPacket.nextAction.preMutationGate.presentChefMenuInHumanLanguage, true);
+  assert.equal(entered.operatorPacket.nextAction.preMutationGate.sensitiveWebMcpTransmissionRequiresActionTimeConfirmation, true);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].knownArgsComplete, false);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].derivedArgs[0].argument, "summary");
+  assert.equal(entered.operatingContract.preMutationGate.copiedHandoffIsNotActionTimeConfirmation, true);
+  assert.match(entered.operatorPacket.law, /knownArgs are executable only when knownArgsComplete is not false/);
+  assert.match(entered.next, /Never call with knownArgs alone/);
   assert.equal(entered.next.includes("finite_create_arrival_order"), false);
 });
 

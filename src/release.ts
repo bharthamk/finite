@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "whole-journey-repair-v108",
+  build: "operator-contract-v109",
 } as const;

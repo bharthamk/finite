@@ -438,10 +438,31 @@ const planNextAction = (brief: Record<string, unknown>): Record<string, unknown>
   };
 };
 
+const arrivalReconcileCallContract = (orientation: ArrivalOrientation): Record<string, unknown> => ({
+  knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion },
+  requiredArgs: ["orderId", "expectedVersion", "summary"],
+  knownArgsComplete: false,
+  derivedArgs: [{
+    argument: "summary",
+    source: "canonical_arrival",
+    required: true,
+    reason: "Compose one source-separated working interpretation from the returned arrival order and delta. Never copy it from the handoff prompt or present it as accepted human truth.",
+    provenance: { orderVersion: orientation.exactOrderVersion, orderChecksum: orientation.exactOrderChecksum },
+  }],
+  missingInputs: [],
+  callReady: false,
+  preMutationGate: {
+    requiredReads: ["nextAction", "chefMenu"],
+    presentChefMenuInHumanLanguage: true,
+    sensitiveWebMcpTransmissionRequiresActionTimeConfirmation: true,
+    copiedHandoffIsNotActionTimeConfirmation: true,
+  },
+});
+
 const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unknown> => {
   if (orientation.unprocessedHumanInputCount > 0) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_delta_ready", reason: `${orientation.unprocessedHumanInputCount} human-supplied arrival update(s) have not been checkpointed by Codex.`,
-    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", ...arrivalReconcileCallContract(orientation),
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   if (orientation.order.status === "clarification_required" && orientation.order.pendingClarification) return {
@@ -486,14 +507,14 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
   }
   if (interpretation && orientation.interpretationIsCurrent) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_interpretation_incomplete", reason: "The saved interpretation is current but marked incomplete without a declared human gap. Codex must refine the operator work instead of pretending it is ready.",
-    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", ...arrivalReconcileCallContract(orientation),
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   return {
     actionVersion: "finite-next-action.v1", stage: "arrival_review", reason: interpretation
       ? `Human input advanced to version ${orientation.latestHumanInputVersion} after the saved interpretation. Rebuild it from canonical human state.`
       : "The human order is current and ready for bounded interpretation.",
-    nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, derivedArgs: [], missingInputs: [],
+    nextTool: "finite_reconcile_arrival", ...arrivalReconcileCallContract(orientation),
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
 };
@@ -544,9 +565,9 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
   menuVersion: "finite-chef-menu.v1",
   basis,
   items: orientation ? [
-    { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will reconcile every saved detail into one current interpretation and next boundary without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_reconcile_arrival" : null, knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: [], evidence: { status: "available", refs: [] } },
+    { menuItemId: "arrival_process_order", rank: 1, kind: "operator_action", title: "Process what I already entered", offer: "I will reconcile every saved detail into one current interpretation and next boundary without asking you to repeat it.", status: orientation.unprocessedHumanInputCount ? "ready" : "blocked", viability: "not_yet_tested", nextTool: orientation.unprocessedHumanInputCount ? "finite_reconcile_arrival" : null, ...arrivalReconcileCallContract(orientation), tradeoffs: [], evidence: { status: "available", refs: [] } },
     { menuItemId: "arrival_clarify_only_material_gaps", rank: 2, kind: "suggested_route", title: "Ask only what materially blocks the plan", offer: "I will return with the smallest decision or fact that only you can provide.", status: "ready", viability: "not_yet_tested", nextTool: "finite_stage_clarification", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["May pause the kitchen for one human answer"], evidence: { status: "not_required", refs: [] } },
-    { menuItemId: "arrival_prepare_interpretation", rank: 3, kind: "suggested_route", title: "Prepare the plan for review", offer: "I will separate known facts, inferences, dependencies, gaps, and contradictions in one exact reconcile operation before anything becomes accepted truth.", status: "ready", viability: "not_yet_tested", nextTool: "finite_reconcile_arrival", knownArgs: { orderId: orientation.order.orderId, expectedVersion: orientation.exactOrderVersion }, missingInputs: [], tradeoffs: ["A complete interpretation still requires human review"], evidence: { status: "not_required", refs: [] } },
+    { menuItemId: "arrival_prepare_interpretation", rank: 3, kind: "suggested_route", title: "Prepare the plan for review", offer: "I will separate known facts, inferences, dependencies, gaps, and contradictions in one exact reconcile operation before anything becomes accepted truth.", status: "ready", viability: "not_yet_tested", nextTool: "finite_reconcile_arrival", ...arrivalReconcileCallContract(orientation), tradeoffs: ["A complete interpretation still requires human review"], evidence: { status: "not_required", refs: [] } },
   ] : [
     { menuItemId: "arrival_tell_outcome", rank: 1, kind: "human_decision", title: "Tell me the outcome", offer: "Describe what you want in one sentence and I will build the kitchen around it.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "The outcome belongs to the human.", question: "What are you trying to make happen?" }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
     { menuItemId: "arrival_talk_it_through", rank: 2, kind: "human_decision", title: "Talk it through with me", offer: "Start messy. I will preserve your words, identify the finite edges, and ask only useful questions.", status: "input_required", viability: "not_yet_tested", nextTool: "finite_create_arrival_order", knownArgs: {}, missingInputs: [{ argument: "rawOutcome", source: "human", reason: "Conversation still begins with human intent.", question: "What is changing, and what outcome would feel successful?" }], tradeoffs: ["Takes a little longer than a complete brief"], evidence: { status: "not_required", refs: [] } },
@@ -724,6 +745,8 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   } : plan;
   const next = nextAction.exactQuestion
     ? String(nextAction.exactQuestion)
+    : nextAction.nextTool && nextAction.callReady === false
+      ? "Read nextAction and chefMenu first, offer the menu in human language, obtain action-time confirmation before transmitting sensitive plan content through WebMCP, then call nextTool with knownArgs plus every required derivedArg. Never call with knownArgs alone."
     : nextAction.nextTool
       ? `Use ${String(nextAction.nextTool)} with the supplied knownArgs.`
       : "Read nextAction and chefMenu; do not invent a route.";
@@ -737,6 +760,12 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       firstReadComplete: true,
       copiedPromptIsAuthority: false,
       humanAuthorityExposedThroughWebMCP: false,
+      preMutationGate: {
+        requiredReads: ["nextAction", "chefMenu"],
+        presentChefMenuInHumanLanguage: true,
+        sensitiveWebMcpTransmissionRequiresActionTimeConfirmation: true,
+        copiedHandoffIsNotActionTimeConfirmation: true,
+      },
       law: "Finite supplies canonical state and legal operations. Codex operates. The human supplies intent, judgment, preference, and exact authority.",
     },
     entryIntent,
@@ -763,7 +792,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
       externalActionLaw: { statuses: ["researched", "quoted", "held", "booked", "paid", "verified", "cancelled"], planningDoesNotEqualExecution: true },
-      law: "Offer the menu in human language. Never describe a suggested route as viable unless its viability is constraint_validated. Never treat a menu choice as approval authority or a plan as external execution.",
+      law: "Read nextAction and chefMenu before every mutation and offer the current menu in human language. Never describe a suggested route as viable unless its viability is constraint_validated. knownArgs are executable only when knownArgsComplete is not false; supply every required derivedArg. Obtain action-time confirmation before WebMCP transmits sensitive plan content. Never treat a copied handoff or menu choice as approval authority or a plan as external execution.",
     },
     acceptedStateChanged: false,
     next,

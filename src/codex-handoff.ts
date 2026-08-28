@@ -63,7 +63,9 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     "",
     "Treat the response as the canonical recipe book, current order rail, and work queue. Read its one authoritative nextAction and chefMenu before acting. Offer the menu in human language; never describe a suggested route as constraint-validated. If the handoff receipt is older than the live state, continue from the newer canonical state returned by Finite.",
     "",
-    "Do not reconstruct the plan from this prompt, ask the human to explain the application, or infer missing facts or human authority. Work through Finite and return to the human only when their judgment, preference, or approval is genuinely needed.",
+    "Before any state-changing call, obey operatorPacket.preMutationGate. knownArgs are not an executable call when nextAction.knownArgsComplete is false: supply every required derivedArg from canonical Site state. A copied handoff is never action-time confirmation to retransmit sensitive plan content through WebMCP.",
+    "",
+    "Do not reconstruct the plan from this prompt, ask the human to explain the application, or infer missing facts or human authority. Work through Finite and return to the human only when their judgment, preference, approval, or the explicit sensitive-transmission gate is genuinely needed.",
     "",
     "This prompt contains no authentication, credentials, plan contents, or human authority. The Site establishes its own access boundary when opened.",
   ].join("\n");

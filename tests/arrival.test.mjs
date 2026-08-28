@@ -210,6 +210,12 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_delta_ready");
   assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
   assert.match(reentered.operatorPacket.nextAction.reason, /2 human-supplied arrival update/);
+  assert.deepEqual(reentered.operatorPacket.nextAction.requiredArgs, ["orderId", "expectedVersion", "summary"]);
+  assert.equal(reentered.operatorPacket.nextAction.knownArgsComplete, false);
+  assert.equal(reentered.operatorPacket.nextAction.callReady, false);
+  assert.equal(reentered.operatorPacket.nextAction.derivedArgs[0].argument, "summary");
+  assert.match(reentered.next, /offer the menu in human language/);
+  assert.match(reentered.next, /action-time confirmation/);
 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
   assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");
