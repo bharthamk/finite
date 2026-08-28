@@ -93,6 +93,33 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
   assert.equal(corrected.orientation.interpretationIsCurrent, false);
 });
 
+test("Codex workspace options are non-authoritative operator work and never become human input", async () => {
+  let tick = 0;
+  const arrivals = new MemoryArrivalRepository(() => new Date(Date.parse("2026-08-29T00:00:00.000Z") + tick++ * 1000));
+  const created = await arrivals.create({ idempotencyKey: "option-provenance-0001", rawOutcome: "Plan a flexible Europe arrival.", structured: {}, attachments: [], sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: 1 });
+  const staged = await arrivals.stageInterpretation({ orderId: created.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A flexible Europe arrival.", known: {}, inferred: {}, missing: [], contradictions: [], dependencies: [], savedOperatorWork: {}, complete: true });
+  const saved = await arrivals.saveWorkspaceOption({
+    orderId: created.order.orderId,
+    expectedVersion: staged.order.version,
+    operation: "add",
+    moduleId: "transport",
+    optionId: "arrive_munich",
+    label: "Arrive Munich",
+    fields: { title: "Arrive Munich", from: "Australia", to: "Munich", provisional: true },
+  });
+  assert.equal(saved.code, "ARRIVAL_WORKSPACE_OPTION_SAVED");
+  assert.equal(saved.order.status, "proposed_plan_ready");
+  assert.equal(saved.orientation.unprocessedHumanInputCount, 0);
+  assert.equal(saved.orientation.latestHumanInputVersion, 1);
+  assert.equal(saved.orientation.latestOperatorEventVersion, 4);
+  assert.equal(saved.orientation.interpretationIsCurrent, true);
+  assert.equal(saved.orientation.delta.at(-1).eventType, "operator_option_saved");
+  assert.equal(saved.orientation.delta.at(-1).actor, "codex");
+  assert.equal(saved.order.inputs.at(-1).payload.workspaceOperation, "option_add");
+  assert.equal(saved.order.inputs.at(-1).payload.optionSource, "codex");
+});
+
 test("Codex-first, Site-later preserves a staged question and treats the later Site answer as new human input", async () => {
   const arrivals = new MemoryArrivalRepository();
   const created = await arrivals.create({ idempotencyKey: "codex-first-0001", rawOutcome: "Help me renovate the kitchen before Christmas.", sourceSurface: "codex" });

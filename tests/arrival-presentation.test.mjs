@@ -249,6 +249,29 @@ test("manual workspace operations add, edit, reorder, complete and remove record
   assert.equal(starter.sections.find((section) => section.sectionId === "tasks").items.find((item) => item.itemId === "task_a").fields.done, true);
 });
 
+test("workspace options stay outside plan maths and records until a person promotes one", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_options", version: 10, status: "proposed_plan_ready", rawOutcome: "Plan a flexible Europe trip.", structured: {}, attachments: [], pendingClarification: null,
+    inputs: [
+      { inputId: "arrival_option_arrival_options_7", kind: "detail", payload: { workspaceOperation: "option_add", moduleId: "transport", recordId: "option_munich", optionSource: "codex", label: "Arrive Munich", fields: { title: "Arrive Munich", from: "Australia", to: "Munich", cost: "1400", currency: "AUD", provisional: true } }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:00.000Z" },
+      { inputId: "arrival_option_arrival_options_8", kind: "detail", payload: { workspaceOperation: "option_update", moduleId: "transport", recordId: "option_munich", optionSource: "codex", fields: { notes: "Closest to Oktoberfest." } }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:01.000Z" },
+      { inputId: "arrival_input_arrival_options_9", kind: "detail", payload: { workspaceOperation: "option_add", moduleId: "transport", recordId: "option_frankfurt", label: "Arrive Frankfurt", fields: { title: "Arrive Frankfurt", from: "Australia", to: "Frankfurt", cost: "1200", currency: "AUD", provisional: true } }, sourceSurface: "site", createdAt: "2026-08-29T00:00:02.000Z" },
+      { inputId: "arrival_input_arrival_options_10", kind: "correction", payload: { workspaceOperation: "option_promote", moduleId: "transport", recordId: "option_frankfurt", targetRecordId: "manual_frankfurt" }, sourceSurface: "site", createdAt: "2026-08-29T00:00:03.000Z" },
+    ],
+    interpretation: { basedOnVersion: 6, inferredFamily: "travel", summary: "A flexible Europe arrival.", known: {}, inferred: {}, missing: [], contradictions: [], dependencies: [], savedOperatorWork: {}, complete: true, stagedAt: "2026-08-29T00:00:00.000Z" },
+    lastOperatorCheckpoint: 6, createdAt: "2026-08-29T00:00:00.000Z", updatedAt: "2026-08-29T00:00:03.000Z", checksum: "e".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  const transport = starter.sections.find((section) => section.sectionId === "transport");
+  assert.deepEqual(transport.options.map((option) => option.itemId), ["option_munich"]);
+  assert.equal(transport.options[0].source, "working");
+  assert.equal(transport.options[0].fields.notes, "Closest to Oktoberfest.");
+  assert.equal(transport.items.find((item) => item.itemId === "manual_frankfurt").fields.to, "Frankfurt");
+  assert.equal(transport.items.find((item) => item.itemId === "manual_frankfurt").source, "human");
+  assert.equal(starter.overview.categoryAllocated, 4100);
+  assert.equal(starter.laterHumanInputs.length, 2);
+});
+
 test("manual mode opens the full workspace without an interpretation and keeps section notes and Codex requests", () => {
   const order = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_manual", version: 4, status: "waiting_for_codex", rawOutcome: "Plan a flexible Europe trip.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,

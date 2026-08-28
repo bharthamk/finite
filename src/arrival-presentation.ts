@@ -128,6 +128,7 @@ export interface StarterPlanSection {
   variant: "calendar" | "people" | "stays" | "transport" | "money" | "requirements" | "checklist" | "cards";
   fields: StarterPlanField[];
   items: StarterPlanItem[];
+  options: StarterPlanItem[];
   comments: Array<{ commentId: string; text: string; forCodex: boolean }>;
 }
 
@@ -167,7 +168,7 @@ const starterFamily = (value: string | null | undefined): StarterPlanPresentatio
   return "general";
 };
 
-type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "comments"> & { keywords: string[] };
+type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "options" | "comments"> & { keywords: string[] };
 
 const field = (fieldId: string, label: string, inputType: StarterPlanField["inputType"] = "text", placeholder = "", options?: StarterPlanField["options"]): StarterPlanField => ({ fieldId, label, inputType, ...(placeholder ? { placeholder } : {}), ...(options ? { options } : {}) });
 const statusOptions = [{ value: "open", label: "Not started" }, { value: "in_progress", label: "In progress" }, { value: "ready", label: "Ready" }];
@@ -446,6 +447,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   ].filter(Boolean))];
   const definitions = starterSections[family];
   const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
+  const sectionOptions = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionComments = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ commentId: string; text: string; forCodex: boolean }>]));
   const overviewOverrides: Record<string, string | boolean> = {};
   const addItem = (sectionId: string, item: StarterPlanItem): void => {
@@ -453,6 +455,12 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     const items = sectionItems.get(resolved)!;
     const fingerprint = `${item.label.toLowerCase()}|${JSON.stringify(item.fields)}`;
     if (!items.some((existing) => `${existing.label.toLowerCase()}|${JSON.stringify(existing.fields)}` === fingerprint)) items.push(item);
+  };
+  const addOption = (sectionId: string, item: StarterPlanItem): void => {
+    const resolved = sectionOptions.has(sectionId) ? sectionId : sectionAliases[sectionId] && sectionOptions.has(sectionAliases[sectionId]!) ? sectionAliases[sectionId]! : definitions[0]!.sectionId;
+    const options = sectionOptions.get(resolved)!;
+    const fingerprint = `${item.label.toLowerCase()}|${JSON.stringify(item.fields)}`;
+    if (!options.some((existing) => `${existing.label.toLowerCase()}|${JSON.stringify(existing.fields)}` === fingerprint)) options.push(item);
   };
   const requestFacts = flattenPlanFacts(Object.fromEntries([
     ["when", order.structured.deadline],
@@ -469,8 +477,10 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
   if (interpretation?.complete) seedRoughPlan(family, order, sectionItems, addItem);
+  const operatorOptionInput = (input: ArrivalInput): boolean => input.payload.optionSource === "codex" && safePayloadText(input.payload, "workspaceOperation").startsWith("option_");
+  const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorOptionInput(input));
   const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));
-  const presentationInputs = [...workspaceInputs, ...laterHumanInputs.filter((input) => !safePayloadText(input.payload, "workspaceOperation"))];
+  const presentationInputs = [...workspaceInputs, ...humanInputsAfterInterpretation.filter((input) => !safePayloadText(input.payload, "workspaceOperation"))];
   presentationInputs.forEach((input, index) => {
     const operation = safePayloadText(input.payload, "workspaceOperation");
     if (operation) {
@@ -497,6 +507,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       const sectionId = sectionItems.has(rawSection) ? rawSection : sectionAliases[rawSection] ?? rawSection;
       const recordId = safePayloadText(input.payload, "recordId");
       const items = sectionItems.get(sectionId);
+      const options = sectionOptions.get(sectionId);
       if (!items) return;
       if (operation === "note") {
         const text = safePayloadText(input.payload, "comment");
@@ -504,6 +515,23 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
         return;
       }
       if (operation === "add") addItem(sectionId, { itemId: recordId || `human_${index}`, label: safePayloadText(input.payload, "label") || "Plan item", fields: safeFields(input.payload.fields), source: "human" });
+      if (operation === "option_add") addOption(sectionId, { itemId: recordId || `option_${index}`, label: safePayloadText(input.payload, "label") || "Option", fields: safeFields(input.payload.fields), source: input.payload.optionSource === "codex" ? "working" : "human" });
+      if (operation === "option_update") {
+        const option = options?.find((candidate) => candidate.itemId === recordId);
+        if (option) {
+          option.fields = { ...option.fields, ...safeFields(input.payload.fields) };
+          option.label = String(option.fields.title || option.label);
+          option.source = input.payload.optionSource === "codex" ? "working" : "human";
+        }
+      }
+      if (operation === "option_delete") sectionOptions.set(sectionId, (options ?? []).filter((candidate) => candidate.itemId !== recordId));
+      if (operation === "option_promote") {
+        const option = options?.find((candidate) => candidate.itemId === recordId);
+        if (option) {
+          addItem(sectionId, { ...option, itemId: safePayloadText(input.payload, "targetRecordId") || `selected_${index}`, source: "human" });
+          sectionOptions.set(sectionId, (options ?? []).filter((candidate) => candidate.itemId !== recordId));
+        }
+      }
       if (operation === "update") {
         const item = items.find((candidate) => candidate.itemId === recordId);
         if (item) { item.fields = { ...item.fields, ...safeFields(input.payload.fields) }; item.label = String(item.fields.title || item.label); item.source = "human"; }
@@ -576,8 +604,8 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       categoryAllocated,
       categoryPercent: budgetNumber > 0 ? (categoryAllocated / budgetNumber) * 100 : 0,
     },
-    sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [] })),
-    laterHumanInputs,
-    interpretationIsCurrent: laterHumanInputs.length === 0,
+    sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [], options: sectionOptions.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [] })),
+    laterHumanInputs: humanInputsAfterInterpretation,
+    interpretationIsCurrent: humanInputsAfterInterpretation.length === 0,
   };
 };

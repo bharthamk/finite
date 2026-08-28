@@ -177,6 +177,11 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /const showStarterPlan = Boolean\(starterPlanMarkup && !planDraftMarkup/);
   assert.match(source, /data-arrival-form="workspace-add"/);
   assert.match(source, /data-arrival-form="workspace-update"/);
+  assert.match(source, /data-arrival-form="workspace-option-add"/);
+  assert.match(source, /data-arrival-form="workspace-option-update"/);
+  assert.match(source, /data-action="workspace-option-promote"/);
+  assert.match(source, /data-action="workspace-option-delete"/);
+  assert.match(source, /Suggested alternatives stay separate until you add one to the plan./);
   assert.match(source, /data-action="workspace-delete"/);
   assert.match(source, /data-action="workspace-toggle"/);
   assert.match(source, /data-arrival-form="workspace-comment"/);
@@ -200,6 +205,8 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:1fr/);
+  assert.match(styles, /\.starter-module__options/);
+  assert.match(styles, /\.starter-option-grid/);
   assert.match(source, /<details class="starter-plan__overview" open>/);
   assert.equal(source.match(/<article class="starter-report-card/g)?.length, 5);
   for (const label of ["Dates", "Total budget", "Budget split", "To-do"]) assert.match(source, new RegExp(`>${label}<`));

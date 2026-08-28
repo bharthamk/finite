@@ -85,6 +85,7 @@ test("production adapter normalizes host input, excludes authority, and replaces
   const planning = await host.execute("finite_open_toolset", { group: "planning" });
   assert.equal(planning.code, "TOOLSET_READY");
   assert.equal(planning.group, "planning");
+  assert(planning.advertisedTools.includes("finite_save_workspace_option"));
   assert(planning.advertisedTools.includes("travel_extend_stay"));
   assert(planning.advertisedTools.length <= 20);
   assert.equal((await host.execute("finite_get_plan_state", "{bad-json")).code, "INVALID_TOOL_INPUT");

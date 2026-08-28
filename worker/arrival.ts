@@ -51,6 +51,7 @@ const activeStatuses: ArrivalStatus[] = ["waiting_for_codex", "codex_reviewing",
 const isArrivalDraftReady = (status: ArrivalStatus | string): boolean => status === "proposed_plan_ready" || status === "interpretation_confirmed";
 const sourceSurfaces = new Set<ArrivalSourceSurface>(["site", "codex", "inline"]);
 const inputKinds = new Set<ArrivalInputKind>(["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"]);
+const workspaceOptionOperations = new Set(["add", "update", "delete"]);
 const answerKinds = new Set<ArrivalClarification["answerKind"]>(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const dependencyKinds = new Set<ArrivalDependencyKind>(["operator_research", "human_coordination", "external_evidence", "human_decision"]);
 const dependencyStatuses = new Set<ArrivalDependencyStatus>(["open", "resolved", "deferred"]);
@@ -297,6 +298,32 @@ const appendInput = async (db: D1Database, scopeId: string, order: ArrivalOrder,
   return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input], status: "waiting_for_codex", pendingClarification: kind === "answer" ? null : order.pendingClarification }, { eventType: "human_input_added", actor: "human", sourceSurface, payload: { input } }, "ARRIVAL_INPUT_APPENDED");
 };
 
+const saveWorkspaceOption = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const operation = String(body.operation ?? "");
+  const moduleId = String(body.moduleId ?? "");
+  const optionId = String(body.optionId ?? "");
+  const label = String(body.label ?? "").trim();
+  const rawFields = asRecord(body.fields);
+  const fields = Object.fromEntries(Object.entries(rawFields).filter((entry): entry is [string, string | boolean] => typeof entry[1] === "string" || typeof entry[1] === "boolean"));
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (!workspaceOptionOperations.has(operation)) return errorResponse(422, "WORKSPACE_OPTION_OPERATION_INVALID", "The option operation must be add, update, or delete.");
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(moduleId) || !/^[a-zA-Z0-9_-]{1,120}$/.test(optionId)) return errorResponse(422, "WORKSPACE_OPTION_ID_INVALID", "The module and option identities must be bounded stable identifiers.");
+  if (operation === "add" && (!label || label.length > 200 || !String(fields.title ?? "").trim())) return errorResponse(422, "WORKSPACE_OPTION_INVALID", "A new option requires a bounded label and title.");
+  if (operation !== "delete" && (!Object.keys(fields).length || Object.keys(fields).length > 40 || stableSerialize(fields).length > 30_000)) return errorResponse(422, "WORKSPACE_OPTION_FIELDS_INVALID", "Option fields must be a bounded set of planning values.");
+  const createdAt = new Date().toISOString();
+  const payload: JsonRecord = {
+    workspaceOperation: `option_${operation}`,
+    moduleId,
+    recordId: optionId,
+    optionSource: "codex",
+    ...(label ? { label } : {}),
+    ...(operation !== "delete" ? { fields } : {}),
+  };
+  const input: ArrivalInput = { inputId: `arrival_option_${order.orderId}_${expectedVersion + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
+  return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_option_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_OPTION_SAVED");
+};
+
 const checkpoint = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
   const expectedVersion = Number(body.expectedVersion);
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
@@ -473,6 +500,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (request.method !== "POST") return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
     const body = await parseJson(request);
     if (operation === "input") return appendInput(db, scopeId, order, body);
+    if (operation === "option") return saveWorkspaceOption(db, scopeId, order, body);
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);
     if (operation === "clarification") return stageClarification(db, scopeId, order, body);
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);

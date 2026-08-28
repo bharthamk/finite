@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "a-plus-manual-plan-workspace-v125",
+  build: "per-area-options-v126",
 } as const;

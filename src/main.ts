@@ -576,12 +576,14 @@ if (hotModule) hotModule.dispose(() => adapter?.dispose());
 let busy = false;
 type WorkspaceUiState = {
   openModules: Set<string>;
+  openOptionModules: Set<string>;
   calendarViews: Map<string, "calendar" | "list">;
   calendarSelections: Map<string, string>;
   calendarFilters: Map<string, string>;
 };
 const workspaceUiState: WorkspaceUiState = {
   openModules: new Set(),
+  openOptionModules: new Set(),
   calendarViews: new Map(),
   calendarSelections: new Map(),
   calendarFilters: new Map(),
@@ -1507,11 +1509,26 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       </article>`;
     };
     const items = section.items.map(renderRecord).join("");
+    const optionCards = section.options.map((item, index) => {
+      const title = String(item.fields.title || item.label);
+      const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
+      const provisional = starterItemIsProvisional(item);
+      const sourceLabel = item.source === "working" ? `${agenticName()} suggestion` : "Added by you";
+      return `<article class="starter-option${provisional ? " is-provisional" : ""}" data-workspace-option data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
+        <header><div><span>Option ${String(index + 1).padStart(2, "0")}</span><h4>${escapeHtml(title)}</h4><small>${escapeHtml(sourceLabel)} · not in plan</small></div><button class="button button--secondary" type="button" data-action="workspace-option-promote" ${busy ? "disabled" : ""}>Add to plan</button></header>
+        ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
+          const value = String(item.fields[field.fieldId] ?? "");
+          const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open source <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
+          return `<div><dt>${escapeHtml(field.label)}</dt><dd>${renderedValue}</dd></div>`;
+        }).join("")}</dl>` : ""}
+        <details class="starter-record__edit"><summary>Edit option</summary><form data-arrival-form="workspace-option-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save option</button><button class="text-button" type="button" data-action="workspace-option-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
+      </article>`;
+    }).join("");
     const unresolvedPeople = peopleSection?.items.filter((item) => String(item.fields.status || "tentative") !== "confirmed").length ?? 0;
     const unlinkedStays = staysSection?.items.filter((item) => !calendarMatches(item.fields.location, item.fields.start, item.fields.end).length).length ?? 0;
     const unlinkedTransportEnds = transportSection?.items.reduce((count, item) => count + (calendarMatches(item.fields.from).length ? 0 : 1) + (calendarMatches(item.fields.to).length ? 0 : 1), 0) ?? 0;
     const moduleWarningCount = section.sectionId === "people" ? unresolvedPeople : section.sectionId === "stays" ? unlinkedStays : section.sectionId === "transport" ? unlinkedTransportEnds : 0;
-    const moduleCountMarkup = `<b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</b>`;
+    const moduleCountMarkup = `<b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${section.options.length ? ` · ${section.options.length} ${section.options.length === 1 ? "option" : "options"}` : ""}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</b>`;
     const categoryAmount = (pattern: RegExp): number => starter.sections.find((candidate) => candidate.sectionId === "money")?.items.filter((item) => item.fields.moneyRole === "cost").filter((item) => pattern.test(String(item.fields.title || item.label))).reduce((sum, item) => sum + starterAmount(item.fields.amount), 0) ?? 0;
     const accommodationEnvelope = categoryAmount(/accommodation|stay|lodg/i);
     const transportEnvelope = categoryAmount(/flight|transport|rail|coach|ferry/i);
@@ -1524,6 +1541,13 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
     const entryNoun = section.variant === "calendar" ? calendarEntryNoun(starter.family) : section.label;
     const addControl = `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(entryNoun.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`;
+    const optionsSection = `<details class="starter-module__options" data-workspace-options>
+      <summary><div><strong>Options</strong><small>Suggested alternatives stay separate until you add one to the plan.</small></div><b>${section.options.length}</b></summary>
+      <div class="starter-module__options-body">
+        <div class="starter-option-grid">${optionCards || `<p class="starter-plan__empty">No options saved here yet.</p>`}</div>
+        <details class="starter-module__option-add"><summary>＋ Add an option</summary><form data-arrival-form="workspace-option-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(true)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Save as option</button></form></details>
+      </div>
+    </details>`;
     const commentControl = `<details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details>`;
     if (section.variant === "calendar") {
       const selectedItem = section.items.find((item) => calendarDate(item.fields.start)) ?? section.items[0];
@@ -1548,6 +1572,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           <div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>
           <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item below to place it on the calendar.</p></div>`}</aside></div></div>
           <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div></div>
+          ${optionsSection}
           ${comments}<div class="starter-module__controls starter-module__controls--calendar">${addControl}${commentControl}</div>
         </div>
       </details>`;
@@ -1555,6 +1580,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
       <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
       <div class="starter-module__body">${moduleInsight}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
+        ${optionsSection}
         ${comments}
         <div class="starter-module__controls">${addControl}${commentControl}</div>
       </div>
@@ -1762,6 +1788,9 @@ const captureWorkspaceUiState = (): void => {
     if (!moduleId) return;
     if (module.open) workspaceUiState.openModules.add(moduleId);
     else workspaceUiState.openModules.delete(moduleId);
+    const options = module.querySelector<HTMLDetailsElement>("[data-workspace-options]");
+    if (options?.open) workspaceUiState.openOptionModules.add(moduleId);
+    else workspaceUiState.openOptionModules.delete(moduleId);
     const selected = module.querySelector<HTMLButtonElement>("[data-action='select-calendar-item'][aria-pressed='true']")?.dataset.recordId;
     if (selected) workspaceUiState.calendarSelections.set(moduleId, selected);
     const view = module.querySelector<HTMLButtonElement>("[data-action='calendar-view'][aria-pressed='true']")?.dataset.calendarView;
@@ -1795,6 +1824,8 @@ const restoreWorkspaceUiState = (): void => {
   root?.querySelectorAll<HTMLDetailsElement>("details[data-workspace-module]").forEach((module) => {
     const moduleId = module.dataset.workspaceModule ?? "";
     module.open = workspaceUiState.openModules.has(moduleId);
+    const options = module.querySelector<HTMLDetailsElement>("[data-workspace-options]");
+    if (options) options.open = workspaceUiState.openOptionModules.has(moduleId);
     applyCalendarView(module, workspaceUiState.calendarViews.get(moduleId) ?? "calendar");
     const selection = workspaceUiState.calendarSelections.get(moduleId);
     if (selection && module.querySelector(`[data-calendar-detail][data-record-id='${CSS.escape(selection)}']`)) applyCalendarSelection(module, selection);
@@ -1812,6 +1843,7 @@ const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "de
   arrivalResult = await arrivalRepository.appendInput({ orderId: order.orderId, expectedVersion: order.version, kind, payload, sourceSurface: modelContext ? "inline" : "site" });
   busy = false;
   if (arrivalResult.ok && payload.workspaceOperation === "add" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.recordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.recordId);
+  if (arrivalResult.ok && payload.workspaceOperation === "option_promote" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.targetRecordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.targetRecordId);
   announce(arrivalResult.ok ? message : `The plan was not updated: ${arrivalResult.code}`);
   await render();
   return arrivalResult.ok;
@@ -1829,6 +1861,27 @@ const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   const fields = workspaceFieldsFromForm(form);
   if (!String(fields.title ?? "").trim()) return;
   await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
+};
+
+const addWorkspaceOption = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "option_add", moduleId: form.dataset.moduleId, recordId: `option_${crypto.randomUUID().replaceAll("-", "")}`, label: fields.title, fields }, "detail", "The option is saved outside the working plan.");
+};
+
+const updateWorkspaceOption = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "option_update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "The option is updated.");
+};
+
+const deleteWorkspaceOption = async (record: HTMLElement): Promise<void> => {
+  await saveWorkspaceMutation({ workspaceOperation: "option_delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The option was removed.");
+};
+
+const promoteWorkspaceOption = async (record: HTMLElement): Promise<void> => {
+  const targetRecordId = `manual_${crypto.randomUUID().replaceAll("-", "")}`;
+  await saveWorkspaceMutation({ workspaceOperation: "option_promote", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, targetRecordId }, "correction", "The option is now part of the working plan.");
 };
 
 const saveWorkspaceOverview = async (form: HTMLFormElement): Promise<void> => {
@@ -1972,7 +2025,7 @@ const addWorkspaceComment = async (form: HTMLFormElement, forCodex: boolean): Pr
 };
 
 const bindWorkspaceCurrencyConversions = (): void => {
-  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add'],[data-arrival-form='workspace-update']").forEach((form) => {
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add'],[data-arrival-form='workspace-update'],[data-arrival-form='workspace-option-add'],[data-arrival-form='workspace-option-update']").forEach((form) => {
     const localAmount = form.querySelector<HTMLInputElement>("[name='field_localAmount'],[name='field_localTotal']");
     const baseRate = form.querySelector<HTMLInputElement>("[name='field_baseRate']");
     const baseAmount = form.querySelector<HTMLInputElement>("[name='field_cost'],[name='field_totalBudget']");
@@ -2181,6 +2234,8 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-option-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceOption(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-option-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceOption(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-overview']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void saveWorkspaceOverview(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
@@ -2190,6 +2245,8 @@ function bindArrivalInteractions(): void {
     void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record], [data-record-context]"); if (record) void deleteWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void deleteWorkspaceOption(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-promote']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void promoteWorkspaceOption(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-category-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-category-record]"); if (record) void deleteWorkspaceCategory(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {
