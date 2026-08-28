@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "module-colour-separation-v121",
+  build: "adaptive-calendar-workspace-v122",
 } as const;

@@ -507,6 +507,46 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-module__body { padding:clamp(24px,3.4vw,42px); background:color-mix(in srgb,var(--module-tone) 24%,var(--paper)); }
 .starter-module__records { display:grid; gap:10px; margin-top:16px; }
 .starter-module--calendar .starter-module__records { grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); }
+.starter-calendar__toolbar { display:flex; justify-content:space-between; gap:18px; align-items:end; margin-bottom:18px; }
+.starter-calendar__toolbar>div:first-child { display:grid; gap:3px; }
+.starter-calendar__toolbar>div:first-child span,.starter-calendar__list-heading span,.starter-calendar__detail>header span { color:var(--muted); font:700 .56rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.starter-calendar__toolbar>div:first-child strong { font-size:1rem; }
+.starter-calendar__view-toggle { display:grid; grid-template-columns:repeat(2,1fr); min-width:190px; border:1px solid var(--ink); background:var(--paper); }
+.starter-calendar__view-toggle button { min-height:38px; padding:8px 14px; border:0; color:var(--ink); background:transparent; cursor:pointer; font:700 .65rem/1 "DM Mono",monospace; text-transform:uppercase; }
+.starter-calendar__view-toggle button+button { border-left:1px solid var(--ink); }
+.starter-calendar__view-toggle button[aria-pressed="true"] { color:var(--on-deep); background:var(--deep); }
+.starter-module--calendar [data-calendar-pane][hidden],.starter-calendar__detail[hidden] { display:none!important; }
+.starter-calendar__layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(290px,360px); gap:22px; align-items:start; }
+.starter-calendar__grid { min-width:0; }
+.starter-calendar__months { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); gap:18px; }
+.starter-calendar__month { min-width:0; overflow-x:auto; border:1px solid var(--line); background:var(--paper); }
+.starter-calendar__month table { width:100%; min-width:560px; border-collapse:collapse; table-layout:fixed; }
+.starter-calendar__month caption { padding:13px 14px; border-bottom:1px solid var(--ink); color:var(--ink); background:var(--module-tone); font:800 .83rem/1.2 "DM Mono",monospace; text-align:left; text-transform:uppercase; }
+.starter-calendar__month th { padding:8px 5px; border-bottom:1px solid var(--line); color:var(--muted); background:var(--panel); font:700 .56rem/1.2 "DM Mono",monospace; text-align:left; text-transform:uppercase; }
+.starter-calendar__month th abbr { text-decoration:none; }
+.starter-calendar__month td { height:92px; padding:6px 5px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); vertical-align:top; }
+.starter-calendar__month tr:last-child td { border-bottom:0; }
+.starter-calendar__month td:last-child { border-right:0; }
+.starter-calendar__month td>time { display:block; margin-bottom:5px; color:var(--muted); font:700 .58rem/1 "DM Mono",monospace; }
+.starter-calendar__empty { background:color-mix(in srgb,var(--paper) 72%,var(--line)); }
+.starter-calendar__event { display:block; width:100%; margin-top:3px; padding:5px 6px; overflow:hidden; border:1px solid transparent; color:var(--on-deep); background:var(--module-mark); cursor:pointer; font:700 .63rem/1.2 var(--skin-meta); text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.starter-calendar__event:hover,.starter-calendar__event:focus-visible,.starter-calendar__event[aria-pressed="true"] { outline:2px solid var(--ink); outline-offset:1px; }
+.starter-calendar__event.is-provisional span { font-style:italic; }
+.starter-calendar__note { margin:12px 0 0; color:var(--muted); font-size:.72rem; line-height:1.45; }
+.starter-calendar__selection { position:sticky; top:132px; min-width:0; padding:18px; border:1px solid var(--ink); background:var(--panel); }
+.starter-calendar__detail>header { padding-bottom:13px; border-bottom:1px solid var(--line); }
+.starter-calendar__detail>header div { display:grid; gap:5px; }
+.starter-calendar__detail h4 { margin:0; font-size:1.15rem; overflow-wrap:anywhere; }
+.starter-calendar__detail.is-provisional h4 { font-style:italic; }
+.starter-calendar__detail>header small { color:var(--muted); font-size:.68rem; line-height:1.45; }
+.starter-calendar__selection .starter-record__fields { grid-template-columns:1fr; }
+.starter-calendar__selection .starter-record__fields label:has(textarea) { grid-column:auto; }
+.starter-calendar__selection .starter-module__add { margin-top:18px; }
+.starter-calendar__empty-selection { display:grid; gap:7px; }
+.starter-calendar__empty-selection p { margin:0; color:var(--muted); font-size:.78rem; line-height:1.5; }
+.starter-calendar__list-heading { display:flex; justify-content:space-between; gap:16px; align-items:baseline; }
+.starter-calendar__list-heading small { color:var(--muted); font-size:.7rem; }
+.starter-module__controls--calendar { grid-template-columns:minmax(0,1fr); }
 .starter-record { min-width:0; padding:16px; border:1px solid var(--line); background:var(--panel); transition:opacity .15s,transform .15s; }
 .starter-record[draggable="true"] { cursor:grab; }
 .starter-record.is-dragging { opacity:.4; transform:scale(.98); }
@@ -1436,6 +1476,8 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .arrival-continue .button { width:100%; }
   .arrival-question .button { width:100%; }
   .starter-report-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .starter-calendar__layout { grid-template-columns:1fr; }
+  .starter-calendar__selection { position:static; }
 }
 
 @media (max-width:680px) {
@@ -1467,6 +1509,9 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .arrival-state { grid-template-columns:1fr auto; }
   .arrival-state>div { grid-column:1/-1; grid-row:2; }
   .starter-plan__header,.starter-plan__notice { align-items:flex-start; flex-direction:column; }
+  .starter-calendar__toolbar { align-items:stretch; flex-direction:column; }
+  .starter-calendar__view-toggle { width:100%; }
+  .starter-calendar__list-heading { align-items:flex-start; flex-direction:column; }
   .starter-plan__header h2 { font-size:clamp(2.5rem,14vw,4.2rem); }
   .starter-plan__header-actions { width:100%; flex-basis:auto; }
   .starter-plan__notice strong { white-space:normal; }

@@ -1243,6 +1243,72 @@ const starterItemIsProvisional = (item: import("./arrival-presentation.js").Star
 
 const renderStarterCertaintyToggle = (provisional = false): string => `<label class="starter-certainty-toggle"><input name="field_provisional" type="checkbox" ${provisional ? "checked" : ""}><span><strong>Placeholder</strong><small>Italic until you mark it settled. This does not change calculations.</small></span></label>`;
 
+const calendarDate = (value: unknown): Date | null => {
+  const text = String(value ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const date = new Date(`${text}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const calendarDateKey = (date: Date): string => date.toISOString().slice(0, 10);
+
+const calendarEntryNoun = (family: import("./arrival-presentation.js").StarterPlanPresentation["family"]): string => ({
+  travel: "Locations & activities",
+  renovation: "Phases & work",
+  event: "Events & activities",
+  general: "Scheduled items",
+})[family];
+
+const renderCalendarMonths = (
+  section: import("./arrival-presentation.js").StarterPlanSection,
+  overview: import("./arrival-presentation.js").StarterPlanOverview,
+  selectedId: string,
+): string => {
+  const dated = section.items.map((item) => ({ item, start: calendarDate(item.fields.start), end: calendarDate(item.fields.end) })).filter((entry) => entry.start) as Array<{ item: import("./arrival-presentation.js").StarterPlanItem; start: Date; end: Date | null }>;
+  const datedStarts = dated.map((entry) => entry.start.getTime());
+  const datedEnds = dated.map((entry) => (entry.end && entry.end >= entry.start ? entry.end : entry.start).getTime());
+  const today = new Date();
+  const rangeStart = calendarDate(overview.start) ?? (datedStarts.length ? new Date(Math.min(...datedStarts)) : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1, 12)));
+  const rangeEndCandidate = calendarDate(overview.end) ?? (datedEnds.length ? new Date(Math.max(...datedEnds)) : rangeStart);
+  const rangeEnd = rangeEndCandidate >= rangeStart ? rangeEndCandidate : rangeStart;
+  const monthCursor = new Date(Date.UTC(rangeStart.getUTCFullYear(), rangeStart.getUTCMonth(), 1, 12));
+  const finalMonth = new Date(Date.UTC(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth(), 1, 12));
+  const months: Date[] = [];
+  while (monthCursor <= finalMonth && months.length < 12) {
+    months.push(new Date(monthCursor));
+    monthCursor.setUTCMonth(monthCursor.getUTCMonth() + 1);
+  }
+  const weekdays = [["Monday", "Mon"], ["Tuesday", "Tue"], ["Wednesday", "Wed"], ["Thursday", "Thu"], ["Friday", "Fri"], ["Saturday", "Sat"], ["Sunday", "Sun"]];
+  const monthTables = months.map((month) => {
+    const year = month.getUTCFullYear();
+    const monthIndex = month.getUTCMonth();
+    const monthName = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric", timeZone: "UTC" }).format(month);
+    const firstWeekday = (month.getUTCDay() + 6) % 7;
+    const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0, 12)).getUTCDate();
+    const cells = Array.from({ length: Math.ceil((firstWeekday + daysInMonth) / 7) * 7 }, (_, index) => {
+      const dayNumber = index - firstWeekday + 1;
+      if (dayNumber < 1 || dayNumber > daysInMonth) return `<td class="starter-calendar__empty" aria-hidden="true"></td>`;
+      const date = new Date(Date.UTC(year, monthIndex, dayNumber, 12));
+      const key = calendarDateKey(date);
+      const active = dated.filter((entry) => {
+        const end = entry.end && entry.end >= entry.start ? entry.end : entry.start;
+        return date >= entry.start && date <= end;
+      });
+      const entries = active.map(({ item }) => {
+        const title = String(item.fields.title || item.label);
+        const provisional = starterItemIsProvisional(item);
+        return `<button class="starter-calendar__event${provisional ? " is-provisional" : ""}" type="button" data-action="select-calendar-item" data-record-id="${escapeHtml(item.itemId)}" aria-pressed="${item.itemId === selectedId}" title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span></button>`;
+      }).join("");
+      return `<td data-calendar-date="${key}"><time datetime="${key}">${dayNumber}</time>${entries}</td>`;
+    });
+    const rows = Array.from({ length: cells.length / 7 }, (_, index) => `<tr>${cells.slice(index * 7, index * 7 + 7).join("")}</tr>`).join("");
+    return `<div class="starter-calendar__month"><table><caption>${escapeHtml(monthName)}</caption><thead><tr>${weekdays.map(([full, short]) => `<th scope="col"><abbr title="${full}">${short}</abbr></th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join("");
+  const unscheduled = section.items.length - dated.length;
+  const truncated = monthCursor <= finalMonth;
+  return `<div class="starter-calendar__months">${monthTables}</div>${unscheduled ? `<p class="starter-calendar__note">${unscheduled} ${unscheduled === 1 ? "item has" : "items have"} no start date yet. Select it from List to schedule it.</p>` : ""}${truncated ? `<p class="starter-calendar__note">The calendar shows the first 12 months. Use List for later items.</p>` : ""}`;
+};
+
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter) return "";
@@ -1359,7 +1425,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
   </dialog>`;
   const modules = starter.sections.map((section) => {
-    const items = section.items.map((item, index) => {
+    const renderRecord = (item: import("./arrival-presentation.js").StarterPlanItem, index: number): string => {
       const title = String(item.fields.title || item.label);
       const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
       const provisional = starterItemIsProvisional(item);
@@ -1369,14 +1435,43 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(item.fields[field.fieldId])}</dd></div>`).join("")}</dl>` : ""}
         <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
       </article>`;
-    }).join("");
+    };
+    const items = section.items.map(renderRecord).join("");
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
+    const entryNoun = section.variant === "calendar" ? calendarEntryNoun(starter.family) : section.label;
+    const addControl = `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(entryNoun.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`;
+    const commentControl = `<details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details>`;
+    if (section.variant === "calendar") {
+      const selectedItem = section.items.find((item) => calendarDate(item.fields.start)) ?? section.items[0];
+      const selectedId = selectedItem?.itemId ?? "";
+      const details = section.items.map((item) => {
+        const title = String(item.fields.title || item.label);
+        const provisional = starterItemIsProvisional(item);
+        const start = String(item.fields.start ?? "");
+        const end = String(item.fields.end ?? "");
+        const startTime = String(item.fields.startTime ?? "");
+        const endTime = String(item.fields.endTime ?? "");
+        const timing = start ? `${dateLabel(start)}${startTime ? ` · ${startTime}` : ""}${end && end !== start ? ` – ${dateLabel(end)}` : ""}${endTime ? ` · ${endTime}` : ""}` : "No date yet";
+        return `<article class="starter-calendar__detail${provisional ? " is-provisional" : ""}" data-calendar-detail data-record-context data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}" ${item.itemId === selectedId ? "" : "hidden"}>
+          <header><div><span>Selected item</span><h4 tabindex="-1">${escapeHtml(title)}</h4><small>${escapeHtml(timing)} · ${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
+          <form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form>
+        </article>`;
+      }).join("");
+      return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+        <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">Calendar</strong><small>${escapeHtml(section.description)}</small></div><b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</b></summary>
+        <div class="starter-module__body">
+          <div class="starter-calendar__toolbar"><div><span>View</span><strong>${escapeHtml(entryNoun)}</strong></div><div class="starter-calendar__view-toggle" role="group" aria-label="Calendar display"><button type="button" data-action="calendar-view" data-calendar-view="calendar" aria-pressed="true">Calendar</button><button type="button" data-action="calendar-view" data-calendar-view="list" aria-pressed="false">List</button></div></div>
+          <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item to place it on the calendar.</p></div>`}${addControl}</aside></div></div>
+          <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>${addControl}</div>
+          ${comments}<div class="starter-module__controls starter-module__controls--calendar">${commentControl}</div>
+        </div>
+      </details>`;
+    }
     return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
       <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div><b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</b></summary>
       <div class="starter-module__body"><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
         ${comments}
-        <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
-        <details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details></div>
+        <div class="starter-module__controls">${addControl}${commentControl}</div>
       </div>
     </details>`;
   }).join("");
@@ -1677,6 +1772,25 @@ const bindWorkspaceOverviewEditors = (): void => {
     module.scrollIntoView({ behavior: "smooth", block: "start" });
     module.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
   }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='calendar-view']").forEach((button) => button.addEventListener("click", () => {
+    const module = button.closest<HTMLElement>("[data-workspace-module]");
+    if (!module) return;
+    const view = button.dataset.calendarView ?? "calendar";
+    module.querySelectorAll<HTMLButtonElement>("[data-action='calendar-view']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.calendarView === view)));
+    module.querySelectorAll<HTMLElement>("[data-calendar-pane]").forEach((pane) => { pane.hidden = pane.dataset.calendarPane !== view; });
+  }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='select-calendar-item']").forEach((button) => button.addEventListener("click", () => {
+    const module = button.closest<HTMLElement>("[data-workspace-module]");
+    const recordId = button.dataset.recordId ?? "";
+    if (!module || !recordId) return;
+    module.querySelectorAll<HTMLButtonElement>("[data-action='select-calendar-item']").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate.dataset.recordId === recordId)));
+    let selected: HTMLElement | null = null;
+    module.querySelectorAll<HTMLElement>("[data-calendar-detail]").forEach((detail) => {
+      detail.hidden = detail.dataset.recordId !== recordId;
+      if (!detail.hidden) selected = detail;
+    });
+    (selected as HTMLElement | null)?.querySelector<HTMLElement>("h4")?.focus({ preventScroll: true });
+  }));
 };
 
 const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => { await saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan."); };
@@ -1901,7 +2015,7 @@ function bindArrivalInteractions(): void {
     const forCodex = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "codex";
     void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
   }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void deleteWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record], [data-record-context]"); if (record) void deleteWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-category-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-category-record]"); if (record) void deleteWorkspaceCategory(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {

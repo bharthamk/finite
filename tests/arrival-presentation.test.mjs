@@ -112,7 +112,7 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   };
   const starter = starterPlanForArrival(order);
   assert.equal(starter.title, "Travel rough plan");
-  assert.deepEqual(starter.sections.map((section) => section.label), ["Route & calendar", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
+  assert.deepEqual(starter.sections.map((section) => section.label), ["Calendar", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Northern Italy"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "London").fields.start, "2026-09-15");
   assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
