@@ -1348,7 +1348,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const staysSection = starter.sections.find((section) => section.sectionId === "stays");
   const transportSection = starter.sections.find((section) => section.sectionId === "transport");
   const peopleSection = starter.sections.find((section) => section.sectionId === "people");
-  const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel", "germany", "hungary", "poland", "ireland", "finland", "latvia", "estonia", "lithuania", "luxembourg"].includes(token)) ?? [];
+  const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel"].includes(token)) ?? [];
   const samePlace = (left: unknown, right: unknown): boolean => {
     const leftTokens = normalizePlace(left);
     const rightTokens = normalizePlace(right);

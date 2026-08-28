@@ -1,4 +1,4 @@
-# Finite v124 A+ Manual Plan Workspace Acceptance
+# Finite v125 A+ Manual Plan Workspace Acceptance
 
 Date: 2026-08-29
 
@@ -20,6 +20,8 @@ walkthrough before asking the human to inspect the product again.
   location, date window and plan dependency.
 - Stay and transport records derive links to matching calendar locations and
   expose unresolved-link warnings rather than relying on hidden note prose.
+- Relationship matching keeps meaningful country/city names such as Luxembourg,
+  preventing false warnings when the same word identifies both city and country.
 - Related-record controls open the linked calendar item directly.
 - Stay and transport price state distinguishes planning allowance, live quote,
   booked price and paid price.
@@ -55,7 +57,7 @@ The local Sites build was exercised through the visible manual workspace:
 
 ## Automated proof
 
-- Release marker: `a-plus-manual-plan-workspace-v124`
+- Release marker: `a-plus-manual-plan-workspace-v125`
 - Tests: 216/216
 - TypeScript: pass
 - Production client/Worker build: pass
