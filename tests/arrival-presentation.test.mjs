@@ -112,13 +112,13 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   };
   const starter = starterPlanForArrival(order);
   assert.equal(starter.title, "Travel starter plan");
-  assert.deepEqual(starter.sections.map((section) => section.label), ["Destinations", "Flights & travel", "Dates & duration", "Money", "Commitments & fixed items", "Open ideas & decisions"]);
-  assert.deepEqual(starter.sections.find((section) => section.sectionId === "destinations").items.map((item) => item.value), [["London", "Paris"], "Northern Italy"]);
-  assert.equal(starter.sections.find((section) => section.sectionId === "travel").items[0].value, "QF9 to London");
-  assert.equal(starter.sections.find((section) => section.sectionId === "dates").items[0].value, "15 September");
-  assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.value === "A$10,000"));
-  assert.equal(starter.sections.find((section) => section.sectionId === "commitments").items[0].value, "Wedding in Lyon");
-  assert.ok(starter.sections.find((section) => section.sectionId === "open").items.some((item) => item.label === "Friend visit dates are still open."));
+  assert.deepEqual(starter.sections.map((section) => section.label), ["Route & calendar", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Departure Date", "Northern Italy"]);
+  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "Departure Date").fields.start, "15 September");
+  assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
+  assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.fields.amount === "10000" && item.fields.moneyRole === "limit"));
+  assert.equal(starter.sections.find((section) => section.sectionId === "requirements").items[0].fields.notes, "Wedding in Lyon");
+  assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.some((item) => item.fields.title === "Friend visit dates are still open."));
   assert.equal(starter.interpretationIsCurrent, true);
   assert.deepEqual(starter.laterHumanInputs, []);
 });
@@ -152,7 +152,27 @@ test("human draft edits remain visible and mark the starter interpretation for r
   assert.equal(starter.title, "Event starter plan");
   assert.equal(starter.interpretationIsCurrent, false);
   assert.equal(starter.laterHumanInputs[0].payload.detail, "Twelve guests, not ten.");
-  assert.deepEqual(starter.sections.find((section) => section.sectionId === "people").items[0], {
-    itemId: "human_0", label: "Guest count", value: "Twelve guests, not ten.", source: "human",
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "scope").items[0], {
+    itemId: "human_0", label: "Guest count", fields: { title: "Guest count", notes: "Twelve guests, not ten." }, source: "human",
   });
+});
+
+test("manual workspace operations add, edit, reorder, complete and remove records without model construction", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_workspace", version: 12, status: "waiting_for_codex", rawOutcome: "Plan a trip.", structured: {}, attachments: [], pendingClarification: null,
+    inputs: [
+      { inputId: "arrival_input_arrival_workspace_7", kind: "detail", payload: { workspaceOperation: "add", moduleId: "itinerary", recordId: "manual_a", label: "Berlin", fields: { title: "Berlin", location: "Berlin" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:00.000Z" },
+      { inputId: "arrival_input_arrival_workspace_8", kind: "detail", payload: { workspaceOperation: "add", moduleId: "itinerary", recordId: "manual_b", label: "Munich", fields: { title: "Munich", location: "Munich" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:01.000Z" },
+      { inputId: "arrival_input_arrival_workspace_9", kind: "correction", payload: { workspaceOperation: "update", moduleId: "itinerary", recordId: "manual_b", fields: { start: "2026-09-15" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:02.000Z" },
+      { inputId: "arrival_input_arrival_workspace_10", kind: "correction", payload: { workspaceOperation: "reorder", moduleId: "itinerary", recordOrder: ["manual_b", "manual_a"] }, sourceSurface: "site", createdAt: "2026-08-28T00:00:03.000Z" },
+      { inputId: "arrival_input_arrival_workspace_11", kind: "detail", payload: { workspaceOperation: "add", moduleId: "tasks", recordId: "task_a", label: "Insurance", fields: { title: "Buy insurance", done: false } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:04.000Z" },
+      { inputId: "arrival_input_arrival_workspace_12", kind: "detail", payload: { workspaceOperation: "toggle", moduleId: "tasks", recordId: "task_a", done: true }, sourceSurface: "site", createdAt: "2026-08-28T00:00:05.000Z" },
+    ],
+    interpretation: { basedOnVersion: 6, inferredFamily: "travel", summary: "A trip.", known: {}, inferred: {}, missing: [], contradictions: [], dependencies: [], savedOperatorWork: {}, complete: true, stagedAt: "2026-08-28T00:00:00.000Z" },
+    lastOperatorCheckpoint: 6, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:05.000Z", checksum: "c".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.itemId), ["manual_b", "manual_a"]);
+  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items[0].fields.start, "2026-09-15");
+  assert.equal(starter.sections.find((section) => section.sectionId === "tasks").items[0].fields.done, true);
 });

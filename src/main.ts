@@ -1223,42 +1223,58 @@ const renderOriginalRequest = (order: ArrivalOrder): string => {
   return `<div class="arrival-order-source__content">${[...fields, ...references].map((field) => `<div><span>${escapeHtml(field.label)}</span><p>${escapeHtml(field.value)}</p></div>`).join("")}</div>`;
 };
 
+const starterSourceLabels = { request: "Your request", known: "Reviewed fact", working: "Rough choice", human: "Changed by you", open: "Still open" } as const;
+
+const renderStarterField = (field: import("./arrival-presentation.js").StarterPlanField, value: unknown = "", namePrefix = "field_"): string => {
+  const safeValue = String(value ?? "");
+  if (field.inputType === "select") return `<label><span>${escapeHtml(field.label)}</span><select name="${namePrefix}${escapeHtml(field.fieldId)}">${(field.options ?? []).map((option) => `<option value="${escapeHtml(option.value)}" ${safeValue === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
+  if (field.inputType === "textarea") return `<label><span>${escapeHtml(field.label)}</span><textarea name="${namePrefix}${escapeHtml(field.fieldId)}" maxlength="2000" placeholder="${escapeHtml(field.placeholder ?? "")}">${escapeHtml(safeValue)}</textarea></label>`;
+  const actualType = field.inputType === "date" && safeValue && !/^\d{4}-\d{2}-\d{2}$/.test(safeValue) ? "text" : field.inputType;
+  return `<label><span>${escapeHtml(field.label)}</span><input name="${namePrefix}${escapeHtml(field.fieldId)}" type="${actualType}" ${field.fieldId === "title" ? "required" : ""} maxlength="${field.inputType === "number" ? "20" : "240"}" value="${escapeHtml(safeValue)}" placeholder="${escapeHtml(field.placeholder ?? "")}"></label>`;
+};
+
+const starterAmount = (value: unknown): number => {
+  const number = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+};
+
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter || !order.interpretation) return "";
   const confirmed = order.status === "interpretation_confirmed";
   const previewOnly = order.status === "proposed_plan_ready";
-  const sourceLabels = { request: "From your request", known: "From the reviewed brief", working: "Working choice", human: "Added by you", open: "Still open" } as const;
-  const sectionOptions = starter.sections.map((section) => `<option value="${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</option>`).join("");
-  const sections = starter.sections.map((section) => `<section class="starter-plan__section" data-draft-section="${escapeHtml(section.sectionId)}" aria-labelledby="starter_plan_${escapeHtml(section.sectionId)}">
-    <div class="starter-plan__section-heading"><p class="eyebrow">${escapeHtml(starter.familyLabel)} plan</p><h3 id="starter_plan_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3></div>
-    ${section.items.length ? `<ol class="starter-plan__items">${section.items.map((item) => `<li>
-      <div><strong>${escapeHtml(item.label)}</strong>${item.value !== undefined ? renderHumanValue(item.value, item.valueKey, item.valueParent) : ""}</div>
-      <span data-source="${escapeHtml(item.source)}">${escapeHtml(sourceLabels[item.source])}</span>
-    </li>`).join("")}</ol>` : `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}
-  </section>`).join("");
+  const moneyItems = starter.sections.find((section) => section.sectionId === "money")?.items ?? [];
+  const limit = moneyItems.filter((item) => item.fields.moneyRole === "limit").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
+  const daily = moneyItems.filter((item) => item.fields.moneyRole === "daily").reduce((sum, item) => sum + starterAmount(item.fields.amount), 0);
+  const planned = starter.sections.flatMap((section) => section.items).reduce((sum, item) => sum + starterAmount(item.fields.cost) + (item.fields.moneyRole === "cost" ? starterAmount(item.fields.amount) : 0), 0);
+  const currency = String(moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
+  const money = (value: number): string => new Intl.NumberFormat("en-AU", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+  const modules = starter.sections.map((section) => {
+    const items = section.items.map((item, index) => {
+      const title = String(item.fields.title || item.label);
+      const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
+      const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}`;
+      return `<article class="${recordClass}" draggable="${previewOnly ? "false" : "true"}" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
+        <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" ${previewOnly ? "disabled" : ""} aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
+        ${visibleFields.length ? `<dl>${visibleFields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(item.fields[field.fieldId])}</dd></div>`).join("")}</dl>` : ""}
+        ${previewOnly ? "" : `<details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div><div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>`}
+      </article>`;
+    }).join("");
+    return `<section class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+      <header class="starter-module__header"><div><p class="eyebrow">${escapeHtml(starter.familyLabel)} workspace</p><h3 id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3><p>${escapeHtml(section.description)}</p></div><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</span></header>
+      <div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
+      ${previewOnly ? "" : `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div><button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`}
+    </section>`;
+  }).join("");
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
-      <div><p class="eyebrow">${previewOnly ? "Draft preview" : "Your starter plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
-      <span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to shape") : "Updated by you"}</span>
+      <div><p class="eyebrow">${previewOnly ? "Rough plan preview" : "Your editable rough plan"}</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
+      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? (previewOnly ? "Preview" : "Ready to edit") : "Your changes saved"}</span>${!previewOnly ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Develop with ${escapeHtml(agenticName())}</button><small>Research, compare options, or reconcile the whole plan</small>` : ""}</div>
     </header>
-    <div class="starter-plan__notice"><strong>Continue with this draft.</strong><p>Review it below, then add or change anything you want. You can ask ${escapeHtml(agenticName())} to develop it further whenever you’re ready.</p></div>
-    <div class="starter-plan__grid">${sections}</div>
-    <form class="starter-plan__edit" data-arrival-form="draft-edit">
-      <div><p class="eyebrow">Edit the plan</p><h3>Add an item to this draft</h3><p>Choose where it belongs, then add the real detail. This does not book, buy, contact, or commit anything.</p></div>
-      <label><span>Section</span><select name="draftSection">${sectionOptions}</select></label>
-      <label><span>Item</span><input name="label" required maxlength="160" placeholder="e.g. Paris, QF9 flight, total budget"></label>
-      <label><span>Details</span><textarea name="detail" maxlength="2000" placeholder="Date, amount, booking note, preference, or anything else"></textarea></label>
-      <label><span>Update type</span><select name="kind"><option value="detail">Add item</option><option value="correction">Correct an item</option><option value="commitment">Record a fixed item</option><option value="preference">Add a preference</option><option value="constraint">Add a hard limit</option></select></label>
-      <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to draft</button>
-    </form>
-    <div class="starter-plan__actions">
-      ${confirmed
-        ? `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Ask ${escapeHtml(agenticName())} to develop this plan</button><p>You can keep editing here first. The chef handoff carries this saved draft and your latest changes when you are ready.</p>`
-        : order.status === "proposed_plan_ready"
-          ? `<p>Like this shape? Accept the brief above. The same starter plan will stay here, ready for you to edit.</p>`
-          : `<button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Ask ${escapeHtml(agenticName())} to reconcile my changes</button><p>Your edits remain visible here. The brief needs another review before this draft can be developed into an active plan.</p>`}
-    </div>
+    <div class="starter-plan__notice"><strong>Use this plan now.</strong><p>It is built from the brief you accepted. Edit, delete, tick off, or drag its records whenever you want; none of those controls require ${escapeHtml(agenticName())}.</p></div>
+    <section class="starter-plan__money-strip" aria-label="Current finite picture"><div><span>Overall limit</span><strong>${limit ? escapeHtml(money(limit)) : "Add limit"}</strong></div><div><span>Planned so far</span><strong>${planned ? escapeHtml(money(planned)) : "Add costs"}</strong></div><div><span>Daily target</span><strong>${daily ? escapeHtml(money(daily)) : "Add daily spend"}</strong></div><div><span>Unallocated</span><strong>${limit ? escapeHtml(money(limit - planned)) : "—"}</strong></div></section>
+    <div class="starter-workspace">${modules}</div>
+    ${previewOnly ? `<div class="starter-plan__preview-footer"><p>Accept the brief above to keep this rough plan and use all editing controls.</p></div>` : confirmed ? "" : `<div class="starter-plan__preview-footer"><p>Your manual changes are saved. The reviewed brief is now out of date, but the plan remains editable while you decide whether to reconcile it.</p></div>`}
   </section>`;
 };
 
@@ -1439,6 +1455,49 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
       ? `Added to your draft. Keep editing here, or ask ${agenticName()} to reconcile the changes when you are ready.`
       : `Your update is saved. ${agenticName()} will work from your newest information.`) : `The update was not saved: ${arrivalResult.code}`);
   await render();
+};
+
+const workspaceFieldsFromForm = (form: HTMLFormElement): Record<string, string | boolean> => Object.fromEntries([...new FormData(form).entries()]
+  .filter(([key]) => key.startsWith("field_"))
+  .map(([key, value]) => [key.slice(6), String(value).trim()]));
+
+const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<void> => {
+  const order = currentArrival();
+  if (!order || busy) return;
+  starterDraftPreviewOpen = true;
+  busy = true;
+  announce("Saving your plan…");
+  await render();
+  arrivalResult = await arrivalRepository.appendInput({ orderId: order.orderId, expectedVersion: order.version, kind, payload, sourceSurface: modelContext ? "inline" : "site" });
+  busy = false;
+  announce(arrivalResult.ok ? message : `The plan was not updated: ${arrivalResult.code}`);
+  await render();
+};
+
+const addWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: form.dataset.moduleId, recordId: `manual_${crypto.randomUUID().replaceAll("-", "")}`, label: fields.title, fields }, "detail", "Added to your plan.");
+};
+
+const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
+  const fields = workspaceFieldsFromForm(form);
+  if (!String(fields.title ?? "").trim()) return;
+  await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
+};
+
+const deleteWorkspaceRecord = async (record: HTMLElement): Promise<void> => saveWorkspaceMutation({ workspaceOperation: "delete", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId }, "correction", "The item was removed from your plan.");
+
+const toggleWorkspaceRecord = async (record: HTMLElement): Promise<void> => saveWorkspaceMutation({ workspaceOperation: "toggle", moduleId: record.dataset.moduleId, recordId: record.dataset.recordId, done: !record.classList.contains("is-done") }, "detail", record.classList.contains("is-done") ? "The task is open again." : "The task is complete.");
+
+const reorderWorkspaceRecords = async (module: HTMLElement, draggedId: string, targetId: string): Promise<void> => {
+  const order = [...module.querySelectorAll<HTMLElement>("[data-workspace-record]")].map((record) => record.dataset.recordId ?? "").filter(Boolean);
+  const from = order.indexOf(draggedId);
+  const to = order.indexOf(targetId);
+  if (from < 0 || to < 0 || from === to) return;
+  order.splice(from, 1);
+  order.splice(to, 0, draggedId);
+  await saveWorkspaceMutation({ workspaceOperation: "reorder", moduleId: module.dataset.workspaceModule, recordOrder: order }, "correction", "The plan order is updated.");
 };
 
 const confirmArrivalInterpretation = async (): Promise<void> => {
@@ -1644,6 +1703,16 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-arrival-form='create']")?.addEventListener("submit", (event) => { event.preventDefault(); void submitArrivalOrder(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void deleteWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {
+    record.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", record.dataset.recordId ?? ""); event.dataTransfer?.setData("application/x-finite-module", record.dataset.moduleId ?? ""); record.classList.add("is-dragging"); });
+    record.addEventListener("dragend", () => record.classList.remove("is-dragging"));
+    record.addEventListener("dragover", (event) => event.preventDefault());
+    record.addEventListener("drop", (event) => { event.preventDefault(); const moduleId = event.dataTransfer?.getData("application/x-finite-module") ?? ""; if (moduleId !== record.dataset.moduleId) return; const module = record.closest<HTMLElement>("[data-workspace-module]"); if (module) void reorderWorkspaceRecords(module, event.dataTransfer?.getData("text/plain") ?? "", record.dataset.recordId ?? ""); });
+  });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-arrival-interpretation']")?.addEventListener("click", () => { void confirmArrivalInterpretation(); });
   root?.querySelector<HTMLButtonElement>("[data-action='toggle-starter-draft']")?.addEventListener("click", async () => {

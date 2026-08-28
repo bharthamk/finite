@@ -43,8 +43,13 @@ domain records the human expects to shape—for travel, destinations, flights an
 transport, dates, money, fixed commitments, and open ideas—with equivalent
 sections for other plan families. Known facts, working choices and unresolved
 items remain distinguishable. The human may preview it before accepting the
-brief and add records directly afterward. Codex remains the optional route for
-research, insight, detailed construction, reconciliation, and replanning.
+brief and then use it as a full manual planning workspace: add, edit, remove and
+reorder schedule records; maintain family-specific places, stays, transport,
+resources and requirements; adjust overall, daily and item-level money; and
+manage a to-do list. Codex remains the optional route for research, insight,
+detailed construction, reconciliation, and replanning. The difference between
+the manual and Codex-developed plan is the depth and quality of populated
+content—not whether the human has usable controls.
 
 Codex performs the interpretive work:
 

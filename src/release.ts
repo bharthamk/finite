@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "actual-editable-starter-plan-v112",
+  build: "full-manual-planning-workspace-v113",
 } as const;
