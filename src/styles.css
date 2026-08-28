@@ -508,7 +508,7 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-module__summary small { color:var(--muted); font-size:.75rem; line-height:1.4; overflow-wrap:anywhere; }
 .starter-module__summary>b { color:var(--muted); font:700 .62rem/1.2 "DM Mono",monospace; text-transform:uppercase; white-space:nowrap; }
 .starter-module__body { padding:clamp(24px,3.4vw,42px); background:color-mix(in srgb,var(--module-tone) 24%,var(--paper)); }
-.starter-module__records { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:16px; }
+.starter-module__records { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:start; margin-top:16px; }
 .starter-module__records>.starter-plan__empty { grid-column:1/-1; }
 .starter-calendar__toolbar { display:flex; justify-content:space-between; gap:18px; align-items:end; margin-bottom:18px; }
 .starter-calendar__toolbar>div:first-child { display:grid; gap:3px; }
@@ -559,7 +559,7 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-calendar__list-heading { display:flex; justify-content:space-between; gap:16px; align-items:baseline; }
 .starter-calendar__list-heading small { color:var(--muted); font-size:.7rem; }
 .starter-module__controls--calendar { grid-template-columns:minmax(0,1fr); }
-.starter-record { display:flex; min-width:0; padding:16px; border:1px solid var(--line); background:var(--panel); flex-direction:column; transition:opacity .15s,transform .15s; }
+.starter-record { display:flex; min-width:0; padding:14px; border:1px solid var(--line); background:var(--panel); flex-direction:column; transition:opacity .15s,transform .15s; }
 .starter-record[draggable="true"] { cursor:grab; }
 .starter-record.is-dragging { opacity:.4; transform:scale(.98); }
 .starter-record.is-done { color:var(--muted); background:color-mix(in srgb,var(--paper) 75%,var(--line)); }
@@ -572,18 +572,18 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-record header small { display:block; margin-top:5px; color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 .starter-record__check { width:22px; height:22px; padding:0; border:1px solid var(--ink); color:var(--on-deep); background:transparent; cursor:pointer; }
 .starter-record.is-done .starter-record__check { background:var(--deep); }
-.starter-record dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 14px; margin:15px 0 0; }
+.starter-record dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 14px; margin:12px 0 0; }
 .starter-record dl>div { min-width:0; }
 .starter-record dl>div.is-span,.starter-record dl>div.is-full { grid-column:1/-1; }
 .starter-record dt { color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 .starter-record dd { margin:4px 0 0; font-size:.82rem; line-height:1.4; white-space:pre-line; overflow-wrap:anywhere; }
 .starter-record dd a { color:var(--accent); font-weight:750; text-underline-offset:3px; }
-.starter-record__relationships { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:13px; padding-top:11px; border-top:1px dashed var(--line); }
+.starter-record__relationships { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:10px; padding-top:9px; border-top:1px dashed var(--line); }
 .starter-record__relationships>span { width:100%; color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 .starter-record__relationships button { padding:5px 8px; border:1px solid var(--line); color:var(--ink); background:var(--module-tone); cursor:pointer; font:700 .64rem/1.2 var(--skin-meta); text-align:left; }
 .starter-record__relationships small { color:var(--muted); font-size:.66rem; line-height:1.35; }
 .starter-record__warning { margin:12px 0 0; padding:8px 9px; border-left:3px solid var(--accent); color:var(--muted); background:color-mix(in srgb,var(--accent-soft) 42%,var(--paper)); font-size:.68rem; line-height:1.4; }
-.starter-record__edit { margin-top:auto; border-top:1px solid var(--line); }
+.starter-record__edit { margin-top:12px; border-top:1px solid var(--line); }
 .starter-record__edit>summary,.starter-module__add>summary,.starter-module__comment>summary { padding-top:11px; color:var(--muted); cursor:pointer; font:700 .62rem/1.2 "DM Mono",monospace; letter-spacing:.05em; text-transform:uppercase; }
 .starter-record__fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; }
 .starter-record__fields label { display:grid; gap:6px; }

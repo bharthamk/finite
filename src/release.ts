@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "record-option-layout-v128",
+  build: "compact-record-heights-v129",
 } as const;

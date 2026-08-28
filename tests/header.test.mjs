@@ -207,7 +207,9 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:1fr/);
   assert.match(styles, /\.starter-module__options/);
   assert.match(styles, /\.starter-option-grid/);
-  assert.match(styles, /\.starter-module__records \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.starter-module__records \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\); gap:12px; align-items:start/);
+  assert.match(styles, /\.starter-record__edit \{ margin-top:12px;/);
+  assert.doesNotMatch(styles, /\.starter-record__edit \{ margin-top:auto;/);
   assert.match(styles, /\.starter-option-grid \{ display:grid; grid-template-columns:minmax\(0,1fr\)/);
   assert.match(styles, /\.starter-option dl \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(source, /class=\"\$\{layoutClass\}\"/);
