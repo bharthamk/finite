@@ -61,6 +61,12 @@ scope, open-work and requirement signals provide centering without becoming a
 second source of truth; edits update the same underlying plan records used
 below.
 
+Every rough-plan value has visible certainty. Human facts and settled values
+use normal type; generated, guessed, open, or explicitly placeholder values use
+italics everywhere they are presented. Each focused edit section includes a
+Placeholder toggle so the human can change that status directly. Certainty is
+presentation and planning context only: it never changes arithmetic.
+
 The Codex-created rough plan is centering, not a researched recommendation. It
 may use clearly labelled first-pass timing, cost and routing assumptions, but
 never presents training-data estimates as live fares, availability, legal or

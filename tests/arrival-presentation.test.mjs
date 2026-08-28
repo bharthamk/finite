@@ -96,7 +96,7 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
       basedOnVersion: 4,
       inferredFamily: "travel",
       summary: "A flexible Europe plan that protects the fixed visits, event, and A$10,000 ceiling.",
-      known: { destinations: ["London", "Paris"], fixedFlight: "QF9 to London", departureDate: "15 September", budget: "A$10,000", confirmedEvent: "Wedding in Lyon" },
+      known: { destinations: ["London", "Paris"], fixedFlight: "QF9 to London", departureDate: "~15th September 2026", budget: "A$10,000", confirmedEvent: "Wedding in Lyon" },
       inferred: { optionalRegion: "Northern Italy" },
       missing: [],
       contradictions: [],
@@ -118,8 +118,11 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
   assert.equal(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, "QF9 to London");
   assert.ok(starter.sections.find((section) => section.sectionId === "money").items.some((item) => item.fields.amount === "10000" && item.fields.moneyRole === "limit"));
   assert.equal(starter.overview.start, "2026-09-15");
+  assert.equal(starter.overview.end, "2026-10-15");
+  assert.equal(starter.overview.datesProvisional, true);
   assert.equal(starter.overview.totalBudget, "10000");
   assert.equal(starter.overview.currency, "AUD");
+  assert.equal(starter.overview.budgetProvisional, false);
   assert.deepEqual(starter.overview.categories.map((item) => item.fields.title), ["Flights & transport", "Accommodation", "Food & daily spending", "Insurance, visas & admin", "Experiences & flexible buffer"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "requirements").items[0].fields.notes, "Wedding in Lyon");
   assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.some((item) => item.fields.title === "Friend visit dates are still open."));
@@ -139,7 +142,7 @@ test("plan overview settings support a timed single-day event and category alloc
   };
   const starter = starterPlanForArrival(order);
   assert.deepEqual(starter.overview, {
-    start: "2026-10-03", end: "2026-10-03", singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD",
+    start: "2026-10-03", end: "2026-10-03", datesProvisional: false, singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD", budgetProvisional: false,
     categories: starter.overview.categories, categoryAllocated: 1250, categoryPercent: 125,
   });
 });

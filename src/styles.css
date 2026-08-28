@@ -430,14 +430,17 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-report-card>header>button:hover,.starter-report-card>header>button:focus-visible { color:var(--ink); border-color:var(--line); background:var(--panel); }
 .starter-report-card__value { align-self:center; min-width:0; font-size:clamp(1.45rem,2.35vw,2.2rem); font-weight:550; line-height:1.02; letter-spacing:-.045em; overflow-wrap:anywhere; }
 .starter-report-card.is-over .starter-report-card__value { color:var(--accent); }
+.starter-report-card.is-provisional .starter-report-card__value,.starter-report-card.is-provisional>small { font-style:italic; }
 .starter-report-card>small { min-width:0; color:var(--muted); font-size:.68rem; line-height:1.45; overflow-wrap:anywhere; }
 .starter-overview-dialog { position:relative; width:min(720px,calc(100vw - 28px)); max-height:calc(100vh - 28px); padding:clamp(24px,4vw,42px); border:1px solid var(--ink); border-radius:0; color:var(--ink); background:var(--paper); box-shadow:18px 18px 0 color-mix(in srgb,var(--deep) 35%,transparent); overflow:auto; }
+.starter-overview-dialog--compact { width:min(560px,calc(100vw - 28px)); }
 .starter-overview-dialog::backdrop { background:color-mix(in srgb,var(--deep) 70%,transparent); backdrop-filter:blur(2px); }
 .starter-overview-dialog>header { padding-right:40px; margin-bottom:24px; }
 .starter-overview-dialog>header h3 { margin:5px 0 0; font-size:clamp(1.65rem,3vw,2.5rem); letter-spacing:-.04em; }
 .starter-overview-dialog>header>p:not(.eyebrow) { margin:9px 0 0; color:var(--muted); line-height:1.5; }
 .starter-overview-dialog__close { position:absolute; top:18px; right:18px; width:34px; height:34px; display:grid; place-items:center; padding:0; border:1px solid var(--line); color:var(--ink); background:var(--panel); cursor:pointer; font:400 1.25rem/1 sans-serif; }
 .starter-overview-dialog__form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); }
+.starter-overview-dialog__form--single { grid-template-columns:1fr; }
 .starter-overview-dialog__form>section { min-width:0; padding:20px; background:var(--paper); }
 .starter-overview-dialog__form h4 { margin:0 0 16px; font-size:.86rem; }
 .starter-overview__field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
@@ -449,6 +452,17 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-overview__toggles { display:flex; gap:18px; margin:15px 0; color:var(--muted); font-size:.76rem; }
 .starter-overview__toggles label { display:flex; align-items:center; gap:7px; cursor:pointer; }
 .starter-overview__toggles input { accent-color:var(--accent); }
+.starter-certainty-toggle { display:flex!important; align-items:flex-start; gap:10px!important; margin-top:16px; padding:12px; border:1px solid var(--line); color:var(--ink); background:var(--panel); cursor:pointer; text-transform:none!important; }
+.starter-certainty-toggle>input { width:auto!important; min-height:0!important; margin-top:2px; accent-color:var(--accent); }
+.starter-certainty-toggle>span { display:grid!important; gap:3px; color:var(--ink)!important; font:inherit!important; letter-spacing:normal!important; text-transform:none!important; }
+.starter-certainty-toggle strong { font-size:.78rem; }
+.starter-certainty-toggle small { color:var(--muted); font-size:.68rem; font-weight:400; line-height:1.4; }
+.starter-overview-dialog__form:has(input[name="datesProvisional"]:checked) :where(input:not([type="checkbox"]),textarea,select),
+.starter-overview-dialog__form:has(input[name="budgetProvisional"]:checked) :where(input:not([type="checkbox"]),textarea,select),
+.starter-record__edit form:has(input[name="field_provisional"]:checked) :where(input:not([type="checkbox"]),textarea,select),
+.starter-overview__category form:has(input[name="field_provisional"]:checked) :where(input:not([type="checkbox"]),textarea,select),
+[data-arrival-form="workspace-add"]:has(input[name="field_provisional"]:checked) :where(input:not([type="checkbox"]),textarea,select),
+[data-arrival-form="workspace-category-add"]:has(input[name="field_provisional"]:checked) :where(input:not([type="checkbox"]),textarea,select) { font-style:italic; }
 .starter-overview__allocation { display:flex; justify-content:space-between; gap:12px; margin:18px 0 0; padding-top:14px; border-top:1px solid var(--line); font-size:.78rem; }
 .starter-overview__allocation span { color:var(--muted); }
 .starter-overview__allocation.is-over strong { color:var(--accent); }
@@ -456,7 +470,9 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-overview__categories { display:grid; gap:8px; }
 .starter-overview__category { border:1px solid var(--line); background:var(--panel); }
 .starter-overview__category.is-over { border-left:3px solid var(--accent); }
+.starter-overview__category.is-provisional output { font-style:italic; }
 .starter-overview__category form { display:grid; grid-template-columns:minmax(150px,1.3fr) minmax(120px,.8fr) auto auto; gap:10px; align-items:end; padding:12px; }
+.starter-overview__category .starter-certainty-toggle { grid-column:1/-1; margin-top:2px; }
 .starter-overview__money-input { display:grid!important; grid-template-columns:auto 1fr; align-items:center; border:1px solid var(--line); background:var(--paper); }
 .starter-overview__money-input b { padding:0 9px; color:var(--muted); font:700 .62rem/1 "DM Mono",monospace; }
 .starter-overview__money-input input { border:0; background:transparent; }
@@ -484,6 +500,7 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-record.is-dragging { opacity:.4; transform:scale(.98); }
 .starter-record.is-done { color:var(--muted); background:color-mix(in srgb,var(--paper) 75%,var(--line)); }
 .starter-record.is-done h4 { text-decoration:line-through; }
+.starter-record.is-provisional :where(h4,dd) { font-style:italic; }
 .starter-record>header { display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:10px; align-items:start; }
 .starter-record__drag { color:var(--muted); font:800 .9rem/1 monospace; letter-spacing:-.25em; }
 .starter-record>header>b { color:var(--accent); font:700 .64rem/1.4 "DM Mono",monospace; }

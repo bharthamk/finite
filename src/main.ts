@@ -1237,6 +1237,12 @@ const starterAmount = (value: unknown): number => {
   return Number.isFinite(number) ? number : 0;
 };
 
+const starterItemIsProvisional = (item: import("./arrival-presentation.js").StarterPlanItem): boolean => typeof item.fields.provisional === "boolean"
+  ? item.fields.provisional
+  : item.source === "working" || item.source === "starter" || item.source === "open";
+
+const renderStarterCertaintyToggle = (provisional = false): string => `<label class="starter-certainty-toggle"><input name="field_provisional" type="checkbox" ${provisional ? "checked" : ""}><span><strong>Placeholder</strong><small>Italic until you mark it settled. This does not change calculations.</small></span></label>`;
+
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter) return "";
@@ -1275,73 +1281,87 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     return `${item.fields.title || item.label} ${percentage.toFixed(0)}%`;
   }).join(" · ");
   const availablePercent = limit > 0 ? (Math.abs(allocationDelta) / limit) * 100 : 0;
+  const splitProvisional = overview.categories.some(starterItemIsProvisional);
+  const availableProvisional = overview.budgetProvisional || splitProvisional;
   const categoryRows = overview.categories.map((item) => {
     const amount = starterAmount(item.fields.amount);
     const percentage = limit > 0 ? (amount / limit) * 100 : 0;
-    return `<article class="starter-overview__category${percentage > 100 ? " is-over" : ""}" data-category-record data-module-id="money" data-record-id="${escapeHtml(item.itemId)}">
+    const provisional = starterItemIsProvisional(item);
+    return `<article class="starter-overview__category${percentage > 100 ? " is-over" : ""}${provisional ? " is-provisional" : ""}" data-category-record data-module-id="money" data-record-id="${escapeHtml(item.itemId)}">
       <form data-arrival-form="workspace-category-update" data-module-id="money" data-record-id="${escapeHtml(item.itemId)}">
         <label><span>Category</span><input name="field_title" required maxlength="120" value="${escapeHtml(item.fields.title || item.label)}"></label>
         <label><span>Set budget</span><span class="starter-overview__money-input"><b>${escapeHtml(currency)}</b><input name="field_amount" type="number" step="1" min="0" value="${escapeHtml(item.fields.amount)}"></span></label>
         <input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><input name="field_notes" type="hidden" value="${escapeHtml(item.fields.notes)}">
         <output><strong>${escapeHtml(money(amount))}</strong><span>${limit ? `${percentage.toFixed(1)}% of total` : "Set a total to see %"}</span></output>
         <div><button class="text-button" type="submit" ${busy ? "disabled" : ""}>Save</button><button class="text-button" type="button" data-action="workspace-category-delete" ${busy ? "disabled" : ""}>Delete</button></div>
+        ${renderStarterCertaintyToggle(provisional)}
       </form>
     </article>`;
   }).join("");
   const overviewMarkup = `<details class="starter-plan__overview" open>
     <summary><span>Plan at a glance</span></summary>
     <div class="starter-report-strip" aria-label="Plan at a glance">
-      <article class="starter-report-card">
-        <header><span>Dates</span><button type="button" data-action="open-overview-editor" data-overview-editor="settings" data-overview-focus="start" aria-label="Edit plan dates"><span aria-hidden="true">✎</span></button></header>
+      <article class="starter-report-card${overview.datesProvisional ? " is-provisional" : ""}">
+        <header><span>Dates</span><button type="button" data-action="open-overview-editor" data-overview-editor="dates" data-overview-focus="start" aria-label="Edit plan dates"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${escapeHtml(dateRange)}</strong>
         <small>${escapeHtml(duration)} · ${escapeHtml(timingDetail)}</small>
       </article>
-      <article class="starter-report-card">
-        <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="settings" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
+      <article class="starter-report-card${overview.budgetProvisional ? " is-provisional" : ""}">
+        <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="budget" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${limit ? escapeHtml(money(limit)) : "Not set"}</strong>
         <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated</small>
       </article>
-      <article class="starter-report-card${allocationClass}">
+      <article class="starter-report-card${allocationClass}${splitProvisional ? " is-provisional" : ""}">
         <header><span>Budget split</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit budget split"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${limit ? `${overview.categoryPercent.toFixed(0)}%` : "—"}</strong>
         <small>${overview.categories.length} ${overview.categories.length === 1 ? "category" : "categories"}${splitDetail ? ` · ${escapeHtml(splitDetail)}` : ""}</small>
       </article>
-      <article class="starter-report-card${allocationClass}">
+      <article class="starter-report-card${allocationClass}${availableProvisional ? " is-provisional" : ""}">
         <header><span>${allocationDelta < 0 ? "Over" : "Available"}</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit available budget"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${limit ? escapeHtml(money(Math.abs(allocationDelta))) : "—"}</strong>
         <small>${limit ? `${availablePercent.toFixed(0)}% ${allocationDelta < 0 ? "over" : "remaining"}` : escapeHtml(allocationLabel)} · ${openItems} open ${openItems === 1 ? "item" : "items"}</small>
       </article>
     </div>
   </details>
-  <dialog class="starter-overview-dialog" data-overview-dialog="settings" aria-labelledby="overview_settings_title">
-    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close date and budget editor">×</button>
-    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_settings_title">Dates & total budget</h3></header>
-    <form class="starter-overview-dialog__form" data-arrival-form="workspace-overview">
-      <section><h4>Dates</h4><div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
+  <dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="dates" aria-labelledby="overview_dates_title">
+    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close date editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_dates_title">Dates</h3></header>
+    <form class="starter-overview-dialog__form starter-overview-dialog__form--single" data-arrival-form="workspace-overview">
+      <section><div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
         <div class="starter-overview__toggles"><label><input name="singleDay" type="checkbox" ${overview.singleDay ? "checked" : ""}> Single day</label><label><input name="includeTime" type="checkbox" ${overview.includeTime ? "checked" : ""}> Add times</label></div>
         <div class="starter-overview__field-grid" data-overview-times ${overview.includeTime ? "" : "hidden"}><label><span>Start time</span><input name="startTime" type="time" value="${escapeHtml(overview.startTime)}"></label><label><span>End time</span><input name="endTime" type="time" value="${escapeHtml(overview.endTime)}"></label><label class="is-wide"><span>Time zone</span><input name="timeZone" maxlength="80" value="${escapeHtml(overview.timeZone)}" placeholder="e.g. Europe/Berlin"></label></div>
+        <label class="starter-certainty-toggle"><input name="datesProvisional" type="checkbox" ${overview.datesProvisional ? "checked" : ""}><span><strong>Placeholder dates</strong><small>Keep the date values italic until you decide they are settled. Calculations stay the same.</small></span></label>
       </section>
-      <section><h4>Total budget</h4><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
+      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save dates</button></div>
+    </form>
+  </dialog>
+  <dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="budget" aria-labelledby="overview_budget_title">
+    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close total budget editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_budget_title">Total budget</h3></header>
+    <form class="starter-overview-dialog__form starter-overview-dialog__form--single" data-arrival-form="workspace-overview">
+      <section><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
         <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
+        <label class="starter-certainty-toggle"><input name="budgetProvisional" type="checkbox" ${overview.budgetProvisional ? "checked" : ""}><span><strong>Placeholder budget</strong><small>Italic until settled. Calculations stay the same.</small></span></label>
       </section>
-      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button></div>
+      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save budget</button></div>
     </form>
   </dialog>
   <dialog class="starter-overview-dialog starter-overview-dialog--split" data-overview-dialog="split" aria-labelledby="overview_split_title">
     <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close budget split editor">×</button>
     <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_split_title">Budget split</h3><p>Category budgets can intentionally add up to more than 100%.</p></header>
     <div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
-    <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost"><button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
+    <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
   </dialog>`;
   const modules = starter.sections.map((section) => {
     const items = section.items.map((item, index) => {
       const title = String(item.fields.title || item.label);
       const visibleFields = section.fields.filter((field) => field.fieldId !== "title" && item.fields[field.fieldId] !== undefined && item.fields[field.fieldId] !== "" && field.fieldId !== "moneyRole");
-      const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}`;
+      const provisional = starterItemIsProvisional(item);
+      const recordClass = `starter-record starter-record--${section.variant}${item.fields.done === true ? " is-done" : ""}${provisional ? " is-provisional" : ""}`;
       return `<article class="${recordClass}" draggable="true" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
         <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div></header>
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(item.fields[field.fieldId])}</dd></div>`).join("")}</dl>` : ""}
-        <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div><div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
+        <details class="starter-record__edit"><summary>Edit</summary><form data-arrival-form="workspace-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save changes</button><button class="text-button" type="button" data-action="workspace-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
       </article>`;
     }).join("");
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
@@ -1349,7 +1369,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <header class="starter-module__header"><div><p class="eyebrow">${escapeHtml(starter.familyLabel)} workspace</p><h3 id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</h3><p>${escapeHtml(section.description)}</p></div><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}</span></header>
       <div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
       ${comments}
-      <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div><button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
+      <div class="starter-module__controls"><details class="starter-module__add"><summary>＋ Add ${escapeHtml(section.label.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>
       <details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details></div>
     </section>`;
   }).join("");
@@ -1539,9 +1559,14 @@ const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promi
   await render();
 };
 
-const workspaceFieldsFromForm = (form: HTMLFormElement): Record<string, string | boolean> => Object.fromEntries([...new FormData(form).entries()]
-  .filter(([key]) => key.startsWith("field_"))
-  .map(([key, value]) => [key.slice(6), String(value).trim()]));
+const workspaceFieldsFromForm = (form: HTMLFormElement): Record<string, string | boolean> => {
+  const fields = Object.fromEntries([...new FormData(form).entries()]
+    .filter(([key]) => key.startsWith("field_") && key !== "field_provisional")
+    .map(([key, value]) => [key.slice(6), String(value).trim()])) as Record<string, string | boolean>;
+  const provisional = form.querySelector<HTMLInputElement>("input[name='field_provisional']");
+  if (provisional) fields.provisional = provisional.checked;
+  return fields;
+};
 
 const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<boolean> => {
   const order = currentArrival();
@@ -1570,21 +1595,30 @@ const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
 
 const saveWorkspaceOverview = async (form: HTMLFormElement): Promise<void> => {
   const data = new FormData(form);
-  const start = String(data.get("start") ?? "").trim();
-  const singleDay = form.querySelector<HTMLInputElement>("input[name='singleDay']")?.checked === true;
-  const includeTime = form.querySelector<HTMLInputElement>("input[name='includeTime']")?.checked === true;
-  const fields = {
-    start,
-    end: singleDay ? start : String(data.get("end") ?? "").trim(),
-    singleDay,
-    includeTime,
-    startTime: includeTime ? String(data.get("startTime") ?? "").trim() : "",
-    endTime: includeTime ? String(data.get("endTime") ?? "").trim() : "",
-    timeZone: includeTime ? String(data.get("timeZone") ?? "").trim() : "",
+  const fields: Record<string, string | boolean> = {};
+  const hasDates = form.elements.namedItem("start") !== null;
+  const hasBudget = form.elements.namedItem("totalBudget") !== null;
+  if (hasDates) {
+    const start = String(data.get("start") ?? "").trim();
+    const singleDay = form.querySelector<HTMLInputElement>("input[name='singleDay']")?.checked === true;
+    const includeTime = form.querySelector<HTMLInputElement>("input[name='includeTime']")?.checked === true;
+    Object.assign(fields, {
+      start,
+      end: singleDay ? start : String(data.get("end") ?? "").trim(),
+      datesProvisional: form.querySelector<HTMLInputElement>("input[name='datesProvisional']")?.checked === true,
+      singleDay,
+      includeTime,
+      startTime: includeTime ? String(data.get("startTime") ?? "").trim() : "",
+      endTime: includeTime ? String(data.get("endTime") ?? "").trim() : "",
+      timeZone: includeTime ? String(data.get("timeZone") ?? "").trim() : "",
+    });
+  }
+  if (hasBudget) Object.assign(fields, {
     totalBudget: String(data.get("totalBudget") ?? "").trim(),
     currency: String(data.get("currency") ?? "AUD").trim().toUpperCase(),
-  };
-  await saveWorkspaceMutation({ workspaceOperation: "overview", moduleId: "overview", fields }, "correction", "Your plan dates and budget are saved.");
+    budgetProvisional: form.querySelector<HTMLInputElement>("input[name='budgetProvisional']")?.checked === true,
+  });
+  await saveWorkspaceMutation({ workspaceOperation: "overview", moduleId: "overview", fields }, "correction", hasDates ? "Your plan dates are saved." : "Your total budget is saved.");
 };
 
 const addWorkspaceCategory = async (form: HTMLFormElement): Promise<void> => {
@@ -1844,7 +1878,7 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
-  root?.querySelector<HTMLFormElement>("[data-arrival-form='workspace-overview']")?.addEventListener("submit", (event) => { event.preventDefault(); void saveWorkspaceOverview(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-overview']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void saveWorkspaceOverview(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-category-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceCategory(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-comment']").forEach((form) => form.addEventListener("submit", (event) => {

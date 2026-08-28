@@ -134,6 +134,7 @@ export interface StarterPlanSection {
 export interface StarterPlanOverview {
   start: string;
   end: string;
+  datesProvisional: boolean;
   singleDay: boolean;
   includeTime: boolean;
   startTime: string;
@@ -141,6 +142,7 @@ export interface StarterPlanOverview {
   timeZone: string;
   totalBudget: string;
   currency: string;
+  budgetProvisional: boolean;
   categories: StarterPlanItem[];
   categoryAllocated: number;
   categoryPercent: number;
@@ -258,7 +260,7 @@ const fieldsForFact = (sectionId: string, fact: FlatPlanFact, value = fact.value
 };
 
 const dateIso = (value: string, fallbackYear: number): string => {
-  const text = value.trim();
+  const text = value.trim().replace(/[~≈]/g, " ").replace(/\b(\d{1,2})(?:st|nd|rd|th)\b/gi, "$1").replace(/\b(?:about|around|approximately|approx|roughly|circa)\b/gi, " ").replace(/\s+/g, " ").trim();
   if (!text) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const timestamp = Date.parse(`${/\b20\d{2}\b/.test(text) ? text : `${text} ${fallbackYear}`} UTC`);
@@ -272,6 +274,31 @@ const addDays = (value: string, days: number): string => {
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 };
+
+const addMonths = (value: string, months: number): string => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 10);
+};
+
+const requestedDurationEnd = (order: ArrivalOrder, start: string): { end: string; provisional: boolean } => {
+  if (!start) return { end: "", provisional: false };
+  const text = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${JSON.stringify(order.interpretation?.known ?? {})} ${JSON.stringify(order.interpretation?.inferred ?? {})}`.toLowerCase();
+  const approximate = /\b(?:about|around|approximately|approx|roughly|rough|or so|thinking|flexible|open[- ]ended)\b/.test(text);
+  const words: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  const months = text.match(/\b(\d+|a|an|one|two|three|four|five|six)\s+months?\b/);
+  if (months) return { end: addMonths(start, Number(months[1]) || words[months[1]!] || 1), provisional: approximate };
+  const weeks = text.match(/\b(\d+|one|two|three|four|five|six)\s+weeks?\b/);
+  if (weeks) return { end: addDays(start, (Number(weeks[1]) || words[weeks[1]!] || 1) * 7), provisional: approximate };
+  const days = text.match(/\b(\d+)\s+days?\b/);
+  if (days) return { end: addDays(start, Number(days[1])), provisional: approximate };
+  return { end: "", provisional: false };
+};
+
+const starterItemIsProvisional = (item: StarterPlanItem | undefined): boolean => typeof item?.fields.provisional === "boolean"
+  ? item.fields.provisional
+  : item ? item.source === "working" || item.source === "starter" || item.source === "open" : true;
 
 const travelAllowance = (location: string): { daily: number; nightly: number } => {
   const normalized = location.toLowerCase();
@@ -295,7 +322,8 @@ const seedRoughPlan = (
   const requirements = sectionItems.get("requirements") ?? [];
   if (family === "travel") {
     const itinerary = sectionItems.get("itinerary") ?? [];
-    const year = Number(`${order.rawOutcome} ${order.interpretation?.summary ?? ""}`.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const yearSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""} ${JSON.stringify(order.interpretation?.known ?? {})}`;
+    const year = Number(yearSource.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dateOnly = itinerary.filter((item) => !String(item.fields.location ?? "").trim() && String(item.fields.start ?? "").trim());
     const firstDate = dateIso(String(dateOnly[0]?.fields.start ?? ""), year);
     dateOnly.forEach((item) => itinerary.splice(itinerary.indexOf(item), 1));
@@ -466,10 +494,10 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     addItem(sectionId, { itemId: `human_${index}`, label, fields: { title: label, ...(detail ? { notes: detail } : {}) }, source: "human" });
   });
   const allItems = [...sectionItems.values()].flat();
-  const dateValues = allItems.flatMap((item) => [item.fields.start, item.fields.end])
-    .map((value) => String(value ?? ""))
-    .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
-    .sort();
+  const dateEntries = allItems.flatMap((item) => [item.fields.start, item.fields.end]
+    .map((value) => ({ value: String(value ?? ""), item })))
+    .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry.value))
+    .sort((a, b) => a.value.localeCompare(b.value));
   const moneyItems = sectionItems.get("money") ?? [];
   const limitItems = moneyItems.filter((item) => item.fields.moneyRole === "limit");
   const canonicalLimit = limitItems.find((item) => item.source === "human") ?? limitItems.at(-1);
@@ -479,9 +507,14 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const totalBudget = String(overviewOverrides.totalBudget || (limit ? String(limit) : ""));
   const budgetNumber = Number(totalBudget || 0);
   const singleDay = overviewOverrides.singleDay === true;
-  const start = String(overviewOverrides.start || dateValues[0] || "");
-  const end = singleDay ? start : String(overviewOverrides.end || dateValues.at(-1) || start);
+  const start = String(overviewOverrides.start || dateEntries[0]?.value || "");
+  const requestedDuration = requestedDurationEnd(order, start);
+  const end = singleDay ? start : String(overviewOverrides.end || requestedDuration.end || dateEntries.at(-1)?.value || start);
+  const datesProvisional = typeof overviewOverrides.datesProvisional === "boolean"
+    ? overviewOverrides.datesProvisional
+    : Boolean(requestedDuration.end ? requestedDuration.provisional || !dateEntries.some((entry) => entry.value === requestedDuration.end && !starterItemIsProvisional(entry.item)) : dateEntries.some((entry) => starterItemIsProvisional(entry.item)));
   const currency = String(overviewOverrides.currency || moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
+  const budgetProvisional = typeof overviewOverrides.budgetProvisional === "boolean" ? overviewOverrides.budgetProvisional : starterItemIsProvisional(canonicalLimit);
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
@@ -490,6 +523,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     overview: {
       start,
       end,
+      datesProvisional,
       singleDay,
       includeTime: overviewOverrides.includeTime === true,
       startTime: String(overviewOverrides.startTime || ""),
@@ -497,6 +531,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       timeZone: String(overviewOverrides.timeZone || ""),
       totalBudget,
       currency,
+      budgetProvisional,
       categories,
       categoryAllocated,
       categoryPercent: budgetNumber > 0 ? (categoryAllocated / budgetNumber) * 100 : 0,
