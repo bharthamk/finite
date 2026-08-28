@@ -1502,7 +1502,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
           const value = String(item.fields[field.fieldId] ?? "");
           const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open website <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
-          const layoutClass = field.inputType === "textarea" ? "is-full" : field.inputType === "url" || ["provider", "address"].includes(field.fieldId) ? "is-span" : "";
+          const layoutClass = field.inputType === "textarea" ? "is-full" : field.inputType === "url" || ["provider", "address", "location", "from", "to", "timeZone", "departureTimeZone", "arrivalTimeZone"].includes(field.fieldId) ? "is-span" : "";
           return `<div${layoutClass ? ` class="${layoutClass}"` : ""}><dt>${escapeHtml(field.label)}</dt><dd>${renderedValue}</dd></div>`;
         }).join("")}</dl>` : ""}
         ${relationshipMarkup}
@@ -1520,7 +1520,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
           const value = String(item.fields[field.fieldId] ?? "");
           const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open source <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
-          const layoutClass = field.inputType === "textarea" ? "is-full" : field.inputType === "url" || ["provider", "address"].includes(field.fieldId) ? "is-span" : "";
+          const layoutClass = field.inputType === "textarea" ? "is-full" : field.inputType === "url" || ["provider", "address", "location", "from", "to", "timeZone", "departureTimeZone", "arrivalTimeZone"].includes(field.fieldId) ? "is-span" : "";
           return `<div${layoutClass ? ` class="${layoutClass}"` : ""}><dt>${escapeHtml(field.label)}</dt><dd>${renderedValue}</dd></div>`;
         }).join("")}</dl>` : ""}
         <details class="starter-record__edit"><summary>Edit option</summary><form data-arrival-form="workspace-option-update" data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field, item.fields[field.fieldId])).join("")}</div>${renderStarterCertaintyToggle(provisional)}<div class="starter-record__buttons"><button class="button" type="submit" ${busy ? "disabled" : ""}>Save option</button><button class="text-button" type="button" data-action="workspace-option-delete" ${busy ? "disabled" : ""}>Delete</button></div></form></details>
