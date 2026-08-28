@@ -131,6 +131,8 @@ export interface StarterPlanSection {
   items: StarterPlanItem[];
   options: StarterPlanItem[];
   comments: Array<{ commentId: string; text: string; forCodex: boolean }>;
+  custom?: boolean;
+  customSource?: "human" | "working";
 }
 
 export interface StarterPlanOverview {
@@ -164,7 +166,7 @@ export interface StarterPlanPresentation {
 const starterFamily = (value: string | null | undefined): StarterPlanPresentation["family"] => {
   const normalized = String(value ?? "").toLowerCase();
   if (normalized.includes("travel") || normalized.includes("trip") || normalized.includes("calendar")) return "travel";
-  if (normalized.includes("renovation") || normalized.includes("build") || normalized.includes("phase")) return "renovation";
+  if (normalized.includes("renovation") || normalized.includes("makeover") || normalized.includes("build") || normalized.includes("phase")) return "renovation";
   if (normalized.includes("event") || normalized.includes("run_of_show") || normalized.includes("dinner")) return "event";
   return "general";
 };
@@ -197,23 +199,23 @@ const starterSections: Record<StarterPlanPresentation["family"], StarterSectionD
   renovation: [
     { sectionId: "schedule", label: "Calendar", description: "See phases and work across the plan, then select one to change it.", emptyLabel: "No phases or work added yet.", variant: "calendar", fields: scheduleFields, keywords: ["phase", "work", "date", "day", "month", "year", "duration", "schedule", "deadline", "when"] },
     { sectionId: "scope", label: "Spaces & scope", description: "Keep rooms, work packages and finish choices editable.", emptyLabel: "No spaces or scope items added yet.", variant: "cards", fields: [field("title", "Space or work item"), field("location", "Area"), field("cost", "Planned cost", "number"), field("notes", "Scope and finish notes", "textarea")], keywords: ["space", "room", "scope", "design", "finish", "outcome", "area"] },
-    { sectionId: "resources", label: "Contractors & materials", description: "Track people, quotes, suppliers and materials.", emptyLabel: "No contractors or materials added yet.", variant: "cards", fields: [field("title", "Contractor or material"), field("provider", "Supplier"), field("start", "Needed by", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["contractor", "builder", "supplier", "material", "quote"] },
+    { sectionId: "resources", label: "Contractors & materials", description: "Track people, quotes, suppliers and materials.", emptyLabel: "No contractors or materials added yet.", variant: "cards", fields: [field("title", "Contractor or material"), field("provider", "Supplier"), field("quantity", "Quantity", "number"), field("bookingStatus", "Decision state", "select", "", bookingStatusOptions), field("website", "Website or product", "url", "https://"), field("start", "Needed by", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["contractor", "builder", "supplier", "material", "quote"] },
     { sectionId: "money", label: "Budget & costs", description: "Track the limit, allowances and planned costs.", emptyLabel: "No budget or costs added yet.", variant: "money", fields: moneyFields, keywords: ["budget", "cost", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
     { sectionId: "requirements", label: "Approvals & fixed items", description: "Keep permits, approvals and non-negotiables visible.", emptyLabel: "No approvals or fixed items added yet.", variant: "requirements", fields: requirementFields, keywords: ["approval", "permit", "commitment", "fixed", "booked", "confirmed", "must", "constraint", "hard"] },
     { sectionId: "tasks", label: "To-do list", description: "Track practical work without waiting for Codex.", emptyLabel: "Nothing on the to-do list yet.", variant: "checklist", fields: taskFields, keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency", "todo", "task"] },
   ],
   event: [
     { sectionId: "schedule", label: "Calendar", description: "See events and activities across the plan, then select one to change it.", emptyLabel: "No events or activities added yet.", variant: "calendar", fields: scheduleFields, keywords: ["programme", "program", "agenda", "schedule", "event", "moment", "activity", "runofshow", "date", "time", "deadline", "when"] },
-    { sectionId: "scope", label: "Guests & venue", description: "Track people, capacity, rooms and venue choices.", emptyLabel: "No guests or venue details added yet.", variant: "cards", fields: [field("title", "Guest group or venue"), field("location", "Location"), field("start", "Date", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["guest", "people", "attendee", "capacity", "venue", "location", "place"] },
-    { sectionId: "resources", label: "Suppliers & logistics", description: "Track suppliers, travel, equipment and delivery details.", emptyLabel: "No suppliers or logistics added yet.", variant: "cards", fields: [field("title", "Supplier or logistic item"), field("provider", "Provider"), field("start", "Due", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["supplier", "cater", "vendor", "transport", "equipment", "logistic"] },
+    { sectionId: "scope", label: "Guests & venue", description: "Track people, capacity, rooms and venue choices.", emptyLabel: "No guests or venue details added yet.", variant: "cards", fields: [field("title", "Guest group or venue"), field("headcount", "People / capacity", "number"), field("contact", "Contact"), field("bookingStatus", "Decision state", "select", "", bookingStatusOptions), field("location", "Location"), field("start", "Date", "date"), field("website", "Website or reference", "url", "https://"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["guest", "people", "attendee", "capacity", "venue", "location", "place"] },
+    { sectionId: "resources", label: "Suppliers & logistics", description: "Track suppliers, travel, equipment and delivery details.", emptyLabel: "No suppliers or logistics added yet.", variant: "cards", fields: [field("title", "Supplier or logistic item"), field("provider", "Provider"), field("bookingStatus", "Decision state", "select", "", bookingStatusOptions), field("website", "Website or reference", "url", "https://"), field("start", "Due", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["supplier", "cater", "vendor", "transport", "equipment", "logistic"] },
     { sectionId: "money", label: "Budget & costs", description: "Track the limit, allowances and planned costs.", emptyLabel: "No budget or costs added yet.", variant: "money", fields: moneyFields, keywords: ["budget", "cost", "quote", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
     { sectionId: "requirements", label: "Requirements & commitments", description: "Keep approvals, bookings and fixed commitments visible.", emptyLabel: "No requirements or commitments added yet.", variant: "requirements", fields: requirementFields, keywords: ["approval", "requirement", "commitment", "fixed", "booked", "confirmed", "must", "constraint", "hard"] },
     { sectionId: "tasks", label: "To-do list", description: "Track practical work without waiting for Codex.", emptyLabel: "Nothing on the to-do list yet.", variant: "checklist", fields: taskFields, keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency", "todo", "task"] },
   ],
   general: [
     { sectionId: "schedule", label: "Calendar", description: "See dated items across the plan, then select one to change it.", emptyLabel: "No scheduled items added yet.", variant: "calendar", fields: scheduleFields, keywords: ["date", "day", "month", "year", "duration", "time", "window", "schedule", "deadline", "when"] },
-    { sectionId: "scope", label: "Plan items", description: "Keep the plan’s concrete parts editable.", emptyLabel: "No plan items added yet.", variant: "cards", fields: [field("title", "Plan item"), field("location", "Where or who"), field("start", "When", "date"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["outcome", "item", "step", "scope", "deliverable"] },
-    { sectionId: "resources", label: "People & resources", description: "Track capacity, providers and resources.", emptyLabel: "No people or resources added yet.", variant: "cards", fields: [field("title", "Person or resource"), field("provider", "Provider or owner"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["person", "people", "resource", "provider", "supplier"] },
+    { sectionId: "scope", label: "Plan items", description: "Keep the plan’s concrete parts editable.", emptyLabel: "No plan items added yet.", variant: "cards", fields: [field("title", "Plan item"), field("status", "Status", "select", "", statusOptions), field("location", "Where or who"), field("start", "When", "date"), field("reference", "Website or reference", "url", "https://"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["outcome", "item", "step", "scope", "deliverable"] },
+    { sectionId: "resources", label: "People & resources", description: "Track capacity, providers and resources.", emptyLabel: "No people or resources added yet.", variant: "cards", fields: [field("title", "Person or resource"), field("provider", "Provider or owner"), field("status", "Status", "select", "", statusOptions), field("start", "Needed by", "date"), field("reference", "Website or reference", "url", "https://"), field("cost", "Planned cost", "number"), field("notes", "Notes", "textarea")], keywords: ["person", "people", "resource", "provider", "supplier"] },
     { sectionId: "money", label: "Money", description: "Track the limit, allowances and planned costs.", emptyLabel: "No budget or costs added yet.", variant: "money", fields: moneyFields, keywords: ["budget", "cost", "price", "amount", "spend", "limit", "maximum", "minimum", "currency", "cap"] },
     { sectionId: "requirements", label: "Requirements & limits", description: "Keep approvals, commitments and hard limits visible.", emptyLabel: "No requirements or limits added yet.", variant: "requirements", fields: requirementFields, keywords: ["approval", "requirement", "commitment", "fixed", "confirmed", "must", "constraint", "nonnegotiable", "hard"] },
     { sectionId: "tasks", label: "To-do list", description: "Track practical work without waiting for Codex.", emptyLabel: "Nothing on the to-do list yet.", variant: "checklist", fields: taskFields, keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency", "todo", "task"] },
@@ -252,6 +254,45 @@ const safeFields = (value: unknown): Record<string, string | boolean> => value !
     return fields;
   }, {})
   : {};
+const customFieldTypes = new Set<StarterPlanField["inputType"]>(["text", "url", "date", "time", "number", "textarea", "select"]);
+const customModuleDefinition = (payload: Record<string, unknown>, sourceSurface: ArrivalInput["sourceSurface"]): StarterSectionDefinition | null => {
+  const sectionId = safePayloadText(payload, "moduleId");
+  const label = safePayloadText(payload, "label").slice(0, 100);
+  const description = safePayloadText(payload, "description").slice(0, 300);
+  const variant = safePayloadText(payload, "variant") as StarterPlanSection["variant"];
+  if (!/^custom_[a-z0-9_]{3,80}$/.test(sectionId) || !label || !["cards", "checklist", "calendar"].includes(variant) || !Array.isArray(payload.fields)) return null;
+  const seen = new Set<string>();
+  const fields = payload.fields.slice(0, 12).flatMap((candidate): StarterPlanField[] => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const input = candidate as Record<string, unknown>;
+    const fieldId = safePayloadText(input, "fieldId");
+    const fieldLabel = safePayloadText(input, "label").slice(0, 80);
+    const inputType = safePayloadText(input, "inputType") as StarterPlanField["inputType"];
+    if (!/^[a-z][a-zA-Z0-9_]{0,39}$/.test(fieldId) || seen.has(fieldId) || !fieldLabel || !customFieldTypes.has(inputType)) return [];
+    seen.add(fieldId);
+    const rawOptions = Array.isArray(input.options) ? input.options : [];
+    const options = rawOptions.slice(0, 20).flatMap((option): NonNullable<StarterPlanField["options"]> => {
+      if (!option || typeof option !== "object" || Array.isArray(option)) return [];
+      const value = safePayloadText(option as Record<string, unknown>, "value").slice(0, 60);
+      const optionLabel = safePayloadText(option as Record<string, unknown>, "label").slice(0, 80);
+      return value && optionLabel ? [{ value, label: optionLabel }] : [];
+    });
+    if (inputType === "select" && !options.length) return [];
+    return [{ fieldId, label: fieldLabel, inputType, ...(safePayloadText(input, "placeholder") ? { placeholder: safePayloadText(input, "placeholder").slice(0, 140) } : {}), ...(options.length ? { options } : {}) }];
+  });
+  if (!fields.length || fields[0]?.fieldId !== "title") return null;
+  return {
+    sectionId,
+    label,
+    description: description || `A specialist section for ${label.toLowerCase()}.`,
+    emptyLabel: `No ${label.toLowerCase()} added yet.`,
+    variant,
+    fields,
+    keywords: [label, description, ...fields.map((entry) => entry.label)].filter(Boolean),
+    custom: true,
+    customSource: payload.moduleSource === "codex" || sourceSurface === "codex" ? "working" : "human",
+  };
+};
 const sectionAliases: Record<string, string> = { destinations: "itinerary", dates: "itinerary", travel: "transport", commitments: "requirements", open: "tasks", programme: "schedule", people: "scope", items: "scope" };
 
 const moneyAmount = (text: string): string => {
@@ -446,7 +487,22 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     ...(interpretation?.dependencies ?? []).filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
     ...(interpretation?.missing ?? []).map((item) => item.trim()),
   ].filter(Boolean))];
-  const definitions = starterSections[family];
+  const definitions: StarterSectionDefinition[] = starterSections[family].map((definition) => ({ ...definition, fields: definition.fields.map((entry) => ({ ...entry })) }));
+  order.inputs.forEach((input) => {
+    const operation = safePayloadText(input.payload, "workspaceOperation");
+    if (!operation.startsWith("module_")) return;
+    const moduleId = safePayloadText(input.payload, "moduleId");
+    const existingIndex = definitions.findIndex((definition) => definition.sectionId === moduleId && definition.custom);
+    if (operation === "module_delete") {
+      if (existingIndex >= 0) definitions.splice(existingIndex, 1);
+      return;
+    }
+    if (operation !== "module_add" && operation !== "module_update") return;
+    const definition = customModuleDefinition(input.payload, input.sourceSurface);
+    if (!definition) return;
+    if (existingIndex >= 0) definitions.splice(existingIndex, 1, definition);
+    else definitions.push(definition);
+  });
   const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionOptions = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionComments = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ commentId: string; text: string; forCodex: boolean }>]));
@@ -478,13 +534,14 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
   if (interpretation?.complete) seedRoughPlan(family, order, sectionItems, addItem);
-  const operatorOptionInput = (input: ArrivalInput): boolean => input.payload.optionSource === "codex" && safePayloadText(input.payload, "workspaceOperation").startsWith("option_");
-  const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorOptionInput(input));
+  const operatorWorkspaceInput = (input: ArrivalInput): boolean => input.sourceSurface === "codex" && ["option_", "module_"].some((prefix) => safePayloadText(input.payload, "workspaceOperation").startsWith(prefix));
+  const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorWorkspaceInput(input));
   const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));
   const presentationInputs = [...workspaceInputs, ...humanInputsAfterInterpretation.filter((input) => !safePayloadText(input.payload, "workspaceOperation"))];
   presentationInputs.forEach((input, index) => {
     const operation = safePayloadText(input.payload, "workspaceOperation");
     if (operation) {
+      if (operation.startsWith("module_")) return;
       if (operation === "overview") {
         const overviewFields = safeFields(input.payload.fields);
         Object.assign(overviewOverrides, overviewFields);
@@ -579,7 +636,8 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const singleDay = overviewOverrides.singleDay === true;
   const start = String(overviewOverrides.start || dateEntries[0]?.value || "");
   const requestedDuration = requestedDurationEnd(order, start);
-  const end = singleDay ? start : String(overviewOverrides.end || requestedDuration.end || dateEntries.at(-1)?.value || start);
+  const explicitEnd = dateEntries.filter((entry) => entry.value !== start && ["request", "known", "human"].includes(entry.item.source)).at(-1)?.value ?? "";
+  const end = singleDay ? start : String(overviewOverrides.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
   const datesProvisional = typeof overviewOverrides.datesProvisional === "boolean"
     ? overviewOverrides.datesProvisional
     : Boolean(requestedDuration.end ? requestedDuration.provisional || !dateEntries.some((entry) => entry.value === requestedDuration.end && !starterItemIsProvisional(entry.item)) : dateEntries.some((entry) => starterItemIsProvisional(entry.item)));

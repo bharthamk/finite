@@ -6,6 +6,14 @@ export type ArrivalStatus = "waiting_for_codex" | "codex_reviewing" | "clarifica
 export const isArrivalDraftReady = (status: ArrivalStatus | string): boolean => status === "proposed_plan_ready" || status === "interpretation_confirmed";
 export type ArrivalInputKind = "detail" | "constraint" | "preference" | "commitment" | "answer" | "evidence_reference" | "correction";
 export type ArrivalWorkspaceOptionOperation = "add" | "update" | "delete";
+export type ArrivalWorkspaceModuleOperation = "add" | "update" | "delete";
+export interface ArrivalWorkspaceModuleField {
+  fieldId: string;
+  label: string;
+  inputType: "text" | "url" | "date" | "time" | "number" | "textarea" | "select";
+  placeholder?: string;
+  options?: Array<{ value: string; label: string }>;
+}
 export type ArrivalDependencyKind = "operator_research" | "human_coordination" | "external_evidence" | "human_decision";
 export type ArrivalDependencyStatus = "open" | "resolved" | "deferred";
 
@@ -78,7 +86,7 @@ export interface ArrivalEvent {
   eventId: string;
   orderId: string;
   version: number;
-  eventType: "human_order_created" | "human_input_added" | "operator_option_saved" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "arrival_reconciled" | "interpretation_reviewed" | "plan_activated";
+  eventType: "human_order_created" | "human_input_added" | "operator_option_saved" | "operator_module_saved" | "operator_checkpointed" | "clarification_staged" | "interpretation_staged" | "arrival_reconciled" | "interpretation_reviewed" | "plan_activated";
   actor: "human" | "codex";
   sourceSurface: ArrivalSourceSurface;
   payload: Record<string, unknown>;
@@ -123,6 +131,7 @@ export interface ArrivalRepository {
   open(input?: { orderId?: string; sinceVersion?: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   appendInput(input: { orderId: string; expectedVersion: number; kind: ArrivalInputKind; payload: Record<string, unknown>; sourceSurface: ArrivalSourceSurface }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   saveWorkspaceOption(input: { orderId: string; expectedVersion: number; operation: ArrivalWorkspaceOptionOperation; moduleId: string; optionId: string; parentRecordId?: string; label?: string; fields?: Record<string, string | boolean> }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  saveWorkspaceModule(input: { orderId: string; expectedVersion: number; operation: ArrivalWorkspaceModuleOperation; moduleId: string; label?: string; description?: string; variant?: "cards" | "checklist" | "calendar"; fields?: ArrivalWorkspaceModuleField[] }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   checkpoint(input: { orderId: string; expectedVersion: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
@@ -160,6 +169,9 @@ export class HttpArrivalRepository implements ArrivalRepository {
   }
   saveWorkspaceOption(input: Parameters<ArrivalRepository["saveWorkspaceOption"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/option`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
+  }
+  saveWorkspaceModule(input: Parameters<ArrivalRepository["saveWorkspaceModule"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/module`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
   checkpoint(input: Parameters<ArrivalRepository["checkpoint"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/checkpoint`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
@@ -257,6 +269,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     this.orders.set(next.orderId, next);
     await this.appendEvent(next, { ...event, orderId: next.orderId, version: next.version, createdAt });
     const code = event.eventType === "operator_option_saved" ? "ARRIVAL_WORKSPACE_OPTION_SAVED"
+      : event.eventType === "operator_module_saved" ? "ARRIVAL_WORKSPACE_MODULE_SAVED"
       : event.eventType === "operator_checkpointed" ? "ARRIVAL_CHECKPOINTED"
       : event.eventType === "clarification_staged" ? "ARRIVAL_CLARIFICATION_STAGED"
         : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED"
@@ -319,6 +332,23 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     };
     const record: ArrivalInput = { inputId: `arrival_option_${order.orderId}_${input.expectedVersion + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
     return this.replace(order, input.expectedVersion, { inputs: [...order.inputs, record] }, { eventType: "operator_option_saved", actor: "codex", sourceSurface: "codex", payload: { input: record } });
+  }
+
+  async saveWorkspaceModule(input: Parameters<ArrivalRepository["saveWorkspaceModule"]>[0]): Promise<ArrivalResult> {
+    const order = this.orders.get(input.orderId);
+    if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+    const createdAt = this.now().toISOString();
+    const payload: Record<string, unknown> = {
+      workspaceOperation: `module_${input.operation}`,
+      moduleId: input.moduleId,
+      moduleSource: "codex",
+      ...(input.label ? { label: input.label } : {}),
+      ...(input.description ? { description: input.description } : {}),
+      ...(input.variant ? { variant: input.variant } : {}),
+      ...(input.fields ? { fields: clone(input.fields) } : {}),
+    };
+    const record: ArrivalInput = { inputId: `arrival_module_${order.orderId}_${input.expectedVersion + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
+    return this.replace(order, input.expectedVersion, { inputs: [...order.inputs, record] }, { eventType: "operator_module_saved", actor: "codex", sourceSurface: "codex", payload: { input: record } });
   }
 
   async checkpoint(input: Parameters<ArrivalRepository["checkpoint"]>[0]): Promise<ArrivalResult> {

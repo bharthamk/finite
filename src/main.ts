@@ -588,6 +588,7 @@ const workspaceUiState: WorkspaceUiState = {
   calendarSelections: new Map(),
   calendarFilters: new Map(),
 };
+let customWorkspaceOpen = false;
 let message = "";
 let messageScope = "";
 let settingsBusy = false;
@@ -1475,6 +1476,9 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
   </dialog>`;
   const modules = starter.sections.map((section) => {
+    const workspaceLabel = section.custom
+      ? `Custom section · ${section.customSource === "working" ? `${agenticName()} built` : "Added by you"}`
+      : `${starter.familyLabel} workspace`;
     const optionParentId = (option: import("./arrival-presentation.js").StarterPlanItem): string => option.parentRecordId || section.items[0]?.itemId || "";
     const optionsForRecord = (item: import("./arrival-presentation.js").StarterPlanItem): import("./arrival-presentation.js").StarterPlanItem[] => section.options.filter((option) => optionParentId(option) === item.itemId);
     const researchLinks = (item: import("./arrival-presentation.js").StarterPlanItem): Array<{ label: string; url: string }> => String(item.fields.researchSources ?? "").split("\n").map((line) => line.trim()).filter(Boolean).map((line, index) => {
@@ -1589,33 +1593,57 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           ${recordOptionsDialog(item)}
         </article>`;
       }).join("");
-      return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
-        <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">Calendar</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
+      return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+        <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.custom ? section.label : "Calendar")}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
         <div class="starter-module__body">
           <div class="starter-calendar__toolbar"><div><span>View</span><strong>${escapeHtml(entryNoun)}</strong></div><div class="starter-calendar__view-toggle" role="group" aria-label="Calendar display"><button type="button" data-action="calendar-view" data-calendar-view="calendar" aria-pressed="true">Calendar</button><button type="button" data-action="calendar-view" data-calendar-view="list" aria-pressed="false">List</button></div></div>
-          <div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>
+          ${section.custom ? "" : `<div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>`}
           <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item below to place it on the calendar.</p></div>`}</aside></div></div>
           <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div></div>
           ${comments}<div class="starter-module__controls starter-module__controls--calendar">${addControl}${commentControl}</div>
+          ${section.custom ? `<div class="starter-module__custom-footer"><span>This section extends the standard workspace.</span><button class="text-button" type="button" data-action="workspace-module-delete" data-module-id="${escapeHtml(section.sectionId)}" ${busy ? "disabled" : ""}>Remove section</button></div>` : ""}
         </div>
       </details>`;
     }
-    return `<details class="starter-module starter-module--${section.variant}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
-      <summary class="starter-module__summary"><div><span>${escapeHtml(starter.familyLabel)} workspace</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
+    return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+      <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
       <div class="starter-module__body">${moduleInsight}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
         ${comments}
         <div class="starter-module__controls">${addControl}${commentControl}</div>
+        ${section.custom ? `<div class="starter-module__custom-footer"><span>This section extends the standard workspace.</span><button class="text-button" type="button" data-action="workspace-module-delete" data-module-id="${escapeHtml(section.sectionId)}" ${busy ? "disabled" : ""}>Remove section</button></div>` : ""}
       </div>
     </details>`;
   }).join("");
+  const customSections = starter.sections.filter((section) => section.custom);
+  const customWorkspaceMarkup = `<dialog class="custom-workspace-dialog" data-custom-workspace-dialog aria-labelledby="custom_workspace_title">
+    <button class="custom-workspace-dialog__close" type="button" data-action="close-custom-workspace" aria-label="Close custom workspace">×</button>
+    <header><p class="eyebrow">Custom mode</p><h3 id="custom_workspace_title">Extend this workspace</h3><p>The standard workspace already covers dates, money, people, tasks, requirements, options and evidence. Add a specialist section when this plan needs its own fields or tracker.</p></header>
+    ${customSections.length ? `<section class="custom-workspace-dialog__current" aria-labelledby="custom_workspace_current"><h4 id="custom_workspace_current">Custom sections</h4>${customSections.map((section) => `<article><div><strong>${escapeHtml(section.label)}</strong><small>${escapeHtml(section.fields.map((entry) => entry.label).join(" · "))}</small></div><button class="text-button" type="button" data-action="open-custom-module" data-module-id="${escapeHtml(section.sectionId)}">Open</button></article>`).join("")}</section>` : ""}
+    <div class="custom-workspace-dialog__paths">
+      <section><span class="custom-workspace-dialog__step">Build it yourself</span><h4>Add one specialist section</h4><p>Choose a useful shape and name the extra fields. You can add, edit and remove its records like every other part of the plan.</p>
+        <form data-arrival-form="workspace-module-add">
+          <label><span>Section name</span><input name="label" required maxlength="100" placeholder="e.g. Interview evidence"></label>
+          <label><span>What belongs here?</span><textarea name="description" required maxlength="300" placeholder="A short description of what this section tracks"></textarea></label>
+          <div class="custom-workspace-dialog__grid"><label><span>Layout</span><select name="variant"><option value="cards">Cards</option><option value="checklist">Checklist</option><option value="calendar">Calendar</option></select></label><label><span>Extra fields</span><input name="fieldLabels" maxlength="240" placeholder="e.g. Competency, Result, Confidence"></label></div>
+          <small>Separate extra field names with commas. Every section includes a title and notes; calendar sections also include start and end dates.</small>
+          <button class="button" type="submit" ${busy ? "disabled" : ""}>Add custom section</button>
+        </form>
+      </section>
+      <section class="custom-workspace-dialog__codex"><span class="custom-workspace-dialog__step">Build it with ${escapeHtml(agenticName())}</span><h4>Describe the specialist view</h4><p>${escapeHtml(agenticName())} can propose the fields and layout, while every resulting record remains directly editable here.</p>
+        <form data-arrival-form="workspace-module-request"><label><span>What should this plan track?</span><textarea name="request" required maxlength="2000" placeholder="e.g. Add an interview evidence bank with competency, example, result, proof and confidence"></textarea></label><button class="button button--secondary" type="submit" ${busy ? "disabled" : ""}>Save request and open ${escapeHtml(agenticName())}</button></form>
+      </section>
+    </div>
+    <footer><strong>Custom is an extension, not a different plan.</strong><span>The overview, shared sections, history and human approval boundary stay in place.</span></footer>
+  </dialog>`;
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
       <div><p class="eyebrow">Your editable rough plan</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
-      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><small>Research, compare, draft, or rework any part</small></div>
+      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><button class="button button--secondary" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button><small>Research, compare, or add a specialist tracker without losing manual control</small></div>
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     ${overviewMarkup}
     <div class="starter-workspace">${modules}</div>
+    ${customWorkspaceMarkup}
     ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
   </section>`;
 };
@@ -1856,6 +1884,8 @@ const restoreWorkspaceUiState = (): void => {
   root?.querySelectorAll<HTMLDialogElement>("[data-record-options-dialog]").forEach((dialog) => {
     if (workspaceUiState.openRecordOptions.has(dialog.dataset.recordOptionsKey ?? "") && !dialog.open) dialog.showModal();
   });
+  const customDialog = root?.querySelector<HTMLDialogElement>("[data-custom-workspace-dialog]");
+  if (customWorkspaceOpen && customDialog && !customDialog.open) customDialog.showModal();
 };
 
 const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<boolean> => {
@@ -1886,6 +1916,59 @@ const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   const fields = workspaceFieldsFromForm(form);
   if (!String(fields.title ?? "").trim()) return;
   await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
+};
+
+const customFieldId = (label: string, used: Set<string>): string => {
+  const words = label.normalize("NFKD").replace(/[^a-zA-Z0-9 ]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  const raw = words.map((word, index) => index ? `${word[0]?.toUpperCase() ?? ""}${word.slice(1).toLowerCase()}` : word.toLowerCase()).join("").replace(/^[^a-z]+/, "").slice(0, 40) || "detail";
+  let candidate = raw;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${raw.slice(0, 36)}${suffix++}`;
+  used.add(candidate);
+  return candidate;
+};
+
+const customModuleFields = (variant: "cards" | "checklist" | "calendar", labels: string[]): Array<{ fieldId: string; label: string; inputType: "text" | "date" | "textarea" }> => {
+  const used = new Set(["title"]);
+  const fields: Array<{ fieldId: string; label: string; inputType: "text" | "date" | "textarea" }> = [{ fieldId: "title", label: variant === "checklist" ? "Item" : "Title", inputType: "text" }];
+  if (variant === "calendar") {
+    fields.push({ fieldId: "start", label: "Start", inputType: "date" }, { fieldId: "end", label: "End", inputType: "date" });
+    used.add("start"); used.add("end");
+  } else if (variant === "checklist") {
+    fields.push({ fieldId: "due", label: "Due", inputType: "date" });
+    used.add("due");
+  }
+  labels.slice(0, 7).forEach((label) => fields.push({ fieldId: customFieldId(label, used), label: label.slice(0, 80), inputType: "text" }));
+  fields.push({ fieldId: "notes", label: "Notes", inputType: "textarea" });
+  return fields.slice(0, 12);
+};
+
+const addWorkspaceModule = async (form: HTMLFormElement): Promise<void> => {
+  const data = new FormData(form);
+  const label = String(data.get("label") ?? "").trim();
+  const description = String(data.get("description") ?? "").trim();
+  const variant = data.get("variant") === "calendar" ? "calendar" : data.get("variant") === "checklist" ? "checklist" : "cards";
+  if (!label || !description) return;
+  const labels = String(data.get("fieldLabels") ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 52) || "section";
+  const moduleId = `custom_${slug}_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  customWorkspaceOpen = true;
+  await saveWorkspaceMutation({ workspaceOperation: "module_add", moduleId, label, description, variant, fields: customModuleFields(variant, labels), moduleSource: "human" }, "detail", `${label} was added to your workspace.`);
+};
+
+const deleteWorkspaceModule = async (button: HTMLButtonElement): Promise<void> => {
+  const moduleId = button.dataset.moduleId ?? "";
+  if (!moduleId.startsWith("custom_")) return;
+  workspaceUiState.openModules.delete(moduleId);
+  await saveWorkspaceMutation({ workspaceOperation: "module_delete", moduleId, moduleSource: "human" }, "correction", "The custom section was removed. Its history remains in the plan record.");
+};
+
+const requestWorkspaceModule = async (form: HTMLFormElement): Promise<void> => {
+  const request = String(new FormData(form).get("request") ?? "").trim();
+  if (!request) return;
+  customWorkspaceOpen = false;
+  const saved = await saveWorkspaceMutation({ workspaceOperation: "module_request", moduleId: "custom_request", request, moduleSource: "human" }, "detail", `Your custom workspace request is saved for ${agenticName()}.`);
+  if (saved) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const addWorkspaceOption = async (form: HTMLFormElement): Promise<void> => {
@@ -2250,6 +2333,27 @@ function bindArrivalInteractions(): void {
   bindWorkspaceOverviewEditors();
   bindWorkspaceOverviewToggles();
   bindWorkspaceCurrencyConversions();
+  root?.querySelector<HTMLButtonElement>("[data-action='open-custom-workspace']")?.addEventListener("click", () => {
+    customWorkspaceOpen = true;
+    const dialog = root.querySelector<HTMLDialogElement>("[data-custom-workspace-dialog]");
+    dialog?.showModal();
+    dialog?.querySelector<HTMLElement>("input, textarea, button")?.focus();
+  });
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-custom-workspace']").forEach((button) => button.addEventListener("click", () => {
+    customWorkspaceOpen = false;
+    button.closest<HTMLDialogElement>("dialog")?.close();
+  }));
+  root?.querySelector<HTMLDialogElement>("[data-custom-workspace-dialog]")?.addEventListener("close", () => { customWorkspaceOpen = false; });
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-custom-module']").forEach((button) => button.addEventListener("click", () => {
+    const moduleId = button.dataset.moduleId ?? "";
+    customWorkspaceOpen = false;
+    button.closest<HTMLDialogElement>("dialog")?.close();
+    const module = root.querySelector<HTMLDetailsElement>(`details[data-workspace-module='${CSS.escape(moduleId)}']`);
+    if (!module) return;
+    module.open = true;
+    workspaceUiState.openModules.add(moduleId);
+    module.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-record-options']").forEach((button) => button.addEventListener("click", () => {
     const target = button.dataset.recordOptionsTarget ?? "";
     const dialog = target ? root.querySelector<HTMLDialogElement>(`#${CSS.escape(target)}`) : null;
@@ -2273,6 +2377,8 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='workspace-module-add']")?.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceModule(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-arrival-form='workspace-module-request']")?.addEventListener("submit", (event) => { event.preventDefault(); void requestWorkspaceModule(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-option-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceOption(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-option-update']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void updateWorkspaceOption(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-overview']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void saveWorkspaceOverview(event.currentTarget as HTMLFormElement); }));
@@ -2284,6 +2390,7 @@ function bindArrivalInteractions(): void {
     void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record], [data-record-context]"); if (record) void deleteWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-module-delete']").forEach((button) => button.addEventListener("click", () => { void deleteWorkspaceModule(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void deleteWorkspaceOption(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-promote']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void promoteWorkspaceOption(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-category-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-category-record]"); if (record) void deleteWorkspaceCategory(record); }));

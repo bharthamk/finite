@@ -290,3 +290,26 @@ test("manual mode opens the full workspace without an interpretation and keeps s
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").comments, [{ commentId: "comment_1", text: "Move this after Munich", forCodex: false }]);
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "money").comments, [{ commentId: "comment_2", text: "Research a safer daily allowance", forCodex: true }]);
 });
+
+test("custom sections survive human and Codex creation, accept normal records, and can be removed", () => {
+  const base = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_custom_workspace", version: 5, status: "waiting_for_codex", rawOutcome: "Prepare for a job interview.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
+    inputs: [
+      { inputId: "arrival_input_arrival_custom_workspace_2", kind: "detail", payload: { workspaceOperation: "module_add", moduleId: "custom_interview_evidence", moduleSource: "human", label: "Interview evidence", description: "Connect competencies to proof.", variant: "cards", fields: [{ fieldId: "title", label: "Competency", inputType: "text" }, { fieldId: "example", label: "Example", inputType: "textarea" }, { fieldId: "result", label: "Result", inputType: "textarea" }] }, sourceSurface: "site", createdAt: "2026-08-29T00:00:00.000Z" },
+      { inputId: "arrival_input_arrival_custom_workspace_3", kind: "detail", payload: { workspaceOperation: "add", moduleId: "custom_interview_evidence", recordId: "manual_story", label: "Prioritisation", fields: { title: "Prioritisation", example: "Replanned a live launch.", result: "Shipped without missing the customer deadline." } }, sourceSurface: "site", createdAt: "2026-08-29T00:00:01.000Z" },
+      { inputId: "arrival_operator_arrival_custom_workspace_4", kind: "operator_work", payload: { workspaceOperation: "module_add", moduleId: "custom_questions", moduleSource: "codex", label: "Questions & signals", description: "Track questions and the evidence to listen for.", variant: "checklist", fields: [{ fieldId: "title", label: "Question", inputType: "text" }, { fieldId: "notes", label: "Signals", inputType: "textarea" }] }, sourceSurface: "codex", createdAt: "2026-08-29T00:00:02.000Z" },
+    ],
+    interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-29T00:00:00.000Z", updatedAt: "2026-08-29T00:00:02.000Z", checksum: "1".repeat(64),
+  };
+  const starter = starterPlanForArrival(base);
+  const evidence = starter.sections.find((section) => section.sectionId === "custom_interview_evidence");
+  assert.equal(evidence.custom, true);
+  assert.equal(evidence.customSource, "human");
+  assert.deepEqual(evidence.fields.map((field) => field.fieldId), ["title", "example", "result"]);
+  assert.equal(evidence.items[0].fields.result, "Shipped without missing the customer deadline.");
+  assert.equal(starter.sections.find((section) => section.sectionId === "custom_questions").customSource, "working");
+
+  const removed = starterPlanForArrival({ ...base, version: 6, inputs: [...base.inputs, { inputId: "arrival_input_arrival_custom_workspace_5", kind: "correction", payload: { workspaceOperation: "module_delete", moduleId: "custom_interview_evidence" }, sourceSurface: "site", createdAt: "2026-08-29T00:00:03.000Z" }] });
+  assert.equal(removed.sections.some((section) => section.sectionId === "custom_interview_evidence"), false);
+  assert.equal(removed.sections.some((section) => section.sectionId === "custom_questions"), true);
+});

@@ -122,6 +122,34 @@ test("Codex workspace options are non-authoritative operator work and never beco
   assert.equal(saved.order.inputs.at(-1).payload.parentRecordId, "arrival_flight");
 });
 
+test("Codex specialist sections are bounded operator work and remain outside human authority", async () => {
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "module-provenance-0001", rawOutcome: "Prepare for a job interview.", structured: {}, attachments: [], sourceSurface: "site" });
+  const saved = await arrivals.saveWorkspaceModule({
+    orderId: created.order.orderId,
+    expectedVersion: created.order.version,
+    operation: "add",
+    moduleId: "custom_interview_evidence",
+    label: "Interview evidence",
+    description: "Connect each competency to a concise example and result.",
+    variant: "cards",
+    fields: [
+      { fieldId: "title", label: "Competency", inputType: "text" },
+      { fieldId: "example", label: "Example", inputType: "textarea" },
+      { fieldId: "result", label: "Result", inputType: "textarea" },
+    ],
+  });
+  assert.equal(saved.code, "ARRIVAL_WORKSPACE_MODULE_SAVED");
+  assert.equal(saved.acceptedStateChanged, false);
+  assert.equal(saved.orientation.unprocessedHumanInputCount, 1);
+  assert.equal(saved.orientation.latestHumanInputVersion, 1);
+  assert.equal(saved.orientation.delta.at(-1).eventType, "operator_module_saved");
+  assert.equal(saved.orientation.delta.at(-1).actor, "codex");
+  assert.equal(saved.order.inputs.at(-1).payload.workspaceOperation, "module_add");
+  assert.equal(saved.order.inputs.at(-1).payload.moduleSource, "codex");
+  assert.equal(saved.order.inputs.at(-1).payload.fields[0].fieldId, "title");
+});
+
 test("Codex-first, Site-later preserves a staged question and treats the later Site answer as new human input", async () => {
   const arrivals = new MemoryArrivalRepository();
   const created = await arrivals.create({ idempotencyKey: "codex-first-0001", rawOutcome: "Help me renovate the kitchen before Christmas.", sourceSurface: "codex" });

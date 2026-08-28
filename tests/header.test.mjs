@@ -255,8 +255,14 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-record\.is-provisional :where\(h4,dd\)/);
   assert.doesNotMatch(source, /starter-overview__body/);
   assert.doesNotMatch(styles, /\.starter-overview__settings \{ display:contents; \}/);
-  assert.match(source, /return `<details class="starter-module starter-module--\$\{section\.variant\}"/);
+  assert.match(source, /return `<details class="starter-module starter-module--\$\{section\.variant\}\$\{section\.custom/);
   assert.doesNotMatch(source, /return `<section class="starter-module/);
+  assert.match(source, /Customise workspace/);
+  assert.match(source, /data-custom-workspace-dialog/);
+  assert.match(source, /data-arrival-form="workspace-module-add"/);
+  assert.match(source, /data-arrival-form="workspace-module-request"/);
+  assert.match(source, /Custom is an extension, not a different plan/);
+  assert.match(styles, /\.custom-workspace-dialog/);
   assert.match(styles, /\.starter-module>summary \{/);
   assert.match(styles, /\.starter-module\[open\]>summary/);
   for (const moduleId of ["itinerary", "people", "stays", "transport", "money", "requirements", "tasks"]) assert.match(styles, new RegExp(`data-workspace-module="${moduleId}"`));

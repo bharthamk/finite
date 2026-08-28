@@ -52,6 +52,9 @@ const isArrivalDraftReady = (status: ArrivalStatus | string): boolean => status 
 const sourceSurfaces = new Set<ArrivalSourceSurface>(["site", "codex", "inline"]);
 const inputKinds = new Set<ArrivalInputKind>(["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"]);
 const workspaceOptionOperations = new Set(["add", "update", "delete"]);
+const workspaceModuleOperations = new Set(["add", "update", "delete"]);
+const workspaceModuleVariants = new Set(["cards", "checklist", "calendar"]);
+const workspaceFieldTypes = new Set(["text", "url", "date", "time", "number", "textarea", "select"]);
 const answerKinds = new Set<ArrivalClarification["answerKind"]>(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const dependencyKinds = new Set<ArrivalDependencyKind>(["operator_research", "human_coordination", "external_evidence", "human_decision"]);
 const dependencyStatuses = new Set<ArrivalDependencyStatus>(["open", "resolved", "deferred"]);
@@ -327,6 +330,50 @@ const saveWorkspaceOption = async (db: D1Database, scopeId: string, order: Arriv
   return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_option_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_OPTION_SAVED");
 };
 
+const saveWorkspaceModule = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const operation = String(body.operation ?? "");
+  const moduleId = String(body.moduleId ?? "");
+  const label = String(body.label ?? "").trim();
+  const description = String(body.description ?? "").trim();
+  const variant = String(body.variant ?? "cards");
+  const rawFields = Array.isArray(body.fields) ? body.fields : [];
+  const fields = rawFields.map((entry) => {
+    const record = asRecord(entry);
+    const rawOptions = Array.isArray(record.options) ? record.options : [];
+    return {
+      fieldId: String(record.fieldId ?? "").trim(),
+      label: String(record.label ?? "").trim(),
+      inputType: String(record.inputType ?? "text").trim(),
+      ...(String(record.placeholder ?? "").trim() ? { placeholder: String(record.placeholder).trim() } : {}),
+      ...(rawOptions.length ? { options: rawOptions.map((option) => ({ value: String(asRecord(option).value ?? "").trim(), label: String(asRecord(option).label ?? "").trim() })) } : {}),
+    };
+  });
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (!workspaceModuleOperations.has(operation)) return errorResponse(422, "WORKSPACE_MODULE_OPERATION_INVALID", "The module operation must be add, update, or delete.");
+  if (!/^custom_[a-z0-9_]{3,80}$/.test(moduleId)) return errorResponse(422, "WORKSPACE_MODULE_ID_INVALID", "A custom module requires a bounded custom_ identity.");
+  if (operation !== "delete") {
+    if (!label || label.length > 100 || !description || description.length > 300 || !workspaceModuleVariants.has(variant)) return errorResponse(422, "WORKSPACE_MODULE_INVALID", "A custom module requires a bounded name, purpose, and supported layout.");
+    if (!fields.length || fields.length > 12 || fields[0]?.fieldId !== "title") return errorResponse(422, "WORKSPACE_MODULE_FIELDS_INVALID", "Custom modules require title first and at most twelve fields.");
+    const ids = new Set<string>();
+    for (const moduleField of fields) {
+      if (!/^[a-z][a-zA-Z0-9_]{0,49}$/.test(moduleField.fieldId) || ids.has(moduleField.fieldId) || !moduleField.label || moduleField.label.length > 80 || !workspaceFieldTypes.has(moduleField.inputType)) return errorResponse(422, "WORKSPACE_MODULE_FIELDS_INVALID", "Custom module fields require unique bounded identities, labels, and supported types.");
+      ids.add(moduleField.fieldId);
+      if (moduleField.placeholder && moduleField.placeholder.length > 160) return errorResponse(422, "WORKSPACE_MODULE_FIELDS_INVALID", "Custom module placeholders must be bounded.");
+      if (moduleField.inputType === "select" && (!moduleField.options?.length || moduleField.options.length > 12 || moduleField.options.some((option) => !option.value || !option.label || option.value.length > 60 || option.label.length > 80))) return errorResponse(422, "WORKSPACE_MODULE_FIELDS_INVALID", "Select fields require bounded labelled choices.");
+    }
+  }
+  const createdAt = new Date().toISOString();
+  const payload: JsonRecord = {
+    workspaceOperation: `module_${operation}`,
+    moduleId,
+    moduleSource: "codex",
+    ...(operation !== "delete" ? { label, description, variant, fields } : {}),
+  };
+  const input: ArrivalInput = { inputId: `arrival_module_${order.orderId}_${expectedVersion + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
+  return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_module_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_MODULE_SAVED");
+};
+
 const checkpoint = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
   const expectedVersion = Number(body.expectedVersion);
   if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
@@ -504,6 +551,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     const body = await parseJson(request);
     if (operation === "input") return appendInput(db, scopeId, order, body);
     if (operation === "option") return saveWorkspaceOption(db, scopeId, order, body);
+    if (operation === "module") return saveWorkspaceModule(db, scopeId, order, body);
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);
     if (operation === "clarification") return stageClarification(db, scopeId, order, body);
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);
