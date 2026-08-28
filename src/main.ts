@@ -1276,7 +1276,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </article>`;
   }).join("");
   const overviewMarkup = `<details class="starter-plan__overview" open>
-    <summary><div><p class="eyebrow">Plan at a glance</p><h3>Dates, money and scope</h3></div><div class="starter-overview__summary"><span>${escapeHtml(dateLabel(overview.start))}${overview.start && overview.end && !overview.singleDay ? ` → ${escapeHtml(dateLabel(overview.end))}` : ""}</span><strong>${limit ? escapeHtml(money(limit)) : "Budget open"}</strong></div></summary>
+    <summary><div><p class="eyebrow">Plan at a glance</p><strong>Dates, budget and split</strong></div><div class="starter-overview__summary"><span>${escapeHtml(dateLabel(overview.start))}${overview.start && overview.end && !overview.singleDay ? ` → ${escapeHtml(dateLabel(overview.end))}` : ""}</span><strong>${limit ? escapeHtml(money(limit)) : "Budget open"}</strong></div></summary>
     <div class="starter-overview__body">
       <form class="starter-overview__settings" data-arrival-form="workspace-overview">
         <section class="starter-overview__panel starter-overview__dates"><header><span>Dates</span><strong>${escapeHtml(duration)}</strong></header>

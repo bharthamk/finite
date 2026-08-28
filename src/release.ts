@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "editable-plan-glance-v115",
+  build: "white-box-plan-glance-v116",
 } as const;

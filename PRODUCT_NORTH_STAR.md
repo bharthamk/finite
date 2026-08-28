@@ -46,7 +46,8 @@ family-specific places, stays, transport, resources and requirements; adjust
 overall, daily and item-level money; manage a to-do list; add a local note or
 Codex request to any section; or talk to Codex about the whole plan.
 
-The rough-plan surface opens with a collapsible, editable **Plan at a glance**.
+The rough-plan surface opens with a collapsible, editable white-box **Plan at
+a glance** top bar rather than a separate overview workspace.
 It owns the plan-wide from/to window, optional start/end times and time zone,
 single-day shape, total budget and base currency. It also exposes editable
 main-category allocations as both set amounts and percentages of the total.

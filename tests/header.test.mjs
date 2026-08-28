@@ -201,6 +201,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(source, /<details class="starter-plan__overview" open>/);
+  assert.match(source, /<strong>Dates, budget and split<\/strong>/);
   assert.match(source, /data-arrival-form="workspace-overview"/);
   assert.match(source, /name="singleDay" type="checkbox"/);
   assert.match(source, /name="includeTime" type="checkbox"/);
@@ -209,6 +210,8 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /% of total/);
   assert.doesNotMatch(source, /starter-plan__money-strip/);
   assert.match(styles, /\.starter-plan__overview/);
+  assert.match(styles, /\.starter-overview__body \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.starter-overview__settings \{ display:contents; \}/);
   assert.match(styles, /\.starter-module--calendar/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
