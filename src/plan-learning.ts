@@ -1,6 +1,7 @@
 export type PlanLessonKind = "worked" | "changed" | "next_time";
 export type ProfileMemoryKind = "preference" | "interest" | "constraint" | "working_pattern" | "avoid";
-export type ProfileMemoryStatus = "proposed" | "accepted" | "rejected";
+export type ProfileMemoryStatus = "proposed" | "accepted" | "rejected" | "retired";
+export type ProfileMemoryAction = "accept" | "reject" | "retire" | "restore" | "update" | "delete";
 export type LearningSource = "site" | "codex";
 
 export interface PlanRetrospective {
@@ -81,9 +82,12 @@ const readResult = async (response: Response): Promise<PlanLearningResult> => re
 
 export interface PlanLearningRepository {
   list(planId: string, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
+  listProfile(context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
   saveRetrospective(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
   addMemory(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
+  addProfileMemory(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
   decideMemory(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
+  changeProfileMemory(input: Record<string, unknown>, context?: { signal?: AbortSignal }): Promise<PlanLearningResult>;
 }
 
 export class HttpPlanLearningRepository implements PlanLearningRepository {
@@ -91,13 +95,22 @@ export class HttpPlanLearningRepository implements PlanLearningRepository {
   list(planId: string, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
     return fetch(`${this.baseUrl}?planId=${encodeURIComponent(planId)}`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
   }
+  listProfile(context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
+    return fetch(`${this.baseUrl}/profile`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
+  }
   saveRetrospective(input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
     return fetch(`${this.baseUrl}/retrospective`, { method: "PUT", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
   }
   addMemory(input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
     return fetch(`${this.baseUrl}/memories`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
   }
+  addProfileMemory(input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
+    return fetch(`${this.baseUrl}/profile/memories`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
+  }
   decideMemory(input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
     return fetch(`${this.baseUrl}/memories/${encodeURIComponent(String(input.memoryId ?? ""))}/decision`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
+  }
+  changeProfileMemory(input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<PlanLearningResult> {
+    return fetch(`${this.baseUrl}/profile/memories/${encodeURIComponent(String(input.memoryId ?? ""))}`, { method: "PATCH", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
   }
 }

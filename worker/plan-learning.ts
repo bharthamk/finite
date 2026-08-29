@@ -20,6 +20,10 @@ const parseBody = async (request: Request): Promise<JsonRecord> => {
 };
 const toRetrospective = (row: RetrospectiveRow, revision: number): PlanRetrospective => ({ planId: row.plan_id, planRevision: row.plan_revision, worked: row.worked, changed: row.changed, nextTime: row.next_time, updatedAt: row.updated_at, baseCurrent: row.plan_revision === revision });
 const toMemory = (row: MemoryRow): ProfileMemory => ({ memoryId: row.memory_id, family: row.family, kind: row.kind, statement: row.statement, evidence: row.evidence, sourcePlanId: row.source_plan_id, sourceSurface: row.source_surface, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at, decidedAt: row.decided_at });
+const listMemories = async (db: D1Database, scopeId: string): Promise<ProfileMemory[]> => {
+  const { results } = await db.prepare("SELECT memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at FROM profile_memories WHERE scope_id = ? ORDER BY CASE status WHEN 'proposed' THEN 0 WHEN 'accepted' THEN 1 WHEN 'retired' THEN 2 ELSE 3 END, updated_at DESC").bind(scopeId).all<MemoryRow>();
+  return (results ?? []).map(toMemory);
+};
 const validGuard = (body: JsonRecord): { planId: string; expectedRevision: number; idempotencyKey: string; sourceSurface: "site" | "codex" } | null => {
   const planId = typeof body.planId === "string" ? body.planId : "";
   const expectedRevision = Number(body.expectedRevision);
@@ -30,9 +34,9 @@ const validGuard = (body: JsonRecord): { planId: string; expectedRevision: numbe
 const listState = async (db: D1Database, scopeId: string, planId: string, revision: number): Promise<Pick<PlanLearningResult, "retrospective" | "memories">> => {
   const [retrospective, memories] = await Promise.all([
     db.prepare("SELECT plan_id, plan_revision, worked, changed, next_time, updated_at FROM plan_retrospectives WHERE scope_id = ? AND plan_id = ?").bind(scopeId, planId).first<RetrospectiveRow>(),
-    db.prepare("SELECT memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at FROM profile_memories WHERE scope_id = ? ORDER BY CASE status WHEN 'proposed' THEN 0 WHEN 'accepted' THEN 1 ELSE 2 END, updated_at DESC").bind(scopeId).all<MemoryRow>(),
+    listMemories(db, scopeId),
   ]);
-  return { retrospective: retrospective ? toRetrospective(retrospective, revision) : emptyRetrospective(planId, revision), memories: (memories.results ?? []).map(toMemory) };
+  return { retrospective: retrospective ? toRetrospective(retrospective, revision) : emptyRetrospective(planId, revision), memories };
 };
 
 export const handlePlanLearningRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
@@ -45,6 +49,70 @@ export const handlePlanLearningRequest = async (request: Request, db: D1Database
     if (principal.kind === "demo" && request.method !== "GET") return response(403, { ok: false, code: "ACCOUNT_LEARNING_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
     const { scopeId } = await principalStorageScope(principal);
     const body = request.method === "GET" ? {} : await parseBody(request);
+    if (request.method === "GET" && url.pathname === "/api/plan-learning/profile") return response(200, { ok: true, code: "PROFILE_MEMORIES_LOADED", retrospective: null, memories: await listMemories(db, scopeId), acceptedStateChanged: false });
+
+    if (request.method === "POST" && url.pathname === "/api/plan-learning/profile/memories") {
+      if (body.sourceSurface !== "site") return response(403, { ok: false, code: "HUMAN_PROFILE_MEMORY_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
+      if (!/^[a-zA-Z0-9._:-]{8,200}$/.test(idempotencyKey)) return response(422, { ok: false, code: "PROFILE_MEMORY_GUARD_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const validation = validateProfileMemory(body);
+      if (!validation.ok) return response(422, { ok: false, code: "PROFILE_MEMORY_INVALID", retrospective: null, memories: [], issues: validation.issues, acceptedStateChanged: false });
+      const requestHash = await authSha256({ scopeId, path: url.pathname, body: { ...body, idempotencyKey: undefined } });
+      const replay = await db.prepare("SELECT request_hash, receipt_json FROM plan_learning_receipts WHERE scope_id = ? AND idempotency_key = ?").bind(scopeId, idempotencyKey).first<{ request_hash: string; receipt_json: string }>();
+      if (replay) return replay.request_hash === requestHash ? response(200, JSON.parse(replay.receipt_json) as JsonRecord) : response(409, { ok: false, code: "IDEMPOTENCY_KEY_REUSED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const now = new Date().toISOString();
+      const memoryId = `memory_${crypto.randomUUID().replaceAll("-", "")}`;
+      const memory: ProfileMemory = { memoryId, family: "all", ...validation.value, sourcePlanId: "profile", sourceSurface: "site", status: "accepted", createdAt: now, updatedAt: now, decidedAt: now };
+      const memories = [memory, ...(await listMemories(db, scopeId))];
+      const payload = { ok: true, code: "PROFILE_MEMORY_ACCEPTED", retrospective: null, memories, memory, acceptedStateChanged: false };
+      await db.batch([
+        db.prepare("INSERT INTO profile_memories (scope_id, memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(scopeId, memoryId, memory.family, memory.kind, memory.statement, memory.evidence, memory.sourcePlanId, memory.sourceSurface, memory.status, now, now, now),
+        db.prepare("INSERT INTO plan_learning_receipts (scope_id, idempotency_key, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)").bind(scopeId, idempotencyKey, requestHash, JSON.stringify(payload), now),
+      ]);
+      return response(200, payload);
+    }
+
+    const profileMatch = url.pathname.match(/^\/api\/plan-learning\/profile\/memories\/([^/]+)$/);
+    if (request.method === "PATCH" && profileMatch) {
+      if (body.sourceSurface !== "site") return response(403, { ok: false, code: "HUMAN_PROFILE_MEMORY_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
+      const action = ["accept", "reject", "retire", "restore", "update", "delete"].includes(String(body.action)) ? String(body.action) : "";
+      const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : "";
+      if (!action || !expectedUpdatedAt || !/^[a-zA-Z0-9._:-]{8,200}$/.test(idempotencyKey)) return response(422, { ok: false, code: "PROFILE_MEMORY_GUARD_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const memoryId = decodeURIComponent(profileMatch[1]!);
+      const requestHash = await authSha256({ scopeId, path: url.pathname, body: { ...body, idempotencyKey: undefined } });
+      const replay = await db.prepare("SELECT request_hash, receipt_json FROM plan_learning_receipts WHERE scope_id = ? AND idempotency_key = ?").bind(scopeId, idempotencyKey).first<{ request_hash: string; receipt_json: string }>();
+      if (replay) return replay.request_hash === requestHash ? response(200, JSON.parse(replay.receipt_json) as JsonRecord) : response(409, { ok: false, code: "IDEMPOTENCY_KEY_REUSED", retrospective: null, memories: [], acceptedStateChanged: false });
+      const existing = await db.prepare("SELECT memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at FROM profile_memories WHERE scope_id = ? AND memory_id = ?").bind(scopeId, memoryId).first<MemoryRow>();
+      if (!existing) return response(404, { ok: false, code: "PROFILE_MEMORY_NOT_FOUND", retrospective: null, memories: [], acceptedStateChanged: false });
+      if (existing.updated_at !== expectedUpdatedAt) return response(409, { ok: false, code: "PROFILE_MEMORY_CONFLICT", retrospective: null, memories: await listMemories(db, scopeId), acceptedStateChanged: false, message: "This item changed elsewhere. Review the current version before saving." });
+      const now = new Date().toISOString();
+      const current = await listMemories(db, scopeId);
+      if (action === "delete") {
+        const memories = current.filter((item) => item.memoryId !== memoryId);
+        const payload = { ok: true, code: "PROFILE_MEMORY_DELETED", retrospective: null, memories, acceptedStateChanged: false };
+        await db.batch([
+          db.prepare("DELETE FROM profile_memories WHERE scope_id = ? AND memory_id = ?").bind(scopeId, memoryId),
+          db.prepare("INSERT INTO plan_learning_receipts (scope_id, idempotency_key, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)").bind(scopeId, idempotencyKey, requestHash, JSON.stringify(payload), now),
+        ]);
+        return response(200, payload);
+      }
+      const kind = body.kind ?? existing.kind;
+      const statement = body.statement ?? existing.statement;
+      const validation = validateProfileMemory({ kind, statement, evidence: existing.evidence });
+      if (!validation.ok) return response(422, { ok: false, code: "PROFILE_MEMORY_INVALID", retrospective: null, memories: current, issues: validation.issues, acceptedStateChanged: false });
+      const status: ProfileMemoryStatus = action === "accept" || action === "restore" ? "accepted" : action === "reject" ? "rejected" : action === "retire" ? "retired" : existing.status;
+      const decidedAt = action === "update" ? existing.decided_at : now;
+      const memory = toMemory({ ...existing, kind: validation.value.kind, statement: validation.value.statement, status, updated_at: now, decided_at: decidedAt });
+      const memories = current.map((item) => item.memoryId === memoryId ? memory : item);
+      const payload = { ok: true, code: action === "update" ? "PROFILE_MEMORY_UPDATED" : status === "accepted" ? "PROFILE_MEMORY_ACCEPTED" : status === "retired" ? "PROFILE_MEMORY_RETIRED" : "PROFILE_MEMORY_REJECTED", retrospective: null, memories, memory, acceptedStateChanged: false };
+      await db.batch([
+        db.prepare("UPDATE profile_memories SET kind = ?, statement = ?, status = ?, updated_at = ?, decided_at = ? WHERE scope_id = ? AND memory_id = ?").bind(memory.kind, memory.statement, memory.status, now, memory.decidedAt, scopeId, memoryId),
+        db.prepare("INSERT INTO plan_learning_receipts (scope_id, idempotency_key, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)").bind(scopeId, idempotencyKey, requestHash, JSON.stringify(payload), now),
+      ]);
+      return response(200, payload);
+    }
+
     const planId = request.method === "GET" ? url.searchParams.get("planId") ?? "" : typeof body.planId === "string" ? body.planId : "";
     const head = planId ? await db.prepare("SELECT revision, profile_id FROM plan_heads WHERE scope_id = ? AND plan_id = ?").bind(scopeId, planId).first<PlanHeadRow>() : null;
     if (!head) return response(404, { ok: false, code: "PLAN_NOT_FOUND", retrospective: null, memories: [], acceptedStateChanged: false });
@@ -75,7 +143,7 @@ export const handlePlanLearningRequest = async (request: Request, db: D1Database
       const validation = validateProfileMemory(body);
       if (!validation.ok) return response(422, { ok: false, code: "PROFILE_MEMORY_INVALID", retrospective: null, memories: [], issues: validation.issues, acceptedStateChanged: false });
       if (guard.sourceSurface === "codex") {
-        const rejected = await db.prepare("SELECT memory_id FROM profile_memories WHERE scope_id = ? AND kind = ? AND evidence = ? AND status = 'rejected' LIMIT 1").bind(scopeId, validation.value.kind, validation.value.evidence).first<{ memory_id: string }>();
+        const rejected = await db.prepare("SELECT memory_id FROM profile_memories WHERE scope_id = ? AND kind = ? AND evidence = ? AND status IN ('rejected', 'retired') LIMIT 1").bind(scopeId, validation.value.kind, validation.value.evidence).first<{ memory_id: string }>();
         if (rejected) return response(409, { ok: false, code: "PROFILE_MEMORY_EVIDENCE_REJECTED", retrospective: (await listState(db, scopeId, planId, head.revision)).retrospective, memories: [], acceptedStateChanged: false, message: "The person already rejected a profile read based on this evidence. Materially new evidence is required." });
       }
       const status: ProfileMemoryStatus = guard.sourceSurface === "site" ? "accepted" : "proposed";

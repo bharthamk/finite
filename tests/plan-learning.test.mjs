@@ -12,7 +12,7 @@ class Statement {
     if (this.query.includes("FROM plan_retrospectives")) return this.db.retrospectives.get(`${this.values[0]}:${this.values[1]}`) ?? null;
     if (this.query.includes("FROM plan_learning_receipts")) return this.db.receipts.get(`${this.values[0]}:${this.values[1]}`) ?? null;
     if (this.query.includes("FROM profile_memories") && this.query.includes("memory_id = ?")) return this.db.memories.get(`${this.values[0]}:${this.values[1]}`) ?? null;
-    if (this.query.includes("FROM profile_memories") && this.query.includes("status = 'rejected'")) return [...this.db.memories.values()].find((item) => item.scope_id === this.values[0] && item.kind === this.values[1] && item.evidence === this.values[2] && item.status === "rejected") ?? null;
+    if (this.query.includes("FROM profile_memories") && this.query.includes("status IN ('rejected', 'retired')")) return [...this.db.memories.values()].find((item) => item.scope_id === this.values[0] && item.kind === this.values[1] && item.evidence === this.values[2] && ["rejected", "retired"].includes(item.status)) ?? null;
     return null;
   }
   async all() {
@@ -37,9 +37,16 @@ class LearningDb {
         const [scopeId, memoryId, family, kind, statementText, evidence, sourcePlanId, sourceSurface, status, createdAt, updatedAt, decidedAt] = statement.values;
         this.memories.set(`${scopeId}:${memoryId}`, { scope_id: scopeId, memory_id: memoryId, family, kind, statement: statementText, evidence, source_plan_id: sourcePlanId, source_surface: sourceSurface, status, created_at: createdAt, updated_at: updatedAt, decided_at: decidedAt });
       } else if (statement.query.startsWith("UPDATE profile_memories")) {
-        const [statementText, status, updatedAt, decidedAt, scopeId, memoryId] = statement.values;
+        const values = statement.values;
+        const withKind = statement.query.includes("SET kind = ?");
+        const [kind, statementText, status, updatedAt, decidedAt, scopeId, memoryId] = withKind
+          ? values
+          : [undefined, ...values];
         const existing = this.memories.get(`${scopeId}:${memoryId}`);
-        if (existing) this.memories.set(`${scopeId}:${memoryId}`, { ...existing, statement: statementText, status, updated_at: updatedAt, decided_at: decidedAt });
+        if (existing) this.memories.set(`${scopeId}:${memoryId}`, { ...existing, ...(kind ? { kind } : {}), statement: statementText, status, updated_at: updatedAt, decided_at: decidedAt });
+      } else if (statement.query.startsWith("DELETE FROM profile_memories")) {
+        const [scopeId, memoryId] = statement.values;
+        this.memories.delete(`${scopeId}:${memoryId}`);
       } else if (statement.query.startsWith("INSERT INTO plan_learning_receipts")) {
         const [scopeId, idempotencyKey, requestHash, receiptJson] = statement.values;
         this.receipts.set(`${scopeId}:${idempotencyKey}`, { request_hash: requestHash, receipt_json: receiptJson });
@@ -105,4 +112,37 @@ test("rejected evidence cannot silently return as another Codex profile read", a
   assert.equal(rejected.status, 200);
   const repeated = await (await handlePlanLearningRequest(request("/api/plan-learning/memories", "POST", { ...proposal, statement: "I like leaving decisions late.", idempotencyKey: "learning-reject-repeat" }), db)).json();
   assert.equal(repeated.code, "PROFILE_MEMORY_EVIDENCE_REJECTED");
+});
+
+test("About you exposes every memory and uses optimistic human controls independent of a source plan revision", async () => {
+  const db = new LearningDb(); seed(db);
+  const proposed = await (await handlePlanLearningRequest(request("/api/plan-learning/memories", "POST", { planId, expectedRevision: 3, kind: "preference", statement: "I like collaborative cooking.", evidence: "The host chose to cook with guests.", idempotencyKey: "learning-profile-proposal", sourceSurface: "codex" }), db)).json();
+  const memoryId = proposed.memory.memoryId;
+
+  const catalog = await (await handlePlanLearningRequest(request("/api/plan-learning/profile"), db)).json();
+  assert.equal(catalog.code, "PROFILE_MEMORIES_LOADED");
+  assert.equal(catalog.memories[0].status, "proposed");
+
+  const accepted = await (await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${memoryId}`, "PATCH", { action: "accept", expectedUpdatedAt: proposed.memory.updatedAt, kind: "preference", statement: "I enjoy cooking with guests.", idempotencyKey: "learning-profile-accept", sourceSurface: "site" }), db)).json();
+  assert.equal(accepted.memory.status, "accepted");
+  assert.equal(accepted.memory.statement, "I enjoy cooking with guests.");
+
+  const stale = await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${memoryId}`, "PATCH", { action: "retire", expectedUpdatedAt: proposed.memory.updatedAt, kind: "preference", statement: "I enjoy cooking with guests.", idempotencyKey: "learning-profile-stale", sourceSurface: "site" }), db);
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).code, "PROFILE_MEMORY_CONFLICT");
+
+  const retired = await (await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${memoryId}`, "PATCH", { action: "retire", expectedUpdatedAt: accepted.memory.updatedAt, kind: "preference", statement: accepted.memory.statement, idempotencyKey: "learning-profile-retire", sourceSurface: "site" }), db)).json();
+  assert.equal(retired.memory.status, "retired");
+  const repeated = await (await handlePlanLearningRequest(request("/api/plan-learning/memories", "POST", { planId, expectedRevision: 3, kind: "preference", statement: "Collaborative cooking works for me.", evidence: proposed.memory.evidence, idempotencyKey: "learning-profile-retired-repeat", sourceSurface: "codex" }), db)).json();
+  assert.equal(repeated.code, "PROFILE_MEMORY_EVIDENCE_REJECTED");
+});
+
+test("a person can add and permanently delete an explicit About you memory", async () => {
+  const db = new LearningDb();
+  const added = await (await handlePlanLearningRequest(request("/api/plan-learning/profile/memories", "POST", { kind: "working_pattern", statement: "I prefer short planning sessions.", evidence: "Added by you in About you.", idempotencyKey: "learning-profile-direct", sourceSurface: "site" }), db)).json();
+  assert.equal(added.memory.sourcePlanId, "profile");
+  assert.equal(added.memory.status, "accepted");
+  const deleted = await (await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${added.memory.memoryId}`, "PATCH", { action: "delete", expectedUpdatedAt: added.memory.updatedAt, kind: added.memory.kind, statement: added.memory.statement, idempotencyKey: "learning-profile-delete", sourceSurface: "site" }), db)).json();
+  assert.equal(deleted.code, "PROFILE_MEMORY_DELETED");
+  assert.equal(deleted.memories.length, 0);
 });

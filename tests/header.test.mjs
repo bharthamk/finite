@@ -48,7 +48,7 @@ test("the product header contains actions instead of unexplained internal state"
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
     assert.doesNotMatch(source, new RegExp(obsoleteLabel));
   }
-  assert.equal(source.match(/class="header-actions"/g)?.length, 4);
+  assert.equal(source.match(/class="header-actions"/g)?.length, 5);
   assert.match(source, /class="header-action" data-action="open-theme-settings">Appearance<\/button>/);
   assert.match(source, /<details class="account-menu">/);
   assert.doesNotMatch(source, /class="account-menu__name"/);
@@ -73,7 +73,7 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
   assert.match(source, /const initialSecondaryPlanData = startupSurface === "plan"/);
   assert.match(source, /refreshSecondaryPlanData\(\)\.finally\(\(\) => \{ secondaryPlanDataReady = true; \}\)/);
-  assert.match(source, /if \(startupSurface === "arrival"\) void refreshSecondaryPlanData\(\)/);
+  assert.match(source, /if \(startupSurface === "arrival"\) \{[\s\S]{0,180}refreshSecondaryPlanData\(\), refreshProfileContext\(\)/);
   assert.match(source, /initialSecondaryPlanData\.then\(async \(\) =>/);
   assert.match(styles, /\.app-loading \{ min-height:100vh;/);
   assert.match(styles, /\.app-loading__panel/);
@@ -101,7 +101,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 7);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 8);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -434,9 +434,22 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true">/);
   assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
   assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
-  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 4);
+  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 5);
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
+});
+
+test("About you is inspectable and new plans expose plan-local profile selection", () => {
+  assert.match(source, /<h1>About you<\/h1>/);
+  assert.match(source, /Suggestions to review/);
+  assert.match(source, /Nothing here is hidden, permanent, or permission to act/);
+  assert.match(source, /name="action" value="retire">Stop using/);
+  assert.match(source, /name="action" value="delete">Delete/);
+  assert.match(source, /name="profileUse"/);
+  assert.match(source, /finite-plan-profile-selection\.v1/);
+  assert.match(source, /Used only for this plan; changing it here does not edit About you/);
+  assert.match(styles, /\.about-memory-grid/);
+  assert.match(styles, /\.arrival-profile-context/);
 });
 
 test("guided highlighting is a human-controlled option inside the single Codex handoff", () => {

@@ -20,7 +20,7 @@ import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
-import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryKind } from "./plan-learning.js";
+import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryAction, type ProfileMemoryKind } from "./plan-learning.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
@@ -492,6 +492,7 @@ let checklistItems: ChecklistItem[] = [];
 let planAttachments: PlanAttachment[] = [];
 let planRetrospective: PlanRetrospective | null = null;
 let profileMemories: ProfileMemory[] = [];
+let profileContextReady = false;
 const refreshPlanInputs = async (): Promise<void> => {
   const result = await planInputRepository.list({ planId: runtime.kernel.profile.planId });
   planInputs = result.ok ? result.inputs : [];
@@ -504,7 +505,13 @@ const refreshPlanWork = async (): Promise<void> => {
 const refreshPlanLearning = async (): Promise<void> => {
   const result = await planLearningRepository.list(runtime.kernel.profile.planId);
   planRetrospective = result.ok ? result.retrospective : emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
-  profileMemories = result.ok ? result.memories : [];
+  if (result.ok) profileMemories = result.memories;
+  profileContextReady = profileContextReady || result.ok;
+};
+const refreshProfileContext = async (): Promise<void> => {
+  const result = await planLearningRepository.listProfile();
+  if (result.ok) profileMemories = result.memories;
+  profileContextReady = result.ok;
 };
 const startupSurface = selectExperienceSurface({
   labMode,
@@ -516,7 +523,7 @@ const refreshSecondaryPlanData = (): Promise<unknown[]> => Promise.all([
   refreshPlanDisplayNames().catch(() => undefined),
   refreshPlanInputs().catch(() => { planInputs = []; }),
   refreshPlanWork().catch(() => { checklistItems = []; planAttachments = []; }),
-  refreshPlanLearning().catch(() => { planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision); profileMemories = []; }),
+  refreshPlanLearning().catch(() => { planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision); }),
 ]);
 let secondaryPlanDataReady = startupSurface !== "plan";
 const initialSecondaryPlanData = startupSurface === "plan"
@@ -642,6 +649,9 @@ let planWorkError = "";
 let planLearningBusy = false;
 let planLearningError = "";
 let lessonsOpen = false;
+let profilePageBusy = false;
+let profilePageError = "";
+let profilePageMessage = "";
 let attachmentContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
 let planFactDialogOpen = false;
 let planFactBusy = false;
@@ -675,9 +685,15 @@ const renderHeaderControls = (): string => {
   const accountName = authSession.displayName.trim() || (authSession.kind === "demo" ? "Finite demo" : "Finite account");
   const initial = Array.from(accountName)[0]?.toLocaleUpperCase() ?? "F";
   const settingsTarget = new URL(location.href);
+  settingsTarget.searchParams.delete("about");
   settingsTarget.searchParams.set("settings", "1");
   const settingsPath = `${settingsTarget.pathname}${settingsTarget.search}${settingsTarget.hash}`;
-  return `${authSession.kind === "account" ? `<button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
+  const aboutTarget = new URL(location.href);
+  aboutTarget.searchParams.delete("settings");
+  aboutTarget.searchParams.set("about", "1");
+  const aboutPath = `${aboutTarget.pathname}${aboutTarget.search}${aboutTarget.hash}`;
+  const proposedCount = profileMemories.filter((memory) => memory.status === "proposed").length;
+  return `${authSession.kind === "account" ? `<a class="header-action header-action--about" href="${escapeHtml(aboutPath)}">About you${proposedCount ? `<span>${proposedCount}</span>` : ""}</a><button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
     <details class="account-menu">
       <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
       <div class="account-menu__popover">
@@ -686,6 +702,7 @@ const renderHeaderControls = (): string => {
           <summary>How Finite works</summary>
           <div><p>Think of Finite as the kitchen behind your plan: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
         </details>
+        ${authSession.kind === "account" ? `<a href="${escapeHtml(aboutPath)}">About you</a>` : ""}
         <a href="${escapeHtml(settingsPath)}">Settings</a>
         <button type="button" data-action="open-kitchen-reset">Start over</button>
         ${authSession.kind === "demo" ? `<button type="button" data-action="end-demo">End demo</button>` : `<a href="/signout-with-chatgpt?return_to=/">Sign out</a>`}
@@ -1841,6 +1858,22 @@ const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; det
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
 
+const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
+  if (authSession.kind !== "account") return "";
+  const target = new URL(location.href);
+  target.searchParams.delete("settings");
+  target.searchParams.set("about", "1");
+  const aboutPath = `${target.pathname}${target.search}${target.hash}`;
+  if (!profileContextReady) return `<div class="arrival-profile-context arrival-profile-context--loading"><span>Checking what you asked Finite to remember…</span></div>`;
+  const accepted = profileMemories.filter((memory) => memory.status === "accepted");
+  if (!accepted.length) return `<div class="arrival-profile-context arrival-profile-context--empty"><span>No saved preferences are being added to this plan.</span><a href="${escapeHtml(aboutPath)}">About you</a></div>`;
+  return `<details class="arrival-profile-context">
+    <summary><div><span>From About you</span><strong>Using ${accepted.length} saved ${accepted.length === 1 ? "thing" : "things"}</strong><small>Open this to skip or change anything for this plan.</small></div><em>${accepted.length} on</em></summary>
+    <div class="arrival-profile-context__items">${accepted.map((memory) => `<label class="arrival-profile-context__item"><input type="checkbox" name="profileUse" value="${escapeHtml(memory.memoryId)}" checked data-arrival-mode-control ${mode === "manual" ? "disabled" : ""}><span><small>${escapeHtml(profileMemoryKindLabel(memory.kind))}</small><input name="profileStatement:${escapeHtml(memory.memoryId)}" maxlength="500" value="${escapeHtml(memory.statement)}" aria-label="Change ${escapeHtml(memory.statement)} for this plan" data-arrival-mode-control ${mode === "manual" ? "disabled" : ""}><em>Used only for this plan; changing it here does not edit About you.</em></span></label>`).join("")}</div>
+    <footer><p>These are revisable starting context—not current facts, permission, or approval.</p><a href="${escapeHtml(aboutPath)}">Manage About you</a></footer>
+  </details>`;
+};
+
 const renderArrival = (manifest: SurfaceManifest): void => {
   const order = currentArrival();
   const status = order ? arrivalStatus(order) : null;
@@ -1890,6 +1923,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <button type="button" data-arrival-example="Help me prepare for a job interview for an operations lead role next month.">Job interview</button>
                 <button type="button" data-arrival-example="Plan a home office makeover without replacing my current desk.">Home project</button>
               </div>
+              ${renderArrivalProfileContext("codex")}
               <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" name="planningMode" value="codex" data-arrival-mode-control ${busy ? "disabled" : ""}>Build my rough plan</button><p>You can change every part yourself once it opens.</p></div>
             </section>
             <section id="arrival_panel_manual" class="arrival-start-panel arrival-start-panel--manual" role="tabpanel" aria-labelledby="arrival_start_manual" data-arrival-start-panel="manual" hidden>
@@ -1901,6 +1935,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <label><span>What must not change?</span><input name="hardConstraint" maxlength="500" placeholder="A commitment, requirement, or hard edge" data-arrival-mode-control disabled></label>
                 <label><span>Useful references</span><input name="evidence" maxlength="1000" placeholder="Links, booking references, or documents" data-arrival-mode-control disabled></label>
               </div>
+              ${renderArrivalProfileContext("manual")}
               <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" name="planningMode" value="manual" data-arrival-mode-control disabled ${busy ? "disabled" : ""}>Open my workspace</button><p>Anything left blank stays open for you to add later.</p></div>
             </section>
           </form>
@@ -1981,9 +2016,27 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     controls.forEach((control) => { control.disabled = disabledBefore.get(control) ?? false; });
     if (submitButton) submitButton.textContent = submitLabel;
   };
+  const acceptedProfile = profileMemories.filter((memory) => memory.status === "accepted");
+  const selectedMemoryIds = new Set(data.getAll("profileUse").map(String));
+  const selectedProfile = acceptedProfile.filter((memory) => selectedMemoryIds.has(memory.memoryId)).map((memory) => ({
+    memoryId: memory.memoryId,
+    kind: memory.kind,
+    statement: String(data.get(`profileStatement:${memory.memoryId}`) ?? memory.statement).trim() || memory.statement,
+    originalStatement: memory.statement,
+    evidence: memory.evidence,
+    sourcePlanId: memory.sourcePlanId,
+    sourceUpdatedAt: memory.updatedAt,
+  }));
+  const profileContext = profileContextReady && acceptedProfile.length ? {
+    selectionVersion: "finite-plan-profile-selection.v1",
+    selected: selectedProfile,
+    excludedMemoryIds: acceptedProfile.filter((memory) => !selectedMemoryIds.has(memory.memoryId)).map((memory) => memory.memoryId),
+    humanReviewedAtSubmit: true,
+    law: "Plan-local context only. It is not current fact, permission, approval, or a change to About you.",
+  } : undefined;
   const structured = planningMode === "manual"
-    ? { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)) }
-    : { planningMode };
+    ? { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)), ...(profileContext ? { profileContext } : {}) }
+    : { planningMode, ...(profileContext ? { profileContext } : {}) };
   const evidence = planningMode === "manual" ? String(data.get("evidence") ?? "").trim() : "";
   try {
     arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
@@ -3298,7 +3351,7 @@ const profileMemoryKindLabel = (kind: ProfileMemoryKind): string => ({
 
 const renderPlanLessons = (): string => {
   const retrospective = planRetrospective ?? emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
-  const memories = profileMemories.filter((memory) => memory.sourcePlanId === runtime.kernel.profile.planId && memory.status !== "rejected");
+  const memories = profileMemories.filter((memory) => memory.sourcePlanId === runtime.kernel.profile.planId && memory.status !== "rejected" && memory.status !== "retired");
   const proposed = memories.filter((memory) => memory.status === "proposed");
   const accepted = memories.filter((memory) => memory.status === "accepted");
   const notes = [retrospective.worked, retrospective.changed, retrospective.nextTime].filter(Boolean).length;
@@ -3407,6 +3460,83 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
     ${renderThemeSettingsDialog()}`;
 };
 
+const profileKindOptions = (selected: ProfileMemoryKind): string => ([
+  ["preference", "Preference"],
+  ["interest", "Interest"],
+  ["constraint", "Constraint"],
+  ["working_pattern", "Working pattern"],
+  ["avoid", "Avoid next time"],
+] as Array<[ProfileMemoryKind, string]>).map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
+
+const profileMemorySourceLabel = (memory: ProfileMemory): string => {
+  if (memory.sourcePlanId === "profile") return "Added directly in About you";
+  return `From ${planDisplayNames.get(memory.sourcePlanId) ?? "an earlier plan"}`;
+};
+
+const renderProfileMemoryEditor = (memory: ProfileMemory): string => {
+  const proposed = memory.status === "proposed";
+  return `<form class="about-memory-card ${proposed ? "is-proposed" : "is-accepted"}" data-profile-memory-change>
+    <input type="hidden" name="memoryId" value="${escapeHtml(memory.memoryId)}">
+    <input type="hidden" name="expectedUpdatedAt" value="${escapeHtml(memory.updatedAt)}">
+    <header><span>${escapeHtml(profileMemoryKindLabel(memory.kind))}</span><em>${proposed ? `Suggested by ${escapeHtml(agenticName())}` : "Remembered"}</em></header>
+    <label><span>${proposed ? "Review the wording" : "What Finite remembers"}</span><input name="statement" maxlength="500" value="${escapeHtml(memory.statement)}" required></label>
+    <label class="about-memory-card__kind"><span>Type</span><select name="kind">${profileKindOptions(memory.kind)}</select></label>
+    <div class="about-memory-card__evidence"><span>Why this exists</span><p>${escapeHtml(memory.evidence)}</p><small>${escapeHtml(profileMemorySourceLabel(memory))}</small></div>
+    <footer>${proposed
+      ? `<button class="button button--secondary" type="submit" name="action" value="accept">Remember this</button><button class="text-button" type="submit" name="action" value="reject">Don’t use this</button>`
+      : `<button class="button button--secondary" type="submit" name="action" value="update">Save changes</button><button class="text-button" type="submit" name="action" value="retire">Stop using</button><button class="text-button about-memory-card__delete" type="submit" name="action" value="delete">Delete</button>`}</footer>
+  </form>`;
+};
+
+const renderInactiveProfileMemory = (memory: ProfileMemory): string => `<form class="about-memory-row" data-profile-memory-change>
+  <input type="hidden" name="memoryId" value="${escapeHtml(memory.memoryId)}">
+  <input type="hidden" name="expectedUpdatedAt" value="${escapeHtml(memory.updatedAt)}">
+  <input type="hidden" name="statement" value="${escapeHtml(memory.statement)}">
+  <input type="hidden" name="kind" value="${escapeHtml(memory.kind)}">
+  <div><span>${memory.status === "rejected" ? "Not used" : "Retired"} · ${escapeHtml(profileMemoryKindLabel(memory.kind))}</span><strong>${escapeHtml(memory.statement)}</strong><small>${escapeHtml(profileMemorySourceLabel(memory))}</small></div>
+  <footer><button class="text-button" type="submit" name="action" value="restore">Use again</button><button class="text-button about-memory-card__delete" type="submit" name="action" value="delete">Delete</button></footer>
+</form>`;
+
+const aboutReturnPath = (): string => {
+  const target = new URL(location.href);
+  target.searchParams.delete("about");
+  return `${target.pathname}${target.search}${target.hash}`;
+};
+
+function renderAboutYou(): void {
+  const canPersist = authSession.kind === "account";
+  const accepted = profileMemories.filter((memory) => memory.status === "accepted");
+  const proposed = profileMemories.filter((memory) => memory.status === "proposed");
+  const inactive = profileMemories.filter((memory) => memory.status === "rejected" || memory.status === "retired");
+  surfaceRoot.dataset.profile = "about-you";
+  surfaceRoot.setAttribute("aria-busy", String(profilePageBusy));
+  surfaceRoot.innerHTML = `
+    <div class="private-top-shell private-top-shell--settings">
+      <header class="site-header settings-header">
+        ${renderBrand()}
+        <a class="settings-back" href="${escapeHtml(aboutReturnPath())}">← Back to plan</a>
+        <div class="header-actions">${renderHeaderControls()}</div>
+      </header>
+    </div>
+    <main id="main" class="about-main">
+      <header class="about-hero"><div><p class="eyebrow">Your reusable context</p><h1>About you</h1><p>See and control what Finite may carry into later plans. Nothing here is hidden, permanent, or permission to act.</p></div><dl><div><dt>Remembered</dt><dd>${accepted.length}</dd></div><div><dt>To review</dt><dd>${proposed.length}</dd></div><div><dt>Not in use</dt><dd>${inactive.length}</dd></div></dl></header>
+      ${profilePageError ? `<p class="settings-feedback is-error" role="alert">${escapeHtml(profilePageError)}</p>` : ""}
+      ${profilePageMessage ? `<p class="settings-feedback is-success" role="status">${escapeHtml(profilePageMessage)}</p>` : ""}
+      ${!profileContextReady ? `<section class="about-loading"><strong>Loading what Finite remembers…</strong></section>` : `
+        ${proposed.length ? `<section class="about-section about-section--review" aria-labelledby="about_review_title"><header><div><p class="eyebrow">Your decision</p><h2 id="about_review_title">Suggestions to review</h2></div><p>${escapeHtml(agenticName())} noticed these in earlier plans. They do nothing until you accept or edit them.</p></header><div class="about-memory-grid">${proposed.map(renderProfileMemoryEditor).join("")}</div></section>` : ""}
+        <section class="about-section" aria-labelledby="about_remembered_title"><header><div><p class="eyebrow">Available to later plans</p><h2 id="about_remembered_title">Remembered</h2></div><p>Each new plan shows these before using them. You can skip or rewrite one for that plan without changing it here.</p></header>${accepted.length ? `<div class="about-memory-grid">${accepted.map(renderProfileMemoryEditor).join("")}</div>` : `<div class="about-empty"><strong>Nothing is being carried forward yet.</strong><p>Add something below, or accept a suggestion after a completed plan.</p></div>`}</section>
+        <section class="about-section about-add" aria-labelledby="about_add_title"><header><div><p class="eyebrow">In your own words</p><h2 id="about_add_title">Add something Finite should remember</h2></div><p>Your own entry is accepted immediately and remains editable.</p></header>${canPersist ? `<form data-profile-memory-add><label><span>What should Finite remember?</span><input name="statement" maxlength="500" required placeholder="e.g. I prefer a quieter first day when travelling"></label><label><span>Type</span><select name="kind">${profileKindOptions("preference")}</select></label><button class="button" type="submit" ${profilePageBusy ? "disabled" : ""}>Remember this</button></form>` : `<div class="about-add__signin"><strong>Sign in with ChatGPT to save reusable context.</strong><p>Demo plans remain isolated and do not build a lasting profile.</p></div>`}</section>
+        ${inactive.length ? `<details class="about-inactive"><summary><div><p class="eyebrow">Your history</p><h2>Not in use</h2></div><span>${inactive.length}</span></summary><p>These do not shape plans. Keeping a rejected suggestion prevents the same evidence from being quietly proposed again.</p><div>${inactive.map(renderInactiveProfileMemory).join("")}</div></details>` : ""}
+      `}
+      <aside class="about-boundary"><strong>What this can—and cannot—do</strong><p>Remembered items are revisable context. They cannot confirm a current fact, approve a purchase, weaken a safety constraint, or override what you say in a plan.</p></aside>
+    </main>
+    <footer><p>You can inspect, change or remove every reusable item.</p><span>About you</span></footer>
+    ${renderKitchenResetDialog()}
+    ${renderThemeSettingsDialog()}`;
+  enableNativeWritingAssistance();
+  bindAboutYouInteractions();
+}
+
 const settingsReturnPath = (): string => {
   const target = new URL(location.href);
   target.searchParams.delete("settings");
@@ -3481,6 +3611,70 @@ function bindSettingsInteractions(): void {
   });
 }
 
+const addProfileMemoryFromAbout = async (form: HTMLFormElement): Promise<void> => {
+  if (profilePageBusy) return;
+  const data = new FormData(form);
+  profilePageBusy = true;
+  profilePageError = "";
+  profilePageMessage = "";
+  await render();
+  try {
+    const result = await planLearningRepository.addProfileMemory({
+      kind: String(data.get("kind") ?? "preference"),
+      statement: String(data.get("statement") ?? ""),
+      evidence: "Added by you in About you.",
+      idempotencyKey: `profile-memory-about-site-${crypto.randomUUID()}`,
+      sourceSurface: "site",
+    });
+    if (result.ok) {
+      profileMemories = result.memories;
+      profilePageMessage = "Remembered. New plans will show this before using it.";
+      announce(profilePageMessage);
+    } else profilePageError = result.issues?.join(" ") || result.message || "That could not be remembered.";
+  } catch { profilePageError = "That could not be remembered. Nothing changed."; }
+  profilePageBusy = false;
+  await render();
+};
+
+const changeProfileMemoryFromAbout = async (form: HTMLFormElement, submitter: HTMLButtonElement | null): Promise<void> => {
+  if (profilePageBusy) return;
+  const data = new FormData(form);
+  const action = String(submitter?.value ?? "update") as ProfileMemoryAction;
+  if (action === "delete" && !window.confirm("Delete this permanently from About you? This also removes its evidence history.")) return;
+  profilePageBusy = true;
+  profilePageError = "";
+  profilePageMessage = "";
+  await render();
+  try {
+    const result = await planLearningRepository.changeProfileMemory({
+      memoryId: String(data.get("memoryId") ?? ""),
+      expectedUpdatedAt: String(data.get("expectedUpdatedAt") ?? ""),
+      action,
+      statement: String(data.get("statement") ?? ""),
+      kind: String(data.get("kind") ?? "preference"),
+      idempotencyKey: `profile-memory-${action}-about-site-${crypto.randomUUID()}`,
+      sourceSurface: "site",
+    });
+    if (result.ok) {
+      profileMemories = result.memories;
+      profilePageMessage = action === "delete" ? "Deleted." : action === "retire" || action === "reject" ? "This will not be used in later plans." : action === "accept" || action === "restore" ? "Remembered for later plans." : "Changes saved.";
+      announce(profilePageMessage);
+    } else {
+      if (result.code === "PROFILE_MEMORY_CONFLICT") await refreshProfileContext();
+      profilePageError = result.issues?.join(" ") || result.message || "That change could not be saved.";
+    }
+  } catch { profilePageError = "That change could not be saved. Nothing changed."; }
+  profilePageBusy = false;
+  await render();
+};
+
+function bindAboutYouInteractions(): void {
+  bindKitchenResetInteractions();
+  bindThemeSettingsInteractions();
+  root?.querySelector<HTMLFormElement>("[data-profile-memory-add]")?.addEventListener("submit", (event) => { event.preventDefault(); void addProfileMemoryFromAbout(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-profile-memory-change]").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void changeProfileMemoryFromAbout(event.currentTarget as HTMLFormElement, (event as SubmitEvent).submitter as HTMLButtonElement | null); }));
+}
+
 async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
   const reconciledMessage = reconcileScopedSurfaceMessage({ message, scope: messageScope }, currentMessageScope());
@@ -3489,6 +3683,10 @@ async function render(): Promise<SurfaceManifest> {
   messageScope = reconciledMessage.scope;
   const params = new URLSearchParams(location.search);
   const manifestPromise = compileSurfaceManifest(kernel.profile, kernel);
+  if (params.get("about") === "1") {
+    renderAboutYou();
+    return manifestPromise;
+  }
   if (params.get("settings") === "1") {
     renderSettings();
     return manifestPromise;
@@ -4294,7 +4492,9 @@ updateOpeningStatus("Opening your workspace…");
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 if (opensFreshArrival) void hydrateCanonicalRuntime();
-if (startupSurface === "arrival") void refreshSecondaryPlanData();
+if (startupSurface === "arrival") {
+  void Promise.all([refreshSecondaryPlanData(), refreshProfileContext()]).then(() => render()).catch(() => { /* The starting surface stays usable without reusable context. */ });
+}
 if (startupSurface === "plan") {
   void initialSecondaryPlanData.then(async () => {
     await render();
