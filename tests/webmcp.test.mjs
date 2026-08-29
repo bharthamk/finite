@@ -70,6 +70,61 @@ test("the page-start entry proxy stays registered while the adapter supplies its
   assert.equal(entered.operationProof.toolName, "finite_enter_kitchen");
 });
 
+test("kitchen entry prioritises new human source material without asking for another permission", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const attachment = {
+    attachmentId: "attachment_human_notes",
+    planId: runtime.kernel.profile.planId,
+    planRevision: runtime.kernel.revision,
+    section: "general",
+    contextId: "stage_first",
+    contextLabel: "First priority",
+    kind: "file",
+    label: "notes.txt",
+    noteText: null,
+    linkUrl: null,
+    fileName: "notes.txt",
+    contentType: "text/plain",
+    sizeBytes: 120,
+    contentUrl: "/api/plan-work/attachments/attachment_human_notes/content",
+    sourceSurface: "site",
+    attachmentRole: "source",
+    processingStatus: "unread",
+    processingSummary: null,
+    derivedRefs: [],
+    processedBy: null,
+    processedAt: null,
+    createdAt: "2026-08-30T00:00:00.000Z",
+    updatedAt: "2026-08-30T00:00:00.000Z",
+    baseCurrent: true,
+  };
+  const planWork = {
+    list: async () => ({ ok: true, code: "PLAN_WORK_LISTED", checklist: [], attachments: [attachment], acceptedStateChanged: false }),
+    readAttachment: async () => ({ ok: true, code: "PLAN_ATTACHMENT_READ", attachment, contentMode: "text", content: "x".repeat(600), offset: 0, nextOffset: null, truncated: false, acceptedStateChanged: false }),
+  };
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, planWork);
+  await adapter.register();
+  const entered = await adapter.enterKitchen({ entryIntent: "continue_current" });
+  assert.equal(entered.operatorPacket.nextAction.stage, "plan_attachment_unread");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_read_plan_attachment");
+  assert.deepEqual(entered.operatorPacket.nextAction.missingInputs, []);
+  assert.equal(entered.operatorPacket.planWork.unreadSourceCount, 1);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].title, "Process notes.txt");
+  assert.equal(entered.operatorPacket.preMutationGate.sameSiteAttachmentProcessingRequiresConfirmation, false);
+  assert.equal((await host.execute("finite_open_toolset", { group: "execution" })).code, "TOOLSET_READY");
+  adapter.useBoundedOutputs();
+  const read = await host.execute("finite_read_plan_attachment", { attachmentId: attachment.attachmentId, planId: attachment.planId });
+  assert.equal(read.nextAction.nextTool, "finite_set_plan_attachment_processing");
+  assert.equal(read.nextAction.requiresHuman, false);
+  assert.equal(read.nextAction.knownArgsComplete, false);
+  assert.equal(read.content, null);
+  const exactContent = await host.execute("finite_read_result", { resultRef: read.contentInResultDetail.resultRef, paths: ["/content"] });
+  assert.equal(exactContent.values[0].value.length, 600);
+  assert.equal(JSON.stringify(read).length <= 1500, true);
+});
+
 test("production adapter normalizes host input, excludes authority, and replaces contextual tools", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");

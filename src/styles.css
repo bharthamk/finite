@@ -1039,12 +1039,19 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .attachment-empty strong { font-size:.82rem; }
 .plan-attachments { display:grid; gap:8px; }
 .plan-attachment { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:12px; align-items:start; padding:11px 0; border-bottom:1px solid var(--line); }
+.plan-attachment.is-new { margin-inline:-10px; padding-inline:10px; background:color-mix(in srgb,var(--accent-soft) 58%,transparent); }
 .plan-attachment__icon,.plan-attachment__thumb { width:40px; height:40px; display:grid; place-items:center; color:var(--accent); background:var(--accent-soft); text-decoration:none; overflow:hidden; }
 .plan-attachment__thumb img { width:100%; height:100%; object-fit:cover; }
 .plan-attachment>div { min-width:0; display:grid; gap:4px; }
 .plan-attachment>div>span { color:var(--muted); font:500 .58rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
+.plan-attachment__badges { display:flex; flex-wrap:wrap; gap:5px; }
+.plan-attachment__badges b { padding:3px 6px; border:1px solid var(--line); color:var(--muted); background:var(--panel); font:600 .52rem/1 "DM Mono",monospace; text-transform:uppercase; }
+.plan-attachment__badges b.is-unread { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+.plan-attachment__badges b.is-processed { color:var(--success); border-color:color-mix(in srgb,var(--success) 58%,var(--line)); }
+.plan-attachment__badges b.is-needs_review { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 58%,var(--line)); }
 .plan-attachment>div>a,.plan-attachment>div>strong { color:var(--ink); font-size:.88rem; font-weight:650; overflow-wrap:anywhere; }
 .plan-attachment p { margin:2px 0 0; color:var(--ink); font-size:.85rem; line-height:1.45; white-space:pre-line; }
+.plan-attachment p.plan-attachment__summary { padding-left:9px; border-left:2px solid var(--accent); color:var(--muted); }
 .plan-attachment small { color:var(--muted); }
 .plan-attachment>button { border:0; border-bottom:1px solid currentColor; padding:3px 0; color:var(--muted); background:transparent; font:600 .56rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
 .plan-attachments--compact { margin-top:12px; }
@@ -1054,7 +1061,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .attachment-dialog__fields label { display:grid; gap:8px; }
 .attachment-dialog__fields label>span { color:var(--muted); font:600 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 .attachment-dialog__fields input,.attachment-dialog__fields select,.attachment-dialog__fields textarea { width:100%; padding:13px 14px; border:1px solid var(--line); color:var(--ink); background:var(--panel); font:inherit; }
-.attachment-dialog__fields>label:first-child,.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:1/-1; }
+.attachment-dialog__fields>label:first-child,.attachment-dialog__fields>label:nth-child(2),.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:1/-1; }
 .attachment-upload { padding:20px; border:1px dashed var(--line); }
 .attachment-upload small { color:var(--muted); }
 .attachment-dialog__or { display:flex; align-items:center; gap:14px; color:var(--muted); font:600 .6rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
@@ -1613,7 +1620,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .plan-work { grid-template-columns:1fr; }
   .plan-work>article { padding:22px 18px; }
   .attachment-dialog__fields { grid-template-columns:1fr; }
-  .attachment-dialog__fields>label:first-child,.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:auto; }
+  .attachment-dialog__fields>label:first-child,.attachment-dialog__fields>label:nth-child(2),.attachment-upload,.attachment-note,.attachment-dialog__or { grid-column:auto; }
   .surface-grid { display:block; padding-top:30px; }
   .zone { margin-bottom:14px; padding:22px 18px; }
   .zone__heading { display:block; }

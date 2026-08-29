@@ -2838,12 +2838,14 @@ const checklistFor = (section: PlanInputSection, contextId: string | null = null
 const checklistForStage = (stageId: string): ChecklistItem | null => checklistItems.find((item) => item.sourceRef === `stage:${stageId}`) ?? null;
 const attachmentsFor = (section: PlanInputSection, contextId: string | null = null): PlanAttachment[] => planAttachments.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
 const attachmentKindLabel = (kind: PlanAttachment["kind"]): string => ({ image: "Image", file: "File", link: "Link", note: "Note" })[kind];
+const attachmentRoleLabel = (role: PlanAttachment["attachmentRole"]): string => role === "source" ? "Source" : "Agent output";
+const attachmentProcessingLabel = (item: PlanAttachment): string => item.attachmentRole === "output" ? "Output" : ({ unread: "New", in_progress: "Processing", processed: "Processed", needs_review: "Needs review", not_applicable: "Output" })[item.processingStatus];
 const formatFileSize = (bytes: number | null): string => bytes === null ? "" : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const renderAttachmentItems = (items: PlanAttachment[], compact = false): string => {
   if (!items.length) return "";
-  return `<div class="plan-attachments${compact ? " plan-attachments--compact" : ""}">${items.map((item) => `<article class="plan-attachment plan-attachment--${escapeHtml(item.kind)}">
+  return `<div class="plan-attachments${compact ? " plan-attachments--compact" : ""}">${items.map((item) => `<article class="plan-attachment plan-attachment--${escapeHtml(item.kind)}${item.processingStatus === "unread" ? " is-new" : ""}">
     ${item.kind === "image" && item.contentUrl ? `<a class="plan-attachment__thumb" href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(item.contentUrl)}" alt=""></a>` : `<span class="plan-attachment__icon" aria-hidden="true">${item.kind === "link" ? "↗" : item.kind === "note" ? "≡" : "↓"}</span>`}
-    <div><span>${escapeHtml(attachmentKindLabel(item.kind))}${item.contextLabel ? ` · ${escapeHtml(item.contextLabel)}` : ""}</span>${item.linkUrl ? `<a href="${escapeHtml(item.linkUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : item.contentUrl ? `<a href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : `<strong>${escapeHtml(item.label)}</strong>`}${item.noteText ? `<p>${escapeHtml(item.noteText)}</p>` : ""}${item.sizeBytes ? `<small>${escapeHtml(formatFileSize(item.sizeBytes))}</small>` : ""}</div>
+    <div><span>${escapeHtml(attachmentKindLabel(item.kind))}${item.contextLabel ? ` · ${escapeHtml(item.contextLabel)}` : ""}</span><div class="plan-attachment__badges"><b>${escapeHtml(attachmentRoleLabel(item.attachmentRole))}</b><b class="is-${escapeHtml(item.processingStatus)}">${escapeHtml(attachmentProcessingLabel(item))}</b></div>${item.linkUrl ? `<a href="${escapeHtml(item.linkUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : item.contentUrl ? `<a href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : `<strong>${escapeHtml(item.label)}</strong>`}${item.noteText ? `<p>${escapeHtml(item.noteText)}</p>` : ""}${item.processingSummary ? `<p class="plan-attachment__summary">${escapeHtml(item.processingSummary)}</p>` : ""}${item.derivedRefs.length ? `<small>${item.derivedRefs.length} derived plan ${item.derivedRefs.length === 1 ? "record" : "records"}</small>` : ""}${item.sizeBytes ? `<small>${escapeHtml(formatFileSize(item.sizeBytes))}</small>` : ""}</div>
     <button type="button" data-action="remove-attachment" data-attachment-id="${escapeHtml(item.attachmentId)}" aria-label="Remove ${escapeHtml(item.label)}">Remove</button>
   </article>`).join("")}</div>`;
 };
@@ -2858,7 +2860,7 @@ const renderPlanWork = (): string => {
       <form class="checklist-add" data-checklist-add><label><span class="sr-only">Add something to do</span><input name="label" type="text" maxlength="240" placeholder="Add something to do…" required></label><button type="submit" ${planWorkBusy ? "disabled" : ""}>Add</button></form>
     </article>
     <article class="plan-work__attachments">
-      <header><div><p class="eyebrow">Reference material</p><h2>Files &amp; links</h2></div><button type="button" data-action="open-attachment" data-attachment-section="general">+ Add</button></header>
+      <header><div><p class="eyebrow">Reference material</p><h2>Files &amp; links</h2>${planAttachments.some((item) => item.attachmentRole === "source" && item.processingStatus === "unread") ? `<small>${planAttachments.filter((item) => item.attachmentRole === "source" && item.processingStatus === "unread").length} new for ${escapeHtml(agenticName())}</small>` : ""}</div><button type="button" data-action="open-attachment" data-attachment-section="general">+ Add</button></header>
       ${planAttachments.length ? renderAttachmentItems(planAttachments) : `<button type="button" class="attachment-empty" data-action="open-attachment" data-attachment-section="general"><span>＋</span><strong>Add a file, image, note or link</strong></button>`}
     </article>
   </section>`;
@@ -2869,6 +2871,7 @@ const renderAttachmentDialog = (manifest: SurfaceManifest): string => `<dialog c
   <form data-attachment-form>
     <header><p class="eyebrow">Add to this plan</p><h2 id="attachment_title">Files, pictures, links or notes</h2></header>
     <div class="attachment-dialog__fields">
+      <label><span>What is this?</span><select name="attachmentRole"><option value="source" selected>Source material</option><option value="output">Agent output</option></select><small>Source material waits for ${escapeHtml(agenticName())} to process. Agent output is a finished deliverable.</small></label>
       <label><span>Where does it belong?</span><select name="location">
         <option value="general" ${attachmentContext.section === "general" ? "selected" : ""}>Whole plan</option>
         <option value="money" ${attachmentContext.section === "money" ? "selected" : ""}>Money</option>
@@ -3936,6 +3939,7 @@ const saveAttachments = async (form: HTMLFormElement): Promise<void> => {
   const select = form.elements.namedItem("location") as HTMLSelectElement;
   const contextId = section === "timeline" ? rawContext || null : null;
   const contextLabel = section === "timeline" ? select.selectedOptions[0]?.textContent?.trim() || null : null;
+  const attachmentRole = data.get("attachmentRole") === "output" ? "output" as const : "source" as const;
   const files = Array.from((form.elements.namedItem("files") as HTMLInputElement).files ?? []);
   const link = String(data.get("link") ?? "").trim();
   const linkLabel = String(data.get("linkLabel") ?? "").trim();
@@ -3945,7 +3949,7 @@ const saveAttachments = async (form: HTMLFormElement): Promise<void> => {
   planWorkError = "";
   await render();
   try {
-    const common = { planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section, contextId, contextLabel, sourceSurface: "site" as const };
+    const common = { planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section, contextId, contextLabel, attachmentRole, sourceSurface: "site" as const };
     const results: PlanWorkResult[] = [];
     for (const file of files) results.push(await planWorkRepository.uploadAttachment({ ...common, file, idempotencyKey: `attachment-upload-site-${crypto.randomUUID()}` }));
     if (link) results.push(await planWorkRepository.addTextAttachment({ ...common, kind: "link", label: linkLabel, value: link, idempotencyKey: `attachment-link-site-${crypto.randomUUID()}` }));
