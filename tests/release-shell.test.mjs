@@ -38,6 +38,7 @@ test("a standalone share route receives the release shell without entering an AP
 
 test("every Worker response receives the production isolation and content-security contract", async () => {
   const response = withSecurityHeaders(new Response("ok", { headers: { "content-type": "text/plain" } }));
+  assert.equal(response.headers.get("x-finite-build"), finiteRelease.build);
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
   assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");

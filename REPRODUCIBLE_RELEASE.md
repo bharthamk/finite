@@ -16,12 +16,18 @@ npm test
 npm run build
 ```
 
-The accepted v155 gate is 255/255 tests, a successful TypeScript check, a
+The accepted v156 gate is 255/255 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is
 absent, private operator JavaScript is loaded only after authentication, and
 the script CSP no longer permits inline execution.
+
+The build writes the exact release marker into the emitted HTML and static
+header contract. Every Worker response carries the same `x-finite-build`
+marker. Hosted verification therefore proves both the static entry shell and
+the live API without assuming that the hosting edge routes HTML through the
+Worker before serving an asset.
 
 ## Source boundary
 

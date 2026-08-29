@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "storage-integrity-and-bootstrap-v155",
+  build: "hosted-release-proof-v156",
 } as const;

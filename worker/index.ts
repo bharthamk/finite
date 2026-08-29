@@ -25,6 +25,7 @@ export { finiteRelease };
 
 export const withSecurityHeaders = (source: Response): Response => {
   const headers = new Headers(source.headers);
+  headers.set("x-finite-build", finiteRelease.build);
   headers.set("content-security-policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'");
   headers.set("cross-origin-opener-policy", "same-origin");
   headers.set("cross-origin-resource-policy", "same-origin");
