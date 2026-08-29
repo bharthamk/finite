@@ -1377,6 +1377,7 @@ export class FinitePlanWebMCPAdapter {
       preferenceScore: option.preferenceScore,
     }));
     const proof = compactOperationProof(result.operationProof);
+    const persistenceTiming = record(result.persistenceTiming);
     const humanChanges = compactHumanChanges(packet.humanChanges);
     const operatorPhase = record(packet.operatorPhase);
     const compact: ToolResult = {
@@ -1397,6 +1398,7 @@ export class FinitePlanWebMCPAdapter {
       ...(toolName === "finite_enter_kitchen" && Array.isArray(humanChanges.changes) && humanChanges.changes.length ? { humanChanges } : {}),
       ...(toolName === "finite_enter_kitchen" && operatorPhase.stage !== "inactive" ? { operatorPhase } : {}),
       ...(proof ? { proof } : {}),
+      ...(persistenceTiming.measurementVersion === "finite-persistence-timing.v1" ? { persistenceTiming } : {}),
       detail: { ...detail, readTool: "finite_read_result", format: "semantic_paths" },
       next: nextAction?.nextTool ? `Call ${String(nextAction.nextTool)} with nextAction.knownArgs, or read detail only if a required field is omitted.` : shortText(result.next, 180) ?? "Continue from nextAction; read detail only when needed.",
     };
@@ -1415,6 +1417,7 @@ export class FinitePlanWebMCPAdapter {
       ...(toolName === "finite_enter_kitchen" && Array.isArray(humanChanges.changes) && humanChanges.changes.length ? { humanChanges } : {}),
       ...(toolName === "finite_enter_kitchen" && operatorPhase.stage !== "inactive" ? { operatorPhase } : {}),
       ...(proof ? { proof: { operationHash: proof.operationHash, resultHash: proof.resultHash, acceptedStateChanged: proof.acceptedStateChanged } } : {}),
+      ...(persistenceTiming.measurementVersion === "finite-persistence-timing.v1" ? { persistenceTiming } : {}),
       detail: { ...detail, readTool: "finite_read_result", format: "semantic_paths" },
       next: "Read the detail manifest, then request only the exact JSON Pointer paths required for this route.",
     };

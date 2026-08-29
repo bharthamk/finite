@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
+import { starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 import { MemoryConstructionPacketRepository } from "../dist-test/src/construction-packet.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
@@ -266,6 +267,26 @@ test("bounded kitchen entry preserves a resumable human-change cursor", async ()
   const exact = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef, paths: [exactPath] });
   assert.equal(exact.code, "RESULT_DETAIL_SELECTED");
   assert.match(exact.values[0].value.answer, /Detailed answer Detailed answer/);
+});
+
+test("bounded chef writes keep privacy-safe hosted persistence timing visible", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "bounded-write-timing-0001", rawOutcome: "Plan a detailed dinner party for ten.", structured: { planningMode: "codex" }, sourceSurface: "site" });
+  const target = starterPlanForArrival(created.order).sections.find((section) => section.sectionId === "schedule").items[0];
+  const save = arrivals.saveWorkspaceRecords.bind(arrivals);
+  arrivals.saveWorkspaceRecords = async (...args) => ({
+    ...await save(...args),
+    persistenceTiming: { measurementVersion: "finite-persistence-timing.v1", operation: "ARRIVAL_WORKSPACE_RECORDS_SAVED", writeRoundTripMs: 17.5, sqlDurationMs: 3.25, rowsRead: 2, rowsWritten: 4, maxAttempts: 1, statementCount: 2 },
+  });
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).useBoundedOutputs().register();
+  const saved = await host.execute("finite_save_workspace_records", { orderId: created.order.orderId, expectedVersion: created.order.version, changes: [{ operation: "update", moduleId: "schedule", recordId: target.itemId, fields: { title: "Shared cooking" } }] });
+  assert.equal(saved.code, "ARRIVAL_WORKSPACE_RECORDS_SAVED");
+  assert.equal(saved.persistenceTiming.writeRoundTripMs, 17.5);
+  assert.equal(saved.persistenceTiming.sqlDurationMs, 3.25);
+  assert(JSON.stringify(saved).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
 });
 
 test("every response in a production change-to-commit route stays inside the output budget", async () => {

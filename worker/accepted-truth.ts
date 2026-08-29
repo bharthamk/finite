@@ -2,7 +2,14 @@ import { principalStorageScope, resolveRequestPrincipal } from "./auth.js";
 
 interface D1Result<T = Record<string, unknown>> {
   success: boolean;
-  meta?: { changes?: number };
+  meta?: {
+    changes?: number;
+    duration?: number;
+    timings?: { sql_duration_ms?: number };
+    rows_read?: number;
+    rows_written?: number;
+    total_attempts?: number;
+  };
   results?: T[];
 }
 

@@ -2,6 +2,15 @@ import { defineConfig } from "vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { sites } from "@openai/sites-vite-plugin";
 
+const finiteClientChunk = (id: string): string | undefined => {
+  const source = id.replaceAll("\\", "/").split("?")[0] ?? id;
+  if (!source.includes("/src/")) return undefined;
+  if (/\/(arrival|arrival-presentation|codex-handoff|experience-route)\.ts$/.test(source)) return "finite-arrival";
+  if (/\/(theme|skin|settings|plan-share|plan-input|plan-work|kitchen-reset)\.ts$/.test(source)) return "finite-services";
+  if (/\/(webmcp|runtime|kernel|chef-menu|operator-policy|plan-facts|surface|profiles|persistence|types|crypto|accepted-truth|construction-packet)\.ts$/.test(source)) return "finite-operator";
+  return undefined;
+};
+
 export default defineConfig(({ command }) => ({
   plugins: [
     sites(),
@@ -30,6 +39,11 @@ export default defineConfig(({ command }) => ({
   build: {
     target: "es2022",
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: finiteClientChunk,
+      },
+    },
   },
   server: {
     host: "127.0.0.1",

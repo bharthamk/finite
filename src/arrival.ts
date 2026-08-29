@@ -125,11 +125,23 @@ export interface ArrivalOrientation {
   next: string;
 }
 
+export interface ArrivalPersistenceTiming {
+  measurementVersion: "finite-persistence-timing.v1";
+  operation: string;
+  writeRoundTripMs: number;
+  sqlDurationMs: number | null;
+  rowsRead: number | null;
+  rowsWritten: number | null;
+  maxAttempts: number | null;
+  statementCount: number;
+}
+
 export type ArrivalResult = ToolResult & {
   order?: ArrivalOrder;
   orders?: Array<Pick<ArrivalOrder, "orderId" | "version" | "status" | "rawOutcome" | "updatedAt" | "checksum">>;
   orientation?: ArrivalOrientation;
   replay?: boolean;
+  persistenceTiming?: ArrivalPersistenceTiming;
 };
 
 export type RepositoryRequestContext = { signal?: AbortSignal };

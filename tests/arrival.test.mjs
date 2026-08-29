@@ -6,7 +6,7 @@ import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.j
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter } from "../dist-test/src/webmcp.js";
-import { acceptedPlanHeadIsCurrent, handleArrivalRequest } from "../dist-test/worker/arrival.js";
+import { acceptedPlanHeadIsCurrent, buildArrivalPersistenceTiming, handleArrivalRequest } from "../dist-test/worker/arrival.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -16,6 +16,24 @@ class MemoryModelContext {
   }
   async execute(name, input) { return this.tools.get(name)?.execute(input) ?? { ok: false, code: "TOOL_NOT_FOUND" }; }
 }
+
+test("D1 write timing is compact, privacy-safe, and distinguishes SQL from round-trip latency", () => {
+  const timing = buildArrivalPersistenceTiming("ARRIVAL_WORKSPACE_RECORDS_SAVED", 18.45678, [
+    { meta: { duration: 2.5, timings: { sql_duration_ms: 2.25 }, rows_read: 1, rows_written: 3, total_attempts: 1 } },
+    { meta: { duration: 1.75, rows_read: 2, rows_written: 4, total_attempts: 2 } },
+  ]);
+  assert.deepEqual(timing, {
+    measurementVersion: "finite-persistence-timing.v1",
+    operation: "ARRIVAL_WORKSPACE_RECORDS_SAVED",
+    writeRoundTripMs: 18.457,
+    sqlDurationMs: 4,
+    rowsRead: 3,
+    rowsWritten: 7,
+    maxAttempts: 2,
+    statementCount: 2,
+  });
+  assert.doesNotMatch(JSON.stringify(timing), /order|input|payload|scope|user/i);
+});
 
 test("site-first, Codex-later orientation returns the whole order and every unprocessed human update", async () => {
   let tick = 0;

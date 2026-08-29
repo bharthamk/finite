@@ -9,6 +9,7 @@ import type {
   ArrivalInterpretation,
   ArrivalOrder,
   ArrivalOrientation,
+  ArrivalPersistenceTiming,
   ArrivalSourceSurface,
   ArrivalStatus,
 } from "../src/arrival.js";
@@ -88,6 +89,44 @@ const parseJson = async (request: Request): Promise<JsonRecord> => {
   const parsed: unknown = JSON.parse(text);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("JSON_OBJECT_REQUIRED");
   return parsed as JsonRecord;
+};
+
+type PersistenceResult = {
+  meta?: {
+    duration?: number;
+    timings?: { sql_duration_ms?: number };
+    rows_read?: number;
+    rows_written?: number;
+    total_attempts?: number;
+  };
+};
+
+const finiteNumber = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
+const roundedTiming = (value: number): number => Math.round(Math.max(0, value) * 1_000) / 1_000;
+
+export const buildArrivalPersistenceTiming = (operation: string, writeRoundTripMs: number, results: PersistenceResult[]): ArrivalPersistenceTiming => {
+  const sqlDurations = results.map((result) => finiteNumber(result.meta?.timings?.sql_duration_ms) ?? finiteNumber(result.meta?.duration)).filter((value): value is number => value !== null);
+  const rowsRead = results.map((result) => finiteNumber(result.meta?.rows_read)).filter((value): value is number => value !== null);
+  const rowsWritten = results.map((result) => finiteNumber(result.meta?.rows_written)).filter((value): value is number => value !== null);
+  const attempts = results.map((result) => finiteNumber(result.meta?.total_attempts)).filter((value): value is number => value !== null);
+  return {
+    measurementVersion: "finite-persistence-timing.v1",
+    operation,
+    writeRoundTripMs: roundedTiming(writeRoundTripMs),
+    sqlDurationMs: sqlDurations.length ? roundedTiming(sqlDurations.reduce((total, value) => total + value, 0)) : null,
+    rowsRead: rowsRead.length ? rowsRead.reduce((total, value) => total + value, 0) : null,
+    rowsWritten: rowsWritten.length ? rowsWritten.reduce((total, value) => total + value, 0) : null,
+    maxAttempts: attempts.length ? Math.max(...attempts) : null,
+    statementCount: results.length,
+  };
+};
+
+const withPersistenceTiming = (source: Response, timing: ArrivalPersistenceTiming): Response => {
+  const headers = new Headers(source.headers);
+  const metrics = [`finite_d1_write;dur=${timing.writeRoundTripMs}`];
+  if (timing.sqlDurationMs !== null) metrics.push(`finite_d1_sql;dur=${timing.sqlDurationMs}`);
+  headers.set("server-timing", metrics.join(", "));
+  return new Response(source.body, { status: source.status, statusText: source.statusText, headers });
 };
 
 const sameOriginWrite = (request: Request): boolean => {
@@ -273,20 +312,22 @@ const mutateOrder = async (db: D1Database, scopeId: string, order: ArrivalOrder,
   const next: ArrivalOrder = { ...cleanBase, checksum: await checksumForOrder(cleanBase) };
   const eventBase: Omit<ArrivalEvent, "eventHash"> = { eventVersion: "finite-arrival-event.v1", eventId: `arrival_event_${order.orderId}_${next.version}`, orderId: order.orderId, version: next.version, ...event, createdAt: updatedAt };
   const completeEvent = { ...eventBase, eventHash: await sha256(eventBase) };
+  const writeStartedAt = performance.now();
   const results = await db.batch([
     db.prepare("UPDATE arrival_orders SET version = ?, status = ?, inputs_json = ?, pending_clarification_json = ?, interpretation_json = ?, last_operator_checkpoint = ?, packet_checksum = ?, updated_at = ? WHERE scope_id = ? AND order_id = ? AND version = ?")
       .bind(next.version, next.status, JSON.stringify(next.inputs), next.pendingClarification ? JSON.stringify(next.pendingClarification) : null, next.interpretation ? JSON.stringify(next.interpretation) : null, next.lastOperatorCheckpoint, next.checksum, next.updatedAt, scopeId, order.orderId, expectedVersion),
     db.prepare("INSERT INTO arrival_events (scope_id, order_id, version, event_id, event_type, actor, source_surface, payload_json, event_hash, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM arrival_orders WHERE scope_id = ? AND order_id = ? AND version = ? AND packet_checksum = ?)")
       .bind(scopeId, order.orderId, next.version, completeEvent.eventId, completeEvent.eventType, completeEvent.actor, completeEvent.sourceSurface, JSON.stringify(completeEvent.payload), completeEvent.eventHash, updatedAt, scopeId, order.orderId, next.version, next.checksum),
   ]);
+  const persistenceTiming = buildArrivalPersistenceTiming(code, performance.now() - writeStartedAt, results);
   if ((results[0]?.meta?.changes ?? 0) !== 1) {
     const current = await loadOrder(db, scopeId, order.orderId);
     if (!current) return errorResponse(404, "ARRIVAL_NOT_FOUND", "The human order no longer exists.");
-    return openedResponse(db, scopeId, current, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: current.version, currentChecksum: current.checksum, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409);
+    return withPersistenceTiming(await openedResponse(db, scopeId, current, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: current.version, currentChecksum: current.checksum, persistenceTiming, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409), persistenceTiming);
   }
   const durable = await loadOrder(db, scopeId, order.orderId);
   if (!durable) throw new Error("ARRIVAL_MUTATION_FAILED");
-  return openedResponse(db, scopeId, durable, code);
+  return withPersistenceTiming(await openedResponse(db, scopeId, durable, code, undefined, { persistenceTiming }), persistenceTiming);
 };
 
 const appendInput = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {

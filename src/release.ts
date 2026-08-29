@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "chef-continuity-batch-v145",
+  build: "zero-debt-observability-v146",
 } as const;

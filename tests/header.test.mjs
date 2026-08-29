@@ -9,9 +9,20 @@ const runtimeSource = readFileSync(new URL("../src/runtime.ts", import.meta.url)
 const handoffSource = readFileSync(new URL("../src/codex-handoff.ts", import.meta.url), "utf8");
 const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSync(new URL(`../worker/${name}.ts`, import.meta.url), "utf8")).join("\n");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+const chunkBudget = readFileSync(new URL("../scripts/check-client-chunks.mjs", import.meta.url), "utf8");
 const identityNotes = readFileSync(new URL("../design/identity/README.md", import.meta.url), "utf8");
 const wordmark = readFileSync(new URL("../public/finite-wordmark.png", import.meta.url));
 const mark = readFileSync(new URL("../public/finite-mark.png", import.meta.url));
+
+test("the production client has intentional chunks and a hard regression budget", () => {
+  for (const chunk of ["finite-arrival", "finite-services", "finite-operator"]) assert.match(viteConfig, new RegExp(chunk));
+  assert.match(viteConfig, /manualChunks: finiteClientChunk/);
+  assert.match(packageSource, /node scripts\/check-client-chunks\.mjs/);
+  assert.match(chunkBudget, /const maximumBytes = 500_000/);
+  assert.match(chunkBudget, /Production client chunk budget exceeded/);
+});
 
 test("the product header contains actions instead of unexplained internal state", () => {
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
