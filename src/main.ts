@@ -468,9 +468,11 @@ const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogSt
 const startupParams = new URLSearchParams(location.search);
 const opensFreshArrival = !arrivalResult.order && !labMode && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
 const hydrateCanonicalRuntime = async (): Promise<void> => {
-  await runtime.hydrateAcceptedTruth();
-  await runtime.hydrateConstructionPacket();
-  await runtime.resumeConstructionPacket();
+  const [, construction] = await Promise.all([
+    runtime.hydrateAcceptedTruth(),
+    runtime.hydrateConstructionPacket(),
+  ]);
+  if (["CONSTRUCTION_PACKET_REMOTE_HYDRATED", "CONSTRUCTION_PACKET_REMOTE_ADOPTED"].includes(String(construction.code))) await runtime.resumeConstructionPacket();
 };
 if (!opensFreshArrival) await hydrateCanonicalRuntime();
 const planDisplayNames = new Map<string, string>();

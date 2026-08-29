@@ -68,6 +68,8 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /const \[remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival\] = await Promise\.all/);
   assert.match(source, /const opensFreshArrival = !arrivalResult\.order/);
   assert.match(source, /if \(!opensFreshArrival\) await hydrateCanonicalRuntime\(\)/);
+  assert.match(source, /const \[, construction\] = await Promise\.all\(\[\s*runtime\.hydrateAcceptedTruth\(\),\s*runtime\.hydrateConstructionPacket\(\),\s*\]\)/);
+  assert.match(source, /CONSTRUCTION_PACKET_REMOTE_HYDRATED[\s\S]{0,120}runtime\.resumeConstructionPacket\(\)/);
   assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
   assert.match(source, /const initialSecondaryPlanData = startupSurface === "plan"/);
   assert.match(source, /refreshSecondaryPlanData\(\)\.finally\(\(\) => \{ secondaryPlanDataReady = true; \}\)/);
