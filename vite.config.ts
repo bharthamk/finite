@@ -3,30 +3,10 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { sites } from "@openai/sites-vite-plugin";
 import { finiteRelease } from "./src/release.js";
 
-const finiteStaticHeaders = `/*
-  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Resource-Policy: same-origin
-  Origin-Agent-Cluster: ?1
-  Permissions-Policy: tools=(self), camera=(), microphone=(), geolocation=()
-  Referrer-Policy: no-referrer
-  X-Content-Type-Options: nosniff
-  X-Finite-Build: ${finiteRelease.build}
-
-/
-  Cache-Control: no-store
-
-/share/*
-  Cache-Control: no-store
-`;
-
 const finiteReleaseContract = {
   name: "finite-release-contract",
   transformIndexHtml(html: string): string {
     return html.replace('content="initializing"', `content="${finiteRelease.build}"`);
-  },
-  generateBundle(this: { emitFile(file: { type: "asset"; fileName: string; source: string }): void }): void {
-    this.emitFile({ type: "asset", fileName: "_headers", source: finiteStaticHeaders });
   },
 };
 

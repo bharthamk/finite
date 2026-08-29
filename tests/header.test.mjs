@@ -35,8 +35,8 @@ test("public bootstrap routes do not preload the authenticated operator surface"
   assert.match(source, /const labMode = import\.meta\.env\.DEV &&/);
   assert.match(viteConfig, /name: "finite-release-contract"/);
   assert.match(viteConfig, /transformIndexHtml/);
-  assert.match(viteConfig, /fileName: "_headers"/);
-  assert.match(viteConfig, /X-Finite-Build: \$\{finiteRelease\.build\}/);
+  assert.match(viteConfig, /content="\$\{finiteRelease\.build\}"/);
+  assert.doesNotMatch(viteConfig, /fileName: "_headers"/);
 });
 
 test("blocked option cards never claim that no compromise is required", () => {
