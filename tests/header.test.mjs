@@ -142,7 +142,7 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   assert.doesNotMatch(handoffSource, /Bring Codex into the kitchen\.|points to the kitchen and the correct first tool/);
   assert.doesNotMatch(consumerServerCopy, /available in (?:this|a signed-in) kitchen|resetting a kitchen|clear this Finite kitchen/i);
   assert.match(source, /This is all they can see\./);
-  assert.match(source, /Give \$\{escapeHtml\(agenticName\(\)\)\} my plan/);
+  assert.match(source, /Build my rough plan/);
   assert.match(source, /Build it myself/);
   assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan\./);
 });
@@ -167,6 +167,18 @@ test("arrival shows the complete human starting point without protocol language 
 });
 
 test("arrival offers Codex or manual starts and keeps the rough plan directly editable", () => {
+  assert.match(source, /role="tablist" aria-label="How do you want to start\?"/);
+  assert.match(source, /data-arrival-start-tab="codex"/);
+  assert.match(source, /data-arrival-start-tab="manual"/);
+  assert.match(source, /data-arrival-start-panel="manual" hidden/);
+  assert.match(source, /name="codexOutcome" required/);
+  assert.match(source, /name="manualOutcome" required/);
+  assert.match(source, /planningMode === "manual" \? "manualOutcome" : "codexOutcome"/);
+  assert.match(source, /const structured = planningMode === "manual"/);
+  assert.match(source, /Anything left blank stays open for you to add later\./);
+  assert.match(source, /control\.disabled = !selected \|\| busy/);
+  assert.match(source, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
+  assert.match(styles, /\.arrival-start-panel\[hidden\] \{ display:none; \}/);
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
   assert.doesNotMatch(source, /Next step \/ review your brief/);

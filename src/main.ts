@@ -1111,7 +1111,7 @@ const startNewPlan = async (): Promise<void> => {
   target.searchParams.delete("lab");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
-  root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='rawOutcome']")?.focus();
+  root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='codexOutcome']")?.focus();
 };
 
 const bindPlanSwitcherInteractions = (): void => {
@@ -1698,25 +1698,33 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             <p class="arrival-compose__lede">Tell Finite in your own language. One sentence is enough. You do not need to choose a plan type, build a dashboard, or know every detail yet.</p>
           </div>
           <form class="arrival-order" data-arrival-form="create">
-            <div class="arrival-order__head"><p class="eyebrow">Your starting point</p><span>Only this is required</span></div>
-            <label class="arrival-order__outcome"><span>What needs to happen?</span><textarea name="rawOutcome" required maxlength="4000" placeholder="I’m trying to…"></textarea><small>Write it how you would say it. Finite keeps your exact words.</small></label>
-            <div class="arrival-examples" aria-label="Example outcomes">
-              <span>Need a starting point?</span>
-              <button type="button" data-arrival-example="Plan a three-week Europe trip around my fixed flights, with room to change as prices and ideas move.">A trip</button>
-              <button type="button" data-arrival-example="Get my renovation to handover without losing the parts of the design I care about.">A renovation</button>
-              <button type="button" data-arrival-example="Deliver an event that can absorb guest, supplier and programme changes without falling apart.">An event</button>
-              <button type="button" data-arrival-example="Help me turn a messy outcome with limited time and resources into a plan that can keep adapting.">Something else</button>
+            <div class="arrival-start-tabs" role="tablist" aria-label="How do you want to start?">
+              <button id="arrival_start_codex" type="button" role="tab" aria-selected="true" aria-controls="arrival_panel_codex" tabindex="0" data-arrival-start-tab="codex">Build with ${escapeHtml(agenticName())}</button>
+              <button id="arrival_start_manual" type="button" role="tab" aria-selected="false" aria-controls="arrival_panel_manual" tabindex="-1" data-arrival-start-tab="manual">Build it myself</button>
             </div>
-            <details class="arrival-more">
-              <summary><span>Add context</span><strong>Dates, limits, commitments, or links</strong><small>Optional</small></summary>
-              <div class="arrival-fields">
-                <label><span>When does it need to happen?</span><input name="deadline" maxlength="200" placeholder="A date, window, or ‘not sure’"></label>
-                <label><span>What is finite?</span><input name="finiteLimit" maxlength="300" placeholder="Money, time, capacity, energy—or none yet"></label>
-                <label><span>What must not move?</span><input name="hardConstraint" maxlength="500" placeholder="One known commitment or hard edge"></label>
-                <label><span>Evidence or useful links</span><input name="evidence" maxlength="1000" placeholder="Receipts, booking refs, documents, URLs"></label>
+            <section id="arrival_panel_codex" class="arrival-start-panel arrival-start-panel--codex" role="tabpanel" aria-labelledby="arrival_start_codex" data-arrival-start-panel="codex">
+              <div class="arrival-order__head"><div><p class="eyebrow">Describe the plan</p><strong>Write naturally. One sentence is enough.</strong></div><span>Only this is required</span></div>
+              <label class="arrival-order__outcome"><span>What do you want to plan?</span><textarea name="codexOutcome" required maxlength="4000" placeholder="I’m trying to…" data-arrival-mode-control></textarea><small>${escapeHtml(agenticName())} will turn this into a populated, editable rough plan. Any assumptions remain visibly provisional.</small></label>
+              <div class="arrival-examples" aria-label="Plan ideas">
+                <span>Try an idea</span>
+                <button type="button" data-arrival-example="Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do.">Weekend trip</button>
+                <button type="button" data-arrival-example="Plan a dinner party at home for eight people, with menu, timing, shopping and dietary needs covered.">Dinner party</button>
+                <button type="button" data-arrival-example="Help me prepare for a job interview for an operations lead role next month.">Job interview</button>
+                <button type="button" data-arrival-example="Plan a home office makeover without replacing my current desk.">Home project</button>
               </div>
-            </details>
-            <div class="arrival-order__actions arrival-order__actions--paths"><button class="button arrival-order__submit" type="submit" name="planningMode" value="codex" ${busy ? "disabled" : ""}><span>Give ${escapeHtml(agenticName())} my plan</span><small>Build me a populated rough draft</small></button><button class="text-button arrival-order__manual" type="submit" name="planningMode" value="manual" ${busy ? "disabled" : ""}><span>Build it myself</span><small>Open the full workspace now</small></button></div>
+              <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" name="planningMode" value="codex" data-arrival-mode-control ${busy ? "disabled" : ""}>Build my rough plan</button><p>You can change every part yourself once it opens.</p></div>
+            </section>
+            <section id="arrival_panel_manual" class="arrival-start-panel arrival-start-panel--manual" role="tabpanel" aria-labelledby="arrival_start_manual" data-arrival-start-panel="manual" hidden>
+              <div class="arrival-order__head"><div><p class="eyebrow">Prefill the plan</p><strong>Add what you already know.</strong></div><span>Leave anything open</span></div>
+              <label class="arrival-order__outcome arrival-order__outcome--manual"><span>What are you planning?</span><textarea name="manualOutcome" required maxlength="4000" placeholder="Name the outcome or plan" data-arrival-mode-control disabled></textarea><small>This becomes the heading and starting point for your workspace.</small></label>
+              <div class="arrival-fields arrival-fields--manual">
+                <label><span>When?</span><input name="deadline" maxlength="200" placeholder="Date, time, or window" data-arrival-mode-control disabled></label>
+                <label><span>What is limited?</span><input name="finiteLimit" maxlength="300" placeholder="Budget, time, capacity, or energy" data-arrival-mode-control disabled></label>
+                <label><span>What must not change?</span><input name="hardConstraint" maxlength="500" placeholder="A commitment, requirement, or hard edge" data-arrival-mode-control disabled></label>
+                <label><span>Useful references</span><input name="evidence" maxlength="1000" placeholder="Links, booking references, or documents" data-arrival-mode-control disabled></label>
+              </div>
+              <div class="arrival-order__actions"><button class="button arrival-order__submit" type="submit" name="planningMode" value="manual" data-arrival-mode-control disabled ${busy ? "disabled" : ""}>Open my workspace</button><p>Anything left blank stays open for you to add later.</p></div>
+            </section>
           </form>
         </section>
         ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
@@ -1776,13 +1784,15 @@ const refreshArrival = async (): Promise<void> => {
 const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" | "manual"): Promise<void> => {
   if (busy) return;
   const data = new FormData(form);
-  const rawOutcome = String(data.get("rawOutcome") ?? "").trim();
+  const rawOutcome = String(data.get(planningMode === "manual" ? "manualOutcome" : "codexOutcome") ?? "").trim();
   if (!rawOutcome) return;
   busy = true;
   announce("Saving your starting point…");
   await render();
-  const structured = { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)) };
-  const evidence = String(data.get("evidence") ?? "").trim();
+  const structured = planningMode === "manual"
+    ? { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)) }
+    : { planningMode };
+  const evidence = planningMode === "manual" ? String(data.get("evidence") ?? "").trim() : "";
   arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
   if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
@@ -2373,6 +2383,29 @@ function bindArrivalInteractions(): void {
     const mode = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "manual" ? "manual" : "codex";
     void submitArrivalOrder(event.currentTarget as HTMLFormElement, mode);
   });
+  const setArrivalStartTab = (mode: "codex" | "manual", focusTab = false): void => {
+    root?.querySelectorAll<HTMLButtonElement>("[data-arrival-start-tab]").forEach((tab) => {
+      const selected = tab.dataset.arrivalStartTab === mode;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected && focusTab) tab.focus();
+    });
+    root?.querySelectorAll<HTMLElement>("[data-arrival-start-panel]").forEach((panel) => {
+      const selected = panel.dataset.arrivalStartPanel === mode;
+      panel.hidden = !selected;
+      panel.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement>("[data-arrival-mode-control]").forEach((control) => { control.disabled = !selected || busy; });
+    });
+    if (!focusTab) root?.querySelector<HTMLElement>(`[data-arrival-start-panel='${mode}'] textarea`)?.focus();
+  };
+  root?.querySelectorAll<HTMLButtonElement>("[data-arrival-start-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => setArrivalStartTab(tab.dataset.arrivalStartTab === "manual" ? "manual" : "codex"));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const mode = event.key === "ArrowLeft" || event.key === "Home" ? "codex" : "manual";
+      setArrivalStartTab(mode, true);
+    });
+  });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='append']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='draft-edit']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-add']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void addWorkspaceRecord(event.currentTarget as HTMLFormElement); }));
@@ -2403,7 +2436,7 @@ function bindArrivalInteractions(): void {
   });
   root?.querySelector<HTMLFormElement>("[data-arrival-form='answer']")?.addEventListener("submit", (event) => { event.preventDefault(); void appendArrivalDetail(event.currentTarget as HTMLFormElement, true); });
   root?.querySelectorAll<HTMLButtonElement>("[data-arrival-example]").forEach((button) => button.addEventListener("click", () => {
-    const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='rawOutcome']");
+    const textarea = root.querySelector<HTMLTextAreaElement>("textarea[name='codexOutcome']");
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
   }));
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
