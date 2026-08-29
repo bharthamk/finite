@@ -102,7 +102,7 @@ test("account and destructive actions live in a labelled account menu", () => {
 test("the header plan dropdown creates and opens plans from every private product surface", () => {
   assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 3);
   assert.match(source, /runtime\.listPlans\(\)\.plans/);
-  assert.match(runtimeSource, /title: profile\.surface\.hero\.title/);
+  assert.match(runtimeSource, /title: resolvePlanTitle\(\{ proposed: profile\.surface\.hero\.title, brief: profile\.surface\.hero\.brief \}\)/);
   assert.match(source, /projectAcceptedPlanCopyFromReceipts\(plan\.title, receipts\)/);
   assert.match(source, /const persistedPlanIds = new Set\(catalogEntries\.map/);
   assert.match(source, /filter\(\(plan\) => persistedPlanIds\.has\(plan\.planId\) \|\| \(surface === "plan" && plan\.active\)\)/);
@@ -501,7 +501,13 @@ test("Managing starts with one brief and prioritises the next step", () => {
   assert.doesNotMatch(source, /<div class="brief-card">/);
   assert.doesNotMatch(source, /<aside class="plan-orbit"/);
   assert.doesNotMatch(source, /<span>You asked for<\/span>/);
-  assert.match(styles, /\.hero \{ padding:38px 0 34px;/);
+  assert.match(styles, /\.hero \{ padding:32px 0 28px;/);
+  assert.match(source, /<details class="plan-input-items/);
+  assert.match(source, /Saved plan information/);
+  assert.match(source, /\$\{renderPlanWork\(\)\}\s+\$\{renderPlanInputItems\("general"\)\}/);
+  const managingHero = source.match(/<section class="hero">([\s\S]*?)<\/section>\s+\$\{message/);
+  assert.ok(managingHero);
+  assert.doesNotMatch(managingHero[1], /renderPlanInputItems/);
   assert.doesNotMatch(styles, /\.hero-summary \{/);
   assert.match(styles, /\.managing-next \{/);
   assert.doesNotMatch(styles, /\.orbit-ring \{/);

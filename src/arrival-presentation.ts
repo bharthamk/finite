@@ -1,4 +1,5 @@
 import type { ArrivalClarification, ArrivalInput, ArrivalInterpretation, ArrivalOrder } from "./arrival.js";
+import { resolvePlanTitle } from "./plan-title.js";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -859,10 +860,11 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const currency = String(overviewOverrides.currency || moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
   const budgetProvisional = typeof overviewOverrides.budgetProvisional === "boolean" ? overviewOverrides.budgetProvisional : starterItemIsProvisional(canonicalLimit);
   const questionTemplates = sectionQuestionTemplates(family, order);
+  const genericTitle = `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} rough plan`;
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
-    title: `${({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family]} rough plan`,
+    title: resolvePlanTitle({ proposed: genericTitle, brief: `${order.rawOutcome} ${interpretation?.summary ?? ""}`.trim(), start }),
     brief: interpretation?.summary ?? order.rawOutcome,
     overview: {
       start,

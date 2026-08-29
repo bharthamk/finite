@@ -2,6 +2,7 @@ import { compileBuiltInProfiles } from "./profiles.js";
 import { clearFiniteScope, clearForeignFiniteScopes, MemoryStorage, PlanCatalogStore, PlanSnapshotStore, ScopedStorage } from "./persistence.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "./runtime.js";
 import { compileSurfaceManifest, projectAcceptedPlanCopy, projectAcceptedPlanCopyFromReceipts, resolveSurfaceBinding } from "./surface.js";
+import { resolvePlanTitle } from "./plan-title.js";
 import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
 import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
@@ -1160,7 +1161,10 @@ const openPlanShareDialog = async (): Promise<void> => {
   shareError = "";
   newPublicationUrl = "";
   const completed = runtime.kernel.lifecycleStatus === "completed";
-  const currentPlanName = projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel);
+  const currentPlanName = resolvePlanTitle({
+    proposed: projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel),
+    brief: projectAcceptedPlanCopy(runtime.kernel.profile.surface.hero.brief, runtime.kernel),
+  });
   shareDraft = { label: `${currentPlanName} ${completed ? "summary" : "update"}`, mode: completed ? "frozen" : "live", sections: completed ? ["overview", "allocation", "measures", "stages", "changes"] : ["overview"] };
   sharePreview = null;
   sharePreviewKey = "";
@@ -2792,13 +2796,42 @@ const planInputSectionLabel = (section: PlanInputSection): string => ({ general:
 const planInputKindLabel = (kind: PlanInputKind): string => ({ decision: "Decision", update: "Update", question: "Question" })[kind];
 const planInputsFor = (section: PlanInputSection, contextId: string | null = null): PlanInputRecord[] => planInputs.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
 const pendingBadge = (section: PlanInputSection, contextId: string | null = null): string => planInputsFor(section, contextId).some((item) => item.mode === "codex") ? `<span class="pending-badge">Pending</span>` : "";
+type PlanInputMessageBlock = { heading: string | null; lines: string[] };
+const planInputMessageBlocks = (message: string): PlanInputMessageBlock[] => {
+  const blocks: PlanInputMessageBlock[] = [];
+  let current: PlanInputMessageBlock | null = null;
+  message.split("\n").forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) return;
+    if (line.endsWith(":") && Array.from(line).length <= 140) {
+      current = { heading: line.slice(0, -1).trim(), lines: [] };
+      blocks.push(current);
+      return;
+    }
+    if (!current) { current = { heading: null, lines: [] }; blocks.push(current); }
+    current.lines.push(line);
+  });
+  return blocks;
+};
+const planInputHeadings = (items: PlanInputRecord[]): string[] => [...new Set(items.flatMap((item) => planInputMessageBlocks(item.message).flatMap((block) => block.heading ? [block.heading] : [])))];
+const renderPlanInputMessage = (message: string): string => planInputMessageBlocks(message).map((block) => `<section class="plan-input-item__section">
+  ${block.heading ? `<h4>${escapeHtml(block.heading)}</h4>` : ""}
+  ${block.lines.length > 1 ? `<ul>${block.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>` : block.lines.length ? `<p>${escapeHtml(block.lines[0])}</p>` : ""}
+</section>`).join("");
 const renderPlanInputItems = (section: PlanInputSection, contextId: string | null = null, compact = false): string => {
   const items = planInputsFor(section, contextId);
   if (!items.length) return "";
-  return `<div class="plan-input-items${compact ? " plan-input-items--compact" : ""}">${items.map((item) => `<article class="plan-input-item plan-input-item--${escapeHtml(item.mode)}">
-    <div class="plan-input-item__copy"><span>${escapeHtml(planInputKindLabel(item.kind))}</span><p>${escapeHtml(item.message)}</p></div>
+  const headings = planInputHeadings(items);
+  const pending = items.some((item) => item.mode === "codex");
+  const summary = headings.length ? headings.slice(0, 3).join(" · ") : contextId ? items[0]?.contextLabel ?? "Saved information" : `${planInputSectionLabel(section)} notes`;
+  const count = headings.length || items.length;
+  return `<details class="plan-input-items${compact ? " plan-input-items--compact" : ""}${pending ? " plan-input-items--pending" : ""}" ${pending ? "open" : ""}>
+    <summary><span>${pending ? `Waiting for ${escapeHtml(agenticName())}` : "Saved plan information"}</span><strong>${escapeHtml(summary)}</strong><small>${count} ${count === 1 ? "section" : "sections"}</small></summary>
+    <div class="plan-input-items__body">${items.map((item) => `<article class="plan-input-item plan-input-item--${escapeHtml(item.mode)}">
+    <div class="plan-input-item__copy"><span>${escapeHtml(item.mode === "direct" && item.kind === "update" ? "Plan details" : planInputKindLabel(item.kind))}</span>${renderPlanInputMessage(item.message)}</div>
     <div class="plan-input-item__actions"><button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Change</button><button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">${item.mode === "codex" ? "Clear" : "Done"}</button></div>
-  </article>`).join("")}</div>`;
+  </article>`).join("")}</div>
+  </details>`;
 };
 
 const checklistFor = (section: PlanInputSection, contextId: string | null = null): ChecklistItem[] => checklistItems.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
@@ -3389,11 +3422,11 @@ async function render(): Promise<SurfaceManifest> {
       ${kernel.lifecycleStatus === "active" ? "" : `<div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>`}
       <section class="hero">
         <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan ${pendingBadge("general")}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add or change</button></div>
-        ${renderPlanInputItems("general")}
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
       ${renderNextStep(manifest)}
       ${renderPlanWork()}
+      ${renderPlanInputItems("general")}
       ${renderHumanRealityControl()}
       ${renderPlanDraft()}
       <div class="surface-grid">${managingZones.map((zone) => renderZone(manifest, zone)).join("")}</div>

@@ -5,6 +5,7 @@ import { buildChefMenu, type KitchenRoute } from "./chef-menu.js";
 import { FinitePlanKernel } from "./kernel.js";
 import { PlanCatalogStore, PlanSnapshotStore } from "./persistence.js";
 import { compileProfile, getProfileDefinition, ProfileValidationError } from "./profiles.js";
+import { resolvePlanTitle } from "./plan-title.js";
 import type {
   CompiledProfile,
   ArrivalSourceBinding,
@@ -504,12 +505,12 @@ export class FinitePlanRuntime {
         revision: this.kernel.revision,
       },
       consumerOutcome: {
-        name: this.kernel.profile.name,
+        name: resolvePlanTitle({ proposed: this.kernel.profile.name, brief: this.kernel.profile.surface.hero.brief }),
         orderedOutcome: activeEvent?.title ?? this.kernel.profile.surface.hero.brief,
         projection: {
           timeModel: this.kernel.profile.surface.timeModel,
           nouns: clone(this.kernel.profile.surface.nouns),
-          headline: this.kernel.profile.surface.hero.title,
+          headline: resolvePlanTitle({ proposed: this.kernel.profile.surface.hero.title, brief: this.kernel.profile.surface.hero.brief }),
           primaryMeasures: clone(this.kernel.profile.surface.primaryMeasures),
         },
       },
@@ -554,8 +555,8 @@ export class FinitePlanRuntime {
       plans: [...this.plans.values()].map(({ profile, lineage }) => ({
         planId: profile.planId,
         profileId: profile.profileId,
-        name: profile.name,
-        title: profile.surface.hero.title,
+        name: resolvePlanTitle({ proposed: profile.name, brief: profile.surface.hero.brief }),
+        title: resolvePlanTitle({ proposed: profile.surface.hero.title, brief: profile.surface.hero.brief }),
         profileHash: profile.profileHash,
         active: profile.planId === this.kernel.profile.planId,
         lineage: lineage ? clone(lineage) : { activationKind: "built_in", supersedesPlanId: null, supersedesProfileHash: null, diffHash: null, activationReceiptId: null },

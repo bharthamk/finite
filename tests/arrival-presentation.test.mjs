@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
+import { resolvePlanTitle } from "../dist-test/src/plan-title.js";
+
+test("legacy generic accepted names project as useful plan names", () => {
+  assert.equal(resolvePlanTitle({ proposed: "Event rough plan", brief: "A relaxed dinner party for ten friends." }), "Dinner party");
+  assert.equal(resolvePlanTitle({ proposed: "Travel rough plan", brief: "Plan a weekend trip to Hobart for two people.", start: "2026-10-09" }), "Hobart weekend · 9 Oct 2026");
+  assert.equal(resolvePlanTitle({ proposed: "Quarterly launch", brief: "Ignored" }), "Quarterly launch");
+});
 
 test("arrival interpretation renders consumer language without raw JSON or internal paths", () => {
   const rendered = renderHumanValue({
@@ -111,7 +118,7 @@ test("a complete travel brief yields an actual domain plan with destinations, tr
     checksum: "a".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.equal(starter.title, "Travel rough plan");
+  assert.equal(starter.title, "Europe trip · 15 Sept 2026");
   assert.deepEqual(starter.sections.map((section) => section.label), ["Calendar", "People & commitments", "Where you’re staying", "Flights & transport", "Money", "Visa, insurance & fixed items", "To-do list"]);
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").items.map((item) => item.fields.title), ["London", "Paris", "Northern Italy"]);
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.find((item) => item.fields.title === "London").fields.start, "2026-09-15");
@@ -221,7 +228,7 @@ test("human draft edits remain visible and mark the starter interpretation for r
     checksum: "b".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.equal(starter.title, "Event rough plan");
+  assert.equal(starter.title, "Dinner party");
   assert.equal(starter.interpretationIsCurrent, false);
   assert.equal(starter.laterHumanInputs[0].payload.detail, "Twelve guests, not ten.");
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "scope").items[0], {
@@ -284,7 +291,7 @@ test("manual mode opens the full workspace without an interpretation and keeps s
     interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:02.000Z", checksum: "d".repeat(64),
   };
   const starter = starterPlanForArrival(order);
-  assert.equal(starter.title, "Travel rough plan");
+  assert.equal(starter.title, "Europe trip");
   assert.equal(starter.sections.length, 7);
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items[0].fields.location, "Berlin");
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").comments, [{ commentId: "comment_1", text: "Move this after Munich", forCodex: false }]);

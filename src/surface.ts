@@ -1,4 +1,5 @@
 import { clone, sha256 } from "./crypto.js";
+import { resolvePlanTitle } from "./plan-title.js";
 import type { FinitePlanKernel } from "./kernel.js";
 import type {
   CompiledProfile,
@@ -160,7 +161,10 @@ export const compileSurfaceManifest = async (
     profileId: profile.profileId,
     profileVersion: profile.surface.version,
     timeModel: profile.surface.timeModel,
-    title: projectAcceptedPlanCopy(profile.surface.hero.title, kernel),
+    title: resolvePlanTitle({
+      proposed: projectAcceptedPlanCopy(profile.surface.hero.title, kernel),
+      brief: projectAcceptedPlanCopy(profile.surface.hero.brief, kernel),
+    }),
     brief: projectAcceptedPlanCopy(profile.surface.hero.brief, kernel),
     nouns: clone(profile.surface.nouns),
     summaryFields: clone(profile.surface.primaryMeasures),

@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "manual-plan-progression-v149",
+  build: "managing-workspace-v150",
 } as const;
