@@ -67,7 +67,7 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /updateOpeningStatus\("Opening your workspace…"\)/);
   assert.match(source, /const \[remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival\] = await Promise\.all/);
   assert.match(source, /const opensFreshArrival = !arrivalResult\.order/);
-  assert.match(source, /if \(!opensFreshArrival\) await hydrateCanonicalRuntime\(\)/);
+  assert.match(source, /if \(!opensFreshArrival && !opensProfileSurface\) await hydrateCanonicalRuntime\(\)/);
   assert.match(source, /const \[, construction\] = await Promise\.all\(\[\s*runtime\.hydrateAcceptedTruth\(\),\s*runtime\.hydrateConstructionPacket\(\),\s*\]\)/);
   assert.match(source, /CONSTRUCTION_PACKET_REMOTE_HYDRATED[\s\S]{0,120}runtime\.resumeConstructionPacket\(\)/);
   assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
@@ -75,6 +75,7 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /refreshSecondaryPlanData\(\)\.finally\(\(\) => \{ secondaryPlanDataReady = true; \}\)/);
   assert.match(source, /if \(startupSurface === "arrival"\) \{[\s\S]{0,180}refreshSecondaryPlanData\(\), refreshProfileContext\(\)/);
   assert.match(source, /initialSecondaryPlanData\.then\(async \(\) =>/);
+  assert.match(source, /if \(opensProfileSurface\) \{[\s\S]{0,140}refreshProfileContext\(\)\.then\(\(\) => render\(\)\)/);
   assert.match(styles, /\.app-loading \{ min-height:100vh;/);
   assert.match(styles, /\.app-loading__panel/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\) \{ \.app-loading__progress i/);

@@ -466,6 +466,7 @@ let arrivalResult: ArrivalResult = openedArrival;
 updateOpeningStatus("Preparing your workspace…");
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 const startupParams = new URLSearchParams(location.search);
+const opensProfileSurface = startupParams.get("about") === "1";
 const opensFreshArrival = !arrivalResult.order && !labMode && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
 const hydrateCanonicalRuntime = async (): Promise<void> => {
   const [, construction] = await Promise.all([
@@ -474,7 +475,7 @@ const hydrateCanonicalRuntime = async (): Promise<void> => {
   ]);
   if (["CONSTRUCTION_PACKET_REMOTE_HYDRATED", "CONSTRUCTION_PACKET_REMOTE_ADOPTED"].includes(String(construction.code))) await runtime.resumeConstructionPacket();
 };
-if (!opensFreshArrival) await hydrateCanonicalRuntime();
+if (!opensFreshArrival && !opensProfileSurface) await hydrateCanonicalRuntime();
 const planDisplayNames = new Map<string, string>();
 const refreshPlanDisplayNames = async (): Promise<void> => {
   const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string; title: string }>;
@@ -525,8 +526,8 @@ const refreshSecondaryPlanData = (): Promise<unknown[]> => Promise.all([
   refreshPlanWork().catch(() => { checklistItems = []; planAttachments = []; }),
   refreshPlanLearning().catch(() => { planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision); }),
 ]);
-let secondaryPlanDataReady = startupSurface !== "plan";
-const initialSecondaryPlanData = startupSurface === "plan"
+let secondaryPlanDataReady = startupSurface !== "plan" || opensProfileSurface;
+const initialSecondaryPlanData = startupSurface === "plan" && !opensProfileSurface
   ? refreshSecondaryPlanData().finally(() => { secondaryPlanDataReady = true; })
   : Promise.resolve([]);
 const syncAdaptiveChecklist = async (): Promise<void> => {
@@ -4492,7 +4493,9 @@ updateOpeningStatus("Opening your workspace…");
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 if (opensFreshArrival) void hydrateCanonicalRuntime();
-if (startupSurface === "arrival") {
+if (opensProfileSurface) {
+  void refreshProfileContext().then(() => render()).catch(() => { /* About you keeps its safe empty state if reusable context is unavailable. */ });
+} else if (startupSurface === "arrival") {
   void Promise.all([refreshSecondaryPlanData(), refreshProfileContext()]).then(() => render()).catch(() => { /* The starting surface stays usable without reusable context. */ });
 }
 if (startupSurface === "plan") {
