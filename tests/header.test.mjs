@@ -397,6 +397,13 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /\[data-codex-priority="true"\]/);
   assert.match(styles, /\.starter-module__questions/);
+  assert.match(source, /const questionMarkup = section\.openQuestions\.length \?/);
+  assert.doesNotMatch(source, /No open questions in this section\./);
+  assert.match(source, /Known &amp; assumed information/);
+  assert.match(source, /<h4>Answered questions<\/h4>/);
+  assert.match(source, /<h4>Known information<\/h4>/);
+  assert.match(source, /<h4>Working assumptions<\/h4>/);
+  assert.match(styles, /\.starter-module__knowledge/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.codex-handoff-guidance \{ grid-column:1\/-1; display:grid;/);
   assert.match(styles, /\.codex-handoff-choice \{ display:grid; grid-template-rows:auto auto 1fr auto;/);
