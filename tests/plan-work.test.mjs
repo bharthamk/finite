@@ -170,6 +170,9 @@ test("Managing exposes checkboxes and section-bound attachments without engineer
   assert.match(source, /This plan is finished\./);
   assert.match(source, /form\.hasAttribute\("data-plan-complete"\) \|\| recordActual/);
   assert.match(source, /Finishing this plan…/);
+  assert.match(source, /submit\.textContent = recordActual \? "Saving…" : "Finishing…"/);
+  assert.doesNotMatch(source, /announce\("Finishing this plan…"\);\s*await render\(\)/);
+  assert.match(source, /await render\(\);\s*if \(applied\.ok\) await adapter\?\.refreshContextualTools\(\)/);
   assert.doesNotMatch(source, /const returnPlanDraft[\s\S]{0,500}status === "completed"/);
   assert.match(source, /renderWrapUpSurface/);
   assert.match(source, /class="wrap-up-glance"/);

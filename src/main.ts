@@ -3806,7 +3806,9 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
   if (finishNow) {
     busy = true;
     announce("Finishing this plan…");
-    await render();
+    form.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("button,input,textarea,select").forEach((control) => { control.disabled = true; });
+    const submit = form.querySelector<HTMLButtonElement>("button[type='submit']");
+    if (submit) submit.textContent = recordActual ? "Saving…" : "Finishing…";
   }
   const result = await runtime.kernel.stagePlanLifecycle({ status, reason, ...(actualSpendMinor === undefined ? {} : { actualSpendMinor }), expectedRevision: runtime.kernel.revision });
   if (finishNow) {
@@ -3816,8 +3818,9 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
     const applied = pending && confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-lifecycle-site-${crypto.randomUUID()}` }) : confirmed;
     busy = false;
     announce(applied.ok ? (recordActual ? "Actual spend saved." : "Plan finished.") : (recordActual ? "The actual spend could not be saved." : "The plan could not be finished."));
-    if (applied.ok) { planStatusDialogOpen = false; await adapter?.refreshContextualTools(); }
+    if (applied.ok) planStatusDialogOpen = false;
     await render();
+    if (applied.ok) await adapter?.refreshContextualTools();
     return;
   }
   if (result.ok) planStatusDialogOpen = false;
