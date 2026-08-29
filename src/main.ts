@@ -3550,8 +3550,8 @@ const progressArrivalPlan = async (): Promise<void> => {
   try {
     let opened = await arrivalRepository.open();
     if (!opened.ok || !opened.order) throw new Error("ARRIVAL_NOT_FOUND");
-    if (opened.order.status === "proposed_plan_ready") {
-      opened = await arrivalRepository.reviewInterpretation({
+    if (opened.order.status !== "interpretation_confirmed") {
+      opened = await arrivalRepository.reviewWorkspace({
         orderId: opened.order.orderId,
         expectedVersion: opened.order.version,
         expectedChecksum: opened.order.checksum,

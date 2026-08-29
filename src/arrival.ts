@@ -1,5 +1,5 @@
 import { clone, sha256 } from "./crypto.js";
-import { inspectArrivalWorkspaceRecord } from "./arrival-presentation.js";
+import { inspectArrivalWorkspaceRecord, workspaceInterpretationForConstruction } from "./arrival-presentation.js";
 import type { ToolResult } from "./types.js";
 
 export type ArrivalSourceSurface = "site" | "codex" | "inline";
@@ -159,6 +159,7 @@ export interface ArrivalRepository {
   stageClarification(input: { orderId: string; expectedVersion: number; prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   stageInterpretation(input: { orderId: string; expectedVersion: number; inferredFamily?: string | null; summary: string; known?: Record<string, unknown>; inferred?: Record<string, unknown>; missing?: string[]; contradictions?: string[]; dependencies?: ArrivalDependency[]; savedOperatorWork?: Record<string, unknown>; nextHumanBoundary?: { prompt: string; answerKind: ArrivalClarification["answerKind"]; fieldPaths?: string[]; choices?: string[] } | null; complete?: boolean }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   reconcile(input: Parameters<ArrivalRepository["stageInterpretation"]>[0], context?: RepositoryRequestContext): Promise<ArrivalResult>;
+  reviewWorkspace(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   reviewInterpretation(input: { orderId: string; expectedVersion: number; expectedChecksum: string; sourceSurface: "site" | "inline" }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
   acceptPlan(input: { orderId: string; expectedVersion: number; expectedChecksum: string; planId: string; profileHash: string; planRevision: number }, context?: RepositoryRequestContext): Promise<ArrivalResult>;
 }
@@ -213,6 +214,9 @@ export class HttpArrivalRepository implements ArrivalRepository {
   }
   reconcile(input: Parameters<ArrivalRepository["reconcile"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/reconcile`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
+  }
+  reviewWorkspace(input: Parameters<ArrivalRepository["reviewWorkspace"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
+    return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/workspace-review`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
   }
   reviewInterpretation(input: Parameters<ArrivalRepository["reviewInterpretation"]>[0], context: RepositoryRequestContext = {}): Promise<ArrivalResult> {
     return requestJson(`${this.baseUrl}/${encodeURIComponent(input.orderId)}/review`, { method: "POST", body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) });
@@ -305,6 +309,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       : event.eventType === "clarification_staged" ? "ARRIVAL_CLARIFICATION_STAGED"
         : event.eventType === "interpretation_staged" ? "ARRIVAL_INTERPRETATION_STAGED"
           : event.eventType === "arrival_reconciled" ? "ARRIVAL_RECONCILED"
+          : event.eventType === "interpretation_reviewed" && event.payload.decision === "confirm_current_workspace_for_construction" ? "ARRIVAL_WORKSPACE_REVIEWED"
           : event.eventType === "interpretation_reviewed" ? "ARRIVAL_INTERPRETATION_REVIEWED"
             : event.eventType === "plan_activated" ? "ARRIVAL_PLAN_ACCEPTED"
             : "ARRIVAL_INPUT_APPENDED";
@@ -536,6 +541,22 @@ export class MemoryArrivalRepository implements ArrivalRepository {
       actor: "human",
       sourceSurface: input.sourceSurface,
       payload: { decision: "confirm_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
+    });
+  }
+
+  async reviewWorkspace(input: Parameters<ArrivalRepository["reviewWorkspace"]>[0]): Promise<ArrivalResult> {
+    const order = this.orders.get(input.orderId);
+    if (!order) return { ok: false, code: "ARRIVAL_NOT_FOUND", acceptedStateChanged: false };
+    if (input.sourceSurface !== "site" && input.sourceSurface !== "inline") return { ok: false, code: "HUMAN_REVIEW_SURFACE_REQUIRED", acceptedStateChanged: false };
+    if (order.version !== input.expectedVersion || order.checksum !== input.expectedChecksum) return this.conflict(order);
+    const interpretation = workspaceInterpretationForConstruction(order, input.expectedVersion, this.now().toISOString());
+    if (!interpretation || JSON.stringify(interpretation).length > 200_000) return { ok: false, code: "ARRIVAL_WORKSPACE_NOT_REVIEWABLE", acceptedStateChanged: false };
+    const interpretationHash = await sha256(interpretation);
+    return this.replace(order, input.expectedVersion, { interpretation, pendingClarification: null, status: "interpretation_confirmed" }, {
+      eventType: "interpretation_reviewed",
+      actor: "human",
+      sourceSurface: input.sourceSurface,
+      payload: { decision: "confirm_current_workspace_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
     });
   }
 

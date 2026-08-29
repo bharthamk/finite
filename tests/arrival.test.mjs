@@ -110,6 +110,25 @@ test("site-first, Codex-later orientation returns the whole order and every unpr
   const corrected = await arrivals.appendInput({ orderId: reviewed.order.orderId, expectedVersion: reviewed.order.version, kind: "correction", payload: { text: "Make the trip four weeks." }, sourceSurface: "site" });
   assert.equal(corrected.order.status, "waiting_for_codex");
   assert.equal(corrected.orientation.interpretationIsCurrent, false);
+  const reviewedWorkspace = await arrivals.reviewWorkspace({ orderId: corrected.order.orderId, expectedVersion: corrected.order.version, expectedChecksum: corrected.order.checksum, sourceSurface: "site" });
+  assert.equal(reviewedWorkspace.code, "ARRIVAL_WORKSPACE_REVIEWED");
+  assert.equal(reviewedWorkspace.order.status, "interpretation_confirmed");
+  assert.equal(reviewedWorkspace.order.interpretation.basedOnVersion, corrected.order.version);
+  assert.match(JSON.stringify(reviewedWorkspace.order.interpretation.known), /Make the trip four weeks/);
+  assert.equal(reviewedWorkspace.orientation.delta.at(-1).payload.decision, "confirm_current_workspace_for_construction");
+  assert.equal(reviewedWorkspace.orientation.delta.at(-1).payload.reviewedOrderChecksum, corrected.order.checksum);
+});
+
+test("a manual editable workspace can cross the construction boundary without a Codex interpretation", async () => {
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({ idempotencyKey: "manual-workspace-review-0001", rawOutcome: "Plan a dinner party at home for six people with a $240 budget.", structured: { planningMode: "manual" }, attachments: [], sourceSurface: "site" });
+  const reviewed = await arrivals.reviewWorkspace({ orderId: created.order.orderId, expectedVersion: created.order.version, expectedChecksum: created.order.checksum, sourceSurface: "site" });
+  assert.equal(reviewed.code, "ARRIVAL_WORKSPACE_REVIEWED");
+  assert.equal(reviewed.order.status, "interpretation_confirmed");
+  assert.equal(reviewed.order.interpretation.complete, true);
+  assert.equal(reviewed.order.interpretation.inferredFamily, "event");
+  assert.equal(reviewed.order.interpretation.known.overview.totalBudget, "240");
+  assert(reviewed.order.interpretation.inferred.sections.length > 0);
 });
 
 test("Codex workspace options are non-authoritative operator work and never become human input", async () => {

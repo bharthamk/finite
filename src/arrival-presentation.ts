@@ -1,4 +1,4 @@
-import type { ArrivalClarification, ArrivalInput, ArrivalOrder } from "./arrival.js";
+import type { ArrivalClarification, ArrivalInput, ArrivalInterpretation, ArrivalOrder } from "./arrival.js";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -520,7 +520,8 @@ const seedRoughPlan = (
   if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
     const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dinnerDate = dateIso(sourceText, year);
-    const budgetText = sourceText.match(/\bbudget(?:\s+is|\s+of|\s*:)?\s*(?:aud|a\$|\$)?\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
+    const budgetText = sourceText.match(/(?:\baud|\ba\$|\$)\s*(\d[\d,]*(?:\.\d+)?)\s+budget\b/i)?.[1]
+      ?? sourceText.match(/\bbudget(?:\s+is|\s+of|\s*:)?\s*(?:aud|a\$|\$)?\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
       ?? sourceText.match(/\b(?:aud|a\$)\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
       ?? "";
     const budget = Number(budgetText.replaceAll(",", "")) || 0;
@@ -848,5 +849,42 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     }),
     laterHumanInputs: humanInputsAfterInterpretation,
     interpretationIsCurrent: humanInputsAfterInterpretation.length === 0,
+  };
+};
+
+export const workspaceInterpretationForConstruction = (order: ArrivalOrder, basedOnVersion: number, stagedAt: string): ArrivalInterpretation | null => {
+  const starter = starterPlanForArrival(order);
+  if (!starter || order.pendingClarification) return null;
+  const sectionSnapshot = (provisional: boolean) => starter.sections.flatMap((section) => {
+    const items = section.items.filter((item) => ["starter", "working", "open"].includes(item.source) === provisional);
+    const answers = provisional ? [] : section.answers;
+    if (!items.length && !answers.length) return [];
+    return [{ sectionId: section.sectionId, label: section.label, items: items.map((item) => ({ itemId: item.itemId, label: item.label, fields: item.fields, source: item.source })), answers }];
+  });
+  const dependencies = starter.sections.flatMap((section) => section.openQuestions.map((question, index) => ({
+    dependencyId: `workspace_question_${section.sectionId}_${index + 1}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 200),
+    kind: "human_decision" as const,
+    title: question.prompt.slice(0, 500),
+    status: "open" as const,
+    blocking: false,
+    sourcePaths: [`workspace.${section.sectionId}.openQuestions.${index}`],
+  }))).slice(0, 50);
+  return {
+    basedOnVersion,
+    inferredFamily: starter.family,
+    summary: starter.brief.slice(0, 2_000),
+    known: { outcome: order.rawOutcome, overview: starter.overview, sections: sectionSnapshot(false) },
+    inferred: { sections: sectionSnapshot(true) },
+    missing: [],
+    contradictions: [],
+    dependencies,
+    savedOperatorWork: {
+      ...(order.interpretation?.savedOperatorWork ?? {}),
+      workspaceOptions: starter.sections.flatMap((section) => section.options.length ? [{ sectionId: section.sectionId, options: section.options }] : []),
+      workspaceComments: starter.sections.flatMap((section) => section.comments.length ? [{ sectionId: section.sectionId, comments: section.comments }] : []),
+    },
+    nextHumanBoundary: null,
+    complete: true,
+    stagedAt,
   };
 };

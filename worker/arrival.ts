@@ -13,7 +13,7 @@ import type {
   ArrivalSourceSurface,
   ArrivalStatus,
 } from "../src/arrival.js";
-import { inspectArrivalWorkspaceRecord } from "../src/arrival-presentation.js";
+import { inspectArrivalWorkspaceRecord, workspaceInterpretationForConstruction } from "../src/arrival-presentation.js";
 import { ensureAuthenticatedTenant, type D1Database } from "./accepted-truth.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -610,6 +610,26 @@ const reviewInterpretation = async (db: D1Database, scopeId: string, order: Arri
   }, "ARRIVAL_INTERPRETATION_REVIEWED");
 };
 
+const reviewWorkspace = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const expectedChecksum = String(body.expectedChecksum ?? "");
+  const sourceSurface = String(body.sourceSurface ?? "site") as ArrivalSourceSurface;
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (!/^[a-f0-9]{64}$/.test(expectedChecksum)) return errorResponse(422, "ARRIVAL_CHECKSUM_INVALID", "An exact arrival checksum is required.");
+  if (!(sourceSurface === "site" || sourceSurface === "inline")) return errorResponse(403, "HUMAN_REVIEW_SURFACE_REQUIRED", "Workspace review must come from the human Site surface.");
+  if (order.version !== expectedVersion || order.checksum !== expectedChecksum) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The workspace changed before it was reviewed.", currentVersion: order.version, currentChecksum: order.checksum, next: "Reload the current workspace before reviewing it." }, 409);
+  const interpretation = workspaceInterpretationForConstruction(order, expectedVersion, new Date().toISOString());
+  if (!interpretation) return openedResponse(db, scopeId, order, "ARRIVAL_WORKSPACE_NOT_REVIEWABLE", undefined, { ok: false, message: order.pendingClarification ? "Answer the current plan question before starting Managing." : "This editable workspace is not ready for construction." }, 409);
+  if (stableSerialize(interpretation).length > 200_000) return errorResponse(413, "ARRIVAL_INTERPRETATION_TOO_LARGE", "The reviewed workspace exceeds its bounded construction contract.");
+  const interpretationHash = await sha256(interpretation);
+  return mutateOrder(db, scopeId, order, expectedVersion, { interpretation, pendingClarification: null, status: "interpretation_confirmed" }, {
+    eventType: "interpretation_reviewed",
+    actor: "human",
+    sourceSurface,
+    payload: { decision: "confirm_current_workspace_for_construction", reviewedOrderVersion: order.version, reviewedOrderChecksum: order.checksum, interpretationHash },
+  }, "ARRIVAL_WORKSPACE_REVIEWED");
+};
+
 export const acceptedPlanHeadIsCurrent = async (db: D1Database, scopeId: string, planId: string, profileHash: string, revision: number): Promise<{ matches: boolean; currentProfileHash: string | null; currentRevision: number | null }> => {
   const head = await db.prepare("SELECT profile_hash, revision FROM plan_heads WHERE scope_id = ? AND plan_id = ?")
     .bind(scopeId, planId).first<{ profile_hash: string; revision: number }>();
@@ -680,6 +700,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (operation === "clarification") return stageClarification(db, scopeId, order, body);
     if (operation === "interpretation") return stageInterpretation(db, scopeId, order, body);
     if (operation === "reconcile") return reconcileArrival(db, scopeId, order, body);
+    if (operation === "workspace-review") return reviewWorkspace(db, scopeId, order, body);
     if (operation === "review") return reviewInterpretation(db, scopeId, order, body);
     if (operation === "accept") return acceptPlan(db, scopeId, order, body);
     return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
