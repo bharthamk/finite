@@ -264,15 +264,15 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.equal(reentered.code, "KITCHEN_ENTERED_WITH_CURRENT_STATE");
   assert.equal(reentered.handoffReceipt.matchedCurrentState, false);
   assert.equal(reentered.arrival.orientation.exactOrderVersion, 2);
-  assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_delta_ready");
-  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
+  assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
+  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
   assert.match(reentered.operatorPacket.nextAction.reason, /2 human-supplied arrival update/);
-  assert.deepEqual(reentered.operatorPacket.nextAction.requiredArgs, ["orderId", "expectedVersion", "summary"]);
-  assert.equal(reentered.operatorPacket.nextAction.knownArgsComplete, false);
-  assert.equal(reentered.operatorPacket.nextAction.callReady, false);
-  assert.equal(reentered.operatorPacket.nextAction.derivedArgs[0].argument, "summary");
-  assert.match(reentered.next, /offer the menu in human language/);
-  assert.match(reentered.next, /action-time confirmation/);
+  assert.deepEqual(reentered.operatorPacket.nextAction.requiredArgs, []);
+  assert.equal(reentered.operatorPacket.nextAction.knownArgsComplete, true);
+  assert.equal(reentered.operatorPacket.nextAction.callReady, true);
+  assert.deepEqual(reentered.operatorPacket.nextAction.derivedArgs, []);
+  assert.equal(reentered.operatorPacket.nextAction.preMutationGate.readOnlyPlanPreparationRequiresConfirmation, false);
+  assert.match(reentered.operatorPacket.law, /Read and analyse canonical plan state without asking again/);
 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
   assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");

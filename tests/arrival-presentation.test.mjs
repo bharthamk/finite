@@ -322,6 +322,17 @@ test("a copied Codex handoff can open a populated editable workspace without cha
   assert.equal(starter.laterHumanInputs.length, 0);
 });
 
+test("a Codex-first order exposes its populated rough plan immediately without a workflow marker", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_codex_immediate", version: 1, status: "waiting_for_codex", rawOutcome: "Plan a dinner party at home for 10 people on Saturday with an AUD 500 budget.", structured: { planningMode: "codex" }, attachments: [], pendingClarification: null,
+    inputs: [], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z", checksum: "a".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.family, "event");
+  assert.ok(starter.sections.find((section) => section.sectionId === "schedule").items.length > 0);
+  assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.length > 0);
+});
+
 test("custom sections survive human and Codex creation, accept normal records, and can be removed", () => {
   const base = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_custom_workspace", version: 5, status: "waiting_for_codex", rawOutcome: "Prepare for a job interview.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,

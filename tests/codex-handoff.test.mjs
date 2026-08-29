@@ -36,6 +36,8 @@ test("Codex handoff copies a safe bootstrap pointer rather than plan or authenti
   assert.match(handoff.prompt, /knownArgsComplete is false/);
   assert.match(handoff.prompt, /action-time confirmation/i);
   assert.match(handoff.prompt, /sensitive plan content through WebMCP/i);
+  assert.match(handoff.prompt, /Do not ask permission merely to read and analyse canonical Site state/i);
+  assert.match(handoff.prompt, /concrete save boundary/i);
   for (const secret of ["SECRET PLAN CONTENT", "SECRET_ATTACHMENT", "SECRET_URL_TOKEN", "private@example.test", "SECRET_CREDENTIAL"]) {
     assert.equal(handoff.prompt.includes(secret), false);
   }

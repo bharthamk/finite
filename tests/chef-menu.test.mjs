@@ -91,21 +91,22 @@ test("a waiting human order wins route arbitration over an accepted plan", async
     expectedPlanRevision: runtime.kernel.revision,
   });
   assert.equal(entered.arrival.orientation.order.orderId, created.order.orderId);
-  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_delta_ready");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
-  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { orderId: created.order.orderId, expectedVersion: 1 });
-  assert.deepEqual(entered.operatorPacket.nextAction.requiredArgs, ["orderId", "expectedVersion", "summary"]);
-  assert.equal(entered.operatorPacket.nextAction.knownArgsComplete, false);
-  assert.equal(entered.operatorPacket.nextAction.callReady, false);
-  assert.equal(entered.operatorPacket.nextAction.derivedArgs[0].argument, "summary");
-  assert.equal(entered.operatorPacket.nextAction.derivedArgs[0].source, "canonical_arrival");
+  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
+  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, {});
+  assert.deepEqual(entered.operatorPacket.nextAction.requiredArgs, []);
+  assert.equal(entered.operatorPacket.nextAction.knownArgsComplete, true);
+  assert.equal(entered.operatorPacket.nextAction.callReady, true);
+  assert.deepEqual(entered.operatorPacket.nextAction.derivedArgs, []);
   assert.equal(entered.operatorPacket.nextAction.preMutationGate.presentChefMenuInHumanLanguage, true);
   assert.equal(entered.operatorPacket.nextAction.preMutationGate.sensitiveWebMcpTransmissionRequiresActionTimeConfirmation, true);
-  assert.equal(entered.operatorPacket.chefMenu.items[0].knownArgsComplete, false);
-  assert.equal(entered.operatorPacket.chefMenu.items[0].derivedArgs[0].argument, "summary");
-  assert.equal(entered.operatingContract.preMutationGate.copiedHandoffIsNotActionTimeConfirmation, true);
+  assert.equal(entered.operatorPacket.nextAction.preMutationGate.readOnlyPlanPreparationRequiresConfirmation, false);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_develop_before_save");
+  assert.equal(entered.operatorPacket.chefMenu.items[0].knownArgsComplete, true);
+  assert.deepEqual(entered.operatorPacket.chefMenu.items[0].derivedArgs, []);
+  assert.equal(entered.operatingContract.preMutationGate.copiedHandoffIsNotPlanAuthority, true);
   assert.match(entered.operatorPacket.law, /knownArgs are executable only when knownArgsComplete is not false/);
-  assert.match(entered.next, /Never call with knownArgs alone/);
+  assert.match(entered.operatorPacket.law, /Bundle that confirmation at the concrete save boundary/);
   assert.equal(entered.next.includes("finite_create_arrival_order"), false);
 });
 
@@ -162,13 +163,13 @@ test("a saved incomplete interpretation advances to one operator-ready clarifica
 
   const answered = await arrivals.appendInput({ orderId: created.order.orderId, expectedVersion: stagedQuestion.order.version, kind: "answer", payload: { questionId: stagedQuestion.order.pendingClarification.questionId, value: "September 2026; return in early November." }, sourceSurface: "site" });
   const delta = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
-  assert.equal(delta.operatorPacket.nextAction.stage, "arrival_delta_ready");
+  assert.equal(delta.operatorPacket.nextAction.stage, "arrival_draft_preparation");
   assert.equal(delta.arrival.orientation.interpretationIsCurrent, false);
   const processed = await host.execute("finite_checkpoint_arrival", { orderId: created.order.orderId, expectedVersion: answered.order.version });
   const refreshed = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(processed.orientation.latestHumanInputVersion, 5);
-  assert.equal(refreshed.operatorPacket.nextAction.stage, "arrival_review");
-  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
+  assert.equal(refreshed.operatorPacket.nextAction.stage, "arrival_draft_preparation");
+  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
   assert.match(refreshed.operatorPacket.nextAction.reason, /Human input advanced/);
 });
 
@@ -336,8 +337,8 @@ test("new human input invalidates an older kitchen draft and restores the arriva
   const host = new MemoryModelContext();
   await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
-  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_delta_ready");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_reconcile_arrival");
+  assert.equal(entered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
   assert.equal(entered.operatorPacket.nextAction.authorityPresent, false);
   assert.equal(entered.plan.construction.status, "stale_arrival");
   assert.equal(entered.plan.pendingDraft, null);

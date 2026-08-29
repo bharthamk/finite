@@ -486,7 +486,7 @@ export const arrivalInputIsWorkflowOnly = (input: ArrivalInput): boolean => ["ma
 export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
   const interpretation = order.interpretation;
   const manual = arrivalUsesManualWorkspace(order);
-  const editableWorkspace = manual || arrivalUsesCodexWaitingWorkspace(order);
+  const editableWorkspace = manual || arrivalUsesCodexWaitingWorkspace(order) || order.structured.planningMode === "codex";
   if (!interpretation?.complete && !editableWorkspace) return null;
   const family = starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
