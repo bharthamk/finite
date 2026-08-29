@@ -27,7 +27,7 @@ Finite owns no OAuth client, secret, callback, token refresh, password, or recov
 
 A signed-out visitor may explicitly create a 24-hour demo session. The server generates an unguessable opaque bearer token, sends it only in a `Secure`, `HttpOnly`, `SameSite=Lax` cookie, hashes it before storage, and creates a fresh `demo_…` tenant.
 
-Demo tenants never adopt or copy an authenticated user's lineage. Ending the demo or encountering it after expiry purges its complete tenant namespace, including arrivals, construction packets/returns, custom catalog entries, accepted revisions, receipts, challenges, and operation logs. Creating a later demo opportunistically garbage-collects abandoned expired namespaces. No demo authority is transferable to a signed-in account.
+Demo tenants never adopt or copy an authenticated user's lineage. Ending the demo or encountering it after expiry first deletes every recorded private R2 object, then purges the complete D1 tenant namespace, including arrivals, construction packets/returns, custom catalog entries, accepted revisions, settings, themes, skins, plan inputs, checklist work, receipts, challenges, and operation logs. A failed object deletion leaves D1 and the bearer intact for a safe retry; D1 cleanup never falsely succeeds while a recorded file remains. Creating a later demo opportunistically garbage-collects abandoned expired namespaces. No demo authority is transferable to a signed-in account.
 
 ### Portable self-hosting
 

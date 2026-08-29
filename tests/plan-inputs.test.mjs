@@ -31,10 +31,10 @@ class PlanInputDb {
         const [scopeId, inputId, planId, planRevision, kind, handlingMode, section, contextId, contextLabel, message, sourceSurface, createdAt] = statement.values;
         this.inputs.set(`${scopeId}:${inputId}`, { scope_id: scopeId, input_id: inputId, plan_id: planId, plan_revision: planRevision, kind, handling_mode: handlingMode, section, context_id: contextId, context_label: contextLabel, message, status: "open", source_surface: sourceSurface, created_at: createdAt, handled_at: null });
       } else if (statement.query.startsWith("UPDATE plan_inputs")) {
-        if (statement.query.includes("SET kind")) {
-          const [kind, handlingMode, section, contextId, contextLabel, message, sourceSurface, scopeId, inputId, planId] = statement.values;
+        if (statement.query.includes("SET plan_revision")) {
+          const [planRevision, kind, handlingMode, section, contextId, contextLabel, message, sourceSurface, scopeId, inputId, planId] = statement.values;
           const item = this.inputs.get(`${scopeId}:${inputId}`);
-          if (item && item.plan_id === planId && item.status === "open") this.inputs.set(`${scopeId}:${inputId}`, { ...item, kind, handling_mode: handlingMode, section, context_id: contextId, context_label: contextLabel, message, source_surface: sourceSurface });
+          if (item && item.plan_id === planId && item.status === "open") this.inputs.set(`${scopeId}:${inputId}`, { ...item, plan_revision: planRevision, kind, handling_mode: handlingMode, section, context_id: contextId, context_label: contextLabel, message, source_surface: sourceSurface });
           continue;
         }
         const [handledAt, scopeId, inputId, planId] = statement.values;
@@ -93,6 +93,19 @@ test("a person can change a direct plan item or hand it to Codex", async () => {
   assert.equal(changed.input.message, "Rework the budget with $50 set aside.");
   const listed = await (await handlePlanInputRequest(request(`/api/plan-inputs?planId=${planId}`), db)).json();
   assert.equal(listed.inputs[0].mode, "codex");
+});
+
+test("editing an open item rebases it to the current plan revision", async () => {
+  const db = new PlanInputDb(); seed(db);
+  const added = await (await handlePlanInputRequest(request("/api/plan-inputs", "POST", { planId, expectedRevision: 1, kind: "update", mode: "codex", section: "general", message: "Check the guest count.", idempotencyKey: "plan-input-rebase-add", sourceSurface: "site" }), db)).json();
+  db.heads.set(`${scopeId}:${planId}`, { revision: 2 });
+  const before = await (await handlePlanInputRequest(request(`/api/plan-inputs?planId=${planId}`), db)).json();
+  assert.equal(before.inputs[0].baseCurrent, false);
+  const updated = await (await handlePlanInputRequest(request(`/api/plan-inputs/${added.input.inputId}`, "POST", { planId, expectedRevision: 2, kind: "update", mode: "codex", section: "general", message: "Check the updated guest count.", idempotencyKey: "plan-input-rebase-edit", sourceSurface: "site" }), db)).json();
+  assert.equal(updated.input.planRevision, 2);
+  assert.equal(updated.input.baseCurrent, true);
+  const after = await (await handlePlanInputRequest(request(`/api/plan-inputs?planId=${planId}`), db)).json();
+  assert.equal(after.inputs[0].baseCurrent, true);
 });
 
 test("plan inputs refuse stale, cross-origin, anonymous, and idempotency-conflicting writes", async () => {

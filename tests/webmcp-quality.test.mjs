@@ -204,7 +204,7 @@ test("an impossible option search keeps Codex in planning for a bounded fallback
 });
 
 test("the page-start proxy carries semantic metadata and forwards host cancellation", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../src/webmcp-bootstrap.ts", import.meta.url), "utf8");
   for (const parameter of ["entryIntent", "orderId", "sinceVersion", "expectedOrderVersion", "expectedOrderChecksum", "expectedPlanId", "expectedPlanRevision", "expectedProfileHash", "expectedSnapshotHash"]) {
     assert.match(html, new RegExp(`${parameter}: \\{[^}]+description:`), `${parameter} has no bootstrap description`);
   }

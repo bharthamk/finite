@@ -7,7 +7,8 @@ import { handleSkinRequest } from "./skins.js";
 import { handlePlanShareRequest } from "./plan-shares.js";
 import { handleSettingsRequest } from "./settings.js";
 import { handlePlanInputRequest } from "./plan-inputs.js";
-import { handlePlanWorkRequest, type FiniteFilesBucket } from "./plan-work.js";
+import { handlePlanWorkRequest } from "./plan-work.js";
+import type { FiniteFilesBucket } from "./files.js";
 import { finiteRelease } from "../src/release.js";
 
 interface AssetsBinding {
@@ -24,7 +25,7 @@ export { finiteRelease };
 
 export const withSecurityHeaders = (source: Response): Response => {
   const headers = new Headers(source.headers);
-  headers.set("content-security-policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'");
+  headers.set("content-security-policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'");
   headers.set("cross-origin-opener-policy", "same-origin");
   headers.set("cross-origin-resource-policy", "same-origin");
   headers.set("origin-agent-cluster", "?1");
@@ -66,7 +67,7 @@ export const serveFiniteReleaseShell = async (request: Request, assets: AssetsBi
 
 export default {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
-    const authResponse = await handleAuthRequest(request, environment.DB);
+    const authResponse = await handleAuthRequest(request, environment.DB, environment.FILES);
     if (authResponse) return withSecurityHeaders(authResponse);
     const settingsResponse = await handleSettingsRequest(request, environment.DB);
     if (settingsResponse) return withSecurityHeaders(settingsResponse);

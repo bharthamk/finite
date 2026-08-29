@@ -627,8 +627,11 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-record.is-done { color:var(--muted); background:color-mix(in srgb,var(--paper) 75%,var(--line)); }
 .starter-record.is-done h4 { text-decoration:line-through; }
 .starter-record.is-provisional :where(h4,dd) { font-style:italic; }
-.starter-record>header { display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; gap:10px; align-items:start; }
+.starter-record>header { display:grid; grid-template-columns:auto auto minmax(0,1fr) auto auto; gap:10px; align-items:start; }
 .starter-record__drag { color:var(--muted); font:800 .9rem/1 monospace; letter-spacing:-.25em; }
+.starter-record__move { display:flex; gap:4px; }
+.starter-record__move button { width:30px; min-height:30px; padding:0; border:1px solid var(--line); color:var(--ink); background:var(--module-tone); cursor:pointer; font-weight:850; }
+.starter-record__move button:disabled { opacity:.32; cursor:not-allowed; }
 .starter-record>header>b { color:var(--accent); font:700 .64rem/1.4 "DM Mono",monospace; }
 .starter-record h4 { margin:0; font-size:.98rem; overflow-wrap:anywhere; }
 .starter-record header small { display:block; margin-top:5px; color:var(--muted); font:700 .55rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
@@ -1778,7 +1781,8 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .starter-module__records { grid-template-columns:1fr; }
   .starter-record__fields,.starter-record dl,.starter-option dl,.starter-option .starter-record__fields,.starter-module__option-add .starter-record__fields { grid-template-columns:1fr; }
   .starter-record dl>div.is-span,.starter-option dl>div.is-span { grid-column:auto; }
-  .starter-record__options-trigger { grid-column:3/5; justify-self:start; }
+  .starter-record__move { grid-column:3; justify-self:start; }
+  .starter-record__options-trigger { grid-column:4/6; justify-self:start; }
   .starter-option__research-fields { grid-template-columns:1fr; }
   .starter-option>header { flex-direction:column; }
   .starter-option>header .button { width:100%; }

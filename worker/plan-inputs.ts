@@ -76,12 +76,12 @@ export const handlePlanInputRequest = async (request: Request, db: D1Database): 
     if (updateMatch) {
       const existing = await db.prepare("SELECT input_id, plan_id, plan_revision, kind, handling_mode, section, context_id, context_label, message, status, source_surface, created_at, handled_at FROM plan_inputs WHERE scope_id = ? AND input_id = ? AND plan_id = ?").bind(scopeId, inputId, planId).first<PlanInputRow>();
       if (!existing || existing.status !== "open") return response(404, { ok: false, code: "PLAN_INPUT_NOT_FOUND", inputs: await listInputs(db, scopeId, planId, head.revision), acceptedStateChanged: false });
-      const updatedRow: PlanInputRow = { ...existing, kind: validation.value.kind, handling_mode: validation.value.mode, section: validation.value.section, context_id: validation.value.contextId, context_label: validation.value.contextLabel, message: validation.value.message, source_surface: sourceSurface };
+      const updatedRow: PlanInputRow = { ...existing, plan_revision: expectedRevision, kind: validation.value.kind, handling_mode: validation.value.mode, section: validation.value.section, context_id: validation.value.contextId, context_label: validation.value.contextLabel, message: validation.value.message, source_surface: sourceSurface };
       const updated = rowToRecord(updatedRow, head.revision);
       const payload = { ok: true, code: "PLAN_INPUT_UPDATED", input: updated, inputs: [] as PlanInputRecord[], acceptedStateChanged: false };
       payload.inputs = [updated, ...(await listInputs(db, scopeId, planId, head.revision)).filter((item) => item.inputId !== inputId)];
       await db.batch([
-        db.prepare("UPDATE plan_inputs SET kind = ?, handling_mode = ?, section = ?, context_id = ?, context_label = ?, message = ?, source_surface = ? WHERE scope_id = ? AND input_id = ? AND plan_id = ? AND status = 'open'").bind(updated.kind, updated.mode, updated.section, updated.contextId, updated.contextLabel, updated.message, sourceSurface, scopeId, inputId, planId),
+        db.prepare("UPDATE plan_inputs SET plan_revision = ?, kind = ?, handling_mode = ?, section = ?, context_id = ?, context_label = ?, message = ?, source_surface = ? WHERE scope_id = ? AND input_id = ? AND plan_id = ? AND status = 'open'").bind(expectedRevision, updated.kind, updated.mode, updated.section, updated.contextId, updated.contextLabel, updated.message, sourceSurface, scopeId, inputId, planId),
         db.prepare("INSERT INTO plan_input_receipts (scope_id, idempotency_key, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)").bind(scopeId, idempotencyKey, requestHash, JSON.stringify(payload), now),
       ]);
       return response(200, payload);

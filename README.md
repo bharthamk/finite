@@ -50,14 +50,15 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and every new account/demo starts empty. Automatic “first account wins” legacy adoption has been removed; any future legacy transfer must be an explicit audited owner operation.
 - Account-scoped browser persistence: snapshots, custom-plan catalog, construction work, activation receipts, and active selection are namespaced by a server-derived opaque scope, so two identities sharing one browser origin cannot see or initialize from one another's cache.
 - Durable custom-plan catalog truth: D1 persists the complete validated compiler definition, evidence bundle, activation lineage, and receipt needed to reconstruct a custom adaptive plan on a browser-empty device.
-- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, tenant data, and authority traces are purged on end or expiry.
+- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, complete D1 tenant data, uploaded R2 objects, and authority traces are purged on end or expiry through a retry-safe cleanup record.
+- Recoverable D1/R2 plan work: uploads and file removals record a deterministic pending operation before object storage changes, then commit metadata and the idempotent user receipt in one D1 transaction. Retrying the same action finishes an interrupted cross-store operation without duplicate records or untracked objects.
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human challenges now bind every accepted mutation—options, corrections, preference changes, lifecycle, group decisions, external-action truth, and plan activation—and are consumed in the same D1 transaction as the accepted commit.
 - Production responses carry a consistent CSP, opener/resource isolation, permissions policy, no-referrer, and MIME-sniffing protections; production source maps are not published.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
 - Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
-- A responsive, keyboard-operable consumption surface with no mobile horizontal overflow.
-- Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations; there is no backend model or application-owned agent.
+- A responsive, keyboard-operable consumption surface with no mobile horizontal overflow. Every draggable plan record also has labelled earlier/later buttons, so ordering never depends on pointer drag.
+- Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations and a reconciled current-schema snapshot that makes clean generation a no-op; there is no backend model or application-owned agent.
 - Append-only, human-confirmed ledgers for named group decisions and real-world action status, so disagreement is not averaged away and researched/quoted/held/booked/paid/verified/cancelled cannot collapse into one fluent claim.
 - Executable chef-effort and dropped-response benchmarks covering exact retry after a durable commit response is lost.
 
@@ -77,7 +78,7 @@ Local development binds an isolated D1 named `finite-local`;
 product. Production continues to use the Sites-managed `DB` binding from
 `.openai/hosting.json`.
 
-The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`; the optional diagnostic and explicit authenticated acceptance trace is available at `?lab=1`.
+The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
 
 The deployed owner-private build is [Finite](https://finite-plan-kitchen.bharthamk.chatgpt.site). Sign in with ChatGPT to open it.
 

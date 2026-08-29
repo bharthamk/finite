@@ -9,6 +9,9 @@ const runtimeSource = readFileSync(new URL("../src/runtime.ts", import.meta.url)
 const handoffSource = readFileSync(new URL("../src/codex-handoff.ts", import.meta.url), "utf8");
 const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSync(new URL(`../worker/${name}.ts`, import.meta.url), "utf8")).join("\n");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const bootstrap = readFileSync(new URL("../src/webmcp-bootstrap.ts", import.meta.url), "utf8");
+const entry = readFileSync(new URL("../src/entry.ts", import.meta.url), "utf8");
+const shareEntry = readFileSync(new URL("../src/share-entry.ts", import.meta.url), "utf8");
 const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
 const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 const chunkBudget = readFileSync(new URL("../scripts/check-client-chunks.mjs", import.meta.url), "utf8");
@@ -22,6 +25,14 @@ test("the production client has intentional chunks and a hard regression budget"
   assert.match(packageSource, /node scripts\/check-client-chunks\.mjs/);
   assert.match(chunkBudget, /const maximumBytes = 500_000/);
   assert.match(chunkBudget, /Production client chunk budget exceeded/);
+});
+
+test("public bootstrap routes do not preload the authenticated operator surface", () => {
+  assert.match(entry, /if \(auth\.session\) \{[\s\S]*await import\("\.\/main\.js"\)/);
+  assert.match(entry, /await import\("\.\/share-entry\.js"\)/);
+  assert.match(entry, /await import\("\.\/public-gate\.js"\)/);
+  assert.doesNotMatch(shell, /<script>(?![\s\S]*type="module")/);
+  assert.match(source, /const labMode = import\.meta\.env\.DEV &&/);
 });
 
 test("blocked option cards never claim that no compromise is required", () => {
@@ -158,8 +169,12 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(styles, /\.plan-share-preview \{ position:sticky;/);
   assert.match(source, /Stays private/);
   assert.match(source, /No editing · no approval controls · no access to the full plan/);
-  assert.match(shell, /!location\.pathname\.startsWith\("\/share\/"\)/);
+  assert.match(bootstrap, /!location\.pathname\.startsWith\("\/share\/"\)/);
+  assert.match(shell, /src="\/src\/entry\.ts"/);
   assert.match(styles, /\.publication-page/);
+  assert.match(shareEntry, /Recent accepted changes/);
+  assert.match(shareEntry, /Actual spend/);
+  assert.match(shareEntry, /item\.contextLabel/);
 });
 
 test("consumer copy uses plan language outside explicit how-it-works explanations", () => {
@@ -358,6 +373,13 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.doesNotMatch(styles, /\.starter-module--stays \.starter-module__records \{ grid-template-columns:repeat\(auto-fit/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
+});
+
+test("manual record ordering has a keyboard alternative to drag and drop", () => {
+  assert.match(source, /data-action="workspace-move" data-direction="up"/);
+  assert.match(source, /data-action="workspace-move" data-direction="down"/);
+  assert.match(source, /aria-label="Move \$\{escapeHtml\(title\)\} earlier"/);
+  assert.match(source, /const moveWorkspaceRecord/);
 });
 
 test("arrival creation keeps the typed starting point in place while persistence is pending", () => {

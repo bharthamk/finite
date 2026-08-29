@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "blocked-option-truth-v154",
+  build: "storage-integrity-and-bootstrap-v155",
 } as const;

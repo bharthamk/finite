@@ -45,5 +45,6 @@ test("every Worker response receives the production isolation and content-securi
   assert.equal(response.headers.get("origin-agent-cluster"), "?1");
   assert.match(response.headers.get("permissions-policy"), /tools=\(self\)/);
   assert.match(response.headers.get("content-security-policy"), /object-src 'none'/);
+  assert.doesNotMatch(response.headers.get("content-security-policy"), /script-src[^;]*unsafe-inline/);
   assert.equal(await response.text(), "ok");
 });

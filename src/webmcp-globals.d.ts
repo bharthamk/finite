@@ -3,6 +3,9 @@ import type { FinitePlanRuntime } from "./runtime.js";
 import type { FinitePlanWebMCPAdapter, FiniteWebMCPReadiness } from "./webmcp.js";
 
 declare global {
+  interface ImportMeta {
+    readonly env: { readonly DEV: boolean };
+  }
   interface Document {
     modelContext?: ModelContextHost;
   }

@@ -1,4 +1,6 @@
 import type { D1Database } from "./accepted-truth.js";
+import type { FiniteFilesBucket } from "./files.js";
+import { tenantDataTables, tenantDeleteStatements } from "./tenant-data.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -18,33 +20,16 @@ interface DemoSessionRow {
   expires_at: string;
 }
 
+interface ResetJobRow {
+  request_hash: string;
+  object_keys_json: string;
+  status: "pending" | "completed";
+}
+
 const demoCookieName = "finite_demo";
 const demoTtlSeconds = 24 * 60 * 60;
 const resetConfirmation = "START OVER";
 const jsonHeaders = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
-
-const resetTables = [
-  "plan_input_receipts",
-  "plan_inputs",
-  "tenant_settings_receipts",
-  "tenant_settings",
-  "plan_shares",
-  "arrival_events",
-  "arrival_orders",
-  "construction_return_reviews",
-  "construction_packets",
-  "challenge_consumptions",
-  "authority_challenges",
-  "operator_sessions",
-  "operation_log",
-  "evidence_records",
-  "domain_events",
-  "receipts",
-  "activation_receipts",
-  "plan_catalog",
-  "plan_revisions",
-  "plan_heads",
-] as const;
 
 const stableSerialize = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
@@ -85,24 +70,35 @@ const randomToken = (): string => {
 const demoCookie = (token: string, maxAge: number): string =>
   `${demoCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
-const resetStatements = (db: D1Database, scopeId: string) =>
-  resetTables.map((table) => db.prepare(`DELETE FROM ${table} WHERE scope_id = ?`).bind(scopeId));
+const attachmentObjectKeys = async (db: D1Database, scopeId: string): Promise<string[]> => {
+  const rows = await db.prepare("SELECT object_key FROM plan_attachments WHERE scope_id = ? AND object_key IS NOT NULL")
+    .bind(scopeId).all<{ object_key: string }>();
+  return [...new Set((rows.results ?? []).map(({ object_key }) => object_key).filter(Boolean))];
+};
 
-const purgeDemoScope = async (db: D1Database, scopeId: string): Promise<void> => {
+const deleteObjects = async (files: FiniteFilesBucket | undefined, objectKeys: string[]): Promise<void> => {
+  if (!objectKeys.length) return;
+  if (!files) throw new Error("FILE_STORAGE_UNAVAILABLE");
+  for (const objectKey of objectKeys) await files.delete(objectKey);
+};
+
+const purgeDemoScope = async (db: D1Database, scopeId: string, files?: FiniteFilesBucket): Promise<void> => {
   const confirmedDemo = await db.prepare("SELECT scope_id FROM demo_sessions WHERE scope_id = ?").bind(scopeId).first();
   if (!confirmedDemo) return;
+  await deleteObjects(files, await attachmentObjectKeys(db, scopeId));
   await db.batch([
-    ...resetStatements(db, scopeId),
+    ...tenantDeleteStatements(db, scopeId),
     db.prepare("DELETE FROM tenant_reset_receipts WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM tenant_reset_jobs WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM demo_sessions WHERE scope_id = ?").bind(scopeId),
     db.prepare("DELETE FROM tenant_accounts WHERE scope_id = ?").bind(scopeId),
   ]);
 };
 
-const purgeExpiredDemoScopes = async (db: D1Database): Promise<void> => {
+const purgeExpiredDemoScopes = async (db: D1Database, files?: FiniteFilesBucket): Promise<void> => {
   const expired = await db.prepare("SELECT scope_id FROM demo_sessions WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT 10")
     .bind(new Date().toISOString()).all<{ scope_id: string }>();
-  for (const row of expired.results) await purgeDemoScope(db, row.scope_id);
+  for (const row of expired.results) await purgeDemoScope(db, row.scope_id, files);
 };
 
 const accountPrincipal = (request: Request): FinitePrincipal | null => {
@@ -123,7 +119,7 @@ const accountPrincipal = (request: Request): FinitePrincipal | null => {
   };
 };
 
-export const resolveRequestPrincipal = async (request: Request, db: D1Database): Promise<FinitePrincipal | null> => {
+export const resolveRequestPrincipal = async (request: Request, db: D1Database, files?: FiniteFilesBucket): Promise<FinitePrincipal | null> => {
   const account = accountPrincipal(request);
   if (account) return account;
   const token = cookieValue(request, demoCookieName);
@@ -133,7 +129,7 @@ export const resolveRequestPrincipal = async (request: Request, db: D1Database):
     .bind(sessionHash).first<DemoSessionRow>();
   if (!session) return null;
   if (Date.parse(session.expires_at) <= Date.now()) {
-    await purgeDemoScope(db, session.scope_id);
+    await purgeDemoScope(db, session.scope_id, files);
     return null;
   }
   return {
@@ -172,9 +168,9 @@ const publicSession = async (principal: FinitePrincipal | null, db: D1Database):
   };
 };
 
-const createDemoSession = async (request: Request, db: D1Database): Promise<Response> => {
-  await purgeExpiredDemoScopes(db);
-  const existing = await resolveRequestPrincipal(request, db);
+const createDemoSession = async (request: Request, db: D1Database, files?: FiniteFilesBucket): Promise<Response> => {
+  await purgeExpiredDemoScopes(db, files);
+  const existing = await resolveRequestPrincipal(request, db, files);
   if (existing) return response(200, await publicSession(existing, db));
   const token = randomToken();
   const sessionHash = await authSha256({ demoToken: token });
@@ -195,19 +191,19 @@ const createDemoSession = async (request: Request, db: D1Database): Promise<Resp
   }, { "set-cookie": demoCookie(token, demoTtlSeconds) });
 };
 
-const endDemoSession = async (request: Request, db: D1Database): Promise<Response> => {
+const endDemoSession = async (request: Request, db: D1Database, files?: FiniteFilesBucket): Promise<Response> => {
   const token = cookieValue(request, demoCookieName);
   if (token) {
     const sessionHash = await authSha256({ demoToken: token });
     const session = await db.prepare("SELECT session_hash, scope_id, created_at, expires_at FROM demo_sessions WHERE session_hash = ?")
       .bind(sessionHash).first<DemoSessionRow>();
-    if (session) await purgeDemoScope(db, session.scope_id);
+    if (session) await purgeDemoScope(db, session.scope_id, files);
   }
   return response(200, { ok: true, code: "DEMO_SESSION_ENDED", session: null }, { "set-cookie": demoCookie("", 0) });
 };
 
 const resetPreview = async (db: D1Database, scopeId: string): Promise<{ counts: Record<string, number>; totalRecords: number }> => {
-  const entries = await Promise.all(resetTables.map(async (table) => {
+  const entries = await Promise.all(tenantDataTables.map(async (table) => {
     const row = await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE scope_id = ?`).bind(scopeId).first<{ count: number }>();
     return [table, Number(row?.count ?? 0)] as const;
   }));
@@ -224,7 +220,7 @@ const parseResetBody = async (request: Request): Promise<JsonRecord> => {
   return parsed as JsonRecord;
 };
 
-const resetKitchen = async (request: Request, db: D1Database, principal: FinitePrincipal): Promise<Response> => {
+const resetKitchen = async (request: Request, db: D1Database, principal: FinitePrincipal, files?: FiniteFilesBucket): Promise<Response> => {
   const body = await parseResetBody(request);
   const confirmation = typeof body.confirmation === "string" ? body.confirmation : "";
   const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
@@ -243,6 +239,21 @@ const resetKitchen = async (request: Request, db: D1Database, principal: FiniteP
   const preview = await resetPreview(db, scopeId);
   const clearedAt = new Date().toISOString();
   const resetId = `kitchen_reset_${(await authSha256({ scopeId, idempotencyKey })).slice(0, 16)}`;
+  const existingJob = await db.prepare("SELECT request_hash, object_keys_json, status FROM tenant_reset_jobs WHERE scope_id = ? AND idempotency_key = ?")
+    .bind(scopeId, idempotencyKey).first<ResetJobRow>();
+  if (existingJob && existingJob.request_hash !== requestHash) return response(409, { ok: false, code: "IDEMPOTENCY_KEY_REUSED", message: "The reset idempotency key was reused with different content.", acceptedStateChanged: false });
+  const objectKeys = existingJob
+    ? (() => { try { const parsed = JSON.parse(existingJob.object_keys_json) as unknown; return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return []; } })()
+    : await attachmentObjectKeys(db, scopeId);
+  if (!existingJob) {
+    await db.batch([db.prepare("INSERT INTO tenant_reset_jobs (scope_id, idempotency_key, request_hash, object_keys_json, status, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL)")
+      .bind(scopeId, idempotencyKey, requestHash, JSON.stringify(objectKeys), clearedAt, clearedAt)]);
+  }
+  try {
+    await deleteObjects(files, objectKeys);
+  } catch {
+    return response(503, { ok: false, code: "KITCHEN_RESET_STORAGE_PENDING", message: "Finite could not finish deleting private files. Retry the same reset; its recovery record is safe.", acceptedStateChanged: false, retryWithSameIdempotencyKey: true });
+  }
   const receipt = {
     receiptVersion: "finite-kitchen-reset.v1",
     resetId,
@@ -250,39 +261,44 @@ const resetKitchen = async (request: Request, db: D1Database, principal: FiniteP
     sourceSurface,
     cleared: preview.counts,
     totalRecords: preview.totalRecords,
+    deletedFiles: objectKeys.length,
   };
   await db.batch([
-    ...resetStatements(db, scopeId),
+    ...tenantDeleteStatements(db, scopeId),
     db.prepare("DELETE FROM tenant_reset_receipts WHERE scope_id = ?").bind(scopeId),
+    db.prepare("DELETE FROM tenant_reset_jobs WHERE scope_id = ? AND idempotency_key != ?").bind(scopeId, idempotencyKey),
     db.prepare("INSERT OR IGNORE INTO tenant_accounts (scope_id, user_id_hash, legacy_scope_adopted, created_at) VALUES (?, ?, 0, ?)").bind(scopeId, userIdHash, clearedAt),
     db.prepare("UPDATE tenant_accounts SET legacy_scope_adopted = 0 WHERE scope_id = ?").bind(scopeId),
     db.prepare("INSERT INTO tenant_reset_receipts (scope_id, idempotency_key, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)")
       .bind(scopeId, idempotencyKey, requestHash, JSON.stringify(receipt), clearedAt),
+    db.prepare("UPDATE tenant_reset_jobs SET object_keys_json = '[]', status = 'completed', updated_at = ?, completed_at = ? WHERE scope_id = ? AND idempotency_key = ?")
+      .bind(clearedAt, clearedAt, scopeId, idempotencyKey),
   ]);
   return response(200, { ok: true, code: "KITCHEN_RESET", receipt, acceptedStateChanged: true, next: "Clear only this tenant's browser cache and reload Finite at the first-arrival surface." });
 };
 
-export const handleAuthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
+export const handleAuthRequest = async (request: Request, db: D1Database, files?: FiniteFilesBucket): Promise<Response | null> => {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/auth/")) return null;
   if (request.method !== "GET" && !sameOriginWrite(request)) return response(403, { ok: false, code: "CROSS_ORIGIN_WRITE_REFUSED", message: "Finite writes must be same-origin." });
   try {
-    if (request.method === "GET" && url.pathname === "/api/auth/session") return response(200, await publicSession(await resolveRequestPrincipal(request, db), db));
-    if (request.method === "POST" && url.pathname === "/api/auth/demo") return createDemoSession(request, db);
-    if (request.method === "POST" && url.pathname === "/api/auth/demo/end") return endDemoSession(request, db);
+    if (request.method === "GET" && url.pathname === "/api/auth/session") return response(200, await publicSession(await resolveRequestPrincipal(request, db, files), db));
+    if (request.method === "POST" && url.pathname === "/api/auth/demo") return createDemoSession(request, db, files);
+    if (request.method === "POST" && url.pathname === "/api/auth/demo/end") return endDemoSession(request, db, files);
     if (url.pathname === "/api/auth/reset") {
-      const principal = await resolveRequestPrincipal(request, db);
+      const principal = await resolveRequestPrincipal(request, db, files);
       if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", message: "Sign in or open a demo before resetting Finite.", acceptedStateChanged: false });
       if (request.method === "GET") {
         const { scopeId } = await principalStorageScope(principal);
         const preview = await resetPreview(db, scopeId);
         return response(200, { ok: true, code: "KITCHEN_RESET_PREVIEW", ...preview, confirmation: resetConfirmation, permanent: true, preserves: ["ChatGPT sign-in", "current demo session", "external bookings and supplier systems"], acceptedStateChanged: false, next: `Type ${resetConfirmation} exactly to permanently clear this Finite account.` });
       }
-      if (request.method === "POST") return resetKitchen(request, db, principal);
+      if (request.method === "POST") return resetKitchen(request, db, principal, files);
     }
     return response(405, { ok: false, code: "METHOD_NOT_ALLOWED", message: "Unsupported authentication operation." });
   } catch (error) {
     if (error instanceof SyntaxError || (error instanceof Error && error.message.startsWith("RESET_"))) return response(400, { ok: false, code: "KITCHEN_RESET_REQUEST_INVALID", message: "The reset request body is invalid.", acceptedStateChanged: false });
+    if (error instanceof Error && error.message === "FILE_STORAGE_UNAVAILABLE") return response(503, { ok: false, code: "FILE_STORAGE_UNAVAILABLE", message: "Private file storage is required to finish this cleanup safely." });
     return response(500, { ok: false, code: "AUTH_SERVICE_FAILED", message: "Authentication service failed safely." });
   }
 };

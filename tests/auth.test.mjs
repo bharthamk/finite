@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { handleAcceptedTruthRequest } from "../dist-test/worker/accepted-truth.js";
 import { handleAuthRequest } from "../dist-test/worker/auth.js";
+import { tenantDataTables } from "../dist-test/worker/tenant-data.js";
 
 class Statement {
   constructor(db, query, values = []) { this.db = db; this.query = query; this.values = values; }
@@ -16,6 +18,8 @@ class AuthDb {
   resets = new Map();
   counts = new Map();
   statements = [];
+  attachments = new Map();
+  resetJobs = new Map();
 
   prepare(query) { return new Statement(this, query); }
 
@@ -25,6 +29,7 @@ class AuthDb {
       return { count: this.counts.get(values[0])?.[table] ?? 0 };
     }
     if (query.includes("FROM tenant_reset_receipts WHERE scope_id")) return this.resets.get(`${values[0]}:${values[1]}`) ?? null;
+    if (query.includes("FROM tenant_reset_jobs WHERE scope_id")) return this.resetJobs.get(`${values[0]}:${values[1]}`) ?? null;
     if (query.includes("FROM demo_sessions WHERE session_hash")) return this.demos.get(values[0]) ?? null;
     if (query.includes("FROM demo_sessions WHERE scope_id")) return [...this.demos.values()].find((row) => row.scope_id === values[0]) ?? null;
     if (query.includes("FROM tenant_accounts WHERE scope_id")) {
@@ -37,6 +42,7 @@ class AuthDb {
 
   async all(query, values) {
     if (query.includes("FROM demo_sessions WHERE expires_at <=")) return { results: [...this.demos.values()].filter((row) => row.expires_at <= values[0]).slice(0, 10).map(({ scope_id }) => ({ scope_id })) };
+    if (query.includes("FROM plan_attachments") && query.includes("object_key IS NOT NULL")) return { results: [...this.attachments.values()].filter((row) => row.scope_id === values[0] && row.object_key).map(({ object_key }) => ({ object_key })) };
     return { results: [] };
   }
 
@@ -54,6 +60,10 @@ class AuthDb {
         this.tenants.delete(values[0]);
       } else if (query.startsWith("DELETE FROM tenant_reset_receipts WHERE scope_id")) {
         for (const key of this.resets.keys()) if (key.startsWith(`${values[0]}:`)) this.resets.delete(key);
+      } else if (query.startsWith("DELETE FROM tenant_reset_jobs WHERE scope_id") && query.includes("idempotency_key !=")) {
+        for (const key of this.resetJobs.keys()) if (key.startsWith(`${values[0]}:`) && key !== `${values[0]}:${values[1]}`) this.resetJobs.delete(key);
+      } else if (query.startsWith("DELETE FROM tenant_reset_jobs WHERE scope_id")) {
+        for (const key of this.resetJobs.keys()) if (key.startsWith(`${values[0]}:`)) this.resetJobs.delete(key);
       } else if (query.startsWith("DELETE FROM ") && query.includes(" WHERE scope_id = ?")) {
         const table = query.match(/^DELETE FROM ([a-z_]+)/)?.[1];
         if (table && this.counts.has(values[0])) this.counts.get(values[0])[table] = 0;
@@ -64,13 +74,34 @@ class AuthDb {
         if (row) row.legacy_scope_adopted = false;
       } else if (query.startsWith("INSERT INTO tenant_reset_receipts")) {
         this.resets.set(`${values[0]}:${values[1]}`, { request_hash: values[2], receipt_json: values[3] });
+      } else if (query.startsWith("INSERT INTO tenant_reset_jobs")) {
+        this.resetJobs.set(`${values[0]}:${values[1]}`, { request_hash: values[2], object_keys_json: values[3], status: "pending" });
+      } else if (query.startsWith("UPDATE tenant_reset_jobs SET")) {
+        const row = this.resetJobs.get(`${values[2]}:${values[3]}`);
+        if (row) this.resetJobs.set(`${values[2]}:${values[3]}`, { ...row, object_keys_json: "[]", status: "completed" });
       }
     }
     return statements.map(() => ({ success: true }));
   }
 }
 
+class FilesBucket {
+  objects = new Set();
+  failDeletes = 0;
+  async delete(key) {
+    if (this.failDeletes > 0) { this.failDeletes -= 1; throw new Error("R2 unavailable"); }
+    this.objects.delete(key);
+  }
+}
+
 const cookieFrom = (response) => response.headers.get("set-cookie").split(";", 1)[0];
+
+test("the reset inventory covers every tenant-data table in the current schema", async () => {
+  const schema = await readFile(new URL("../db/schema.ts", import.meta.url), "utf8");
+  const tables = [...schema.matchAll(/sqliteTable\("([a-z_]+)"/g)].map((match) => match[1]);
+  const infrastructure = new Set(["tenant_accounts", "demo_sessions", "tenant_reset_receipts", "tenant_reset_jobs"]);
+  assert.deepEqual(new Set(tenantDataTables), new Set(tables.filter((table) => !infrastructure.has(table))));
+});
 
 test("Sites identity supplies first-use account registration without a Finite credential", async () => {
   const response = await handleAuthRequest(new Request("https://finite.example/api/auth/session", { headers: {
@@ -221,4 +252,32 @@ test("kitchen reset rejects signed-out and cross-origin callers", async () => {
     body: JSON.stringify({ confirmation: "START OVER", idempotencyKey: "reset-two-0001", sourceSurface: "codex" }),
   }), db);
   assert.equal(crossOrigin.status, 403);
+});
+
+test("reset deletes private files before D1 and safely resumes after an R2 failure", async () => {
+  const db = new AuthDb();
+  const files = new FilesBucket();
+  const headers = { "oai-authenticated-user-id": "reset-files-user", origin: "https://finite.example", "content-type": "application/json" };
+  const session = await handleAuthRequest(new Request("https://finite.example/api/auth/session", { headers }), db, files);
+  const scopeId = (await session.json()).session.storageScope;
+  db.tenants.set(scopeId, { scope_id: scopeId, user_id_hash: "hash", legacy_scope_adopted: false, created_at: "2026-08-01T00:00:00.000Z" });
+  db.counts.set(scopeId, { plan_attachments: 1, plan_work_receipts: 1, tenant_themes: 1, tenant_skins: 1 });
+  db.attachments.set(`${scopeId}:attachment_one`, { scope_id: scopeId, object_key: `${scopeId}/plan/attachment_one` });
+  files.objects.add(`${scopeId}/plan/attachment_one`);
+  files.failDeletes = 1;
+  const body = JSON.stringify({ confirmation: "START OVER", idempotencyKey: "reset-files-0001", sourceSurface: "site" });
+  const pending = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { method: "POST", headers, body }), db, files);
+  assert.equal(pending.status, 503);
+  assert.equal((await pending.json()).code, "KITCHEN_RESET_STORAGE_PENDING");
+  assert.equal(db.counts.get(scopeId).plan_attachments, 1);
+  assert.equal(db.resetJobs.get(`${scopeId}:reset-files-0001`).status, "pending");
+  const recovered = await handleAuthRequest(new Request("https://finite.example/api/auth/reset", { method: "POST", headers, body }), db, files);
+  const result = await recovered.json();
+  assert.equal(result.code, "KITCHEN_RESET");
+  assert.equal(result.receipt.deletedFiles, 1);
+  assert.equal(files.objects.size, 0);
+  assert.equal(db.counts.get(scopeId).plan_attachments, 0);
+  assert.equal(db.counts.get(scopeId).tenant_themes, 0);
+  assert.equal(db.counts.get(scopeId).tenant_skins, 0);
+  assert.equal(db.resetJobs.get(`${scopeId}:reset-files-0001`).status, "completed");
 });

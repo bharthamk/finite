@@ -462,3 +462,45 @@ export const planWorkReceipts = sqliteTable("plan_work_receipts", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_plan_work_receipts_scope_created").on(table.scopeId, table.createdAt),
 ]);
+
+export const planFileOperations = sqliteTable("plan_file_operations", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  operationKind: text("operation_kind").notNull(),
+  attachmentId: text("attachment_id").notNull(),
+  planId: text("plan_id").notNull(),
+  objectKey: text("object_key"),
+  status: text("status").default("pending").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  completedAt: text("completed_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_plan_file_operations_scope_status_updated").on(table.scopeId, table.status, table.updatedAt),
+]);
+
+export const tenantResetReceipts = sqliteTable("tenant_reset_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_tenant_reset_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);
+
+export const tenantResetJobs = sqliteTable("tenant_reset_jobs", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  objectKeysJson: text("object_keys_json").default("[]").notNull(),
+  status: text("status").default("pending").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  completedAt: text("completed_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_tenant_reset_jobs_scope_status_updated").on(table.scopeId, table.status, table.updatedAt),
+]);

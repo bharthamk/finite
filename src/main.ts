@@ -25,6 +25,7 @@ import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arriva
 import { candidateTradeoffLines } from "./option-presentation.js";
 
 const root = document.querySelector<HTMLElement>("#app");
+const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
@@ -41,7 +42,7 @@ const enableNativeWritingAssistance = (): void => {
 const webmcpReadiness: FiniteWebMCPReadiness = window.finiteWebMCPReadiness ?? { state: "initializing" };
 window.finiteWebMCPReadiness = webmcpReadiness;
 
-interface FiniteAuthSession {
+export interface FiniteAuthSession {
   kind: "account" | "demo";
   provider: "chatgpt" | "demo";
   displayName: string;
@@ -388,7 +389,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
   }));
 };
 
-const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
+export const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
 
 updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
@@ -463,7 +464,7 @@ let arrivalResult: ArrivalResult = openedArrival;
 updateOpeningStatus("Preparing your workspace…");
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 const startupParams = new URLSearchParams(location.search);
-const opensFreshArrival = !arrivalResult.order && startupParams.get("lab") !== "1" && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
+const opensFreshArrival = !arrivalResult.order && !labMode && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
 const hydrateCanonicalRuntime = async (): Promise<void> => {
   await runtime.hydrateAcceptedTruth();
   await runtime.hydrateConstructionPacket();
@@ -495,7 +496,7 @@ const refreshPlanWork = async (): Promise<void> => {
   planAttachments = result.ok ? result.attachments : [];
 };
 const startupSurface = selectExperienceSurface({
-  labMode: startupParams.get("lab") === "1",
+  labMode,
   kitchenMode: startupParams.get("plan") === "1" || startupParams.get("kitchen") === "1",
   hasArrival: isWaitingArrivalStatus(arrivalResult.order?.status),
   hasActivatedPlan: runtime.hasActivationReceipt(),
@@ -640,7 +641,6 @@ let sharePreviewKey = "";
 let planPublications: PlanPublicationRecord[] = [];
 let newPublicationUrl = "";
 let shareError = "";
-const labMode = new URLSearchParams(location.search).get("lab") === "1";
 let labAcceptanceResult: unknown = null;
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
@@ -1671,7 +1671,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         relationshipMarkup = `<div class="starter-record__relationships"><span>Plan dependency</span>${related.slice(0, 2).map((record) => `<button type="button" data-action="open-related-record" data-module-id="${escapeHtml(scheduleSection.sectionId)}" data-record-id="${escapeHtml(record.itemId)}">${escapeHtml(String(record.fields.title || record.label))}</button>`).join("")}${String(item.fields.status || "tentative") !== "confirmed" ? `<small>Dates are not confirmed yet.</small>` : ""}</div>`;
       }
       return `<article class="${recordClass}" draggable="true" data-workspace-record data-module-id="${escapeHtml(section.sectionId)}" data-record-id="${escapeHtml(item.itemId)}">
-        <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div>${recordOptionsButton(item)}</header>
+        <header><span class="starter-record__drag" aria-hidden="true">⋮⋮</span>${section.variant === "checklist" ? `<button class="starter-record__check" type="button" data-action="workspace-toggle" aria-label="${item.fields.done === true ? "Reopen" : "Complete"} ${escapeHtml(title)}">${item.fields.done === true ? "✓" : ""}</button>` : `<b>${String(index + 1).padStart(2, "0")}</b>`}<div><h4>${escapeHtml(title)}</h4><small>${escapeHtml(starterSourceLabels[item.source])}</small></div><span class="starter-record__move"><button type="button" data-action="workspace-move" data-direction="up" aria-label="Move ${escapeHtml(title)} earlier" ${index === 0 || busy ? "disabled" : ""}>↑</button><button type="button" data-action="workspace-move" data-direction="down" aria-label="Move ${escapeHtml(title)} later" ${index === section.items.length - 1 || busy ? "disabled" : ""}>↓</button></span>${recordOptionsButton(item)}</header>
         ${visibleFields.length ? `<dl>${visibleFields.map((field) => {
           const value = String(item.fields[field.fieldId] ?? "");
           const renderedValue = field.inputType === "url" && /^https:\/\//i.test(value) ? `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer">Open website <span aria-hidden="true">↗</span></a>` : escapeHtml(value);
@@ -1749,7 +1749,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           <div class="starter-calendar__toolbar"><div><span>View</span><strong>${escapeHtml(entryNoun)}</strong></div><div class="starter-calendar__view-toggle" role="group" aria-label="Calendar display"><button type="button" data-action="calendar-view" data-calendar-view="calendar" aria-pressed="true">Calendar</button><button type="button" data-action="calendar-view" data-calendar-view="list" aria-pressed="false">List</button></div></div>
           ${section.custom ? "" : `<div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>`}
           <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item below to place it on the calendar.</p></div>`}</aside></div></div>
-          <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Drag to reorder, or open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div></div>
+          <div data-calendar-pane="list" hidden><div class="starter-calendar__list-heading"><span>${escapeHtml(entryNoun)}</span><small>Reorder with the arrow buttons or by dragging, then open an item to edit it.</small></div><div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div></div>
           ${comments}<div class="starter-module__controls starter-module__controls--calendar">${addControl}${commentControl}</div>
           ${section.custom ? `<div class="starter-module__custom-footer"><span>This section extends the standard workspace.</span><button class="text-button" type="button" data-action="workspace-module-delete" data-module-id="${escapeHtml(section.sectionId)}" ${busy ? "disabled" : ""}>Remove section</button></div>` : ""}
           ${knowledgeMarkup}
@@ -2332,6 +2332,15 @@ const reorderWorkspaceRecords = async (module: HTMLElement, draggedId: string, t
   await saveWorkspaceMutation({ workspaceOperation: "reorder", moduleId: module.dataset.workspaceModule, recordOrder: order }, "correction", "The plan order is updated.");
 };
 
+const moveWorkspaceRecord = async (record: HTMLElement, direction: "up" | "down"): Promise<void> => {
+  const module = record.closest<HTMLElement>("[data-workspace-module]");
+  if (!module) return;
+  const records = [...module.querySelectorAll<HTMLElement>("[data-workspace-record]")];
+  const index = records.indexOf(record);
+  const target = records[index + (direction === "up" ? -1 : 1)];
+  if (target) await reorderWorkspaceRecords(module, record.dataset.recordId ?? "", target.dataset.recordId ?? "");
+};
+
 const addWorkspaceComment = async (form: HTMLFormElement, forCodex: boolean): Promise<void> => {
   const comment = String(new FormData(form).get("comment") ?? "").trim();
   if (!comment) return;
@@ -2634,6 +2643,7 @@ function bindArrivalInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-promote']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void promoteWorkspaceOption(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-category-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-category-record]"); if (record) void deleteWorkspaceCategory(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-toggle']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); if (record) void toggleWorkspaceRecord(record); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-move']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record]"); const direction = button.dataset.direction; if (record && (direction === "up" || direction === "down")) void moveWorkspaceRecord(record, direction); }));
   root?.querySelectorAll<HTMLElement>("[data-workspace-record]").forEach((record) => {
     record.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", record.dataset.recordId ?? ""); event.dataTransfer?.setData("application/x-finite-module", record.dataset.moduleId ?? ""); record.classList.add("is-dragging"); });
     record.addEventListener("dragend", () => record.classList.remove("is-dragging"));
@@ -2823,7 +2833,7 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
   const items = planInputsFor(section, contextId);
   if (!items.length) return "";
   const headings = planInputHeadings(items);
-  const pending = items.some((item) => item.mode === "codex");
+  const pending = items.some((item) => item.mode === "codex" && item.baseCurrent);
   const summary = headings.length ? headings.slice(0, 3).join(" · ") : contextId ? items[0]?.contextLabel ?? "Saved information" : `${planInputSectionLabel(section)} notes`;
   const count = headings.length || items.length;
   return `<details class="plan-input-items${compact ? " plan-input-items--compact" : ""}${pending ? " plan-input-items--pending" : ""}" ${pending ? "open" : ""}>
@@ -3400,7 +3410,7 @@ async function render(): Promise<SurfaceManifest> {
   }
   const manifest = await manifestPromise;
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
-    labMode: params.get("lab") === "1",
+    labMode,
     kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
     hasArrival: isWaitingArrivalStatus(currentArrival()?.status),
     hasActivatedPlan: runtime.hasActivationReceipt(),
@@ -4076,7 +4086,7 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-external-action']")?.addEventListener("click", async () => { runtime.kernel.pendingExternalAction = null; runtime.kernel.externalActionConfirmation = null; announce("Real-world status returned. Accepted truth is unchanged."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan-facts']")?.addEventListener("click", (event) => { void confirmPendingPlanFacts((event.currentTarget as HTMLButtonElement).dataset.planFactChange ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-facts']")?.addEventListener("click", async () => { runtime.kernel.pendingPlanFactChange = null; runtime.kernel.planFactConfirmation = null; announce("Plan detail changes cancelled."); await render(); });
-  root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
+  if (labMode) root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     if (response.ok) location.reload();
@@ -4092,27 +4102,3 @@ if (opensFreshArrival) void hydrateCanonicalRuntime();
 if (startupSurface === "arrival") void refreshSecondaryPlanData();
 void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
 };
-
-const publicationPath = location.pathname.startsWith("/share/") ? decodeURIComponent(location.pathname.slice("/share/".length)) : null;
-if (publicationPath && !publicationPath.includes("/")) {
-  webmcpReadiness.state = "signed_out";
-  try {
-    const shared = await shareRepository.loadPublic(publicationPath);
-    renderPublishedPage(shared.label, shared.publishedAt, shared.publication);
-  } catch (error) {
-    renderPublicationFailure(error instanceof Error ? error.message : "This shared page is not available.");
-  }
-} else {
-  const authStatus = await loadAuthStatus();
-  if (authStatus.session) {
-    try { await startKitchen(authStatus.session); }
-    catch (error) {
-      webmcpReadiness.state = "failed";
-      webmcpReadiness.detail = error instanceof Error ? error.message : String(error);
-      throw error;
-    }
-  } else {
-    webmcpReadiness.state = "signed_out";
-    renderAuthGate(authStatus.signInPath);
-  }
-}
