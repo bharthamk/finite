@@ -20,6 +20,7 @@ import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, valid
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
+import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -1784,7 +1785,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   return `<section class="arrival-starter-plan" data-starter-plan aria-labelledby="starter_plan_title">
     <header class="starter-plan__header">
       <div><p class="eyebrow">Your editable rough plan</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
-      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><button class="button button--secondary" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button><small>Research, compare, or add a specialist tracker without losing manual control</small></div>
+      <div class="starter-plan__header-actions"><span>${starter.interpretationIsCurrent ? "Ready to edit" : "Your changes saved"}</span><button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button><button class="button button--secondary" type="button" data-action="open-codex-handoff" aria-haspopup="dialog">Talk to ${escapeHtml(agenticName())}</button><button class="text-button starter-plan__customise" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button><small>Start managing when this draft is useful enough. You can keep changing it afterward.</small></div>
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     ${overviewMarkup}
@@ -2640,6 +2641,7 @@ function bindArrivalInteractions(): void {
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
   }));
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='progress-arrival-plan']")?.addEventListener("click", () => { void progressArrivalPlan(); });
   root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
   root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
@@ -3488,7 +3490,107 @@ const openPlan = async (planId: string): Promise<void> => {
   })();
 };
 
-const confirmPlanDraft = async (draftId: string): Promise<void> => {
+const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<boolean> => {
+  const planId = runtime.kernel.profile.planId;
+  const revision = runtime.kernel.revision;
+  const sourceKey = progression.intake.sourceArrival?.orderId.replace(/[^a-zA-Z0-9_-]/g, "_") ?? "arrival";
+  const inputWrites = progression.inputs.map((input, index) => planInputRepository.add({
+    planId,
+    expectedRevision: revision,
+    kind: "update",
+    mode: "direct",
+    section: input.section,
+    contextId: null,
+    contextLabel: null,
+    message: input.message,
+    idempotencyKey: `arrival-continuity-${sourceKey}-input-${index}`,
+    sourceSurface: "site",
+  }));
+  const taskWrites = progression.tasks.map(async (task, index) => {
+    const created = await planWorkRepository.addChecklist({
+      planId,
+      expectedRevision: revision,
+      section: "general",
+      contextId: null,
+      contextLabel: null,
+      label: task.label,
+      origin: "human",
+      sourceRef: `arrival:${sourceKey}:task:${index}`,
+      position: index + 100,
+      idempotencyKey: `arrival-continuity-${sourceKey}-task-${index}`,
+      sourceSurface: "site",
+    });
+    if (!created.ok || !task.done || !created.item) return created.ok;
+    const completed = await planWorkRepository.setChecklist({
+      itemId: created.item.itemId,
+      planId,
+      expectedRevision: revision,
+      section: "general",
+      contextId: null,
+      contextLabel: null,
+      status: "done",
+      idempotencyKey: `arrival-continuity-${sourceKey}-task-${index}-done`,
+      sourceSurface: "site",
+    });
+    return completed.ok;
+  });
+  const writes = await Promise.allSettled([...inputWrites, ...taskWrites]);
+  const durable = writes.every((result) => result.status === "fulfilled" && (typeof result.value === "boolean" ? result.value : result.value.ok));
+  await Promise.all([refreshPlanInputs(), refreshPlanWork()]);
+  await syncAdaptiveChecklist();
+  await refreshPlanWork();
+  return durable;
+};
+
+const progressArrivalPlan = async (): Promise<void> => {
+  if (busy) return;
+  busy = true;
+  announce("Starting this plan…");
+  await render();
+  try {
+    let opened = await arrivalRepository.open();
+    if (!opened.ok || !opened.order) throw new Error("ARRIVAL_NOT_FOUND");
+    if (opened.order.status === "proposed_plan_ready") {
+      opened = await arrivalRepository.reviewInterpretation({
+        orderId: opened.order.orderId,
+        expectedVersion: opened.order.version,
+        expectedChecksum: opened.order.checksum,
+        sourceSurface: "site",
+      });
+    }
+    if (!opened.ok || !opened.order || opened.order.status !== "interpretation_confirmed") throw new Error(opened.code || "ARRIVAL_NOT_READY");
+    arrivalResult = opened;
+    const starter = starterPlanForArrival(opened.order);
+    if (!starter) throw new Error("ARRIVAL_WORKSPACE_NOT_READY");
+    const progression = arrivalProgressionFromStarter(opened.order, starter);
+    const currentDraft = runtime.pendingPlanDraft;
+    let draftId = currentDraft && currentDraft.sourceArrival?.orderId === opened.order.orderId
+      && currentDraft.sourceArrival.orderVersion === opened.order.version
+      && currentDraft.sourceArrival.orderChecksum === opened.order.checksum
+      ? currentDraft.draftId
+      : "";
+    if (!draftId) {
+      const assessed = await runtime.assessPlanIntake(progression.intake);
+      if (!assessed.ok || !String(assessed.code).startsWith("INTAKE_FACTS_COMPLETE")) throw new Error(String(assessed.code || "INTAKE_NOT_READY"));
+      const packet = assessed.constructionPacket as { packetId?: string; checksum?: string } | undefined;
+      if (!packet?.packetId || !packet.checksum) throw new Error("CONSTRUCTION_PACKET_NOT_SAVED");
+      const compiled = await runtime.compileIntakeToDraft({ packetId: packet.packetId, expectedChecksum: packet.checksum });
+      if (!compiled.ok || !runtime.pendingPlanDraft) throw new Error(String(compiled.code || "PLAN_DRAFT_NOT_STAGED"));
+      draftId = runtime.pendingPlanDraft.draftId;
+    }
+    busy = false;
+    await confirmPlanDraft(draftId, progression);
+  } catch (error) {
+    busy = false;
+    const code = error instanceof Error ? error.message : String(error);
+    announce(code === "ARRIVAL_NOT_READY" || code === "ARRIVAL_WORKSPACE_NOT_READY"
+      ? "This rough plan still needs its current interpretation completed before it can start."
+      : `Finite could not start this plan. Nothing changed (${code}).`);
+    await render();
+  }
+};
+
+const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null): Promise<void> => {
   if (busy) return;
   const draft = runtime.pendingPlanDraft;
   if (!draft || draft.draftId !== draftId) return;
@@ -3555,6 +3657,11 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
   arrivalResult = await arrivalRepository.open();
   persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  let continuitySaved = true;
+  if (continuity) {
+    try { continuitySaved = await seedArrivalContinuity(continuity); }
+    catch { continuitySaved = false; }
+  }
   await adapter?.refreshContextualTools();
   forceArrivalSurface = false;
   newPlanDraftMode = false;
@@ -3566,11 +3673,12 @@ const confirmPlanDraft = async (draftId: string): Promise<void> => {
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
   planActivationError = "";
-  if (arrivalClosed) {
+  if (arrivalClosed && continuitySaved) {
     message = "";
     messageScope = currentMessageScope();
     announcer.textContent = "Plan approved. Managing is ready.";
-  } else announce("Your plan is active. Finite is still syncing the completed starting request.");
+  } else if (!arrivalClosed) announce("Your plan is active. Finite is still syncing the completed starting request.");
+  else announce("Your plan is active. Some editable planning notes need to be retried from the saved arrival history.");
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
 };

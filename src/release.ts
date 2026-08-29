@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "zero-debt-observability-v146",
+  build: "manual-plan-progression-v147",
 } as const;

@@ -477,6 +477,16 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.doesNotMatch(source, /Exact plan draft confirmed\. Codex may now activate it/);
 });
 
+test("the editable rough plan exposes one top-level human progression action", () => {
+  assert.match(source, /data-action="progress-arrival-plan"/);
+  assert.match(source, /busy \? "Starting…" : "Start managing"/);
+  assert.match(source, /arrivalProgressionFromStarter\(opened\.order, starter\)/);
+  assert.match(source, /runtime\.assessPlanIntake\(progression\.intake\)/);
+  assert.match(source, /runtime\.compileIntakeToDraft\(/);
+  assert.match(source, /confirmPlanDraft\(draftId, progression\)/);
+  assert.match(source, /seedArrivalContinuity\(continuity\)/);
+});
+
 test("Managing starts with one brief and prioritises the next step", () => {
   assert.match(source, /<p class="eyebrow">Current plan \$\{pendingBadge\("general"\)\}<\/p>/);
   assert.match(source, /<section class="managing-next"/);

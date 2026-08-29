@@ -433,6 +433,8 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .starter-plan__header-actions>span { width:max-content; padding:8px 11px; color:var(--deep); background:var(--signal); border-radius:999px; font-size:.68rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
 .starter-plan__header-actions .button { color:var(--deep); background:var(--signal); border-color:var(--signal); }
 .starter-plan__header-actions .button--secondary { color:var(--on-deep); background:transparent; border-color:color-mix(in srgb,var(--on-deep) 48%,transparent); }
+.starter-plan__header-actions .button--progress { box-shadow:0 10px 28px color-mix(in srgb,var(--signal) 24%,transparent); }
+.starter-plan__header-actions .starter-plan__customise { justify-self:start; color:color-mix(in srgb,var(--on-deep) 82%,transparent); }
 .starter-plan__header-actions small { color:color-mix(in srgb,var(--on-deep) 62%,transparent); line-height:1.4; }
 .starter-plan__notice { display:flex; gap:12px 22px; align-items:baseline; padding:18px clamp(24px,4vw,54px); background:var(--signal); border-bottom:1px solid var(--line); }
 .starter-plan__notice strong { white-space:nowrap; }
