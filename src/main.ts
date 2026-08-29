@@ -624,6 +624,8 @@ let attachmentContext: { section: PlanInputSection; contextId: string | null; co
 let planFactDialogOpen = false;
 let planFactBusy = false;
 let planFactError = "";
+let planStatusDialogOpen = false;
+const openManagingZones = new Set<string>();
 let draftReturnFormOpen = false;
 let planActivationError = "";
 let kitchenResetPreview: KitchenResetResult | null = null;
@@ -764,7 +766,7 @@ const finiteLifecycleStages: Array<{ id: FiniteLifecycleStage; label: string; de
   { id: "starting", label: "Starting", detail: "Outcome and limits" },
   { id: "planning", label: "Planning", detail: "Build the plan" },
   { id: "managing", label: "Managing", detail: "Day-to-day use" },
-  { id: "wrapping", label: "Wrapping up", detail: "Finish or pause" },
+  { id: "wrapping", label: "Finished", detail: "Outcome summary" },
 ];
 
 const lifecycleStageForPlan = (status: PlanLifecycleStatus): FiniteLifecycleStage =>
@@ -775,9 +777,10 @@ const renderLifecycleRail = (current: FiniteLifecycleStage): string => {
   return `<nav class="plan-lifecycle" aria-label="Plan lifecycle">
     <ol>${finiteLifecycleStages.map((stage, index) => {
       const state = index < currentIndex ? "complete" : index === currentIndex ? "current" : "upcoming";
-      return `<li class="plan-lifecycle__step is-${state}${stage.id === "managing" ? " is-core" : ""}" ${state === "current" ? 'aria-current="step"' : ""}>
+      const detail = current === "wrapping" && stage.id === "wrapping" && runtime.kernel.lifecycleStatus === "abandoned" ? "Plan closed" : stage.detail;
+      return `<li class="plan-lifecycle__step is-${state}" ${state === "current" ? 'aria-current="step"' : ""}>
         <span class="plan-lifecycle__marker" aria-hidden="true">${state === "complete" ? "✓" : index + 1}</span>
-        <span class="plan-lifecycle__copy"><strong>${stage.label}</strong><small>${current === "wrapping" && stage.id === "wrapping" && runtime.kernel.lifecycleStatus === "completed" ? "Outcome summary" : current === "wrapping" && stage.id === "wrapping" && runtime.kernel.lifecycleStatus === "abandoned" ? "Plan closed" : stage.detail}${stage.id === "managing" ? " · core" : ""}</small></span>
+        <span class="plan-lifecycle__copy"><strong>${stage.label}</strong><small>${state === "current" ? "Current · " : ""}${detail}</small></span>
       </li>`;
     }).join("")}</ol>
   </nav>`;
@@ -2840,7 +2843,7 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
     <summary><span>${pending ? `Waiting for ${escapeHtml(agenticName())}` : "Saved plan information"}</span><strong>${escapeHtml(summary)}</strong><small>${count} ${count === 1 ? "section" : "sections"}</small></summary>
     <div class="plan-input-items__body">${items.map((item) => `<article class="plan-input-item plan-input-item--${escapeHtml(item.mode)}">
     <div class="plan-input-item__copy"><span>${escapeHtml(item.mode === "direct" && item.kind === "update" ? "Plan details" : planInputKindLabel(item.kind))}</span>${renderPlanInputMessage(item.message)}</div>
-    <div class="plan-input-item__actions"><button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Change</button><button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">${item.mode === "codex" ? "Clear" : "Done"}</button></div>
+    <div class="plan-input-item__actions"><button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Change</button><button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Mark handled</button></div>
   </article>`).join("")}</div>
   </details>`;
 };
@@ -2921,9 +2924,9 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       const completed = checklist?.status === "done";
       return `
       <li class="stage stage--${escapeHtml(completed ? "complete" : stage.status)}">
-        <span class="stage__marker">${escapeHtml(completed ? "Done" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
+        <span class="stage__marker">${escapeHtml(completed ? "Completed" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
         <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
-        <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span>${completed ? "Done" : "Mark done"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
+        <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span>${completed ? "Completed" : "Mark complete"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
     }).join("")}
@@ -2950,7 +2953,7 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
   return `<section class="managing-next" aria-labelledby="managing_next_title">
     <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(chosen ? "Chosen" : direct ? "Updated" : next.marker)}</span></div>
     <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(direct?.message ?? next.detail)}</p></div>
-    <div class="managing-next__actions">${timeline ? `<a href="#${escapeHtml(timeline.zoneId)}">See the full plan ↓</a>` : ""}${direct ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(direct.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
+    <div class="managing-next__actions">${timeline ? `<button type="button" data-action="open-managing-zone" data-zone-id="${escapeHtml(timeline.zoneId)}">See the full plan ↓</button>` : ""}${direct ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(direct.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
   </section>`;
 };
 
@@ -3056,21 +3059,9 @@ const renderLifecycleControl = (): string => {
   </section>`;
   }
   const inactive = kernel.lifecycleStatus !== "active";
-  if (!inactive) return `<section class="plan-finish" id="plan_status" aria-labelledby="plan_finish_heading">
-    <div class="plan-finish__copy"><p class="eyebrow">Wrapping up</p><h2 id="plan_finish_heading">Did this plan reach its outcome?</h2><p>Finish it when the real thing has happened. Your plan, decisions, files and history will stay available.</p></div>
-    <form class="plan-finish__form" data-plan-lifecycle data-plan-complete>
-      <input type="hidden" name="status" value="completed">
-      <label><span>Closing note <small>optional</small></span><textarea name="reason" maxlength="1000" placeholder="What happened?"></textarea></label>
-      <button class="button button--finish" type="submit" ${busy ? "disabled" : ""}>Finish this plan</button>
-    </form>
-    <details class="plan-finish__other">
-      <summary>Pause or stop this plan</summary>
-      <form data-plan-lifecycle>
-        <label><span>What should happen?</span><select name="status" required><option value="">Choose one</option><option value="paused">Pause — keep it, but stop active work</option><option value="abandoned">Abandon — the outcome is no longer being pursued</option></select></label>
-        <label><span>Why?</span><textarea name="reason" required maxlength="1000" placeholder="Why is the plan changing status?"></textarea></label>
-        <button class="button" type="submit" ${busy ? "disabled" : ""}>Review this change</button>
-      </form>
-    </details>
+  if (!inactive) return `<section class="plan-status-entry" id="plan_status" aria-labelledby="plan_status_heading">
+    <div><p class="eyebrow">Plan status</p><h2 id="plan_status_heading">Still managing this plan</h2><p>When the real outcome has happened, finish it. You can also pause or stop active work.</p></div>
+    <button class="button button--secondary" type="button" data-action="open-plan-status">Finish or pause</button>
   </section>`;
   return `<details class="lifecycle-control ${inactive ? "lifecycle-control--inactive" : ""}" id="plan_status" ${inactive ? "open" : ""}>
     <summary><span>Plan status</span><strong>${escapeHtml(kernel.lifecycleStatus)}</strong><small>${inactive ? "New changes are blocked until you reopen it" : latest ? `Last changed because: ${escapeHtml(latest.reason)}` : "Finish, pause, or stop cleanly"}</small></summary>
@@ -3084,6 +3075,24 @@ const renderLifecycleControl = (): string => {
     </form>
   </details>`;
 };
+
+const renderPlanStatusDialog = (): string => runtime.kernel.lifecycleStatus !== "active" ? "" : `<dialog class="plan-status-dialog" data-plan-status-dialog aria-labelledby="plan_status_dialog_title">
+  <button type="button" class="dialog-close" data-action="close-plan-status" aria-label="Close plan status">×</button>
+  <header><p class="eyebrow">Plan status</p><h2 id="plan_status_dialog_title">Finish or pause this plan</h2><p>You are currently in <strong>Managing</strong>. Finite only moves to the finished summary after you finish the plan here.</p></header>
+  <form class="plan-finish__form" data-plan-lifecycle data-plan-complete>
+    <input type="hidden" name="status" value="completed">
+    <label><span>Closing note <small>optional</small></span><textarea name="reason" maxlength="1000" placeholder="What happened?"></textarea></label>
+    <button class="button button--finish" type="submit" ${busy ? "disabled" : ""}>Finish plan and open summary</button>
+  </form>
+  <details class="plan-finish__other">
+    <summary>Pause or stop this plan instead</summary>
+    <form data-plan-lifecycle>
+      <label><span>What should happen?</span><select name="status" required><option value="">Choose one</option><option value="paused">Pause — keep it, but stop active work</option><option value="abandoned">Abandon — the outcome is no longer being pursued</option></select></label>
+      <label><span>Why?</span><textarea name="reason" required maxlength="1000" placeholder="Why is the plan changing status?"></textarea></label>
+      <button class="button" type="submit" ${busy ? "disabled" : ""}>Review this change</button>
+    </form>
+  </details>
+</dialog>`;
 
 const renderHumanRealityControl = (): string => {
   const kernel = runtime.kernel;
@@ -3242,7 +3251,14 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   const timelineSection = stageComponents.has(zone.component);
   const zoneTitle = zone.component === "finite_summary" ? "Plan details" : zone.title;
   const structuredEdit = zone.component === "finite_summary" ? `<button type="button" data-action="open-plan-facts">Edit numbers</button>` : "";
-  return `<section class="zone zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><div class="zone__heading"><h2>${escapeHtml(zoneTitle)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2><div class="zone__heading-actions">${structuredEdit}${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div></div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</section>`;
+  const hasPending = inputSection
+    ? planInputsFor(inputSection).some((item) => item.mode === "codex" && item.baseCurrent)
+    : timelineSection ? planInputsFor("timeline").some((item) => item.mode === "codex" && item.baseCurrent) : false;
+  const opened = openManagingZones.has(zone.zoneId) || hasPending;
+  return `<section class="zone zone--collapsible zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><details data-managing-zone data-zone-id="${escapeHtml(zone.zoneId)}" ${opened ? "open" : ""}>
+    <summary class="zone__summary"><h2>${escapeHtml(zoneTitle)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2><span>${opened ? "Close section" : "Open section"}</span></summary>
+    <div class="zone__content"><div class="zone__heading-actions">${structuredEdit}${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</div>
+  </details></section>`;
 };
 
 const renderWrapUpAttachments = (): string => `<div class="wrap-up-references">${planAttachments.map((item) => `<article class="wrap-up-reference">
@@ -3437,6 +3453,7 @@ async function render(): Promise<SurfaceManifest> {
         ${renderPlanSwitcher("plan", manifest.title)}
         ${renderShareHeaderAction("plan")}
         <div class="header-actions">
+          ${kernel.lifecycleStatus === "active" ? '<button type="button" class="header-action header-action--status" data-action="open-plan-status">Finish or pause</button>' : ""}
           ${renderCodexHandoffButton()}
           ${renderHeaderControls()}
         </div>
@@ -3465,11 +3482,13 @@ async function render(): Promise<SurfaceManifest> {
     ${renderPlanInputDialog()}
     ${renderAttachmentDialog(manifest)}
     ${renderPlanFactDialog()}
+    ${renderPlanStatusDialog()}
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   if (planInputDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-input-dialog")?.showModal();
   if (attachmentDialogOpen) root?.querySelector<HTMLDialogElement>(".attachment-dialog")?.showModal();
   if (planFactDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-fact-dialog")?.showModal();
+  if (planStatusDialogOpen) root?.querySelector<HTMLDialogElement>(".plan-status-dialog")?.showModal();
   enableNativeWritingAssistance();
   bindInteractions();
   return manifest;
@@ -3790,10 +3809,11 @@ const stageLifecycle = async (form: HTMLFormElement): Promise<void> => {
     const applied = pending && confirmationId ? await runtime.kernel.applyConfirmedPlanLifecycle({ lifecycleChangeId: pending.lifecycleChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-lifecycle-site-${crypto.randomUUID()}` }) : confirmed;
     busy = false;
     announce(applied.ok ? (recordActual ? "Actual spend saved." : "Plan finished.") : (recordActual ? "The actual spend could not be saved." : "The plan could not be finished."));
-    if (applied.ok) await adapter?.refreshContextualTools();
+    if (applied.ok) { planStatusDialogOpen = false; await adapter?.refreshContextualTools(); }
     await render();
     return;
   }
+  if (result.ok) planStatusDialogOpen = false;
   announce(result.ok ? "Review the exact plan status below. Nothing has changed yet." : `The plan status could not be prepared: ${result.code}`);
   await render();
   document.querySelector(".lifecycle-control")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -3906,6 +3926,8 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
 const handlePlanInput = async (inputId: string): Promise<void> => {
   if (planInputBusy || !inputId) return;
   planInputBusy = true;
+  const controls = [...(root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']") ?? [])].filter((button) => button.dataset.planInputId === inputId);
+  controls.forEach((button) => { button.disabled = true; button.textContent = "Marking…"; });
   try {
     const result = await planInputRepository.resolve({ inputId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, idempotencyKey: `plan-input-handle-site-${crypto.randomUUID()}`, sourceSurface: "site" });
     if (result.ok) { planInputs = result.inputs; announce("Marked handled."); }
@@ -3936,7 +3958,9 @@ const toggleChecklistItem = async (itemId: string, done: boolean): Promise<void>
   const priorChecklist = checklistItems;
   checklistItems = checklistItems.map((candidate) => candidate.itemId === itemId ? { ...candidate, status: done ? "done" : "open" } : candidate);
   planWorkBusy = true;
-  await render();
+  [...(root?.querySelectorAll<HTMLInputElement>("[data-action='toggle-checklist']") ?? [])]
+    .filter((input) => input.dataset.checklistId === itemId)
+    .forEach((input) => { input.disabled = true; });
   try {
     const result = await planWorkRepository.setChecklist({ itemId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, status: done ? "done" : "open", idempotencyKey: `checklist-${done ? "done" : "reopen"}-site-${crypto.randomUUID()}`, sourceSurface: "site" });
     if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce(done ? "Ticked off." : "Put back on the list."); }
@@ -4069,6 +4093,24 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactDialogOpen = false; planFactError = ""; await render(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-fact-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void savePlanFacts(event.currentTarget as HTMLFormElement); });
   bindPlanFactCalculation();
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-status']").forEach((button) => button.addEventListener("click", async () => { planStatusDialogOpen = true; await render(); root.querySelector<HTMLTextAreaElement>(".plan-status-dialog textarea")?.focus(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-status']").forEach((button) => button.addEventListener("click", async () => { planStatusDialogOpen = false; await render(); }));
+  root?.querySelectorAll<HTMLDetailsElement>("[data-managing-zone]").forEach((details) => details.addEventListener("toggle", () => {
+    const zoneId = String(details.dataset.zoneId ?? "");
+    if (!zoneId) return;
+    if (details.open) openManagingZones.add(zoneId); else openManagingZones.delete(zoneId);
+    const label = details.querySelector<HTMLElement>(".zone__summary>span");
+    if (label) label.textContent = details.open ? "Close section" : "Open section";
+  }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-managing-zone']").forEach((button) => button.addEventListener("click", () => {
+    const zoneId = String(button.dataset.zoneId ?? "");
+    const section = zoneId ? document.getElementById(zoneId) : null;
+    const details = section?.querySelector<HTMLDetailsElement>("[data-managing-zone]") ?? null;
+    if (!details) return;
+    openManagingZones.add(zoneId);
+    details.open = true;
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
   root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });

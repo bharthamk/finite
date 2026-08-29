@@ -78,20 +78,21 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
 });
 
 test("private product surfaces show the plan lifecycle without pretending it is percentage complete", () => {
-  for (const label of ["Starting", "Planning", "Managing", "Wrapping up"]) assert.match(source, new RegExp(`label: "${label}"`));
+  for (const label of ["Starting", "Planning", "Managing", "Finished"]) assert.match(source, new RegExp(`label: "${label}"`));
   assert.match(source, /aria-label="Plan lifecycle"/);
   assert.match(source, /aria-current="step"/);
   assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 3);
   assert.match(source, /renderLifecycleRail\(order \? "planning" : "starting"\)/);
   assert.match(source, /status === "completed" \|\| status === "abandoned" \? "wrapping" : "managing"/);
   assert.match(source, /detail: "Day-to-day use"/);
-  assert.match(source, /stage\.id === "managing" \? " · core"/);
+  assert.match(source, /state === "current" \? "Current · " : ""/);
+  assert.doesNotMatch(source, / · core/);
   assert.doesNotMatch(source, /plan-lifecycle[^\n]*(?:percent|%)/i);
   assert.match(styles, /\.private-top-shell \{ position:sticky; top:0;/);
   assert.match(styles, /\.plan-lifecycle ol \{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.plan-lifecycle__step\.is-current/);
   assert.match(styles, /\.plan-lifecycle__step\.is-complete/);
-  assert.match(styles, /\.plan-lifecycle__step\.is-core/);
+  assert.doesNotMatch(styles, /\.plan-lifecycle__step\.is-core/);
 });
 
 test("every product surface uses the accepted ImageGen identity source", () => {
@@ -579,7 +580,8 @@ test("Managing accepts general and section-specific decisions from both the page
 test("checklist progress updates optimistically and rolls back failed writes", () => {
   assert.match(source, /const priorChecklist = checklistItems;/);
   assert.match(source, /checklistItems = checklistItems\.map\(\(candidate\) => candidate\.itemId === itemId/);
-  assert.match(source, /planWorkBusy = true;\s*await render\(\);\s*try/);
+  assert.match(source, /planWorkBusy = true;\s*\[\.\.\.\(root\?\.querySelectorAll<HTMLInputElement>/);
+  assert.doesNotMatch(source, /planWorkBusy = true;\s*await render\(\);\s*try/);
   assert.match(source, /checklistItems = priorChecklist; announce\(result\.message/);
 });
 

@@ -159,9 +159,13 @@ test("Managing exposes checkboxes and section-bound attachments without engineer
   assert.match(source, /checklistForStage/);
   assert.match(source, /Everything is ticked off\./);
   assert.match(source, /class="stage__check"/);
-  assert.match(source, /Did this plan reach its outcome\?/);
-  assert.match(source, /Finish this plan/);
-  assert.match(source, /Pause or stop this plan/);
+  assert.match(source, /Still managing this plan/);
+  assert.match(source, /Finish or pause this plan/);
+  assert.match(source, /Finish plan and open summary/);
+  assert.match(source, /Pause or stop this plan instead/);
+  assert.match(source, /data-managing-zone/);
+  assert.match(source, /Mark handled/);
+  assert.doesNotMatch(source, /item\.mode === "codex" \? "Clear" : "Done"/);
   assert.match(source, /applyConfirmedPlanLifecycle/);
   assert.match(source, /This plan is finished\./);
   assert.match(source, /form\.hasAttribute\("data-plan-complete"\) \|\| recordActual/);
