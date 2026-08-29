@@ -617,7 +617,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
   const openItems = [...new Set([
-    ...(interpretation?.dependencies ?? []).filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
+    ...(interpretation?.dependencies ?? []).filter((dependency) => dependency.status === "open" && !dependency.sourcePaths.some((path) => path.includes(".openQuestions."))).map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
     ...(interpretation?.missing ?? []).map((item) => item.trim()),
   ].filter(Boolean))];
   const definitions: StarterSectionDefinition[] = starterSections[family].map((definition) => ({ ...definition, fields: definition.fields.map((entry) => ({ ...entry })) }));
@@ -676,11 +676,50 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     const values = Array.isArray(fact.value) && fact.value.every((value) => value === null || typeof value !== "object") && ["itinerary", "schedule", "tasks"].includes(sectionId) ? fact.value : [fact.value];
     values.forEach((value, valueIndex) => addItem(sectionId, { itemId: `${prefix}_${index}_${valueIndex}`, label: fact.label, fields: fieldsForFact(sectionId, fact, value), source }));
   });
+  const knownRecord = interpretation?.known && typeof interpretation.known === "object" && !Array.isArray(interpretation.known) ? interpretation.known : {};
+  const inferredRecord = interpretation?.inferred && typeof interpretation.inferred === "object" && !Array.isArray(interpretation.inferred) ? interpretation.inferred : {};
+  const reviewedOverview = knownRecord.overview;
+  const reviewedKnownSections = knownRecord.sections;
+  const reviewedInferredSections = inferredRecord.sections;
+  const hasReviewedWorkspaceSnapshot = reviewedOverview !== null && typeof reviewedOverview === "object" && !Array.isArray(reviewedOverview)
+    && Array.isArray(reviewedKnownSections) && Array.isArray(reviewedInferredSections);
+  const restoreReviewedSections = (value: unknown, fallbackSource: StarterPlanItemSource): void => {
+    if (!Array.isArray(value)) return;
+    value.forEach((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return;
+      const section = candidate as Record<string, unknown>;
+      const sectionId = typeof section.sectionId === "string" ? section.sectionId : "";
+      if (!sectionItems.has(sectionId)) return;
+      if (Array.isArray(section.items)) section.items.forEach((rawItem) => {
+        if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) return;
+        const item = rawItem as Record<string, unknown>;
+        const itemId = typeof item.itemId === "string" ? item.itemId.slice(0, 200) : "";
+        const label = typeof item.label === "string" ? item.label.slice(0, 500) : "";
+        const source = typeof item.source === "string" && (["request", "known", "working", "starter", "human", "open"] as string[]).includes(item.source)
+          ? item.source as StarterPlanItemSource : fallbackSource;
+        if (itemId && label) addItem(sectionId, { itemId, label, fields: safeFields(item.fields), source });
+      });
+      if (Array.isArray(section.answers)) section.answers.forEach((rawAnswer) => {
+        if (!rawAnswer || typeof rawAnswer !== "object" || Array.isArray(rawAnswer)) return;
+        const answer = rawAnswer as Record<string, unknown>;
+        const questionId = typeof answer.questionId === "string" ? answer.questionId.slice(0, 200) : "";
+        const prompt = typeof answer.prompt === "string" ? answer.prompt.slice(0, 500) : "";
+        const text = typeof answer.answer === "string" ? answer.answer.slice(0, 2_000) : "";
+        if (questionId && prompt && text && !sectionAnswers.get(sectionId)?.some((entry) => entry.questionId === questionId)) sectionAnswers.get(sectionId)?.push({ questionId, prompt, answer: text });
+      });
+    });
+  };
   addFacts(requestFacts, "request", "request");
-  addFacts(flattenPlanFacts(interpretation?.known ?? {}), "known", "known");
-  addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
+  if (hasReviewedWorkspaceSnapshot) {
+    Object.assign(overviewOverrides, safeFields(reviewedOverview));
+    restoreReviewedSections(reviewedKnownSections, "known");
+    restoreReviewedSections(reviewedInferredSections, "working");
+  } else {
+    addFacts(flattenPlanFacts(interpretation?.known ?? {}), "known", "known");
+    addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
+  }
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
-  if (interpretation?.complete || editableWorkspace) seedRoughPlan(family, order, sectionItems, addItem);
+  if (!hasReviewedWorkspaceSnapshot && (interpretation?.complete || editableWorkspace)) seedRoughPlan(family, order, sectionItems, addItem);
   const operatorWorkspaceInput = (input: ArrivalInput): boolean => input.sourceSurface === "codex" && ["record_", "option_", "module_"].some((prefix) => safePayloadText(input.payload, "workspaceOperation").startsWith(prefix));
   const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorWorkspaceInput(input));
   const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));

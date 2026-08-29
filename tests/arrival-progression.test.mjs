@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { arrivalProgressionFromStarter } from "../dist-test/src/arrival-progression.js";
+import { starterPlanForArrival, workspaceInterpretationForConstruction } from "../dist-test/src/arrival-presentation.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
@@ -76,4 +77,28 @@ test("manual progression compiles every built-in planning family", async () => {
     const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
     assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE", `${family}: ${JSON.stringify(staged)}`);
   }
+});
+
+test("a reviewed editable workspace round-trips into a compiler-valid plan", async () => {
+  const waiting = {
+    ...structuredClone(order),
+    orderId: "arrival_dinner_round_trip_01",
+    version: 12,
+    status: "waiting_for_codex",
+    rawOutcome: "Plan a dinner party at home for 10 people on Saturday 17 October 2026. Budget is AUD 500. Two guests are vegetarian, one has a nut allergy, and I want most preparation completed before guests arrive. Nothing is booked or settled yet.",
+    structured: { planningMode: "codex" },
+    interpretation: null,
+    inputs: [],
+  };
+  const reviewedInterpretation = workspaceInterpretationForConstruction(waiting, waiting.version, "2026-08-30T00:00:00.000Z");
+  const reviewed = { ...waiting, status: "interpretation_confirmed", interpretation: reviewedInterpretation };
+  const reviewedStarter = starterPlanForArrival(reviewed);
+  const progression = arrivalProgressionFromStarter(reviewed, reviewedStarter);
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const assessed = await runtime.assessPlanIntake(progression.intake);
+  assert.match(assessed.code, /^INTAKE_FACTS_COMPLETE/, JSON.stringify(assessed));
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE", JSON.stringify({ reviewedStarter, intake: progression.intake, staged }));
 });
