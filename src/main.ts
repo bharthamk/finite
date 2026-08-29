@@ -508,7 +508,7 @@ let forceArrivalSurface = false;
 let newPlanDraftMode = false;
 let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
 const guideView = async (request: FiniteGuideViewRequest) => {
-  if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to press Follow Codex in Finite's top bar. Codex must not move or highlight their screen without that permission." };
+  if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
   if (request.refresh) {
     arrivalResult = await arrivalRepository.open();
     await runtime.hydrateAcceptedTruth();
@@ -652,8 +652,6 @@ const renderHeaderControls = (): string => {
     </details>`;
 };
 
-const renderFollowCodexButton = (): string => `<button type="button" class="follow-codex-toggle" data-action="toggle-follow-codex" aria-pressed="${followCodexEnabled}" title="${escapeHtml(followCodexEnabled ? `${agenticName()} may refresh, move and highlight this Finite view` : `Allow ${agenticName()} to refresh, move and highlight this Finite view`)}"><span class="follow-codex-toggle__signal" aria-hidden="true"></span><span class="follow-codex-toggle__wide">${followCodexEnabled ? `Following ${escapeHtml(agenticName())}` : `Follow ${escapeHtml(agenticName())}`}</span><span class="follow-codex-toggle__short">${followCodexEnabled ? "Following" : "Follow"}</span></button>`;
-
 const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
   top: { label: "the top of this page", selectors: [".arrival-compose", ".arrival-order-head", ".hero"] },
   starting_point: { label: "your starting point", selectors: [".arrival-order", ".arrival-order-source"] },
@@ -693,12 +691,11 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
 };
 
 const bindFollowCodexInteractions = (): void => {
-  root.querySelector<HTMLButtonElement>("[data-action='toggle-follow-codex']")?.addEventListener("click", async () => {
-    followCodexEnabled = !followCodexEnabled;
+  root.querySelector<HTMLInputElement>("[data-action='toggle-follow-codex']")?.addEventListener("change", (event) => {
+    followCodexEnabled = (event.currentTarget as HTMLInputElement).checked;
     if (followCodexEnabled) scopedStorage.setItem("finite-plan.follow-codex", "true");
     else { scopedStorage.removeItem("finite-plan.follow-codex"); clearCodexSpotlight(); }
-    announce(followCodexEnabled ? `Follow ${agenticName()} is on. ${agenticName()} may refresh, move and highlight this Finite view.` : `Follow ${agenticName()} is off. ${agenticName()} can keep working, but cannot move this view.`);
-    await render();
+    announce(followCodexEnabled ? `${agenticName()} may now refresh, move and highlight this Finite view.` : `${agenticName()} can keep working, but cannot move or highlight this view.`);
   });
 };
 
@@ -1013,6 +1010,7 @@ const renderCodexHandoffDialog = (): string => {
           <span>With ${escapeHtml(agenticName())}</span><strong>Develop the rough plan</strong><p>${escapeHtml(handoff.detail)}</p>
           <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
           <small data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
+          <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
           <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
@@ -1716,7 +1714,6 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         ${renderPlanSwitcher("arrival")}
         ${renderShareHeaderAction("arrival")}
         <div class="header-actions">
-          ${renderFollowCodexButton()}
           ${order ? renderCodexHandoffButton() : ""}
           ${renderHeaderControls()}
         </div>
@@ -3211,7 +3208,6 @@ async function render(): Promise<SurfaceManifest> {
         ${renderPlanSwitcher("plan", manifest.title)}
         ${renderShareHeaderAction("plan")}
         <div class="header-actions">
-          ${renderFollowCodexButton()}
           ${renderCodexHandoffButton()}
           ${renderHeaderControls()}
         </div>

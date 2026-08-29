@@ -24,7 +24,6 @@ test("the product header contains actions instead of unexplained internal state"
   assert.doesNotMatch(styles, /\.account-menu__name/);
   assert.match(source, /<p><span>Signed in as<\/span><strong>\$\{escapeHtml\(accountName\)\}<\/strong><\/p>/);
   assert.match(styles, /grid-template-columns:auto minmax\(210px,340px\) auto minmax\(0,1fr\)/);
-  assert.match(styles, /@media \(max-width:1180px\) and \(min-width:981px\)/);
 });
 
 test("cold navigation shows a useful loading state instead of an empty page", () => {
@@ -344,11 +343,15 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });
 
-test("Follow Codex is a human-controlled top-bar permission with bounded accessible spotlights", () => {
-  assert.equal(source.match(/\$\{renderFollowCodexButton\(\)\}/g)?.length, 2);
-  assert.match(source, /data-action="toggle-follow-codex" aria-pressed="\$\{followCodexEnabled\}"/);
+test("guided highlighting is a human-controlled option inside the single Codex handoff", () => {
+  assert.equal(source.match(/\$\{renderFollowCodexButton\(\)\}/g)?.length ?? 0, 0);
+  assert.doesNotMatch(source, /const renderFollowCodexButton/);
+  assert.doesNotMatch(source, />Follow \$\{escapeHtml\(agenticName\(\)\)\}</);
+  assert.match(source, /class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" \$\{followCodexEnabled \? "checked" : ""\}/);
+  assert.match(source, /Let \$\{escapeHtml\(agenticName\(\)\)\} guide this view/);
   assert.match(source, /scopedStorage\.getItem\("finite-plan\.follow-codex"\) === "true"/);
   assert.match(source, /FOLLOW_CODEX_DISABLED/);
+  assert.match(source, /enable guided highlighting inside Finite's Codex handoff/);
   assert.match(source, /request\.surface !== "current"/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
@@ -356,7 +359,8 @@ test("Follow Codex is a human-controlled top-bar permission with bounded accessi
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(styles, /\.follow-codex-toggle\[aria-pressed="true"\]/);
+  assert.match(styles, /\.codex-handoff-guidance \{ display:grid;/);
+  assert.doesNotMatch(styles, /\.follow-codex-toggle/);
 });
 
 test("pending plan review leads with the actual plan and hides internal proof language", () => {
