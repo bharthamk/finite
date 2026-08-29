@@ -197,10 +197,17 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /Edit manually for now/);
   assert.match(source, /Codex has not processed it\./);
   assert.match(source, /workspaceOperation: "manual_takeover"/);
+  assert.match(source, /workspaceOperation: "codex_handoff_workspace"/);
   assert.match(source, /arrivalUsesManualWorkspace\(order\)/);
+  assert.match(source, /arrivalUsesCodexWaitingWorkspace\(order\)/);
   assert.match(source, /arrivalInputIsWorkflowOnly\(input\)/);
   assert.doesNotMatch(source, /Copy and continue in \$\{escapeHtml\(agenticName\(\)\)\}/);
   assert.match(styles, /\.codex-handoff-choices \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.codex-handoff-choices\[hidden\] \{ display:none; \}/);
+  assert.match(source, /Open \$\{escapeHtml\(agenticName\(\)\)\} and paste the prompt to continue\./);
+  assert.match(source, />Copy again<\/button>/);
+  assert.match(source, /Continue to the plan while you wait/);
+  assert.match(styles, /\.codex-handoff-copied\[hidden\] \{ display:none; \}/);
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
   assert.doesNotMatch(source, /Next step \/ review your brief/);
@@ -333,6 +340,14 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.doesNotMatch(styles, /\.starter-module--stays \.starter-module__records \{ grid-template-columns:repeat\(auto-fit/);
   assert.match(styles, /\.starter-record\[draggable="true"\]/);
   assert.match(styles, /@media \(max-width:980px\) \{[^]*\.arrival-compose,\.arrival-working-grid,\.arrival-continuity__body,\.arrival-handoff,\.arrival-continue,\.settings-section \{ grid-template-columns:1fr; \}/);
+});
+
+test("arrival creation keeps the typed starting point in place while persistence is pending", () => {
+  const submit = source.slice(source.indexOf("const submitArrivalOrder"), source.indexOf("const appendArrivalDetail"));
+  assert.match(submit, /form\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(submit, /submitButton\.textContent = "Saving your starting point…"/);
+  assert.match(submit, /Your starting point is still here so you can try again\./);
+  assert.doesNotMatch(submit.slice(0, submit.indexOf("arrivalRepository\.create")), /await render\(\)/);
 });
 
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {

@@ -9,7 +9,7 @@ import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
-import { arrivalInputIsWorkflowOnly, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
@@ -1027,6 +1027,15 @@ const renderCodexHandoffDialog = (): string => {
         <small class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
         <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
       </div>
+      <section class="codex-handoff-copied" data-codex-handoff-copied tabindex="-1" hidden>
+        <span>Prompt copied</span>
+        <h3>Open ${escapeHtml(agenticName())} and paste the prompt to continue.</h3>
+        <p>${escapeHtml(agenticName())} will enter this plan from the latest saved state. Finite does not need to stay blocked while that happens.</p>
+        <div class="codex-handoff-copied__actions">
+          <button type="button" class="button" data-action="copy-codex-handoff">Copy again</button>
+          <button type="button" class="button button--secondary" data-action="continue-arrival-while-codex-starts">Continue to the plan while you wait</button>
+        </div>
+      </section>
       <details class="codex-handoff-advanced"><summary>What will be copied?</summary><label class="codex-handoff-prompt"><span>Finite plan handoff</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
     </form>
   </dialog>`;
@@ -1055,18 +1064,45 @@ const continueArrivalManually = async (): Promise<void> => {
   await render();
 };
 
+const continueArrivalWhileCodexStarts = async (): Promise<void> => {
+  const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
+  const order = currentArrival();
+  dialog?.close();
+  if (!order || starterPlanForArrival(order)) {
+    root.querySelector<HTMLElement>("[data-starter-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    announce(`Keep editing here while ${agenticName()} opens the saved plan.`);
+    return;
+  }
+  if (busy) return;
+  busy = true;
+  announce(`Opening the rough plan while ${agenticName()} starts…`);
+  arrivalResult = await arrivalRepository.appendInput({
+    orderId: order.orderId,
+    expectedVersion: order.version,
+    kind: "preference",
+    payload: { workspaceOperation: "codex_handoff_workspace", planningMode: "codex" },
+    sourceSurface: modelContext ? "inline" : "site",
+  });
+  busy = false;
+  announce(arrivalResult.ok ? `Your rough plan is open. Keep editing while ${agenticName()} joins from the latest saved state.` : `The rough plan could not be opened: ${arrivalResult.code}`);
+  await render();
+  root.querySelector<HTMLElement>("[data-starter-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
 const bindCodexHandoffInteractions = (): void => {
   const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
   root.querySelectorAll<HTMLButtonElement>("[data-action='open-codex-handoff']").forEach((trigger) => trigger.addEventListener("click", () => dialog?.showModal()));
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
-  root.querySelector<HTMLButtonElement>("[data-action='copy-codex-handoff']")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget as HTMLButtonElement;
+  root.querySelectorAll<HTMLButtonElement>("[data-action='copy-codex-handoff']").forEach((copyButton) => copyButton.addEventListener("click", async () => {
     const prompt = currentCodexHandoff().prompt;
     const status = root.querySelector<HTMLElement>("[data-codex-handoff-status]");
     try {
       await navigator.clipboard.writeText(prompt);
-      button.textContent = `Copied — open ${agenticName()}`;
-      if (status) status.textContent = `Copied. Paste it into your ${agenticName()} task to continue.`;
+      const choices = root.querySelector<HTMLElement>(".codex-handoff-choices");
+      const copied = root.querySelector<HTMLElement>("[data-codex-handoff-copied]");
+      if (choices) choices.hidden = true;
+      if (copied) { copied.hidden = false; copied.focus(); }
+      if (status) status.textContent = `Copied. Open ${agenticName()} and paste the prompt to continue.`;
       announce(`${agenticName()} handoff copied.`);
     } catch {
       const textarea = root.querySelector<HTMLTextAreaElement>("[data-codex-handoff-prompt]");
@@ -1075,8 +1111,9 @@ const bindCodexHandoffInteractions = (): void => {
       if (status) status.textContent = "Automatic copying is unavailable here. The complete prompt is selected for you to copy.";
       announce("The handoff prompt is selected and ready to copy.");
     }
-  });
+  }));
   root.querySelector<HTMLButtonElement>("[data-action='continue-arrival-manually']")?.addEventListener("click", () => { void continueArrivalManually(); });
+  root.querySelector<HTMLButtonElement>("[data-action='continue-arrival-while-codex-starts']")?.addEventListener("click", () => { void continueArrivalWhileCodexStarts(); });
 };
 
 const readShareDraft = (form: HTMLFormElement): typeof shareDraft => {
@@ -1690,6 +1727,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
 };
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
+  if (order.status === "waiting_for_codex" && arrivalUsesCodexWaitingWorkspace(order) && !order.interpretation) return { label: `${agenticName()} handoff ready`, title: `Your rough plan is open while ${agenticName()} starts.`, detail: `Keep editing here. ${agenticName()} will enter from the latest saved version when you paste the copied prompt.` };
   if (order.status === "waiting_for_codex" && arrivalUsesManualWorkspace(order) && !order.interpretation) return { label: "Manual plan", title: "Your planning workspace is ready.", detail: `Build the whole plan yourself, or bring in ${agenticName()} whenever useful.` };
   if (order.status === "waiting_for_codex" && order.interpretation?.complete) return { label: "Draft updated", title: "Your starter plan includes your latest change.", detail: `Keep shaping it here or ask ${agenticName()} to develop the updated draft when you are ready.` };
   if (order.status === "waiting_for_codex") return modelContext
@@ -1826,19 +1864,43 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
   const data = new FormData(form);
   const rawOutcome = String(data.get(planningMode === "manual" ? "manualOutcome" : "codexOutcome") ?? "").trim();
   if (!rawOutcome) return;
+  const controls = [...form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>("input,textarea,select,button")];
+  const disabledBefore = new Map(controls.map((control) => [control, control.disabled]));
+  const submitButton = form.querySelector<HTMLButtonElement>(`button[type="submit"][value="${planningMode}"]`);
+  const submitLabel = submitButton?.textContent ?? "";
   busy = true;
   announce("Saving your starting point…");
-  await render();
+  form.setAttribute("aria-busy", "true");
+  surfaceRoot.setAttribute("aria-busy", "true");
+  controls.forEach((control) => { control.disabled = true; });
+  if (submitButton) submitButton.textContent = "Saving your starting point…";
+  const restoreComposeForm = (): void => {
+    busy = false;
+    form.removeAttribute("aria-busy");
+    surfaceRoot.setAttribute("aria-busy", "false");
+    controls.forEach((control) => { control.disabled = disabledBefore.get(control) ?? false; });
+    if (submitButton) submitButton.textContent = submitLabel;
+  };
   const structured = planningMode === "manual"
     ? { planningMode, ...Object.fromEntries(["deadline", "finiteLimit", "hardConstraint"].map((key) => [key, String(data.get(key) ?? "").trim()]).filter(([, value]) => value)) }
     : { planningMode };
   const evidence = planningMode === "manual" ? String(data.get("evidence") ?? "").trim() : "";
-  arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
+  try {
+    arrivalResult = await arrivalRepository.create({ idempotencyKey: `site-arrival-${crypto.randomUUID()}`, rawOutcome, structured, attachments: evidence ? [{ kind: "human_reference", value: evidence }] : [], sourceSurface: modelContext ? "inline" : "site" });
+  } catch {
+    restoreComposeForm();
+    announce("The request could not be saved yet. Your starting point is still here so you can try again.");
+    return;
+  }
   if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
   announce(arrivalResult.ok ? (planningMode === "manual" ? "Your manual planning workspace is ready." : `Your plan is saved and ready for ${agenticName()} to draft.`) : `The request was not saved: ${arrivalResult.code}`);
+  if (!arrivalResult.ok) {
+    restoreComposeForm();
+    return;
+  }
   await render();
-  if (arrivalResult.ok && planningMode === "codex") root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+  if (planningMode === "codex") root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promise<void> => {

@@ -479,12 +479,15 @@ const inputVersion = (input: ArrivalInput): number => {
 export const arrivalUsesManualWorkspace = (order: ArrivalOrder): boolean => order.structured.planningMode === "manual"
   || order.inputs.some((input) => input.payload.workspaceOperation === "manual_takeover");
 
-export const arrivalInputIsWorkflowOnly = (input: ArrivalInput): boolean => input.payload.workspaceOperation === "manual_takeover";
+export const arrivalUsesCodexWaitingWorkspace = (order: ArrivalOrder): boolean => order.inputs.some((input) => input.payload.workspaceOperation === "codex_handoff_workspace");
+
+export const arrivalInputIsWorkflowOnly = (input: ArrivalInput): boolean => ["manual_takeover", "codex_handoff_workspace"].includes(String(input.payload.workspaceOperation ?? ""));
 
 export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
   const interpretation = order.interpretation;
   const manual = arrivalUsesManualWorkspace(order);
-  if (!interpretation?.complete && !manual) return null;
+  const editableWorkspace = manual || arrivalUsesCodexWaitingWorkspace(order);
+  if (!interpretation?.complete && !editableWorkspace) return null;
   const family = starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
@@ -538,7 +541,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   addFacts(flattenPlanFacts(interpretation?.known ?? {}), "known", "known");
   addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
-  if (interpretation?.complete) seedRoughPlan(family, order, sectionItems, addItem);
+  if (interpretation?.complete || editableWorkspace) seedRoughPlan(family, order, sectionItems, addItem);
   const operatorWorkspaceInput = (input: ArrivalInput): boolean => input.sourceSurface === "codex" && ["option_", "module_"].some((prefix) => safePayloadText(input.payload, "workspaceOperation").startsWith(prefix));
   const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorWorkspaceInput(input));
   const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));

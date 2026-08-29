@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivalInputIsWorkflowOnly, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 
 test("arrival interpretation renders consumer language without raw JSON or internal paths", () => {
   const rendered = renderHumanValue({
@@ -303,6 +303,22 @@ test("a Codex-first order can cross into the manual workspace without claiming C
   assert.equal(starter.family, "travel");
   assert.equal(order.interpretation, null);
   assert.equal(starter.interpretationIsCurrent, true);
+  assert.equal(starter.laterHumanInputs.length, 0);
+});
+
+test("a copied Codex handoff can open a populated editable workspace without changing the plan to manual mode", () => {
+  const waitingWorkspace = { inputId: "arrival_input_arrival_waiting_2", kind: "preference", payload: { workspaceOperation: "codex_handoff_workspace", planningMode: "codex" }, sourceSurface: "site", createdAt: "2026-08-30T00:00:01.000Z" };
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_waiting", version: 2, status: "waiting_for_codex", rawOutcome: "Plan a dinner party at home for 10 people on Saturday with a budget of AUD 500.", structured: { planningMode: "codex" }, attachments: [], pendingClarification: null,
+    inputs: [waitingWorkspace], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:01.000Z", checksum: "e".repeat(64),
+  };
+  assert.equal(arrivalUsesCodexWaitingWorkspace(order), true);
+  assert.equal(arrivalUsesManualWorkspace(order), false);
+  assert.equal(arrivalInputIsWorkflowOnly(waitingWorkspace), true);
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.family, "event");
+  assert.ok(starter.sections.find((section) => section.sectionId === "schedule").items.length > 0);
+  assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.length > 0);
   assert.equal(starter.laterHumanInputs.length, 0);
 });
 
