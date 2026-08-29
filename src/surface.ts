@@ -69,7 +69,7 @@ const supportedComponents = new Set<SurfaceComponentType>([
 ]);
 
 const coreActions = [
-  "finite_get_capabilities", "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation", "finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_resume_build_packet", "finite_discard_build_packet", "finite_get_amendment_blueprint", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
+  "finite_get_capabilities", "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_records", "finite_save_workspace_record", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation", "finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_resume_build_packet", "finite_discard_build_packet", "finite_get_amendment_blueprint", "finite_get_plan_state", "finite_get_movable_set", "finite_record_change_event",
   "finite_simulate_reallocation", "finite_compare_options", "finite_record_feedback",
   "finite_list_plan_facts", "finite_stage_plan_facts", "finite_apply_plan_facts",
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction",

@@ -354,9 +354,21 @@ test("arrival creation keeps the typed starting point in place while persistence
 
 test("workspace saves keep the edited form visible until the durable write returns", () => {
   const save = source.slice(source.indexOf("const saveWorkspaceMutation"), source.indexOf("const addWorkspaceRecord"));
-  assert.match(save, /root\?\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(save, /saveRegion\?\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(save, /saveRegion\?\.setAttribute\("data-save-state", "saving"\)/);
+  assert.match(save, /submitButton\.textContent = "Saving…"/);
   assert.doesNotMatch(save.slice(0, save.indexOf("arrivalRepository\.appendInput")), /await render\(\)/);
-  assert.match(save, /root\?\.removeAttribute\("aria-busy"\)/);
+  assert.match(save, /Your changes are still here\./);
+  assert.match(save, /if \(!arrivalResult\.ok\) \{[^]*return false;[^]*\}[^]*await render\(\)/);
+  assert.doesNotMatch(save, /root\?\.setAttribute\("aria-busy"/);
+});
+
+test("the guided workspace keeps a truthful Codex phase after questions are answered", () => {
+  assert.match(source, /Finite marks the handoff point; work continues when Codex is connected\./);
+  assert.match(source, /Current section ·/);
+  assert.match(source, /data-codex-phase-current="true"/);
+  assert.match(source, /working section/);
+  assert.match(styles, /\.starter-operator-phase/);
 });
 
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {

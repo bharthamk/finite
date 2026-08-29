@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "chef-workspace-schema-v144",
+  build: "chef-continuity-batch-v145",
 } as const;

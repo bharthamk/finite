@@ -194,6 +194,61 @@ test("Codex can develop provisional rough-plan records without taking human auth
   assert.equal(refused.acceptedStateChanged, false);
 });
 
+test("Codex can atomically develop a bounded batch of rough-plan records", async () => {
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({
+    idempotencyKey: "record-batch-0001",
+    rawOutcome: "Plan a dinner party at home for 10 people on Saturday 17 October 2026 with an AUD 500 budget.",
+    structured: { planningMode: "codex" },
+    attachments: [],
+    sourceSurface: "site",
+  });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: created.order.version });
+  const roughPlan = starterPlanForArrival(checkpoint.order);
+  const scheduleTarget = roughPlan.sections.find((section) => section.sectionId === "schedule").items.find((item) => item.source === "starter");
+  const saved = await arrivals.saveWorkspaceRecords({
+    orderId: checkpoint.order.orderId,
+    expectedVersion: checkpoint.order.version,
+    changes: [
+      { operation: "update", moduleId: "schedule", recordId: scheduleTarget.itemId, fields: { title: "Shared cooking with wine", startTime: "16:30" } },
+      { operation: "add", moduleId: "resources", recordId: "codex_extra_ice", label: "Extra ice", fields: { title: "Extra ice", provider: "Local supermarket", bookingStatus: "idea", cost: "15" } },
+    ],
+  });
+  assert.equal(saved.code, "ARRIVAL_WORKSPACE_RECORDS_SAVED");
+  assert.equal(saved.order.version, checkpoint.order.version + 1);
+  assert.equal(saved.order.inputs.length, checkpoint.order.inputs.length + 2);
+  assert.equal(saved.orientation.delta.at(-1).eventType, "operator_records_saved");
+  assert.equal(saved.orientation.delta.at(-1).payload.count, 2);
+  assert.equal(saved.order.inputs.at(-2).payload.fields.provisional, true);
+  assert.equal(saved.order.inputs.at(-1).payload.fields.provisional, true);
+  const developed = starterPlanForArrival(saved.order);
+  assert.equal(developed.sections.find((section) => section.sectionId === "schedule").items.find((item) => item.itemId === scheduleTarget.itemId).fields.title, "Shared cooking with wine");
+  assert.equal(developed.sections.find((section) => section.sectionId === "resources").items.some((item) => item.itemId === "codex_extra_ice"), true);
+
+  const rejected = await arrivals.saveWorkspaceRecords({
+    orderId: saved.order.orderId,
+    expectedVersion: saved.order.version,
+    changes: [
+      { operation: "update", moduleId: "schedule", recordId: scheduleTarget.itemId, fields: { title: "This must not land" } },
+      { operation: "update", moduleId: "resources", recordId: "codex_extra_ice", fields: { title: "Invalid", hiddenInstruction: "not in the section schema" } },
+    ],
+  });
+  assert.equal(rejected.code, "WORKSPACE_RECORD_FIELD_INVALID");
+  const unchanged = await arrivals.open({ orderId: saved.order.orderId });
+  assert.equal(unchanged.order.version, saved.order.version);
+  assert.equal(starterPlanForArrival(unchanged.order).sections.find((section) => section.sectionId === "schedule").items.find((item) => item.itemId === scheduleTarget.itemId).fields.title, "Shared cooking with wine");
+
+  const duplicate = await arrivals.saveWorkspaceRecords({
+    orderId: saved.order.orderId,
+    expectedVersion: saved.order.version,
+    changes: [
+      { operation: "update", moduleId: "schedule", recordId: scheduleTarget.itemId, fields: { title: "First" } },
+      { operation: "delete", moduleId: "schedule", recordId: scheduleTarget.itemId },
+    ],
+  });
+  assert.equal(duplicate.code, "WORKSPACE_RECORD_BATCH_TARGET_CONFLICT");
+});
+
 test("Codex specialist sections are bounded operator work and remain outside human authority", async () => {
   const arrivals = new MemoryArrivalRepository();
   const created = await arrivals.create({ idempotencyKey: "module-provenance-0001", rawOutcome: "Prepare for a job interview.", structured: {}, attachments: [], sourceSurface: "site" });
@@ -302,7 +357,8 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
   assert.equal(inventory.length, 11);
-  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_record", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"]) assert(host.tools.has(name));
+  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_records", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"]) assert(host.tools.has(name));
+  assert.equal(host.tools.has("finite_save_workspace_record"), false);
   assert.equal(host.tools.has("finite_review_arrival_interpretation"), false);
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
@@ -345,13 +401,37 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.deepEqual(reentered.operatorPacket.nextAction.derivedArgs, []);
   assert.equal(reentered.operatorPacket.nextAction.preMutationGate.readOnlyPlanPreparationRequiresConfirmation, false);
   assert.match(reentered.operatorPacket.law, /Read and analyse canonical plan state without asking again/);
+  assert.equal(reentered.operatorPacket.humanChanges.unprocessedCount, 2);
+  assert.equal(reentered.operatorPacket.humanChanges.changes.at(-1).text, "A later Site update");
+  assert.equal(reentered.operatorPacket.humanChanges.nextSinceVersion, 2);
+  assert.equal(reentered.operatorPacket.operatorPhase.automatic, false);
+
+  let latest = changed;
+  for (let index = 0; index < 8; index += 1) latest = await arrivals.appendInput({ orderId: latest.order.orderId, expectedVersion: latest.order.version, kind: "detail", payload: { text: `Page update ${index + 1}` }, sourceSurface: "site" });
+  const firstHumanPage = await host.execute("finite_enter_kitchen", { orderId: latest.order.orderId, sinceVersion: 0 });
+  assert.equal(firstHumanPage.operatorPacket.humanChanges.returnedCount, 3);
+  assert.equal(firstHumanPage.operatorPacket.humanChanges.hasMore, true);
+  assert.equal(firstHumanPage.operatorPacket.humanChanges.nextSinceVersion, 3);
+  const secondHumanPage = await host.execute("finite_enter_kitchen", { orderId: latest.order.orderId, sinceVersion: firstHumanPage.operatorPacket.humanChanges.nextSinceVersion });
+  assert.equal(secondHumanPage.operatorPacket.humanChanges.returnedCount, 3);
+  assert.equal(secondHumanPage.operatorPacket.humanChanges.hasMore, true);
+  assert.equal(secondHumanPage.operatorPacket.humanChanges.nextSinceVersion, 6);
+  const thirdHumanPage = await host.execute("finite_enter_kitchen", { orderId: latest.order.orderId, sinceVersion: secondHumanPage.operatorPacket.humanChanges.nextSinceVersion });
+  assert.equal(thirdHumanPage.operatorPacket.humanChanges.returnedCount, 3);
+  assert.equal(thirdHumanPage.operatorPacket.humanChanges.hasMore, true);
+  assert.equal(thirdHumanPage.operatorPacket.humanChanges.nextSinceVersion, 9);
+  const fourthHumanPage = await host.execute("finite_enter_kitchen", { orderId: latest.order.orderId, sinceVersion: thirdHumanPage.operatorPacket.humanChanges.nextSinceVersion });
+  assert.equal(fourthHumanPage.operatorPacket.humanChanges.returnedCount, 1);
+  assert.equal(fourthHumanPage.operatorPacket.humanChanges.hasMore, false);
+  assert.equal(fourthHumanPage.operatorPacket.humanChanges.changes[0].version, 10);
 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
   assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");
   assert.equal(missing.acceptedStateChanged, false);
   const arrivalTools = await host.execute("finite_open_toolset", { group: "arrival" });
   assert.equal(arrivalTools.code, "TOOLSET_READY");
-  assert.equal(arrivalTools.advertisedTools.includes("finite_save_workspace_record"), true);
+  assert.equal(arrivalTools.advertisedTools.includes("finite_save_workspace_records"), true);
+  assert.equal(arrivalTools.advertisedTools.includes("finite_save_workspace_record"), false);
 });
 
 test("arrival API refuses missing identity and cross-origin writes before touching D1", async () => {

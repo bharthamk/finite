@@ -716,7 +716,10 @@ const bindFollowCodexInteractions = (): void => {
       const safetyFirst = /allerg/i.test(root.textContent ?? "")
         ? root.querySelector<HTMLDetailsElement>("[data-workspace-module='requirements'][data-open-questions]:not([data-open-questions='0'])")
         : null;
-      const priority = safetyFirst ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module][data-open-questions]:not([data-open-questions='0'])");
+      const priority = safetyFirst
+        ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module][data-open-questions]:not([data-open-questions='0'])")
+        ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module][data-codex-phase-current='true']")
+        ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module]");
       if (priority) {
         activeCodexPrioritySectionId = priority.dataset.workspaceModule ?? "";
         scopedStorage.setItem("finite-plan.codex-priority-section", activeCodexPrioritySectionId);
@@ -1456,12 +1459,17 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const staysSection = starter.sections.find((section) => section.sectionId === "stays");
   const transportSection = starter.sections.find((section) => section.sectionId === "transport");
   const peopleSection = starter.sections.find((section) => section.sectionId === "people");
+  const openQuestionCount = starter.sections.reduce((sum, section) => sum + section.openQuestions.length, 0);
+  const latestCodexWorkspaceSectionId = [...order.inputs].reverse().find((input) => input.sourceSurface === "codex" && /^(?:record|option|module)_/.test(String(input.payload.workspaceOperation ?? "")) && starter.sections.some((section) => section.sectionId === input.payload.moduleId))?.payload.moduleId;
+  const developmentSectionId = String(latestCodexWorkspaceSectionId ?? starter.sections.find((section) => section.items.length)?.sectionId ?? starter.sections[0]?.sectionId ?? "");
   const defaultPrioritySectionId = (/allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId)
     || starter.sections.find((section) => section.openQuestions.length)?.sectionId
     || "";
   const unresolvedSafetySectionId = /allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId;
   const prioritySectionId = unresolvedSafetySectionId
-    || (starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length) ? activeCodexPrioritySectionId : defaultPrioritySectionId);
+    || (starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length) ? activeCodexPrioritySectionId : defaultPrioritySectionId || developmentSectionId);
+  const prioritySectionLabel = starter.sections.find((section) => section.sectionId === prioritySectionId)?.label ?? "rough plan";
+  const operatorPhaseMarkup = followCodexEnabled ? `<aside class="starter-operator-phase" data-codex-phase-section="${escapeHtml(prioritySectionId)}"><span>${openQuestionCount ? `${escapeHtml(agenticName())} questions` : `${escapeHtml(agenticName())} development`}</span><strong>${openQuestionCount ? `${openQuestionCount} open · ${escapeHtml(prioritySectionLabel)}` : `Current section · ${escapeHtml(prioritySectionLabel)}`}</strong><small>${openQuestionCount ? "Answer on the page or in Codex." : "Finite marks the handoff point; work continues when Codex is connected."}</small></aside>` : "";
   const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel"].includes(token)) ?? [];
   const samePlace = (left: unknown, right: unknown): boolean => {
     const leftTokens = normalizePlace(left);
@@ -1674,7 +1682,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     const unlinkedStays = staysSection?.items.filter((item) => !calendarMatches(item.fields.location, item.fields.start, item.fields.end).length).length ?? 0;
     const unlinkedTransportEnds = transportSection?.items.reduce((count, item) => count + (calendarMatches(item.fields.from).length ? 0 : 1) + (calendarMatches(item.fields.to).length ? 0 : 1), 0) ?? 0;
     const moduleWarningCount = section.sectionId === "people" ? unresolvedPeople : section.sectionId === "stays" ? unlinkedStays : section.sectionId === "transport" ? unlinkedTransportEnds : 0;
-    const moduleCountMarkup = `<b><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${section.options.length ? ` · ${section.options.length} ${section.options.length === 1 ? "option" : "options"}` : ""}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</span>${section.openQuestions.length ? `<span class="starter-module__question-count">${section.openQuestions.length} open ${section.openQuestions.length === 1 ? "question" : "questions"}</span>` : ""}${isCodexPriority ? `<span class="starter-module__codex-location">${escapeHtml(agenticName())} is here</span>` : ""}</b>`;
+    const moduleCountMarkup = `<b><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${section.options.length ? ` · ${section.options.length} ${section.options.length === 1 ? "option" : "options"}` : ""}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</span>${section.openQuestions.length ? `<span class="starter-module__question-count">${section.openQuestions.length} open ${section.openQuestions.length === 1 ? "question" : "questions"}</span>` : ""}${isCodexPriority ? `<span class="starter-module__codex-location">${openQuestionCount ? `${escapeHtml(agenticName())} is here` : `${escapeHtml(agenticName())} working section`}</span>` : ""}</b>`;
     const categoryAmount = (pattern: RegExp): number => starter.sections.find((candidate) => candidate.sectionId === "money")?.items.filter((item) => item.fields.moneyRole === "cost").filter((item) => pattern.test(String(item.fields.title || item.label))).reduce((sum, item) => sum + starterAmount(item.fields.amount), 0) ?? 0;
     const accommodationEnvelope = categoryAmount(/accommodation|stay|lodg/i);
     const transportEnvelope = categoryAmount(/flight|transport|rail|coach|ferry/i);
@@ -1728,7 +1736,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           ${recordOptionsDialog(item)}
         </article>`;
       }).join("");
-      return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+      return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${section.sectionId === prioritySectionId ? `data-codex-phase-current="true"` : ""} ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
         <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.custom ? section.label : "Calendar")}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
         <div class="starter-module__body">
           ${questionMarkup}
@@ -1742,7 +1750,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         </div>
       </details>`;
     }
-    return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+    return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${section.sectionId === prioritySectionId ? `data-codex-phase-current="true"` : ""} ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
       <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
       <div class="starter-module__body">${moduleInsight}${questionMarkup}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
         ${comments}
@@ -1780,6 +1788,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     ${overviewMarkup}
+    ${operatorPhaseMarkup}
     <div class="starter-workspace">${modules}</div>
     ${customWorkspaceMarkup}
     ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
@@ -2060,21 +2069,40 @@ const restoreWorkspaceUiState = (): void => {
   if (customWorkspaceOpen && customDialog && !customDialog.open) customDialog.showModal();
 };
 
-const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" | "answer" = "detail", message = "Your plan is updated."): Promise<boolean> => {
+const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" | "answer" = "detail", message = "Your plan is updated.", source?: HTMLElement): Promise<boolean> => {
   const order = currentArrival();
   if (!order || busy) return false;
   captureWorkspaceUiState();
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const saveRegion = source ?? active?.closest<HTMLElement>("form,[data-workspace-record],[data-record-context],[data-category-record]") ?? null;
+  const controls = saveRegion ? [...saveRegion.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>("input,textarea,select,button")] : [];
+  const disabledBefore = new Map(controls.map((control) => [control, control.disabled]));
+  const submitButton = active instanceof HTMLButtonElement ? active : saveRegion?.querySelector<HTMLButtonElement>("button[type='submit']") ?? null;
+  const submitLabel = submitButton?.textContent ?? "";
   busy = true;
   announce("Saving your plan…");
-  root?.setAttribute("aria-busy", "true");
+  saveRegion?.setAttribute("aria-busy", "true");
+  saveRegion?.setAttribute("data-save-state", "saving");
+  controls.forEach((control) => { control.disabled = true; });
+  if (submitButton) submitButton.textContent = "Saving…";
   arrivalResult = await arrivalRepository.appendInput({ orderId: order.orderId, expectedVersion: order.version, kind, payload, sourceSurface: modelContext ? "inline" : "site" });
   busy = false;
-  root?.removeAttribute("aria-busy");
+  const restoreSaveRegion = (): void => {
+    saveRegion?.removeAttribute("aria-busy");
+    saveRegion?.removeAttribute("data-save-state");
+    controls.forEach((control) => { control.disabled = disabledBefore.get(control) ?? false; });
+    if (submitButton) submitButton.textContent = submitLabel;
+  };
+  if (!arrivalResult.ok) {
+    restoreSaveRegion();
+    announce(`The plan was not updated: ${arrivalResult.code}. Your changes are still here.`);
+    return false;
+  }
   if (arrivalResult.ok && payload.workspaceOperation === "add" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.recordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.recordId);
   if (arrivalResult.ok && payload.workspaceOperation === "option_promote" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.targetRecordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.targetRecordId);
-  announce(arrivalResult.ok ? message : `The plan was not updated: ${arrivalResult.code}`);
+  announce(message);
   await render();
-  return arrivalResult.ok;
+  return true;
 };
 
 const addWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
@@ -2082,13 +2110,13 @@ const addWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   if (!String(fields.title ?? "").trim()) return;
   const recordId = `manual_${crypto.randomUUID().replaceAll("-", "")}`;
   if (form.dataset.moduleId === "itinerary" || form.dataset.moduleId === "schedule") workspaceUiState.calendarSelections.set(form.dataset.moduleId, recordId);
-  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: form.dataset.moduleId, recordId, label: fields.title, fields }, "detail", "Added to your plan.");
+  await saveWorkspaceMutation({ workspaceOperation: "add", moduleId: form.dataset.moduleId, recordId, label: fields.title, fields }, "detail", "Added to your plan.", form);
 };
 
 const updateWorkspaceRecord = async (form: HTMLFormElement): Promise<void> => {
   const fields = workspaceFieldsFromForm(form);
   if (!String(fields.title ?? "").trim()) return;
-  await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.");
+  await saveWorkspaceMutation({ workspaceOperation: "update", moduleId: form.dataset.moduleId, recordId: form.dataset.recordId, fields }, "correction", "Your changes are saved.", form);
 };
 
 const customFieldId = (label: string, used: Set<string>): string => {
@@ -2310,7 +2338,7 @@ const answerWorkspaceQuestion = async (form: HTMLFormElement): Promise<void> => 
   const questionId = String(form.dataset.questionId ?? "").trim();
   const question = String(form.dataset.questionPrompt ?? "").trim();
   if (!answer || !questionId || !question) return;
-  await saveWorkspaceMutation({ workspaceOperation: "question_answer", moduleId: form.dataset.moduleId, questionId, question, answer }, "answer", "Your answer is saved in this section.");
+  await saveWorkspaceMutation({ workspaceOperation: "question_answer", moduleId: form.dataset.moduleId, questionId, question, answer }, "answer", "Your answer is saved in this section.", form);
 };
 
 const bindWorkspaceCurrencyConversions = (): void => {

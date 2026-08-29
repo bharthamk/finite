@@ -272,7 +272,7 @@ const constructionMatchesArrival = (construction: Record<string, unknown>, orien
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
 const toolsetGroups = {
-  arrival: ["finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_record", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"],
+  arrival: ["finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_records", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"],
   construction: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_get_returned_plan_draft", "finite_resume_build_packet", "finite_discard_build_packet", "finite_get_evidence_policy", "finite_register_evidence", "finite_read_evidence", "finite_stage_plan_draft"],
   planning: ["finite_open_kitchen", "finite_get_plan_state", "finite_save_workspace_option", "finite_save_workspace_module", "finite_list_plan_inputs", "finite_add_plan_input", "finite_get_movable_set", "finite_record_change_event", "finite_simulate_reallocation", "finite_compare_options", "finite_record_feedback", "finite_switch_plan", "finite_switch_profile", "finite_apply_approved_option", "finite_apply_confirmed_preference_change", "finite_apply_confirmed_actual_correction", "finite_apply_confirmed_plan_lifecycle"],
   decisions: ["finite_list_plan_inputs", "finite_add_plan_input", "finite_update_plan_input", "finite_resolve_plan_input", "finite_list_plan_facts", "finite_stage_plan_facts", "finite_apply_plan_facts", "finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option", "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction", "finite_stage_plan_lifecycle", "finite_apply_confirmed_plan_lifecycle", "finite_get_group_decisions", "finite_stage_group_decision", "finite_apply_confirmed_group_decision", "finite_get_external_actions", "finite_stage_external_action", "finite_apply_confirmed_external_action"],
@@ -291,7 +291,7 @@ const WEBMCP_RESULT_VAULT_LIMIT = 24;
 const orientationToolNames = new Set(["finite_get_capabilities", "finite_enter_kitchen", "finite_guide_view", "finite_open_toolset", "finite_read_result"]);
 const routeRefreshToolNames = new Set([
   "finite_invoke",
-  "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_record", "finite_save_workspace_option", "finite_save_workspace_module", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation",
+  "finite_open_kitchen", "finite_enter_kitchen", "finite_get_chef_menu", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_records", "finite_save_workspace_record", "finite_save_workspace_option", "finite_save_workspace_module", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation",
   "finite_record_change_event", "finite_compare_options", "finite_record_feedback", "finite_stage_option", "finite_reject_staged_option", "finite_apply_approved_option",
   "finite_add_plan_input", "finite_update_plan_input", "finite_resolve_plan_input", "finite_add_checklist_item", "finite_set_checklist_item", "finite_add_plan_reference", "finite_remove_plan_attachment",
   "finite_stage_preference_change", "finite_apply_confirmed_preference_change", "finite_stage_actual_correction", "finite_apply_confirmed_actual_correction",
@@ -307,6 +307,59 @@ const arrivalOpenQuestionPacket = (orientation: ArrivalOrientation | null): Reco
   const safetyFirst = /allerg/i.test(orientation.order.rawOutcome) ? sections.find((section) => section.sectionId === "requirements") : null;
   const firstPriority = safetyFirst ?? sections[0] ?? null;
   return { total: sections.reduce((sum, section) => sum + section.count, 0), firstPriority, sections };
+};
+
+const arrivalHumanChangesPacket = (orientation: ArrivalOrientation | null): Record<string, unknown> => {
+  if (!orientation) return { sinceVersion: 0, throughVersion: 0, unprocessedCount: 0, changes: [] };
+  const humanEvents = orientation.delta.filter((event) => event.eventType === "human_order_created" || event.eventType === "human_input_added");
+  const returnedEvents = humanEvents.slice(0, 3);
+  const changes = returnedEvents.map((event) => {
+    if (event.eventType === "human_order_created") return { version: event.version, kind: "order_created" };
+    const input = record(event.payload.input);
+    const payload = record(input.payload);
+    const operation = String(payload.workspaceOperation ?? "");
+    return {
+      version: event.version,
+      inputId: input.inputId,
+      kind: input.kind,
+      ...(operation ? { operation } : {}),
+      ...(payload.moduleId ? { sectionId: payload.moduleId } : {}),
+      ...(payload.recordId ? { recordId: payload.recordId } : {}),
+      ...(payload.questionId ? { questionId: payload.questionId } : {}),
+      ...(payload.question ? { question: payload.question } : {}),
+      ...(payload.answer ? { answer: payload.answer } : {}),
+      ...(payload.label ? { label: payload.label } : {}),
+      ...(payload.detail ? { detail: payload.detail } : {}),
+      ...(payload.text ? { text: payload.text } : {}),
+      ...(payload.fields && typeof payload.fields === "object" && !Array.isArray(payload.fields) ? { fields: payload.fields } : {}),
+    };
+  });
+  return {
+    sinceVersion: orientation.deltaSinceVersion,
+    throughVersion: returnedEvents.at(-1)?.version ?? orientation.deltaSinceVersion,
+    nextSinceVersion: returnedEvents.at(-1)?.version ?? orientation.deltaSinceVersion,
+    unprocessedCount: orientation.unprocessedHumanInputCount,
+    returnedCount: changes.length,
+    hasMore: humanEvents.length > changes.length,
+    changes,
+  };
+};
+
+const arrivalOperatorPhasePacket = (orientation: ArrivalOrientation | null): Record<string, unknown> => {
+  if (!orientation) return { stage: "inactive", currentSectionId: null, automatic: false };
+  const starter = starterPlanForArrival(orientation.order);
+  const openQuestions = arrivalOpenQuestionPacket(orientation);
+  const firstPriority = record(openQuestions.firstPriority);
+  const latestWorkspaceSectionId = [...orientation.order.inputs].reverse().find((input) => input.sourceSurface === "codex" && /^(?:record|option|module)_/.test(String(input.payload.workspaceOperation ?? "")) && starter?.sections.some((section) => section.sectionId === input.payload.moduleId))?.payload.moduleId;
+  const currentSectionId = String(firstPriority.sectionId ?? latestWorkspaceSectionId ?? starter?.sections.find((section) => section.items.length)?.sectionId ?? starter?.sections[0]?.sectionId ?? "") || null;
+  return {
+    stage: Number(openQuestions.total) > 0 ? "questions" : "development",
+    currentSectionId,
+    currentSectionLabel: starter?.sections.find((section) => section.sectionId === currentSectionId)?.label ?? null,
+    openQuestionCount: Number(openQuestions.total),
+    automatic: false,
+    note: Number(openQuestions.total) > 0 ? "The current section contains the next human boundary." : "This is the next operator handoff point; Finite does not run Codex in the background.",
+  };
 };
 
 const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string; answerKind: string; fieldPaths: string[]; choices: string[]; reason: string } => {
@@ -669,7 +722,8 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   const entryIntent: EntryIntent = suppliedIntent === "start_new" || suppliedIntent === "continue_current" || suppliedIntent === "resume_handoff"
     ? suppliedIntent
     : requestedOrderId ? "resume_handoff" : input.expectedPlanId ? "continue_current" : "start_new";
-  const opened = await arrival.open(requestedOrderId ? { orderId: requestedOrderId } : {}, context);
+  const sinceVersion = Number(input.sinceVersion);
+  const opened = await arrival.open(requestedOrderId ? { orderId: requestedOrderId, ...(Number.isInteger(sinceVersion) && sinceVersion >= 0 ? { sinceVersion } : {}) } : {}, context);
   if (!opened.ok && opened.code !== "ARRIVAL_NOT_FOUND") {
     return {
       ok: false,
@@ -716,7 +770,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   }
 
   const arrivalState = orientation
-    ? { status: "active", orientation }
+    ? { status: "active", orientation, humanChanges: arrivalHumanChangesPacket(orientation), operatorPhase: arrivalOperatorPhasePacket(orientation) }
     : { status: "none", code: "ARRIVAL_NOT_FOUND" };
   const plan = record(kitchen.brief);
   let nextAction = orientation
@@ -825,6 +879,8 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       nextAction,
       chefMenu,
       openQuestions: arrivalOpenQuestionPacket(orientation),
+      humanChanges: arrivalHumanChangesPacket(orientation),
+      operatorPhase: arrivalOperatorPhasePacket(orientation),
       currency: currencyContract,
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
@@ -889,11 +945,12 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's guided-view permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, and highlight one bounded named area or exact rough-plan section. This cannot change plan truth, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" }, sectionId: { type: "string", pattern: "^[a-z][a-z0-9_]{0,99}$", maxLength: 100, description: "Exact rough-plan section identity, used only with target priority." } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true, ...(input.sectionId !== undefined ? { sectionId: String(input.sectionId) } : {}) }) }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
-  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
+  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, a resumable compact human-change cursor, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, sinceVersion: { type: "integer", minimum: 0, description: "Cursor returned by operatorPacket.humanChanges.nextSinceVersion when hasMore is true." }, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
   define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions, with exact known and missing inputs.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, input, context) }),
   define({ name: "finite_create_arrival_order", title: "Capture a human order", description: "Persist the human's requested outcome exactly as supplied from Codex. This creates append-only non-authoritative intake, not a plan, interpretation, or human approval.", inputSchema: objectSchema({ idempotencyKey, rawOutcome: { type: "string", minLength: 1, maxLength: 4000 }, structured: { type: "object" }, attachments: { type: "array", maxItems: 20 } }, ["idempotencyKey", "rawOutcome"]), execute: (input, context) => arrival.create({ idempotencyKey: String(input.idempotencyKey), rawOutcome: String(input.rawOutcome), structured: input.structured && typeof input.structured === "object" && !Array.isArray(input.structured) ? input.structured as Record<string, unknown> : {}, attachments: Array.isArray(input.attachments) ? input.attachments : [], sourceSurface: "codex" }, context) }),
   define({ name: "finite_append_arrival_input", title: "Append human-supplied arrival detail", description: "Append one human-supplied detail, constraint, preference, commitment, answer, evidence reference, or correction against an exact order version. This records provenance and never converts Codex inference into human fact.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, kind: { type: "string", enum: ["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"] }, payload: { type: "object" } }, ["orderId", "expectedVersion", "kind", "payload"]), execute: (input, context) => arrival.appendInput({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), kind: input.kind as ArrivalInputKind, payload: input.payload as Record<string, unknown>, sourceSurface: "codex" }, context) }),
-  define({ name: "finite_save_workspace_record", title: "Develop one rough-plan item", description: "Add, update, or remove one provisional working item in an exact editable rough-plan section. Codex work remains visibly provisional, changes no accepted plan truth, and cannot overwrite or delete a settled human, request, or known-fact record.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: { type: "string", minLength: 1, maxLength: 100, description: "Exact section identity returned by Finite." }, recordId: { type: "string", minLength: 1, maxLength: 160, description: "Stable identity for the new or existing rough-plan record." }, label: { type: "string", maxLength: 200 }, fields: { type: "object", maxProperties: 40, additionalProperties: { type: ["string", "boolean"] }, description: "Only fields exposed by the exact section schema. Finite always forces provisional true." } }, ["orderId", "expectedVersion", "operation", "moduleId", "recordId"]), execute: (input, context) => arrival.saveWorkspaceRecord({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), operation: input.operation as "add" | "update" | "delete", moduleId: String(input.moduleId), recordId: String(input.recordId), ...(input.label !== undefined ? { label: String(input.label) } : {}), ...(input.fields && typeof input.fields === "object" && !Array.isArray(input.fields) ? { fields: input.fields as Record<string, string | boolean> } : {}) }, context) }),
+  define({ name: "finite_save_workspace_records", title: "Develop rough-plan items", description: "Atomically add, update, or remove up to twenty-four provisional working items across exact editable rough-plan sections. Every change is validated before one versioned save; if any item is stale, invalid, or human-settled, none of the batch lands.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, changes: { type: "array", minItems: 1, maxItems: 24, items: objectSchema({ operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: { type: "string", minLength: 1, maxLength: 100, description: "Exact section identity returned by Finite." }, recordId: { type: "string", minLength: 1, maxLength: 160, description: "Stable identity for the new or existing rough-plan record." }, label: { type: "string", maxLength: 200 }, fields: { type: "object", maxProperties: 40, additionalProperties: { type: ["string", "boolean"] }, description: "Only fields exposed by the exact section schema. Finite always forces provisional true." } }, ["operation", "moduleId", "recordId"]) } }, ["orderId", "expectedVersion", "changes"]), execute: (input, context) => arrival.saveWorkspaceRecords({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), changes: Array.isArray(input.changes) ? input.changes.map((change) => { const value = record(change); return { operation: value.operation as "add" | "update" | "delete", moduleId: String(value.moduleId), recordId: String(value.recordId), ...(value.label !== undefined ? { label: String(value.label) } : {}), ...(value.fields && typeof value.fields === "object" && !Array.isArray(value.fields) ? { fields: value.fields as Record<string, string | boolean> } : {}) }; }) : [] }, context) }),
+  define({ name: "finite_save_workspace_record", title: "Develop one rough-plan item", description: "Compatibility route for one provisional working item. Prefer finite_save_workspace_records so related changes share one exact atomic save.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: { type: "string", minLength: 1, maxLength: 100, description: "Exact section identity returned by Finite." }, recordId: { type: "string", minLength: 1, maxLength: 160, description: "Stable identity for the new or existing rough-plan record." }, label: { type: "string", maxLength: 200 }, fields: { type: "object", maxProperties: 40, additionalProperties: { type: ["string", "boolean"] }, description: "Only fields exposed by the exact section schema. Finite always forces provisional true." } }, ["orderId", "expectedVersion", "operation", "moduleId", "recordId"]), execute: (input, context) => arrival.saveWorkspaceRecord({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), operation: input.operation as "add" | "update" | "delete", moduleId: String(input.moduleId), recordId: String(input.recordId), ...(input.label !== undefined ? { label: String(input.label) } : {}), ...(input.fields && typeof input.fields === "object" && !Array.isArray(input.fields) ? { fields: input.fields as Record<string, string | boolean> } : {}) }, context) }),
   define({ name: "finite_save_workspace_option", title: "Save a researched option for one plan item", description: "Add, update, or remove one suggested option attached to an exact working-plan record. Include research dates and source links when available. Options stay outside plan dates, counts, relationships, and money until the human chooses Add to plan.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: string, optionId: { type: "string", minLength: 1, maxLength: 120 }, parentRecordId: { type: "string", minLength: 1, maxLength: 160, description: "Stable ID of the working-plan record this option compares against." }, label: { type: "string", maxLength: 200 }, fields: { type: "object", maxProperties: 40, additionalProperties: { type: ["string", "boolean"] } } }, ["orderId", "expectedVersion", "operation", "moduleId", "optionId"]), execute: (input, context) => arrival.saveWorkspaceOption({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), operation: input.operation as "add" | "update" | "delete", moduleId: String(input.moduleId), optionId: String(input.optionId), ...(input.parentRecordId !== undefined ? { parentRecordId: String(input.parentRecordId) } : {}), ...(input.label !== undefined ? { label: String(input.label) } : {}), ...(input.fields && typeof input.fields === "object" && !Array.isArray(input.fields) ? { fields: input.fields as Record<string, string | boolean> } : {}) }, context) }),
   define({ name: "finite_save_workspace_module", title: "Build one specialist workspace section", description: "Add, update, or remove a bounded specialist section when the universal workspace is not enough. The section remains directly editable by the human and does not change accepted plan truth or expose approval authority.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: { type: "string", pattern: "^custom_[a-z0-9_]{3,80}$", description: "Stable custom_ identity for this specialist section." }, label: { type: "string", maxLength: 100, description: "Human-facing specialist section name." }, description: { type: "string", maxLength: 300, description: "One sentence explaining what the section helps the person manage." }, variant: { type: "string", enum: ["cards", "checklist", "calendar"], description: "Cards, checklist, or calendar interaction for this section." }, fields: { type: "array", minItems: 1, maxItems: 12, description: "Bounded editable fields; title must be first.", items: objectSchema({ fieldId: { type: "string", pattern: "^[a-z][a-zA-Z0-9_]{0,49}$", description: "Stable field identity; title is required first." }, label: { type: "string", maxLength: 80, description: "Human-facing field label." }, inputType: { type: "string", enum: ["text", "url", "date", "time", "number", "textarea", "select"], description: "Safe native editor type." }, placeholder: { type: "string", maxLength: 160, description: "Optional example or format hint." }, options: { type: "array", minItems: 1, maxItems: 12, description: "Labelled choices required only for select fields.", items: objectSchema({ value: { type: "string", maxLength: 60, description: "Stable stored choice value." }, label: { type: "string", maxLength: 80, description: "Human-facing choice label." } }, ["value", "label"]) } }, ["fieldId", "label", "inputType"]) } }, ["orderId", "expectedVersion", "operation", "moduleId"]), execute: (input, context) => arrival.saveWorkspaceModule({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), operation: input.operation as "add" | "update" | "delete", moduleId: String(input.moduleId), ...(input.label !== undefined ? { label: String(input.label) } : {}), ...(input.description !== undefined ? { description: String(input.description) } : {}), ...(input.variant !== undefined ? { variant: input.variant as "cards" | "checklist" | "calendar" } : {}), ...(Array.isArray(input.fields) ? { fields: input.fields as never } : {}) }, context) }),
   define({ name: "finite_open_arrival", title: "Orient to the waiting human order", description: "Open the current or named arrival with the full human order, delta since the operator checkpoint, unprocessed count, evidence, inference labels, missing facts, contradictions, saved operator work, exact version/checksum, and next safe route.", readOnly: true, inputSchema: objectSchema({ orderId: string, sinceVersion: { type: "integer", minimum: 0 } }), execute: (input, context) => arrival.open({ ...(input.orderId ? { orderId: String(input.orderId) } : {}), ...(input.sinceVersion !== undefined ? { sinceVersion: Number(input.sinceVersion) } : {}) }, context) }),
@@ -1113,6 +1170,29 @@ const compactMenu = (value: unknown): Array<Record<string, unknown>> => {
   }));
 };
 
+const compactHumanChanges = (value: unknown): Record<string, unknown> => {
+  const packet = record(value);
+  const changes = Array.isArray(packet.changes) ? packet.changes.map(record).map((change, index) => {
+    const fields = record(change.fields);
+    const compactFields = Object.fromEntries(Object.entries(fields).slice(0, 2).map(([key, fieldValue]) => [key, typeof fieldValue === "string" ? shortText(fieldValue, 40) : fieldValue]));
+    return {
+      v: change.version,
+      kind: change.kind,
+      ...(change.operation ? { operation: change.operation } : {}),
+      ...(change.sectionId ? { sectionId: change.sectionId } : {}),
+      ...(change.recordId ? { recordId: change.recordId } : {}),
+      ...(shortText(change.question, 50) ? { question: shortText(change.question, 50) } : {}),
+      ...(shortText(change.answer, 80) ? { answer: shortText(change.answer, 80) } : {}),
+      ...(shortText(change.text, 80) ? { text: shortText(change.text, 80) } : {}),
+      ...(shortText(change.detail, 80) ? { detail: shortText(change.detail, 80) } : {}),
+      ...(shortText(change.label, 50) ? { label: shortText(change.label, 50) } : {}),
+      ...(Object.keys(compactFields).length ? { fields: compactFields } : {}),
+      exactIndex: index,
+    };
+  }) : [];
+  return { sinceVersion: packet.sinceVersion, throughVersion: packet.throughVersion, nextSinceVersion: packet.nextSinceVersion, unprocessedCount: packet.unprocessedCount, returnedCount: packet.returnedCount, hasMore: packet.hasMore === true, exactBasePath: "/operatorPacket/humanChanges/changes", changes };
+};
+
 const compactOperationProof = (value: unknown): Record<string, unknown> | undefined => {
   const proof = record(value);
   if (!Object.keys(proof).length) return undefined;
@@ -1297,6 +1377,8 @@ export class FinitePlanWebMCPAdapter {
       preferenceScore: option.preferenceScore,
     }));
     const proof = compactOperationProof(result.operationProof);
+    const humanChanges = compactHumanChanges(packet.humanChanges);
+    const operatorPhase = record(packet.operatorPhase);
     const compact: ToolResult = {
       ok: result.ok,
       code: result.code,
@@ -1312,6 +1394,8 @@ export class FinitePlanWebMCPAdapter {
       ...(actionNames.length ? { actionNames } : {}),
       ...(typeof result.dispatchedAction === "string" ? { dispatchedAction: result.dispatchedAction } : {}),
       ...(toolName === "finite_enter_kitchen" ? { menu: compactMenu(packet.chefMenu) } : {}),
+      ...(toolName === "finite_enter_kitchen" && Array.isArray(humanChanges.changes) && humanChanges.changes.length ? { humanChanges } : {}),
+      ...(toolName === "finite_enter_kitchen" && operatorPhase.stage !== "inactive" ? { operatorPhase } : {}),
       ...(proof ? { proof } : {}),
       detail: { ...detail, readTool: "finite_read_result", format: "semantic_paths" },
       next: nextAction?.nextTool ? `Call ${String(nextAction.nextTool)} with nextAction.knownArgs, or read detail only if a required field is omitted.` : shortText(result.next, 180) ?? "Continue from nextAction; read detail only when needed.",
@@ -1323,15 +1407,20 @@ export class FinitePlanWebMCPAdapter {
       nextAction.missingInputs = Array.isArray(nextAction.missingInputs) ? nextAction.missingInputs.slice(0, 1) : [];
     }
     if (JSON.stringify(compact).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET) return compact;
-    return {
+    const minimal: ToolResult = {
       ok: result.ok,
       code: result.code,
       acceptedStateChanged: result.acceptedStateChanged === true,
       ...(nextAction ? { nextAction: { stage: nextAction.stage, nextTool: nextAction.nextTool, requiresHuman: nextAction.requiresHuman, authorityPresent: nextAction.authorityPresent } } : {}),
+      ...(toolName === "finite_enter_kitchen" && Array.isArray(humanChanges.changes) && humanChanges.changes.length ? { humanChanges } : {}),
+      ...(toolName === "finite_enter_kitchen" && operatorPhase.stage !== "inactive" ? { operatorPhase } : {}),
       ...(proof ? { proof: { operationHash: proof.operationHash, resultHash: proof.resultHash, acceptedStateChanged: proof.acceptedStateChanged } } : {}),
       detail: { ...detail, readTool: "finite_read_result", format: "semantic_paths" },
       next: "Read the detail manifest, then request only the exact JSON Pointer paths required for this route.",
     };
+    if (JSON.stringify(minimal).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET) return minimal;
+    delete minimal.proof;
+    return minimal;
   }
 
   private authorityReady(toolName: string): boolean {

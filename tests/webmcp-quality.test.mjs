@@ -204,7 +204,7 @@ test("an impossible option search keeps Codex in planning for a bounded fallback
 
 test("the page-start proxy carries semantic metadata and forwards host cancellation", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  for (const parameter of ["entryIntent", "orderId", "expectedOrderVersion", "expectedOrderChecksum", "expectedPlanId", "expectedPlanRevision", "expectedProfileHash", "expectedSnapshotHash"]) {
+  for (const parameter of ["entryIntent", "orderId", "sinceVersion", "expectedOrderVersion", "expectedOrderChecksum", "expectedPlanId", "expectedPlanRevision", "expectedProfileHash", "expectedSnapshotHash"]) {
     assert.match(html, new RegExp(`${parameter}: \\{[^}]+description:`), `${parameter} has no bootstrap description`);
   }
   assert.match(html, /execute: async \(input = \{\}, context = \{\}\)/);
@@ -245,6 +245,27 @@ test("production WebMCP responses are bounded, content-addressed, and recoverabl
   assert(tooLarge.narrowerPaths.length > 0);
   const missing = await host.execute("finite_read_result", { resultRef: "0".repeat(64) });
   assert.equal(missing.code, "RESULT_DETAIL_NOT_FOUND");
+});
+
+test("bounded kitchen entry preserves a resumable human-change cursor", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const arrivals = new MemoryArrivalRepository();
+  let current = await arrivals.create({ idempotencyKey: "bounded-human-delta-0001", rawOutcome: "Plan a detailed dinner.", structured: { planningMode: "codex" }, sourceSurface: "site" });
+  for (let index = 0; index < 5; index += 1) current = await arrivals.appendInput({ orderId: current.order.orderId, expectedVersion: current.order.version, kind: "answer", payload: { workspaceOperation: "question_answer", moduleId: "schedule", questionId: `schedule_question_${index + 1}`, question: `Question ${index + 1}`, answer: `${"Detailed answer ".repeat(30)}${index + 1}` }, sourceSurface: "site" });
+  const host = new MemoryModelContext();
+  await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).useBoundedOutputs().register();
+  const entered = await host.execute("finite_enter_kitchen", { orderId: current.order.orderId, sinceVersion: 0 });
+  assert(JSON.stringify(entered).length <= WEBMCP_OUTPUT_CHARACTER_BUDGET);
+  assert.equal(entered.humanChanges.returnedCount, 3);
+  assert.equal(entered.humanChanges.hasMore, true);
+  assert.equal(entered.humanChanges.nextSinceVersion, 3);
+  assert.match(entered.humanChanges.changes.at(-1).answer, /…$/);
+  assert.equal(entered.humanChanges.exactBasePath, "/operatorPacket/humanChanges/changes");
+  const exactPath = `${entered.humanChanges.exactBasePath}/${entered.humanChanges.changes.at(-1).exactIndex}`;
+  const exact = await host.execute("finite_read_result", { resultRef: entered.detail.resultRef, paths: [exactPath] });
+  assert.equal(exact.code, "RESULT_DETAIL_SELECTED");
+  assert.match(exact.values[0].value.answer, /Detailed answer Detailed answer/);
 });
 
 test("every response in a production change-to-commit route stays inside the output budget", async () => {

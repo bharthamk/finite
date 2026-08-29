@@ -365,6 +365,52 @@ const saveWorkspaceRecord = async (db: D1Database, scopeId: string, order: Arriv
   return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_record_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_RECORD_SAVED");
 };
 
+const saveWorkspaceRecords = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const rawChanges = Array.isArray(body.changes) ? body.changes : [];
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (order.version !== expectedVersion) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: order.version, currentChecksum: order.checksum, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409);
+  if (rawChanges.length < 1 || rawChanges.length > 24 || stableSerialize(rawChanges).length > 120_000) return errorResponse(422, "WORKSPACE_RECORD_BATCH_INVALID", "A record batch requires between one and twenty-four bounded exact changes.");
+  const changes: Array<{ operation: string; moduleId: string; recordId: string; label: string; fields: Record<string, string | boolean> }> = [];
+  const targets = new Set<string>();
+  for (const rawChange of rawChanges) {
+    const change = asRecord(rawChange);
+    const operation = String(change.operation ?? "");
+    const moduleId = String(change.moduleId ?? "");
+    const recordId = String(change.recordId ?? "");
+    const label = String(change.label ?? "").trim();
+    const rawFields = asRecord(change.fields);
+    const fields = Object.fromEntries(Object.entries(rawFields).filter((entry): entry is [string, string | boolean] => typeof entry[1] === "string" || typeof entry[1] === "boolean"));
+    if (!workspaceRecordOperations.has(operation)) return errorResponse(422, "WORKSPACE_RECORD_OPERATION_INVALID", "Every record operation must be add, update, or delete.");
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(moduleId) || !/^[a-zA-Z0-9_-]{1,160}$/.test(recordId)) return errorResponse(422, "WORKSPACE_RECORD_ID_INVALID", "Every module and record identity must be a bounded stable identifier.");
+    const targetKey = `${moduleId}\u0000${recordId}`;
+    if (targets.has(targetKey)) return errorResponse(409, "WORKSPACE_RECORD_BATCH_TARGET_CONFLICT", "A record batch may change each exact record at most once.");
+    targets.add(targetKey);
+    if (operation === "add" && (!label || label.length > 200 || !String(fields.title ?? "").trim())) return errorResponse(422, "WORKSPACE_RECORD_INVALID", "Every new rough-plan record requires a bounded label and title.");
+    if (operation !== "delete" && (!Object.keys(fields).length || Object.keys(fields).length > 40 || stableSerialize(fields).length > 30_000)) return errorResponse(422, "WORKSPACE_RECORD_FIELDS_INVALID", "Every record change must contain a bounded set of planning values.");
+    const target = inspectArrivalWorkspaceRecord(order, moduleId, recordId);
+    if (!target.moduleExists) return errorResponse(404, "WORKSPACE_RECORD_MODULE_NOT_FOUND", "The exact editable workspace section was not found.");
+    if (operation === "add" && target.recordExists) return errorResponse(409, "WORKSPACE_RECORD_ID_CONFLICT", "That workspace record identity already exists.");
+    if (operation !== "add" && (!target.recordExists || !target.operatorEditable)) return errorResponse(409, "WORKSPACE_RECORD_NOT_OPERATOR_EDITABLE", "Codex may only change a provisional rough-plan record; settled human facts remain human-controlled.");
+    const unknownFields = Object.keys(fields).filter((fieldId) => fieldId !== "provisional" && !target.allowedFieldIds.includes(fieldId));
+    if (unknownFields.length) return errorResponse(422, "WORKSPACE_RECORD_FIELD_INVALID", `The exact section does not expose: ${unknownFields.join(", ")}.`);
+    changes.push({ operation, moduleId, recordId, label, fields });
+  }
+  const createdAt = new Date().toISOString();
+  const inputs: ArrivalInput[] = changes.map((change, index) => {
+    const payload: JsonRecord = {
+      workspaceOperation: `record_${change.operation}`,
+      moduleId: change.moduleId,
+      recordId: change.recordId,
+      recordSource: "codex",
+      ...(change.label ? { label: change.label } : {}),
+      ...(change.operation !== "delete" ? { fields: { ...change.fields, provisional: true } } : {}),
+    };
+    return { inputId: `arrival_record_${order.orderId}_${expectedVersion + 1}_${index + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
+  });
+  return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, ...inputs] }, { eventType: "operator_records_saved", actor: "codex", sourceSurface: "codex", payload: { inputs, count: inputs.length } }, "ARRIVAL_WORKSPACE_RECORDS_SAVED");
+};
+
 const saveWorkspaceModule = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
   const expectedVersion = Number(body.expectedVersion);
   const operation = String(body.operation ?? "");
@@ -586,6 +632,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     const body = await parseJson(request);
     if (operation === "input") return appendInput(db, scopeId, order, body);
     if (operation === "record") return saveWorkspaceRecord(db, scopeId, order, body);
+    if (operation === "records") return saveWorkspaceRecords(db, scopeId, order, body);
     if (operation === "option") return saveWorkspaceOption(db, scopeId, order, body);
     if (operation === "module") return saveWorkspaceModule(db, scopeId, order, body);
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);
