@@ -393,6 +393,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /starter-module__question-count/);
   assert.match(source, /data-arrival-form="workspace-question-answer"/);
   assert.match(source, /data-codex-priority="true" open/);
+  assert.match(source, /unresolvedSafetySectionId/);
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /\[data-codex-priority="true"\]/);
   assert.match(styles, /\.starter-module__questions/);

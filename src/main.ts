@@ -713,7 +713,7 @@ const bindFollowCodexInteractions = (): void => {
     followCodexEnabled = (event.currentTarget as HTMLInputElement).checked;
     if (followCodexEnabled) {
       scopedStorage.setItem("finite-plan.follow-codex", "true");
-      const safetyFirst = /allerg/i.test(currentArrival()?.rawOutcome ?? "")
+      const safetyFirst = /allerg/i.test(root.textContent ?? "")
         ? root.querySelector<HTMLDetailsElement>("[data-workspace-module='requirements'][data-open-questions]:not([data-open-questions='0'])")
         : null;
       const priority = safetyFirst ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module][data-open-questions]:not([data-open-questions='0'])");
@@ -1459,9 +1459,9 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const defaultPrioritySectionId = (/allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId)
     || starter.sections.find((section) => section.openQuestions.length)?.sectionId
     || "";
-  const prioritySectionId = starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length)
-    ? activeCodexPrioritySectionId
-    : defaultPrioritySectionId;
+  const unresolvedSafetySectionId = /allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId;
+  const prioritySectionId = unresolvedSafetySectionId
+    || (starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length) ? activeCodexPrioritySectionId : defaultPrioritySectionId);
   const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel"].includes(token)) ?? [];
   const samePlace = (left: unknown, right: unknown): boolean => {
     const leftTokens = normalizePlace(left);
