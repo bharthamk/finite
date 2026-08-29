@@ -28,8 +28,13 @@
   <body>
     <div id="app" aria-busy="true" spellcheck="true">
       <main class="app-loading" role="status" aria-label="Opening Finite">
-        <img src="/finite-mark.png" alt="" width="58" height="58" />
-        <p>Opening your plans…</p>
+        <div class="app-loading__panel">
+          <img src="/finite-mark.png" alt="" width="58" height="58" />
+          <strong>Finite is opening</strong>
+          <p data-loading-status>Checking your saved plans…</p>
+          <span class="app-loading__progress" aria-hidden="true"><i></i></span>
+          <small>Your plan stays saved while this loads.</small>
+        </div>
       </main>
     </div>
     <div id="announcer" class="sr-only" aria-live="polite"></div>

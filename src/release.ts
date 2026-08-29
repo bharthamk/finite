@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "single-codex-entry-v134",
+  build: "continuous-opening-v135",
 } as const;

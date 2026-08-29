@@ -26,6 +26,10 @@ document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribu
 const announcer = document.querySelector<HTMLElement>("#announcer");
 if (!root || !announcer) throw new Error("Finite host elements are missing.");
 const surfaceRoot = root;
+const updateOpeningStatus = (status: string): void => {
+  const statusNode = root.querySelector<HTMLElement>("[data-loading-status]");
+  if (statusNode) statusNode.textContent = status;
+};
 const browserWritingLanguage = navigator.languages.find((language) => language.trim()) ?? navigator.language ?? "en";
 const enableNativeWritingAssistance = (): void => {
   root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("textarea:not([readonly]):not([spellcheck='false']), input:not([type]):not([readonly]):not([spellcheck='false']), input[type='text']:not([readonly]):not([spellcheck='false'])")
@@ -383,6 +387,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
 
 const startKitchen = async (authSession: FiniteAuthSession): Promise<void> => {
 
+updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
 clearForeignFiniteScopes(localStorage, authSession.storageScope);
 const scopedStorage = new ScopedStorage(localStorage, authSession.storageScope);
@@ -408,17 +413,6 @@ if (authSession.legacyBrowserCacheEligible) {
 const store = new PlanSnapshotStore(scopedStorage);
 const catalogStore = new PlanCatalogStore(scopedStorage);
 const acceptedRepository = new HttpAcceptedTruthRepository();
-try {
-  const remoteCatalog = await acceptedRepository.listCatalog();
-  for (const entry of remoteCatalog.entries) catalogStore.save(entry.definition, entry.evidenceRecords, entry.lineage);
-  for (const receipt of remoteCatalog.activationReceipts) catalogStore.saveActivationReceipt(receipt);
-} catch { /* Scoped cache remains a safe availability fallback; accepted heads still verify every consequential write. */ }
-const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
-const persistedPlanIds = new Set(catalogEntries.map((entry) => entry.profile.planId));
-const savedProfile = scopedStorage.getItem("finite-plan.surface.active-profile");
-const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
-const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
-const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
 const constructionRepository = new HttpConstructionPacketRepository();
 const arrivalRepository = new HttpArrivalRepository();
 const resetRepository = new HttpKitchenResetRepository();
@@ -427,19 +421,26 @@ const skinRepository = new HttpSkinRepository();
 const settingsRepository = new HttpSettingsRepository();
 const planInputRepository = new HttpPlanInputRepository();
 const planWorkRepository = new HttpPlanWorkRepository();
-let accountSettings: AgentSettings = defaultAgentSettings();
-try {
-  const loadedSettings = await settingsRepository.load();
-  if (loadedSettings.ok) accountSettings = loadedSettings.settings;
-} catch { /* The default name keeps the plan usable if account preferences are temporarily unavailable. */ }
-const agenticName = (): string => accountSettings.agenticName || defaultAgenticName;
-let themeCatalog: ThemeCatalogResult;
-try {
-  themeCatalog = await themeRepository.list();
-  if (!themeCatalog.ok) throw new Error(themeCatalog.code);
-} catch {
-  themeCatalog = { ok: true, code: "THEME_CATALOG_FALLBACK", builtIns: builtInThemes, custom: [], activeThemeId: defaultTheme.themeId, activeTheme: defaultTheme, acceptedStateChanged: false };
+const [remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival] = await Promise.all([
+  acceptedRepository.listCatalog().catch(() => null),
+  settingsRepository.load().catch(() => null),
+  themeRepository.list().catch(() => null),
+  skinRepository.list().catch(() => null),
+  arrivalRepository.open(),
+]);
+if (remoteCatalog) {
+  for (const entry of remoteCatalog.entries) catalogStore.save(entry.definition, entry.evidenceRecords, entry.lineage);
+  for (const receipt of remoteCatalog.activationReceipts) catalogStore.saveActivationReceipt(receipt);
 }
+const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
+const persistedPlanIds = new Set(catalogEntries.map((entry) => entry.profile.planId));
+const savedProfile = scopedStorage.getItem("finite-plan.surface.active-profile");
+const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
+const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
+const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
+let accountSettings: AgentSettings = loadedSettings?.ok ? loadedSettings.settings : defaultAgentSettings();
+const agenticName = (): string => accountSettings.agenticName || defaultAgenticName;
+let themeCatalog: ThemeCatalogResult = loadedThemes?.ok ? loadedThemes : { ok: true, code: "THEME_CATALOG_FALLBACK", builtIns: builtInThemes, custom: [], activeThemeId: defaultTheme.themeId, activeTheme: defaultTheme, acceptedStateChanged: false };
 applyThemeDefinition(themeCatalog.activeTheme);
 const refreshThemeCatalog = async (): Promise<void> => {
   const next = await themeRepository.list();
@@ -447,13 +448,7 @@ const refreshThemeCatalog = async (): Promise<void> => {
   themeCatalog = next;
   applyThemeDefinition(themeCatalog.activeTheme);
 };
-let skinCatalog: SkinCatalogResult;
-try {
-  skinCatalog = await skinRepository.list();
-  if (!skinCatalog.ok) throw new Error(skinCatalog.code);
-} catch {
-  skinCatalog = { ok: true, code: "SKIN_CATALOG_FALLBACK", builtIns: builtInSkins, custom: [], activeSkinId: defaultSkin.skinId, activeSkin: defaultSkin, acceptedStateChanged: false };
-}
+let skinCatalog: SkinCatalogResult = loadedSkins?.ok ? loadedSkins : { ok: true, code: "SKIN_CATALOG_FALLBACK", builtIns: builtInSkins, custom: [], activeSkinId: defaultSkin.skinId, activeSkin: defaultSkin, acceptedStateChanged: false };
 applySkinDefinition(skinCatalog.activeSkin);
 const refreshSkinCatalog = async (): Promise<void> => {
   const next = await skinRepository.list();
@@ -461,7 +456,8 @@ const refreshSkinCatalog = async (): Promise<void> => {
   skinCatalog = next;
   applySkinDefinition(skinCatalog.activeSkin);
 };
-let arrivalResult: ArrivalResult = await arrivalRepository.open();
+let arrivalResult: ArrivalResult = openedArrival;
+updateOpeningStatus("Preparing your workspace…");
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
 await runtime.hydrateAcceptedTruth();
 await runtime.hydrateConstructionPacket();
@@ -478,7 +474,6 @@ const refreshPlanDisplayNames = async (): Promise<void> => {
     } catch { planDisplayNames.set(plan.planId, plan.title); }
   }));
 };
-await refreshPlanDisplayNames();
 let planInputs: PlanInputRecord[] = [];
 let checklistItems: ChecklistItem[] = [];
 let planAttachments: PlanAttachment[] = [];
@@ -486,13 +481,24 @@ const refreshPlanInputs = async (): Promise<void> => {
   const result = await planInputRepository.list({ planId: runtime.kernel.profile.planId });
   planInputs = result.ok ? result.inputs : [];
 };
-try { await refreshPlanInputs(); } catch { planInputs = []; }
 const refreshPlanWork = async (): Promise<void> => {
   const result = await planWorkRepository.list(runtime.kernel.profile.planId);
   checklistItems = result.ok ? result.checklist : [];
   planAttachments = result.ok ? result.attachments : [];
 };
-try { await refreshPlanWork(); } catch { checklistItems = []; planAttachments = []; }
+const startupParams = new URLSearchParams(location.search);
+const startupSurface = selectExperienceSurface({
+  labMode: startupParams.get("lab") === "1",
+  kitchenMode: startupParams.get("plan") === "1" || startupParams.get("kitchen") === "1",
+  hasArrival: isWaitingArrivalStatus(arrivalResult.order?.status),
+  hasActivatedPlan: runtime.hasActivationReceipt(),
+});
+const refreshSecondaryPlanData = (): Promise<unknown[]> => Promise.all([
+  refreshPlanDisplayNames().catch(() => undefined),
+  refreshPlanInputs().catch(() => { planInputs = []; }),
+  refreshPlanWork().catch(() => { checklistItems = []; planAttachments = []; }),
+]);
+if (startupSurface === "plan") await refreshSecondaryPlanData();
 const syncAdaptiveChecklist = async (): Promise<void> => {
   const manifest = await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel);
   for (const [position, stage] of manifest.stages.entries()) {
@@ -503,7 +509,6 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
     if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; }
   }
 };
-try { await syncAdaptiveChecklist(); } catch { /* The plan remains usable if its suggested checklist cannot be synced yet. */ }
 let forceArrivalSurface = false;
 let newPlanDraftMode = false;
 let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
@@ -1010,13 +1015,13 @@ const renderCodexHandoffDialog = (): string => {
           <span>With ${escapeHtml(agenticName())}</span><strong>Develop the rough plan</strong><p>${escapeHtml(handoff.detail)}</p>
           <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
           <small data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
-          <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
           <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
           <button type="button" class="button button--secondary" data-action="continue-arrival-manually">${manualNeedsTakeover ? "Edit manually for now" : "Continue without Codex"}</button>
           <small>Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
         </section>
+        <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
       </div>
       <details class="codex-handoff-advanced"><summary>What will be copied?</summary><label class="codex-handoff-prompt"><span>Finite plan handoff</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
     </form>
@@ -3758,8 +3763,11 @@ function bindInteractions(): void {
 }
 
 if (labMode) await seedDecision();
+updateOpeningStatus("Opening your workspace…");
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
+if (startupSurface === "arrival") void refreshSecondaryPlanData();
+void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
 };
 
 const publicationPath = location.pathname.startsWith("/share/") ? decodeURIComponent(location.pathname.slice("/share/".length)) : null;

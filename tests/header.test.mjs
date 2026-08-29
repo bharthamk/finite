@@ -28,8 +28,19 @@ test("the product header contains actions instead of unexplained internal state"
 
 test("cold navigation shows a useful loading state instead of an empty page", () => {
   assert.match(shell, /class="app-loading" role="status" aria-label="Opening Finite"/);
-  assert.match(shell, /Opening your plans…/);
+  assert.match(shell, /Finite is opening/);
+  assert.match(shell, /data-loading-status>Checking your saved plans…/);
+  assert.match(shell, /Your plan stays saved while this loads\./);
+  assert.match(source, /updateOpeningStatus\("Loading your saved plans…"\)/);
+  assert.match(source, /updateOpeningStatus\("Preparing your workspace…"\)/);
+  assert.match(source, /updateOpeningStatus\("Opening your workspace…"\)/);
+  assert.match(source, /const \[remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival\] = await Promise\.all/);
+  assert.match(source, /if \(startupSurface === "plan"\) await refreshSecondaryPlanData\(\)/);
+  assert.match(source, /if \(startupSurface === "arrival"\) void refreshSecondaryPlanData\(\)/);
+  assert.match(source, /void syncAdaptiveChecklist\(\)\.catch/);
   assert.match(styles, /\.app-loading \{ min-height:100vh;/);
+  assert.match(styles, /\.app-loading__panel/);
+  assert.match(styles, /@media \(prefers-reduced-motion:reduce\) \{ \.app-loading__progress i/);
 });
 
 test("private product surfaces show the plan lifecycle without pretending it is percentage complete", () => {
@@ -359,7 +370,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(styles, /\.codex-handoff-guidance \{ display:grid;/);
+  assert.match(styles, /\.codex-handoff-guidance \{ grid-column:1\/-1; display:grid;/);
   assert.doesNotMatch(styles, /\.follow-codex-toggle/);
 });
 
