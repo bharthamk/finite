@@ -3291,13 +3291,20 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
     </div>
     <main id="main" class="wrap-up-main">
       <header class="wrap-up-hero">
-        <div class="wrap-up-hero__status"><p class="eyebrow">Wrapping up</p><span>Completed</span></div>
+        <div class="wrap-up-hero__status"><p class="eyebrow">Finished</p><span>Completed</span></div>
         <div class="wrap-up-hero__copy"><h1>${escapeHtml(manifest.title)}</h1><p>${escapeHtml(manifest.brief)}</p></div>
         <blockquote><span>What happened</span><p>${escapeHtml(completion?.reason ?? "The planned outcome happened.")}</p>${completion?.occurredAt ? `<small>Completed ${escapeHtml(new Date(completion.occurredAt).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }))}</small>` : ""}</blockquote>
       </header>
 
-      <section class="wrap-up-section" aria-labelledby="wrap_facts_title">
-        <header><div><p class="eyebrow">Final position</p><h2 id="wrap_facts_title">The plan at finish</h2></div><span>Revision ${kernel.revision}</span></header>
+      <section class="wrap-up-glance" aria-label="Finished plan at a glance">
+        <div><span>Status</span><strong>Completed</strong></div>
+        <div><span>Progress</span><strong>${done.length} / ${checklistItems.length}</strong></div>
+        <div><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
+        <div><span>Actual spend</span><strong>${recordedActual?.actualSpendMinor === undefined || recordedActual.actualSpendMinor === null ? "Not recorded" : money(recordedActual.actualSpendMinor)}</strong></div>
+      </section>
+
+      <details class="wrap-up-section" aria-labelledby="wrap_facts_title">
+        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Final position</p><h2 id="wrap_facts_title">The plan at finish</h2></div><span>Revision ${kernel.revision}</span></summary>
         <div class="wrap-up-facts">
           ${facts.map((fact) => `<div><span>${escapeHtml(fact.label)}</span><strong>${escapeHtml(formatPlanFactValue(fact))}</strong></div>`).join("")}
           <div><span>Planned as spent</span><strong>${money(kernel.accepted.spentMinor)}</strong></div>
@@ -3306,29 +3313,29 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
           <div class="is-actual"><span>Actual spend</span><strong>${recordedActual?.actualSpendMinor === undefined || recordedActual.actualSpendMinor === null ? "Not recorded" : money(recordedActual.actualSpendMinor)}</strong></div>
         </div>
         ${actuals.length ? `<div class="wrap-up-actuals"><h3>Actual and forecast</h3>${actuals.map((actual) => `<div><span>${escapeHtml(actual.label)}</span><strong>${money(actual.currentAmountMinor)}</strong></div>`).join("")}</div>` : ""}
-      </section>
+      </details>
 
-      <section class="wrap-up-section" aria-labelledby="wrap_progress_title">
-        <header><div><p class="eyebrow">Progress</p><h2 id="wrap_progress_title">${done.length} of ${checklistItems.length} items finished</h2></div><span>${checklistItems.length && done.length === checklistItems.length ? "All done" : `${checklistItems.length - done.length} left open`}</span></header>
+      <details class="wrap-up-section" aria-labelledby="wrap_progress_title">
+        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Progress</p><h2 id="wrap_progress_title">${done.length} of ${checklistItems.length} items finished</h2></div><span>${checklistItems.length && done.length === checklistItems.length ? "All done" : `${checklistItems.length - done.length} left open`}</span></summary>
         ${customChecklist.length ? `<h3>Other tasks</h3><ul class="wrap-up-checklist">${customChecklist.map((item) => `<li class="${item.status === "done" ? "is-done" : "is-open"}"><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</div><em>${item.status === "done" ? "Done" : "Not completed"}</em></li>`).join("")}</ul>` : ""}
-      </section>
+      </details>
 
-      <section class="wrap-up-section" aria-labelledby="wrap_journey_title">
-        <header><div><p class="eyebrow">Plan journey</p><h2 id="wrap_journey_title">How it came together</h2></div></header>
+      <details class="wrap-up-section" aria-labelledby="wrap_journey_title">
+        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Plan journey</p><h2 id="wrap_journey_title">How it came together</h2></div><span>${manifest.stages.length} stages</span></summary>
         <ol class="wrap-up-journey">${manifest.stages.map((stage, index) => {
           const checklist = checklistForStage(stage.stageId);
           const stageInputs = directInputs.filter((item) => item.section === "timeline" && item.contextId === stage.stageId);
           return `<li><span>${index + 1}</span><div><h3>${escapeHtml(stage.label)}</h3><p>${escapeHtml(stage.detail)}</p>${stageInputs.map((item) => `<blockquote><strong>${escapeHtml(planInputKindLabel(item.kind))}</strong><p>${escapeHtml(item.message)}</p></blockquote>`).join("")}</div><em>${checklist?.status === "done" || stage.status === "complete" ? "Done" : "Open"}</em></li>`;
         }).join("")}</ol>
-      </section>
+      </details>
 
-      ${hasRecord ? `<section class="wrap-up-section" aria-labelledby="wrap_record_title"><header><div><p class="eyebrow">Plan record</p><h2 id="wrap_record_title">Decisions and updates</h2></div></header><div class="wrap-up-record">
+      ${hasRecord ? `<details class="wrap-up-section" aria-labelledby="wrap_record_title"><summary class="wrap-up-section__summary"><div><p class="eyebrow">Plan record</p><h2 id="wrap_record_title">Decisions and updates</h2></div><span>${recordInputs.length + kernel.groupDecisionEvents.length + kernel.externalActionEvents.length}</span></summary><div class="wrap-up-record">
         ${recordInputs.map((item) => `<article><span>${escapeHtml(planInputKindLabel(item.kind))}${item.contextLabel ? ` · ${escapeHtml(item.contextLabel)}` : ""}</span><p>${escapeHtml(item.message)}</p></article>`).join("")}
         ${kernel.groupDecisionEvents.map((item) => `<article><span>Group decision</span><strong>${escapeHtml(item.question)}</strong><p>${escapeHtml(item.resolvedOutcome)}</p></article>`).join("")}
         ${kernel.externalActionEvents.map((item) => `<article><span>Real-world status</span><strong>${escapeHtml(item.label)} · ${escapeHtml(item.after)}</strong><p>${escapeHtml(item.reason)}</p></article>`).join("")}
-      </div></section>` : ""}
+      </div></details>` : ""}
 
-      ${planAttachments.length ? `<section class="wrap-up-section" aria-labelledby="wrap_refs_title"><header><div><p class="eyebrow">Kept with this plan</p><h2 id="wrap_refs_title">Files, links and notes</h2></div><span>${planAttachments.length}</span></header>${renderWrapUpAttachments()}</section>` : ""}
+      ${planAttachments.length ? `<details class="wrap-up-section" aria-labelledby="wrap_refs_title"><summary class="wrap-up-section__summary"><div><p class="eyebrow">Kept with this plan</p><h2 id="wrap_refs_title">Files, links and notes</h2></div><span>${planAttachments.length}</span></summary>${renderWrapUpAttachments()}</details>` : ""}
 
       ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share" data-share-context="plan">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><form class="wrap-up-actual-form" data-plan-lifecycle data-record-actual><input type="hidden" name="status" value="completed"><label><span>${recordedActual ? "Change actual spend" : "Record actual spend"}</span><div class="plan-fact-input"><span aria-hidden="true">$</span><input name="actualSpend" type="number" inputmode="decimal" min="0" step="0.01" ${recordedActual?.actualSpendMinor !== undefined && recordedActual.actualSpendMinor !== null ? `value="${recordedActual.actualSpendMinor / 100}"` : ""} required></div></label><input type="hidden" name="reason" value="Actual spend recorded after completion."><button class="button button--secondary" type="submit">Save actual</button></form><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
     </main>
