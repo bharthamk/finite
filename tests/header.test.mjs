@@ -24,6 +24,11 @@ test("the production client has intentional chunks and a hard regression budget"
   assert.match(chunkBudget, /Production client chunk budget exceeded/);
 });
 
+test("blocked option cards never claim that no compromise is required", () => {
+  assert.match(source, /candidateTradeoffLines\(candidate\)/);
+  assert.doesNotMatch(source, /No additional compromise required/);
+});
+
 test("the product header contains actions instead of unexplained internal state", () => {
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
     assert.doesNotMatch(source, new RegExp(obsoleteLabel));

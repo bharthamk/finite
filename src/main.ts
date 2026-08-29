@@ -22,6 +22,7 @@ import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type P
 import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
+import { candidateTradeoffLines } from "./option-presentation.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 document.querySelector<HTMLMetaElement>('meta[name="finite-build"]')?.setAttribute("content", finiteRelease.build);
@@ -3023,7 +3024,7 @@ const renderOptions = (): string => {
         <h3>${escapeHtml(objectiveLabel(candidate.objective))}</h3>
         <div class="option-card__number">${money(candidate.resultingBufferMinor)}</div>
         <p>left as ${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)}</p>
-        <ul>${candidate.selectedMoves.length ? candidate.selectedMoves.map((move) => `<li>${escapeHtml(move.tradeoff)}</li>`).join("") : "<li>No additional compromise required</li>"}</ul>
+        <ul>${candidateTradeoffLines(candidate).map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
         <div class="option-card__delta"><span>Plan impact</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
           ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Choose this ${escapeHtml(runtime.kernel.profile.surface.nouns.option)}</button>`
