@@ -69,9 +69,10 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /const opensFreshArrival = !arrivalResult\.order/);
   assert.match(source, /if \(!opensFreshArrival\) await hydrateCanonicalRuntime\(\)/);
   assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
-  assert.match(source, /if \(startupSurface === "plan"\) await refreshSecondaryPlanData\(\)/);
+  assert.match(source, /const initialSecondaryPlanData = startupSurface === "plan"/);
+  assert.match(source, /refreshSecondaryPlanData\(\)\.finally\(\(\) => \{ secondaryPlanDataReady = true; \}\)/);
   assert.match(source, /if \(startupSurface === "arrival"\) void refreshSecondaryPlanData\(\)/);
-  assert.match(source, /void syncAdaptiveChecklist\(\)\.catch/);
+  assert.match(source, /initialSecondaryPlanData\.then\(async \(\) =>/);
   assert.match(styles, /\.app-loading \{ min-height:100vh;/);
   assert.match(styles, /\.app-loading__panel/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\) \{ \.app-loading__progress i/);

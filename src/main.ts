@@ -20,6 +20,7 @@ import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
+import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryKind } from "./plan-learning.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
@@ -425,6 +426,7 @@ const skinRepository = new HttpSkinRepository();
 const settingsRepository = new HttpSettingsRepository();
 const planInputRepository = new HttpPlanInputRepository();
 const planWorkRepository = new HttpPlanWorkRepository();
+const planLearningRepository = new HttpPlanLearningRepository();
 const [remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival] = await Promise.all([
   acceptedRepository.listCatalog().catch(() => null),
   settingsRepository.load().catch(() => null),
@@ -486,6 +488,8 @@ const refreshPlanDisplayNames = async (): Promise<void> => {
 let planInputs: PlanInputRecord[] = [];
 let checklistItems: ChecklistItem[] = [];
 let planAttachments: PlanAttachment[] = [];
+let planRetrospective: PlanRetrospective | null = null;
+let profileMemories: ProfileMemory[] = [];
 const refreshPlanInputs = async (): Promise<void> => {
   const result = await planInputRepository.list({ planId: runtime.kernel.profile.planId });
   planInputs = result.ok ? result.inputs : [];
@@ -494,6 +498,11 @@ const refreshPlanWork = async (): Promise<void> => {
   const result = await planWorkRepository.list(runtime.kernel.profile.planId);
   checklistItems = result.ok ? result.checklist : [];
   planAttachments = result.ok ? result.attachments : [];
+};
+const refreshPlanLearning = async (): Promise<void> => {
+  const result = await planLearningRepository.list(runtime.kernel.profile.planId);
+  planRetrospective = result.ok ? result.retrospective : emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
+  profileMemories = result.ok ? result.memories : [];
 };
 const startupSurface = selectExperienceSurface({
   labMode,
@@ -505,8 +514,12 @@ const refreshSecondaryPlanData = (): Promise<unknown[]> => Promise.all([
   refreshPlanDisplayNames().catch(() => undefined),
   refreshPlanInputs().catch(() => { planInputs = []; }),
   refreshPlanWork().catch(() => { checklistItems = []; planAttachments = []; }),
+  refreshPlanLearning().catch(() => { planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision); profileMemories = []; }),
 ]);
-if (startupSurface === "plan") await refreshSecondaryPlanData();
+let secondaryPlanDataReady = startupSurface !== "plan";
+const initialSecondaryPlanData = startupSurface === "plan"
+  ? refreshSecondaryPlanData().finally(() => { secondaryPlanDataReady = true; })
+  : Promise.resolve([]);
 const syncAdaptiveChecklist = async (): Promise<void> => {
   const manifest = await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel);
   for (const [position, stage] of manifest.stages.entries()) {
@@ -534,6 +547,7 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     await runtime.resumeConstructionPacket();
     await refreshPlanInputs();
     await refreshPlanWork();
+    await refreshPlanLearning();
   }
   if (request.surface !== "current") {
     forceArrivalSurface = request.surface === "arrival";
@@ -552,7 +566,7 @@ window.finitePlanCanary?.adapter?.dispose();
 const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime, async ({ toolName, result }) => {
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED"].includes(result.code)) persistedPlanIds.add(runtime.kernel.profile.planId);
-  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await syncAdaptiveChecklist(); }
+  if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await refreshPlanLearning(); await syncAdaptiveChecklist(); }
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const manifest = await render();
@@ -581,6 +595,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
 }, planWorkRepository, async (result: PlanWorkResult) => {
   checklistItems = result.checklist;
   planAttachments = result.attachments;
+}, planLearningRepository, async (result: PlanLearningResult) => {
+  planRetrospective = result.retrospective;
+  profileMemories = result.memories;
 }).withGuideView(guideView).useBoundedOutputs().useStableDispatcher() : null;
 if (adapter) {
   const inventory = await adapter.register();
@@ -620,6 +637,9 @@ let planInputContext: { section: PlanInputSection; contextId: string | null; con
 let attachmentDialogOpen = false;
 let planWorkBusy = false;
 let planWorkError = "";
+let planLearningBusy = false;
+let planLearningError = "";
+let lessonsOpen = false;
 let attachmentContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
 let planFactDialogOpen = false;
 let planFactBusy = false;
@@ -3266,6 +3286,44 @@ const renderWrapUpAttachments = (): string => `<div class="wrap-up-references">$
   <div><span>${escapeHtml(attachmentKindLabel(item.kind))}${item.contextLabel ? ` · ${escapeHtml(item.contextLabel)}` : ""}</span>${item.linkUrl ? `<a href="${escapeHtml(item.linkUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : item.contentUrl ? `<a href="${escapeHtml(item.contentUrl)}" target="_blank" rel="noopener">${escapeHtml(item.label)}</a>` : `<strong>${escapeHtml(item.label)}</strong>`}${item.noteText ? `<p>${escapeHtml(item.noteText)}</p>` : ""}</div>
 </article>`).join("")}</div>`;
 
+const profileMemoryKindLabel = (kind: ProfileMemoryKind): string => ({
+  preference: "Preference",
+  interest: "Interest",
+  constraint: "Constraint",
+  working_pattern: "Working pattern",
+  avoid: "Avoid next time",
+})[kind];
+
+const renderPlanLessons = (): string => {
+  const retrospective = planRetrospective ?? emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
+  const memories = profileMemories.filter((memory) => memory.sourcePlanId === runtime.kernel.profile.planId && memory.status !== "rejected");
+  const proposed = memories.filter((memory) => memory.status === "proposed");
+  const accepted = memories.filter((memory) => memory.status === "accepted");
+  const notes = [retrospective.worked, retrospective.changed, retrospective.nextTime].filter(Boolean).length;
+  const total = notes + memories.length;
+  if (!secondaryPlanDataReady) return `<details class="wrap-up-section wrap-up-lessons" aria-labelledby="wrap_lessons_title"><summary class="wrap-up-section__summary"><div><p class="eyebrow">After the plan</p><h2 id="wrap_lessons_title">Lessons learned</h2></div><span>Loading…</span></summary></details>`;
+  return `<details class="wrap-up-section wrap-up-lessons" aria-labelledby="wrap_lessons_title" data-plan-lessons ${lessonsOpen ? "open" : ""}>
+    <summary class="wrap-up-section__summary"><div><p class="eyebrow">After the plan</p><h2 id="wrap_lessons_title">Lessons learned</h2></div><span>${proposed.length ? `${proposed.length} to review` : total ? `${total} saved` : "Add reflection"}</span></summary>
+    <div class="wrap-up-lessons__intro"><p>Keep what happened with this plan. Decide separately what Finite may carry into later plans.</p>${planLearningError ? `<p class="form-error" role="alert">${escapeHtml(planLearningError)}</p>` : ""}</div>
+    <form class="wrap-up-retrospective" data-plan-retrospective>
+      <label><span>What worked</span><textarea name="worked" maxlength="2000" placeholder="What would you repeat?">${escapeHtml(retrospective.worked)}</textarea></label>
+      <label><span>What changed</span><textarea name="changed" maxlength="2000" placeholder="What happened differently from the plan?">${escapeHtml(retrospective.changed)}</textarea></label>
+      <label><span>Next time</span><textarea name="nextTime" maxlength="2000" placeholder="What would you do differently?">${escapeHtml(retrospective.nextTime)}</textarea></label>
+      <button class="button button--secondary" type="submit" ${planLearningBusy ? "disabled" : ""}>${planLearningBusy ? "Saving…" : "Save to this plan"}</button>
+    </form>
+    <section class="profile-memory-review" aria-labelledby="carry_forward_title">
+      <header><div><p class="eyebrow">Across plans</p><h3 id="carry_forward_title">Things to carry forward</h3></div><p>Only accepted items become reusable. Finite keeps the evidence with each one.</p></header>
+      ${proposed.length ? `<div class="profile-memory-list profile-memory-list--proposed"><h4>Suggestions to review</h4>${proposed.map((memory) => `<form data-memory-decision class="profile-memory-card is-proposed"><input type="hidden" name="memoryId" value="${escapeHtml(memory.memoryId)}"><span>${escapeHtml(profileMemoryKindLabel(memory.kind))} · Suggested by ${escapeHtml(agenticName())}</span><input name="statement" maxlength="500" value="${escapeHtml(memory.statement)}" aria-label="Edit suggested memory"><p><b>Based on</b> ${escapeHtml(memory.evidence)}</p><div><button class="button button--secondary" name="status" value="accepted" type="submit">Remember this</button><button class="text-button" name="status" value="rejected" type="submit">Don’t use this</button></div></form>`).join("")}</div>` : ""}
+      ${accepted.length ? `<div class="profile-memory-list"><h4>Saved from this plan</h4>${accepted.map((memory) => `<article class="profile-memory-card is-accepted"><span>${escapeHtml(profileMemoryKindLabel(memory.kind))} · Accepted</span><strong>${escapeHtml(memory.statement)}</strong><p><b>Based on</b> ${escapeHtml(memory.evidence)}</p></article>`).join("")}</div>` : ""}
+      <form class="profile-memory-add" data-memory-add>
+        <div><label><span>Remember something yourself</span><input name="statement" maxlength="500" placeholder="e.g. I enjoy cooking together before dinner" required></label><label><span>Type</span><select name="kind"><option value="preference">Preference</option><option value="interest">Interest</option><option value="constraint">Constraint</option><option value="working_pattern">Working pattern</option><option value="avoid">Avoid next time</option></select></label></div>
+        <input type="hidden" name="evidence" value="Added by you after ${escapeHtml(resolvePlanTitle({ proposed: projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel), brief: projectAcceptedPlanCopy(runtime.kernel.profile.surface.hero.brief, runtime.kernel) }))}.">
+        <button class="button button--secondary" type="submit" ${planLearningBusy ? "disabled" : ""}>Add to future plans</button>
+      </form>
+    </section>
+  </details>`;
+};
+
 const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
   const kernel = runtime.kernel;
   const completion = [...kernel.lifecycleEvents].reverse().find((event) => event.after === "completed" && event.before !== "completed") ?? null;
@@ -3298,7 +3356,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
 
       <section class="wrap-up-glance" aria-label="Finished plan at a glance">
         <div><span>Status</span><strong>Completed</strong></div>
-        <div><span>Progress</span><strong>${done.length} / ${checklistItems.length}</strong></div>
+        <div><span>Progress</span><strong>${secondaryPlanDataReady ? `${done.length} / ${checklistItems.length}` : "Loading…"}</strong></div>
         <div><span>Available</span><strong>${money(kernel.accepted.bufferMinor)}</strong></div>
         <div><span>Actual spend</span><strong>${recordedActual?.actualSpendMinor === undefined || recordedActual.actualSpendMinor === null ? "Not recorded" : money(recordedActual.actualSpendMinor)}</strong></div>
       </section>
@@ -3316,7 +3374,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
       </details>
 
       <details class="wrap-up-section" aria-labelledby="wrap_progress_title">
-        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Progress</p><h2 id="wrap_progress_title">${done.length} of ${checklistItems.length} items finished</h2></div><span>${checklistItems.length && done.length === checklistItems.length ? "All done" : `${checklistItems.length - done.length} left open`}</span></summary>
+        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Progress</p><h2 id="wrap_progress_title">${secondaryPlanDataReady ? `${done.length} of ${checklistItems.length} items finished` : "Loading finished items…"}</h2></div><span>${secondaryPlanDataReady ? checklistItems.length && done.length === checklistItems.length ? "All done" : `${checklistItems.length - done.length} left open` : "Please wait"}</span></summary>
         ${customChecklist.length ? `<h3>Other tasks</h3><ul class="wrap-up-checklist">${customChecklist.map((item) => `<li class="${item.status === "done" ? "is-done" : "is-open"}"><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</div><em>${item.status === "done" ? "Done" : "Not completed"}</em></li>`).join("")}</ul>` : ""}
       </details>
 
@@ -3336,6 +3394,8 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
       </div></details>` : ""}
 
       ${planAttachments.length ? `<details class="wrap-up-section" aria-labelledby="wrap_refs_title"><summary class="wrap-up-section__summary"><div><p class="eyebrow">Kept with this plan</p><h2 id="wrap_refs_title">Files, links and notes</h2></div><span>${planAttachments.length}</span></summary>${renderWrapUpAttachments()}</details>` : ""}
+
+      ${renderPlanLessons()}
 
       ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share" data-share-context="plan">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><form class="wrap-up-actual-form" data-plan-lifecycle data-record-actual><input type="hidden" name="status" value="completed"><label><span>${recordedActual ? "Change actual spend" : "Record actual spend"}</span><div class="plan-fact-input"><span aria-hidden="true">$</span><input name="actualSpend" type="number" inputmode="decimal" min="0" step="0.01" ${recordedActual?.actualSpendMinor !== undefined && recordedActual.actualSpendMinor !== null ? `value="${recordedActual.actualSpendMinor / 100}"` : ""} required></div></label><input type="hidden" name="reason" value="Actual spend recorded after completion."><button class="button button--secondary" type="submit">Save actual</button></form><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
     </main>
@@ -4079,6 +4139,82 @@ const bindPlanFactCalculation = (): void => {
   total.addEventListener("input", update);
 };
 
+const savePlanRetrospective = async (form: HTMLFormElement): Promise<void> => {
+  if (planLearningBusy) return;
+  const data = new FormData(form);
+  planLearningBusy = true;
+  planLearningError = "";
+  lessonsOpen = true;
+  await render();
+  const result = await planLearningRepository.saveRetrospective({
+    planId: runtime.kernel.profile.planId,
+    expectedRevision: runtime.kernel.revision,
+    worked: String(data.get("worked") ?? ""),
+    changed: String(data.get("changed") ?? ""),
+    nextTime: String(data.get("nextTime") ?? ""),
+    idempotencyKey: `retrospective-site-${crypto.randomUUID()}`,
+    sourceSurface: "site",
+  });
+  if (result.ok) {
+    planRetrospective = result.retrospective;
+    profileMemories = result.memories;
+    announce("Lessons saved with this plan.");
+  } else planLearningError = result.issues?.join(" ") || "Those lessons could not be saved.";
+  planLearningBusy = false;
+  await render();
+};
+
+const addProfileMemory = async (form: HTMLFormElement): Promise<void> => {
+  if (planLearningBusy) return;
+  const data = new FormData(form);
+  planLearningBusy = true;
+  planLearningError = "";
+  lessonsOpen = true;
+  await render();
+  const result = await planLearningRepository.addMemory({
+    planId: runtime.kernel.profile.planId,
+    expectedRevision: runtime.kernel.revision,
+    kind: String(data.get("kind") ?? "preference"),
+    statement: String(data.get("statement") ?? ""),
+    evidence: String(data.get("evidence") ?? "Added by you after this plan."),
+    idempotencyKey: `profile-memory-site-${crypto.randomUUID()}`,
+    sourceSurface: "site",
+  });
+  if (result.ok) {
+    planRetrospective = result.retrospective;
+    profileMemories = result.memories;
+    announce("Saved for future plans.");
+  } else planLearningError = result.issues?.join(" ") || "That memory could not be saved.";
+  planLearningBusy = false;
+  await render();
+};
+
+const decideProfileMemory = async (form: HTMLFormElement, submitter: HTMLButtonElement | null): Promise<void> => {
+  if (planLearningBusy) return;
+  const data = new FormData(form);
+  const status = submitter?.value === "rejected" ? "rejected" : "accepted";
+  planLearningBusy = true;
+  planLearningError = "";
+  lessonsOpen = true;
+  await render();
+  const result = await planLearningRepository.decideMemory({
+    memoryId: String(data.get("memoryId") ?? ""),
+    planId: runtime.kernel.profile.planId,
+    expectedRevision: runtime.kernel.revision,
+    status,
+    statement: String(data.get("statement") ?? ""),
+    idempotencyKey: `profile-memory-${status}-site-${crypto.randomUUID()}`,
+    sourceSurface: "site",
+  });
+  if (result.ok) {
+    planRetrospective = result.retrospective;
+    profileMemories = result.memories;
+    announce(status === "accepted" ? "Saved for future plans." : "Finite will not use that suggestion.");
+  } else planLearningError = result.issues?.join(" ") || "That choice could not be saved.";
+  planLearningBusy = false;
+  await render();
+};
+
 function bindInteractions(): void {
   bindCodexHandoffInteractions();
   bindFollowCodexInteractions();
@@ -4087,6 +4223,11 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='start-new-plan']")?.addEventListener("click", () => { void startNewPlan(); });
   bindKitchenResetInteractions();
   bindThemeSettingsInteractions();
+  const lessonDetails = root?.querySelector<HTMLDetailsElement>("[data-plan-lessons]");
+  lessonDetails?.addEventListener("toggle", () => { lessonsOpen = lessonDetails.open; });
+  root?.querySelector<HTMLFormElement>("[data-plan-retrospective]")?.addEventListener("submit", (event) => { event.preventDefault(); void savePlanRetrospective(event.currentTarget as HTMLFormElement); });
+  root?.querySelector<HTMLFormElement>("[data-memory-add]")?.addEventListener("submit", (event) => { event.preventDefault(); void addProfileMemory(event.currentTarget as HTMLFormElement); });
+  root?.querySelectorAll<HTMLFormElement>("[data-memory-decision]").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void decideProfileMemory(event.currentTarget as HTMLFormElement, (event as SubmitEvent).submitter as HTMLButtonElement | null); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-input']").forEach((button) => button.addEventListener("click", () => { void openPlanInput(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='edit-plan-input']").forEach((button) => button.addEventListener("click", () => { void editPlanInput(String(button.dataset.planInputId ?? "")); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputError = ""; await render(); }));
@@ -4152,5 +4293,13 @@ await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
 if (opensFreshArrival) void hydrateCanonicalRuntime();
 if (startupSurface === "arrival") void refreshSecondaryPlanData();
-void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
+if (startupSurface === "plan") {
+  void initialSecondaryPlanData.then(async () => {
+    await render();
+    await syncAdaptiveChecklist();
+    await render();
+  }).catch(() => { /* The core plan remains usable if secondary records cannot be loaded. */ });
+} else {
+  void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
+}
 };

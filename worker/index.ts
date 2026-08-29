@@ -8,6 +8,7 @@ import { handlePlanShareRequest } from "./plan-shares.js";
 import { handleSettingsRequest } from "./settings.js";
 import { handlePlanInputRequest } from "./plan-inputs.js";
 import { handlePlanWorkRequest } from "./plan-work.js";
+import { handlePlanLearningRequest } from "./plan-learning.js";
 import type { FiniteFilesBucket } from "./files.js";
 import { finiteRelease } from "../src/release.js";
 
@@ -76,6 +77,8 @@ export default {
     if (planInputResponse) return withSecurityHeaders(planInputResponse);
     const planWorkResponse = await handlePlanWorkRequest(request, environment.DB, environment.FILES);
     if (planWorkResponse) return withSecurityHeaders(planWorkResponse);
+    const planLearningResponse = await handlePlanLearningRequest(request, environment.DB);
+    if (planLearningResponse) return withSecurityHeaders(planLearningResponse);
     const themeResponse = await handleThemeRequest(request, environment.DB);
     if (themeResponse) return withSecurityHeaders(themeResponse);
     const skinResponse = await handleSkinRequest(request, environment.DB);

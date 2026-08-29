@@ -6,6 +6,9 @@ import type { D1Database, D1PreparedStatement } from "./accepted-truth.js";
  * are deliberately handled by the reset coordinator instead.
  */
 export const tenantDataTables = [
+  "plan_learning_receipts",
+  "profile_memories",
+  "plan_retrospectives",
   "plan_input_receipts",
   "plan_inputs",
   "plan_work_receipts",

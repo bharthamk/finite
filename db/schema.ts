@@ -504,3 +504,47 @@ export const tenantResetJobs = sqliteTable("tenant_reset_jobs", {
   primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
   index("idx_tenant_reset_jobs_scope_status_updated").on(table.scopeId, table.status, table.updatedAt),
 ]);
+
+export const planRetrospectives = sqliteTable("plan_retrospectives", {
+  scopeId: text("scope_id").notNull(),
+  planId: text("plan_id").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  worked: text("worked").default("").notNull(),
+  changed: text("changed").default("").notNull(),
+  nextTime: text("next_time").default("").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.planId] }),
+  index("idx_plan_retrospectives_scope_updated").on(table.scopeId, table.updatedAt),
+]);
+
+export const profileMemories = sqliteTable("profile_memories", {
+  scopeId: text("scope_id").notNull(),
+  memoryId: text("memory_id").notNull(),
+  family: text("family").notNull(),
+  kind: text("kind").notNull(),
+  statement: text("statement").notNull(),
+  evidence: text("evidence").notNull(),
+  sourcePlanId: text("source_plan_id").notNull(),
+  sourceSurface: text("source_surface").notNull(),
+  status: text("status").default("proposed").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  decidedAt: text("decided_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.memoryId] }),
+  index("idx_profile_memories_scope_status_updated").on(table.scopeId, table.status, table.updatedAt),
+  index("idx_profile_memories_scope_family_status").on(table.scopeId, table.family, table.status),
+]);
+
+export const planLearningReceipts = sqliteTable("plan_learning_receipts", {
+  scopeId: text("scope_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  receiptJson: text("receipt_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.idempotencyKey] }),
+  index("idx_plan_learning_receipts_scope_created").on(table.scopeId, table.createdAt),
+]);

@@ -182,6 +182,10 @@ test("Managing exposes checkboxes and section-bound attachments without engineer
   assert.match(source, /The plan at finish/);
   assert.match(source, /How it came together/);
   assert.match(source, /Decisions and updates/);
+  assert.match(source, /Lessons learned/);
+  assert.match(source, /Only accepted items become reusable/);
+  assert.match(source, /data-plan-retrospective/);
+  assert.match(source, /data-memory-decision/);
   assert.match(source, /Share this summary/);
   assert.match(source, /Start another plan/);
 });
