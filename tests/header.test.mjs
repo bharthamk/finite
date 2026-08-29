@@ -35,6 +35,9 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /updateOpeningStatus\("Preparing your workspace…"\)/);
   assert.match(source, /updateOpeningStatus\("Opening your workspace…"\)/);
   assert.match(source, /const \[remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival\] = await Promise\.all/);
+  assert.match(source, /const opensFreshArrival = !arrivalResult\.order/);
+  assert.match(source, /if \(!opensFreshArrival\) await hydrateCanonicalRuntime\(\)/);
+  assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
   assert.match(source, /if \(startupSurface === "plan"\) await refreshSecondaryPlanData\(\)/);
   assert.match(source, /if \(startupSurface === "arrival"\) void refreshSecondaryPlanData\(\)/);
   assert.match(source, /void syncAdaptiveChecklist\(\)\.catch/);

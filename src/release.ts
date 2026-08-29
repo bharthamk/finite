@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "continuous-opening-v135",
+  build: "continuous-opening-v136",
 } as const;

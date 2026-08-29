@@ -459,9 +459,14 @@ const refreshSkinCatalog = async (): Promise<void> => {
 let arrivalResult: ArrivalResult = openedArrival;
 updateOpeningStatus("Preparing your workspace…");
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
-await runtime.hydrateAcceptedTruth();
-await runtime.hydrateConstructionPacket();
-await runtime.resumeConstructionPacket();
+const startupParams = new URLSearchParams(location.search);
+const opensFreshArrival = !arrivalResult.order && startupParams.get("lab") !== "1" && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
+const hydrateCanonicalRuntime = async (): Promise<void> => {
+  await runtime.hydrateAcceptedTruth();
+  await runtime.hydrateConstructionPacket();
+  await runtime.resumeConstructionPacket();
+};
+if (!opensFreshArrival) await hydrateCanonicalRuntime();
 const planDisplayNames = new Map<string, string>();
 const refreshPlanDisplayNames = async (): Promise<void> => {
   const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string; title: string }>;
@@ -486,7 +491,6 @@ const refreshPlanWork = async (): Promise<void> => {
   checklistItems = result.ok ? result.checklist : [];
   planAttachments = result.ok ? result.attachments : [];
 };
-const startupParams = new URLSearchParams(location.search);
 const startupSurface = selectExperienceSurface({
   labMode: startupParams.get("lab") === "1",
   kitchenMode: startupParams.get("plan") === "1" || startupParams.get("kitchen") === "1",
@@ -3766,6 +3770,7 @@ if (labMode) await seedDecision();
 updateOpeningStatus("Opening your workspace…");
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
+if (opensFreshArrival) void hydrateCanonicalRuntime();
 if (startupSurface === "arrival") void refreshSecondaryPlanData();
 void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
 };
