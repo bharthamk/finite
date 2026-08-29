@@ -831,7 +831,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     chefMenu = { ...currentMenu, items: [primary, ...currentItems.slice(1)] };
   }
   let planWorkPacket: Record<string, unknown> = { status: "not_read", sourceAttachmentCount: 0, attentionCount: 0, attachments: [] };
-  const mayPrioritizeAcceptedPlanWork = entryIntent !== "start_new" && Boolean(active?.planId) && (!orientation || orientation.order.status === "accepted" || orientation.order.status === "closed");
+  const mayPrioritizeAcceptedPlanWork = entryIntent !== "start_new" && Boolean(active?.planId) && (entryIntent === "continue_current" || !orientation || orientation.order.status === "accepted" || orientation.order.status === "closed");
   if (mayPrioritizeAcceptedPlanWork) {
     try {
       const work = await planWork.list(String(active!.planId), context);

@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "attachment-ingestion-v151",
+  build: "attachment-ingestion-v152",
 } as const;

@@ -74,6 +74,8 @@ test("kitchen entry prioritises new human source material without asking for ano
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
   const host = new MemoryModelContext();
+  const arrivals = new MemoryArrivalRepository();
+  await arrivals.create({ idempotencyKey: "attachment-arrival-0001", rawOutcome: "A later plan idea that has not been handed off.", sourceSurface: "site" });
   const attachment = {
     attachmentId: "attachment_human_notes",
     planId: runtime.kernel.profile.planId,
@@ -104,7 +106,7 @@ test("kitchen entry prioritises new human source material without asking for ano
     list: async () => ({ ok: true, code: "PLAN_WORK_LISTED", checklist: [], attachments: [attachment], acceptedStateChanged: false }),
     readAttachment: async () => ({ ok: true, code: "PLAN_ATTACHMENT_READ", attachment, contentMode: "text", content: "x".repeat(600), offset: 0, nextOffset: null, truncated: false, acceptedStateChanged: false }),
   };
-  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, planWork);
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, planWork);
   await adapter.register();
   const entered = await adapter.enterKitchen({ entryIntent: "continue_current" });
   assert.equal(entered.operatorPacket.nextAction.stage, "plan_attachment_unread");
