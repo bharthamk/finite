@@ -271,6 +271,21 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
   };
 };
 
+export const inspectArrivalWorkspaceRecord = (order: ArrivalOrder, moduleId: string, recordId: string): {
+  moduleExists: boolean;
+  recordExists: boolean;
+  operatorEditable: boolean;
+} => {
+  const starter = starterPlanForArrival(order);
+  const section = starter?.sections.find((candidate) => candidate.sectionId === moduleId);
+  const item = section?.items.find((candidate) => candidate.itemId === recordId);
+  return {
+    moduleExists: Boolean(section),
+    recordExists: Boolean(item),
+    operatorEditable: Boolean(item && ["starter", "working"].includes(item.source) && starterItemIsProvisional(item)),
+  };
+};
+
 type FlatPlanFact = { path: string[]; label: string; value: unknown; valueKey: string; valueParent: Record<string, unknown> };
 
 const flattenPlanFacts = (value: Record<string, unknown>, path: string[] = []): FlatPlanFact[] => Object.entries(value).flatMap(([key, child]) => {
@@ -663,7 +678,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
   if (interpretation?.complete || editableWorkspace) seedRoughPlan(family, order, sectionItems, addItem);
-  const operatorWorkspaceInput = (input: ArrivalInput): boolean => input.sourceSurface === "codex" && ["option_", "module_"].some((prefix) => safePayloadText(input.payload, "workspaceOperation").startsWith(prefix));
+  const operatorWorkspaceInput = (input: ArrivalInput): boolean => input.sourceSurface === "codex" && ["record_", "option_", "module_"].some((prefix) => safePayloadText(input.payload, "workspaceOperation").startsWith(prefix));
   const humanInputsAfterInterpretation = laterHumanInputs.filter((input) => !operatorWorkspaceInput(input));
   const workspaceInputs = order.inputs.filter((input) => safePayloadText(input.payload, "workspaceOperation"));
   const presentationInputs = [...workspaceInputs, ...humanInputsAfterInterpretation.filter((input) => !safePayloadText(input.payload, "workspaceOperation"))];
@@ -714,6 +729,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
         return;
       }
       if (operation === "add") addItem(sectionId, { itemId: recordId || `human_${index}`, label: safePayloadText(input.payload, "label") || "Plan item", fields: safeFields(input.payload.fields), source: "human" });
+      if (operation === "record_add") addItem(sectionId, { itemId: recordId || `working_${index}`, label: safePayloadText(input.payload, "label") || "Plan item", fields: { ...safeFields(input.payload.fields), provisional: true }, source: "working" });
       if (operation === "option_add") addOption(sectionId, { itemId: recordId || `option_${index}`, label: safePayloadText(input.payload, "label") || "Option", fields: safeFields(input.payload.fields), source: input.payload.optionSource === "codex" ? "working" : "human", ...(safePayloadText(input.payload, "parentRecordId") ? { parentRecordId: safePayloadText(input.payload, "parentRecordId") } : {}) });
       if (operation === "option_update") {
         const option = options?.find((candidate) => candidate.itemId === recordId);
@@ -735,6 +751,18 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       if (operation === "update") {
         const item = items.find((candidate) => candidate.itemId === recordId);
         if (item) { item.fields = { ...item.fields, ...safeFields(input.payload.fields) }; item.label = String(item.fields.title || item.label); item.source = "human"; }
+      }
+      if (operation === "record_update") {
+        const item = items.find((candidate) => candidate.itemId === recordId);
+        if (item && ["starter", "working"].includes(item.source) && starterItemIsProvisional(item)) {
+          item.fields = { ...item.fields, ...safeFields(input.payload.fields), provisional: true };
+          item.label = String(item.fields.title || item.label);
+          item.source = "working";
+        }
+      }
+      if (operation === "record_delete") {
+        const item = items.find((candidate) => candidate.itemId === recordId);
+        if (item && ["starter", "working"].includes(item.source) && starterItemIsProvisional(item)) sectionItems.set(sectionId, items.filter((candidate) => candidate.itemId !== recordId));
       }
       if (operation === "delete") sectionItems.set(sectionId, items.filter((candidate) => candidate.itemId !== recordId));
       if (operation === "toggle") {

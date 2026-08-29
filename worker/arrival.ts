@@ -12,6 +12,7 @@ import type {
   ArrivalSourceSurface,
   ArrivalStatus,
 } from "../src/arrival.js";
+import { inspectArrivalWorkspaceRecord } from "../src/arrival-presentation.js";
 import { ensureAuthenticatedTenant, type D1Database } from "./accepted-truth.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -52,6 +53,7 @@ const isArrivalDraftReady = (status: ArrivalStatus | string): boolean => status 
 const sourceSurfaces = new Set<ArrivalSourceSurface>(["site", "codex", "inline"]);
 const inputKinds = new Set<ArrivalInputKind>(["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"]);
 const workspaceOptionOperations = new Set(["add", "update", "delete"]);
+const workspaceRecordOperations = new Set(["add", "update", "delete"]);
 const workspaceModuleOperations = new Set(["add", "update", "delete"]);
 const workspaceModuleVariants = new Set(["cards", "checklist", "calendar"]);
 const workspaceFieldTypes = new Set(["text", "url", "date", "time", "number", "textarea", "select"]);
@@ -330,6 +332,37 @@ const saveWorkspaceOption = async (db: D1Database, scopeId: string, order: Arriv
   return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_option_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_OPTION_SAVED");
 };
 
+const saveWorkspaceRecord = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
+  const expectedVersion = Number(body.expectedVersion);
+  const operation = String(body.operation ?? "");
+  const moduleId = String(body.moduleId ?? "");
+  const recordId = String(body.recordId ?? "");
+  const label = String(body.label ?? "").trim();
+  const rawFields = asRecord(body.fields);
+  const fields = Object.fromEntries(Object.entries(rawFields).filter((entry): entry is [string, string | boolean] => typeof entry[1] === "string" || typeof entry[1] === "boolean"));
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return errorResponse(422, "ORDER_VERSION_INVALID", "An exact positive order version is required.");
+  if (order.version !== expectedVersion) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: order.version, currentChecksum: order.checksum, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409);
+  if (!workspaceRecordOperations.has(operation)) return errorResponse(422, "WORKSPACE_RECORD_OPERATION_INVALID", "The record operation must be add, update, or delete.");
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(moduleId) || !/^[a-zA-Z0-9_-]{1,160}$/.test(recordId)) return errorResponse(422, "WORKSPACE_RECORD_ID_INVALID", "The module and record identities must be bounded stable identifiers.");
+  if (operation === "add" && (!label || label.length > 200 || !String(fields.title ?? "").trim())) return errorResponse(422, "WORKSPACE_RECORD_INVALID", "A new rough-plan record requires a bounded label and title.");
+  if (operation !== "delete" && (!Object.keys(fields).length || Object.keys(fields).length > 40 || stableSerialize(fields).length > 30_000)) return errorResponse(422, "WORKSPACE_RECORD_FIELDS_INVALID", "Record fields must be a bounded set of planning values.");
+  const target = inspectArrivalWorkspaceRecord(order, moduleId, recordId);
+  if (!target.moduleExists) return errorResponse(404, "WORKSPACE_RECORD_MODULE_NOT_FOUND", "The exact editable workspace section was not found.");
+  if (operation === "add" && target.recordExists) return errorResponse(409, "WORKSPACE_RECORD_ID_CONFLICT", "That workspace record identity already exists.");
+  if (operation !== "add" && (!target.recordExists || !target.operatorEditable)) return errorResponse(409, "WORKSPACE_RECORD_NOT_OPERATOR_EDITABLE", "Codex may only change a provisional rough-plan record; settled human facts remain human-controlled.");
+  const createdAt = new Date().toISOString();
+  const payload: JsonRecord = {
+    workspaceOperation: `record_${operation}`,
+    moduleId,
+    recordId,
+    recordSource: "codex",
+    ...(label ? { label } : {}),
+    ...(operation !== "delete" ? { fields: { ...fields, provisional: true } } : {}),
+  };
+  const input: ArrivalInput = { inputId: `arrival_record_${order.orderId}_${expectedVersion + 1}`, kind: "detail", payload, sourceSurface: "codex", createdAt };
+  return mutateOrder(db, scopeId, order, expectedVersion, { inputs: [...order.inputs, input] }, { eventType: "operator_record_saved", actor: "codex", sourceSurface: "codex", payload: { input } }, "ARRIVAL_WORKSPACE_RECORD_SAVED");
+};
+
 const saveWorkspaceModule = async (db: D1Database, scopeId: string, order: ArrivalOrder, body: JsonRecord): Promise<Response> => {
   const expectedVersion = Number(body.expectedVersion);
   const operation = String(body.operation ?? "");
@@ -550,6 +583,7 @@ export const handleArrivalRequest = async (request: Request, db: D1Database): Pr
     if (request.method !== "POST") return errorResponse(405, "METHOD_NOT_ALLOWED", "Unsupported arrival operation.");
     const body = await parseJson(request);
     if (operation === "input") return appendInput(db, scopeId, order, body);
+    if (operation === "record") return saveWorkspaceRecord(db, scopeId, order, body);
     if (operation === "option") return saveWorkspaceOption(db, scopeId, order, body);
     if (operation === "module") return saveWorkspaceModule(db, scopeId, order, body);
     if (operation === "checkpoint") return checkpoint(db, scopeId, order, body);

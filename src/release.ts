@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "collapsed-section-context-v142",
+  build: "chef-workspace-records-v143",
 } as const;

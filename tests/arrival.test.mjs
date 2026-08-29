@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryArrivalRepository } from "../dist-test/src/arrival.js";
+import { starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 import { MemoryStorage, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
@@ -122,6 +123,67 @@ test("Codex workspace options are non-authoritative operator work and never beco
   assert.equal(saved.order.inputs.at(-1).payload.parentRecordId, "arrival_flight");
 });
 
+test("Codex can develop provisional rough-plan records without taking human authority", async () => {
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({
+    idempotencyKey: "record-provenance-0001",
+    rawOutcome: "Plan a dinner party at home for 10 people on Saturday 17 October 2026 with an AUD 500 budget.",
+    structured: { planningMode: "codex" },
+    attachments: [],
+    sourceSurface: "site",
+  });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: created.order.version });
+  const schedule = starterPlanForArrival(checkpoint.order).sections.find((section) => section.sectionId === "schedule");
+  const target = schedule.items.find((item) => item.source === "starter");
+  const updated = await arrivals.saveWorkspaceRecord({
+    orderId: checkpoint.order.orderId,
+    expectedVersion: checkpoint.order.version,
+    operation: "update",
+    moduleId: "schedule",
+    recordId: target.itemId,
+    fields: { title: "Shared cooking with wine", startTime: "16:30", provisional: false },
+  });
+  assert.equal(updated.code, "ARRIVAL_WORKSPACE_RECORD_SAVED");
+  assert.equal(updated.acceptedStateChanged, false);
+  assert.equal(updated.orientation.unprocessedHumanInputCount, 0);
+  assert.equal(updated.orientation.delta.at(-1).eventType, "operator_record_saved");
+  assert.equal(updated.orientation.delta.at(-1).actor, "codex");
+  assert.equal(updated.order.inputs.at(-1).payload.workspaceOperation, "record_update");
+  assert.equal(updated.order.inputs.at(-1).payload.fields.provisional, true);
+  const developed = starterPlanForArrival(updated.order).sections.find((section) => section.sectionId === "schedule").items.find((item) => item.itemId === target.itemId);
+  assert.equal(developed.source, "working");
+  assert.equal(developed.fields.title, "Shared cooking with wine");
+  assert.equal(developed.fields.provisional, true);
+
+  const stale = await arrivals.saveWorkspaceRecord({
+    orderId: updated.order.orderId,
+    expectedVersion: checkpoint.order.version,
+    operation: "update",
+    moduleId: "schedule",
+    recordId: target.itemId,
+    fields: { title: "Stale work" },
+  });
+  assert.equal(stale.code, "ORDER_VERSION_CONFLICT");
+
+  const humanSettled = await arrivals.appendInput({
+    orderId: updated.order.orderId,
+    expectedVersion: updated.order.version,
+    kind: "correction",
+    payload: { workspaceOperation: "update", moduleId: "schedule", recordId: target.itemId, fields: { title: "Guests arrive", provisional: false } },
+    sourceSurface: "site",
+  });
+  const refused = await arrivals.saveWorkspaceRecord({
+    orderId: humanSettled.order.orderId,
+    expectedVersion: humanSettled.order.version,
+    operation: "update",
+    moduleId: "schedule",
+    recordId: target.itemId,
+    fields: { title: "Codex overwrite attempt" },
+  });
+  assert.equal(refused.code, "WORKSPACE_RECORD_NOT_OPERATOR_EDITABLE");
+  assert.equal(refused.acceptedStateChanged, false);
+});
+
 test("Codex specialist sections are bounded operator work and remain outside human authority", async () => {
   const arrivals = new MemoryArrivalRepository();
   const created = await arrivals.create({ idempotencyKey: "module-provenance-0001", rawOutcome: "Prepare for a job interview.", structured: {}, attachments: [], sourceSurface: "site" });
@@ -230,14 +292,14 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
   const inventory = await adapter.register();
   assert.equal(inventory.length, 11);
-  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_open_arrival", "finite_reconcile_arrival", "finite_checkpoint_arrival", "finite_stage_clarification", "finite_stage_interpretation"]) assert(host.tools.has(name));
+  for (const name of ["finite_enter_kitchen", "finite_open_toolset", "finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_record", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"]) assert(host.tools.has(name));
   assert.equal(host.tools.has("finite_review_arrival_interpretation"), false);
   const created = await host.execute("finite_create_arrival_order", { idempotencyKey: "webmcp-arrival-0001", rawOutcome: "Help me make a finite plan." });
   assert.equal(created.code, "ARRIVAL_ORDER_CREATED");
   assert.equal(created.order.status, "waiting_for_codex");
   assert.equal(created.acceptedStateChanged, false);
   assert.equal(created.operationProof.toolName, "finite_create_arrival_order");
-  assert.equal((await host.execute("finite_open_arrival", {})).orientation.exactOrderChecksum, created.order.checksum);
+  assert.equal((await arrivals.open()).orientation.exactOrderChecksum, created.order.checksum);
 
   const entered = await host.execute("finite_enter_kitchen", {
     orderId: created.order.orderId,
@@ -277,6 +339,9 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   const missing = await host.execute("finite_enter_kitchen", { orderId: "arrival_ffffffffffffffff" });
   assert.equal(missing.code, "HANDOFF_ORDER_NOT_FOUND");
   assert.equal(missing.acceptedStateChanged, false);
+  const arrivalTools = await host.execute("finite_open_toolset", { group: "arrival" });
+  assert.equal(arrivalTools.code, "TOOLSET_READY");
+  assert.equal(arrivalTools.advertisedTools.includes("finite_save_workspace_record"), true);
 });
 
 test("arrival API refuses missing identity and cross-origin writes before touching D1", async () => {

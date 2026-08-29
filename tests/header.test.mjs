@@ -328,6 +328,8 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /data-action="open-related-record"/);
   assert.match(source, /Live plan roll-up/);
   assert.match(source, /Automatically summed from/);
+  assert.match(source, /Budget allocation/);
+  assert.match(source, /starter\.family === "travel" \? travelBudgetInsight : adaptiveBudgetInsight/);
   assert.match(styles, /\.starter-calendar__filters/);
   assert.match(styles, /\.starter-record__relationships/);
   assert.match(styles, /\.starter-cost-rollup/);
@@ -348,6 +350,13 @@ test("arrival creation keeps the typed starting point in place while persistence
   assert.match(submit, /submitButton\.textContent = "Saving your starting point…"/);
   assert.match(submit, /Your starting point is still here so you can try again\./);
   assert.doesNotMatch(submit.slice(0, submit.indexOf("arrivalRepository\.create")), /await render\(\)/);
+});
+
+test("workspace saves keep the edited form visible until the durable write returns", () => {
+  const save = source.slice(source.indexOf("const saveWorkspaceMutation"), source.indexOf("const addWorkspaceRecord"));
+  assert.match(save, /root\?\.setAttribute\("aria-busy", "true"\)/);
+  assert.doesNotMatch(save.slice(0, save.indexOf("arrivalRepository\.appendInput")), /await render\(\)/);
+  assert.match(save, /root\?\.removeAttribute\("aria-busy"\)/);
 });
 
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
