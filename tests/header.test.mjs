@@ -362,6 +362,9 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.doesNotMatch(source, /const renderFollowCodexButton/);
   assert.doesNotMatch(source, />Follow \$\{escapeHtml\(agenticName\(\)\)\}</);
   assert.match(source, /class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" \$\{followCodexEnabled \? "checked" : ""\}/);
+  assert.match(source, /class="codex-handoff-choice-note codex-handoff-choice-note--codex" data-codex-handoff-status>Copies one introduction for your/);
+  assert.match(source, /class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable/);
+  assert.doesNotMatch(source, /data-action="copy-codex-handoff">[^<]+<\/button>\s*<small data-codex-handoff-status/);
   assert.match(source, /Let \$\{escapeHtml\(agenticName\(\)\)\} guide this view/);
   assert.match(source, /scopedStorage\.getItem\("finite-plan\.follow-codex"\) === "true"/);
   assert.match(source, /FOLLOW_CODEX_DISABLED/);
@@ -374,6 +377,8 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.codex-handoff-guidance \{ grid-column:1\/-1; display:grid;/);
+  assert.match(styles, /\.codex-handoff-choice \{ display:grid; grid-template-rows:auto auto 1fr auto;/);
+  assert.match(styles, /\.codex-handoff-choice-note \{/);
   assert.doesNotMatch(styles, /\.follow-codex-toggle/);
 });
 

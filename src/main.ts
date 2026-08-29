@@ -1018,13 +1018,13 @@ const renderCodexHandoffDialog = (): string => {
         <section class="codex-handoff-choice codex-handoff-choice--codex">
           <span>With ${escapeHtml(agenticName())}</span><strong>Develop the rough plan</strong><p>${escapeHtml(handoff.detail)}</p>
           <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
-          <small data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
           <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
           <button type="button" class="button button--secondary" data-action="continue-arrival-manually">${manualNeedsTakeover ? "Edit manually for now" : "Continue without Codex"}</button>
-          <small>Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
         </section>
+        <small class="codex-handoff-choice-note codex-handoff-choice-note--codex" data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
+        <small class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
         <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
       </div>
       <details class="codex-handoff-advanced"><summary>What will be copied?</summary><label class="codex-handoff-prompt"><span>Finite plan handoff</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
