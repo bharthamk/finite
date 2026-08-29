@@ -275,6 +275,7 @@ export const inspectArrivalWorkspaceRecord = (order: ArrivalOrder, moduleId: str
   moduleExists: boolean;
   recordExists: boolean;
   operatorEditable: boolean;
+  allowedFieldIds: string[];
 } => {
   const starter = starterPlanForArrival(order);
   const section = starter?.sections.find((candidate) => candidate.sectionId === moduleId);
@@ -283,6 +284,7 @@ export const inspectArrivalWorkspaceRecord = (order: ArrivalOrder, moduleId: str
     moduleExists: Boolean(section),
     recordExists: Boolean(item),
     operatorEditable: Boolean(item && ["starter", "working"].includes(item.source) && starterItemIsProvisional(item)),
+    allowedFieldIds: section?.fields.map((field) => field.fieldId) ?? [],
   };
 };
 

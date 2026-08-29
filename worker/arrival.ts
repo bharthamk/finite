@@ -350,6 +350,8 @@ const saveWorkspaceRecord = async (db: D1Database, scopeId: string, order: Arriv
   if (!target.moduleExists) return errorResponse(404, "WORKSPACE_RECORD_MODULE_NOT_FOUND", "The exact editable workspace section was not found.");
   if (operation === "add" && target.recordExists) return errorResponse(409, "WORKSPACE_RECORD_ID_CONFLICT", "That workspace record identity already exists.");
   if (operation !== "add" && (!target.recordExists || !target.operatorEditable)) return errorResponse(409, "WORKSPACE_RECORD_NOT_OPERATOR_EDITABLE", "Codex may only change a provisional rough-plan record; settled human facts remain human-controlled.");
+  const unknownFields = Object.keys(fields).filter((fieldId) => fieldId !== "provisional" && !target.allowedFieldIds.includes(fieldId));
+  if (unknownFields.length) return errorResponse(422, "WORKSPACE_RECORD_FIELD_INVALID", `The exact section does not expose: ${unknownFields.join(", ")}.`);
   const createdAt = new Date().toISOString();
   const payload: JsonRecord = {
     workspaceOperation: `record_${operation}`,

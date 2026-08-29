@@ -332,6 +332,8 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     if (!target.moduleExists) return { ok: false, code: "WORKSPACE_RECORD_MODULE_NOT_FOUND", message: "The exact editable workspace section was not found.", acceptedStateChanged: false };
     if (input.operation === "add" && target.recordExists) return { ok: false, code: "WORKSPACE_RECORD_ID_CONFLICT", message: "That workspace record identity already exists.", acceptedStateChanged: false };
     if (input.operation !== "add" && (!target.recordExists || !target.operatorEditable)) return { ok: false, code: "WORKSPACE_RECORD_NOT_OPERATOR_EDITABLE", message: "Codex may only change a provisional rough-plan record; settled human facts remain human-controlled.", acceptedStateChanged: false };
+    const unknownFields = Object.keys(input.fields ?? {}).filter((fieldId) => fieldId !== "provisional" && !target.allowedFieldIds.includes(fieldId));
+    if (unknownFields.length) return { ok: false, code: "WORKSPACE_RECORD_FIELD_INVALID", message: `The exact section does not expose: ${unknownFields.join(", ")}.`, acceptedStateChanged: false };
     const createdAt = this.now().toISOString();
     const fields = input.operation === "delete" ? undefined : { ...clone(input.fields ?? {}), provisional: true };
     const payload: Record<string, unknown> = {

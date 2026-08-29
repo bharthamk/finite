@@ -165,6 +165,16 @@ test("Codex can develop provisional rough-plan records without taking human auth
   });
   assert.equal(stale.code, "ORDER_VERSION_CONFLICT");
 
+  const unknownField = await arrivals.saveWorkspaceRecord({
+    orderId: updated.order.orderId,
+    expectedVersion: updated.order.version,
+    operation: "update",
+    moduleId: "schedule",
+    recordId: target.itemId,
+    fields: { title: "Still safe", secretInstruction: "not a calendar field" },
+  });
+  assert.equal(unknownField.code, "WORKSPACE_RECORD_FIELD_INVALID");
+
   const humanSettled = await arrivals.appendInput({
     orderId: updated.order.orderId,
     expectedVersion: updated.order.version,
