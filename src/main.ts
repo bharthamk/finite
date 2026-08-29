@@ -9,7 +9,7 @@ import { HttpConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
-import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
@@ -999,20 +999,53 @@ const renderCodexHandoffButton = (): string => {
 
 const renderCodexHandoffDialog = (): string => {
   const handoff = currentCodexHandoff();
+  const order = currentArrival();
+  const manualNeedsTakeover = Boolean(order && !starterPlanForArrival(order));
   return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
     <form method="dialog" class="codex-handoff-sheet">
       <header>
-        <div><p class="eyebrow">Continue in ${escapeHtml(agenticName())}</p><h2 id="codex_handoff_title">${escapeHtml(handoff.title)}</h2></div>
+        <div><p class="eyebrow">${order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">How do you want to continue?</h2></div>
         <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
-      <p class="codex-handoff-lede">${escapeHtml(handoff.detail)}</p>
-      <div class="codex-handoff-actions">
-        <button type="button" class="button" data-action="copy-codex-handoff">Copy and continue in ${escapeHtml(agenticName())}</button>
-        <p data-codex-handoff-status>Copy this once, then paste it into your ${escapeHtml(agenticName())} task.</p>
+      <p class="codex-handoff-lede">Bring ${escapeHtml(agenticName())} in to develop the plan, or open the unprocessed rough plan and edit it yourself. You can bring ${escapeHtml(agenticName())} in later.</p>
+      <div class="codex-handoff-choices" aria-label="Ways to continue">
+        <section class="codex-handoff-choice codex-handoff-choice--codex">
+          <span>With ${escapeHtml(agenticName())}</span><strong>Develop the rough plan</strong><p>${escapeHtml(handoff.detail)}</p>
+          <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
+          <small data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
+        </section>
+        <section class="codex-handoff-choice codex-handoff-choice--manual">
+          <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
+          <button type="button" class="button button--secondary" data-action="continue-arrival-manually">${manualNeedsTakeover ? "Edit manually for now" : "Continue without Codex"}</button>
+          <small>Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
+        </section>
       </div>
       <details class="codex-handoff-advanced"><summary>What will be copied?</summary><label class="codex-handoff-prompt"><span>Finite plan handoff</span><textarea readonly spellcheck="false" data-codex-handoff-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
     </form>
   </dialog>`;
+};
+
+const continueArrivalManually = async (): Promise<void> => {
+  const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
+  const order = currentArrival();
+  dialog?.close();
+  if (!order || starterPlanForArrival(order)) {
+    announce("Keep editing the plan here. You can bring in Codex whenever you want.");
+    return;
+  }
+  if (busy) return;
+  busy = true;
+  announce("Opening your editable rough plan…");
+  arrivalResult = await arrivalRepository.appendInput({
+    orderId: order.orderId,
+    expectedVersion: order.version,
+    kind: "preference",
+    payload: { workspaceOperation: "manual_takeover", planningMode: "manual" },
+    sourceSurface: modelContext ? "inline" : "site",
+  });
+  busy = false;
+  announce(arrivalResult.ok ? "Your editable rough plan is open. Codex has not processed it." : `The rough plan could not be opened: ${arrivalResult.code}`);
+  await render();
 };
 
 const bindCodexHandoffInteractions = (): void => {
@@ -1036,6 +1069,7 @@ const bindCodexHandoffInteractions = (): void => {
       announce("The handoff prompt is selected and ready to copy.");
     }
   });
+  root.querySelector<HTMLButtonElement>("[data-action='continue-arrival-manually']")?.addEventListener("click", () => { void continueArrivalManually(); });
 };
 
 const readShareDraft = (form: HTMLFormElement): typeof shareDraft => {
@@ -1331,7 +1365,7 @@ const renderCalendarMonths = (
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter) return "";
-  const manual = order.structured.planningMode === "manual" && !order.interpretation?.complete;
+  const manual = arrivalUsesManualWorkspace(order) && !order.interpretation?.complete;
   const { overview } = starter;
   const limit = starterAmount(overview.totalBudget);
   const currency = overview.currency;
@@ -1649,7 +1683,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
 };
 
 const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
-  if (order.status === "waiting_for_codex" && order.structured.planningMode === "manual" && !order.interpretation) return { label: "Manual plan", title: "Your planning workspace is ready.", detail: `Build the whole plan yourself, or bring in ${agenticName()} whenever useful.` };
+  if (order.status === "waiting_for_codex" && arrivalUsesManualWorkspace(order) && !order.interpretation) return { label: "Manual plan", title: "Your planning workspace is ready.", detail: `Build the whole plan yourself, or bring in ${agenticName()} whenever useful.` };
   if (order.status === "waiting_for_codex" && order.interpretation?.complete) return { label: "Draft updated", title: "Your starter plan includes your latest change.", detail: `Keep shaping it here or ask ${agenticName()} to develop the updated draft when you are ready.` };
   if (order.status === "waiting_for_codex") return modelContext
     ? { label: `Saved · ready for ${agenticName()}`, title: "Your starting point is saved.", detail: `Add anything else whenever you like. ${agenticName()} will work from everything you have shared.` }
@@ -1669,7 +1703,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const question = order?.pendingClarification;
   const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
   const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
-  const inputTrail = order?.inputs.slice(-5).reverse() ?? [];
+  const inputTrail = order?.inputs.filter((input) => !arrivalInputIsWorkflowOnly(input)).slice(-5).reverse() ?? [];
   const planDraftMarkup = order ? renderPlanDraft() : "";
   const starterPlanMarkup = order ? renderStarterPlan(order) : "";
   const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup);

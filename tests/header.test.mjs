@@ -179,6 +179,15 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /control\.disabled = !selected \|\| busy/);
   assert.match(source, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
   assert.match(styles, /\.arrival-start-panel\[hidden\] \{ display:none; \}/);
+  assert.match(source, /How do you want to continue\?/);
+  assert.match(source, /Continue in \$\{escapeHtml\(agenticName\(\)\)\}/);
+  assert.match(source, /Edit manually for now/);
+  assert.match(source, /Codex has not processed it\./);
+  assert.match(source, /workspaceOperation: "manual_takeover"/);
+  assert.match(source, /arrivalUsesManualWorkspace\(order\)/);
+  assert.match(source, /arrivalInputIsWorkflowOnly\(input\)/);
+  assert.doesNotMatch(source, /Copy and continue in \$\{escapeHtml\(agenticName\(\)\)\}/);
+  assert.match(styles, /\.codex-handoff-choices \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
   assert.doesNotMatch(source, /Next step \/ review your brief/);

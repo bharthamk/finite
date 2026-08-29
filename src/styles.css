@@ -290,8 +290,14 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .codex-handoff-steps p { margin:22px 0 0; font-weight:600; line-height:1.35; }
 .codex-handoff-prompt { display:grid; gap:10px; }
 .codex-handoff-prompt textarea { width:100%; min-height:245px; resize:vertical; border:1px solid var(--ink); border-radius:0; padding:18px; color:#d8e3df; background:var(--deep); font:400 .72rem/1.6 "DM Mono",monospace; }
-.codex-handoff-actions { display:grid; grid-template-columns:minmax(240px,360px) 1fr; gap:20px; align-items:center; margin-top:16px; }
-.codex-handoff-actions p { margin:0; color:var(--muted); font-size:.78rem; line-height:1.5; }
+.codex-handoff-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:30px 0 22px; }
+.codex-handoff-choice { display:grid; grid-template-rows:auto auto 1fr auto auto; gap:10px; min-width:0; padding:24px; border:1px solid var(--ink); background:var(--paper); }
+.codex-handoff-choice--codex { background:color-mix(in srgb,var(--signal) 38%,var(--paper)); }
+.codex-handoff-choice>span { color:var(--accent); font:500 .64rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.codex-handoff-choice>strong { font-size:1.08rem; letter-spacing:-.025em; }
+.codex-handoff-choice>p { margin:0; color:var(--muted); font-size:.82rem; line-height:1.55; }
+.codex-handoff-choice>button { width:100%; margin-top:10px; text-align:left; }
+.codex-handoff-choice>small { color:var(--muted); font-size:.7rem; line-height:1.45; }
 
 .entry-shell { min-height:100vh; width:100%; display:grid; place-items:center; padding:clamp(24px,6vw,80px); background:radial-gradient(circle at 82% 18%,var(--accent-soft),transparent 28%),var(--paper); }
 .entry-card { width:min(1040px,100%); padding:clamp(30px,6vw,78px); border:1px solid var(--ink); background:var(--panel); box-shadow:18px 18px 0 var(--deep); }
@@ -1661,7 +1667,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .codex-handoff-steps li { min-height:auto; }
   .codex-handoff-steps li+li { border-left:0; border-top:1px solid var(--line); }
   .codex-handoff-steps p { margin-top:10px; }
-  .codex-handoff-actions { grid-template-columns:1fr; }
+  .codex-handoff-choices { grid-template-columns:1fr; }
   .codex-handoff-prompt textarea { min-height:300px; }
 }
 

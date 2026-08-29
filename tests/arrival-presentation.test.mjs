@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 
 test("arrival interpretation renders consumer language without raw JSON or internal paths", () => {
   const rendered = renderHumanValue({
@@ -289,6 +289,21 @@ test("manual mode opens the full workspace without an interpretation and keeps s
   assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items[0].fields.location, "Berlin");
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "itinerary").comments, [{ commentId: "comment_1", text: "Move this after Munich", forCodex: false }]);
   assert.deepEqual(starter.sections.find((section) => section.sectionId === "money").comments, [{ commentId: "comment_2", text: "Research a safer daily allowance", forCodex: true }]);
+});
+
+test("a Codex-first order can cross into the manual workspace without claiming Codex processed it", () => {
+  const takeover = { inputId: "arrival_input_arrival_takeover_2", kind: "preference", payload: { workspaceOperation: "manual_takeover", planningMode: "manual" }, sourceSurface: "site", createdAt: "2026-08-29T00:00:01.000Z" };
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_takeover", version: 2, status: "waiting_for_codex", rawOutcome: "Plan a weekend trip to Hobart for two people.", structured: { planningMode: "codex" }, attachments: [], pendingClarification: null,
+    inputs: [takeover], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-29T00:00:00.000Z", updatedAt: "2026-08-29T00:00:01.000Z", checksum: "f".repeat(64),
+  };
+  assert.equal(arrivalUsesManualWorkspace(order), true);
+  assert.equal(arrivalInputIsWorkflowOnly(takeover), true);
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.family, "travel");
+  assert.equal(order.interpretation, null);
+  assert.equal(starter.interpretationIsCurrent, true);
+  assert.equal(starter.laterHumanInputs.length, 0);
 });
 
 test("custom sections survive human and Codex creation, accept normal records, and can be removed", () => {

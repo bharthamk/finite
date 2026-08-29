@@ -476,13 +476,18 @@ const inputVersion = (input: ArrivalInput): number => {
   return match ? Number(match[1]) : 0;
 };
 
+export const arrivalUsesManualWorkspace = (order: ArrivalOrder): boolean => order.structured.planningMode === "manual"
+  || order.inputs.some((input) => input.payload.workspaceOperation === "manual_takeover");
+
+export const arrivalInputIsWorkflowOnly = (input: ArrivalInput): boolean => input.payload.workspaceOperation === "manual_takeover";
+
 export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
   const interpretation = order.interpretation;
-  const manual = order.structured.planningMode === "manual";
+  const manual = arrivalUsesManualWorkspace(order);
   if (!interpretation?.complete && !manual) return null;
   const family = starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
-  const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion);
+  const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
   const openItems = [...new Set([
     ...(interpretation?.dependencies ?? []).filter((dependency) => dependency.status === "open").map((dependency) => dependency.detail?.trim() || dependency.title.trim()),
     ...(interpretation?.missing ?? []).map((item) => item.trim()),
