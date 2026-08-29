@@ -504,6 +504,11 @@ test("Managing starts with one brief and prioritises the next step", () => {
   assert.match(styles, /\.hero \{ padding:32px 0 28px;/);
   assert.match(source, /<details class="plan-input-items/);
   assert.match(source, /Saved plan information/);
+  assert.match(source, /const renderPendingPlanPriority = \(\): string =>/);
+  assert.match(source, /<p class="eyebrow">Codex priority<\/p>/);
+  assert.match(source, /Visible working input · accepted numbers and constraints stay unchanged/);
+  assert.match(source, /\$\{renderPendingPlanPriority\(\)\}\s+\$\{renderNextStep\(manifest\)\}/);
+  assert.match(styles, /\.plan-priority-update \{/);
   assert.match(source, /\$\{renderPlanWork\(\)\}\s+\$\{renderPlanInputItems\("general"\)\}/);
   const managingHero = source.match(/<section class="hero">([\s\S]*?)<\/section>\s+\$\{message/);
   assert.ok(managingHero);

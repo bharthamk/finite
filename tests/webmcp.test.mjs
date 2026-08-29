@@ -127,6 +127,65 @@ test("kitchen entry prioritises new human source material without asking for ano
   assert.equal(JSON.stringify(read).length <= 1500, true);
 });
 
+test("a pending current-plan update outranks attachment maintenance after reload", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "event");
+  const host = new MemoryModelContext();
+  const pending = {
+    inputId: "plan_input_live_headcount",
+    planId: runtime.kernel.profile.planId,
+    planRevision: runtime.kernel.revision,
+    kind: "update",
+    mode: "codex",
+    section: "boundaries",
+    contextId: "guest_check",
+    contextLabel: "Confirm guests",
+    message: "Actual attendance is now 12; two unplanned guests are already present.",
+    status: "open",
+    sourceSurface: "codex",
+    createdAt: "2026-08-30T00:01:00.000Z",
+    handledAt: null,
+    baseCurrent: true,
+  };
+  const attachment = {
+    attachmentId: "attachment_old_notes",
+    planId: runtime.kernel.profile.planId,
+    planRevision: runtime.kernel.revision,
+    section: "general",
+    contextId: null,
+    contextLabel: null,
+    kind: "note",
+    label: "Older notes",
+    noteText: "Review later",
+    linkUrl: null,
+    fileName: null,
+    contentType: null,
+    sizeBytes: null,
+    contentUrl: null,
+    sourceSurface: "site",
+    attachmentRole: "source",
+    processingStatus: "needs_review",
+    processingSummary: null,
+    derivedRefs: [],
+    processedBy: null,
+    processedAt: null,
+    createdAt: "2026-08-29T00:00:00.000Z",
+    updatedAt: "2026-08-29T00:00:00.000Z",
+    baseCurrent: true,
+  };
+  const planInputs = { list: async () => ({ ok: true, code: "PLAN_INPUTS_LISTED", inputs: [pending], acceptedStateChanged: false }) };
+  const planWork = { list: async () => ({ ok: true, code: "PLAN_WORK_LISTED", checklist: [], attachments: [attachment], acceptedStateChanged: false }) };
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository(), false, undefined, undefined, undefined, undefined, undefined, undefined, planInputs, undefined, planWork);
+  await adapter.register();
+  const entered = await adapter.enterKitchen({ entryIntent: "continue_current" });
+  assert.equal(entered.operatorPacket.nextAction.stage, "plan_input_pending");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_list_plan_inputs");
+  assert.equal(entered.operatorPacket.nextAction.targetId, pending.inputId);
+  assert.equal(entered.operatorPacket.planInputs.pendingCodexCount, 1);
+  assert.equal(entered.operatorPacket.planWork.attentionCount, 1);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].offer, pending.message);
+});
+
 test("production adapter normalizes host input, excludes authority, and replaces contextual tools", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");

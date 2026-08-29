@@ -2834,6 +2834,17 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
   </details>`;
 };
 
+const renderPendingPlanPriority = (): string => {
+  const pending = planInputs.filter((item) => item.mode === "codex" && item.status === "open" && item.baseCurrent);
+  if (!pending.length) return "";
+  const item = pending[0]!;
+  return `<section class="plan-priority-update" aria-labelledby="plan_priority_update_title">
+    <div class="plan-priority-update__status"><p class="eyebrow">Codex priority</p><span>${escapeHtml(planInputKindLabel(item.kind))}</span></div>
+    <div class="plan-priority-update__copy"><h2 id="plan_priority_update_title">${escapeHtml(item.contextLabel ? `New update · ${item.contextLabel}` : "New plan update")}</h2>${renderPlanInputMessage(item.message)}<small>Visible working input · accepted numbers and constraints stay unchanged until a valid route is approved.</small></div>
+    <div class="plan-priority-update__actions">${pending.length > 1 ? `<b>${pending.length} waiting</b>` : ""}<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Change</button><button type="button" data-action="handle-plan-input" data-plan-input-id="${escapeHtml(item.inputId)}">Mark handled</button></div>
+  </section>`;
+};
+
 const checklistFor = (section: PlanInputSection, contextId: string | null = null): ChecklistItem[] => checklistItems.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
 const checklistForStage = (stageId: string): ChecklistItem | null => checklistItems.find((item) => item.sourceRef === `stage:${stageId}`) ?? null;
 const attachmentsFor = (section: PlanInputSection, contextId: string | null = null): PlanAttachment[] => planAttachments.filter((item) => item.section === section && (section !== "timeline" || item.contextId === contextId));
@@ -3427,6 +3438,7 @@ async function render(): Promise<SurfaceManifest> {
         <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan ${pendingBadge("general")}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add or change</button></div>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+      ${renderPendingPlanPriority()}
       ${renderNextStep(manifest)}
       ${renderPlanWork()}
       ${renderPlanInputItems("general")}

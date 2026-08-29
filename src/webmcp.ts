@@ -7,7 +7,7 @@ import { isWaitingArrivalStatus } from "./experience-route.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetRepository, type KitchenResetResult } from "./kitchen-reset.js";
 import { HttpThemeRepository, themeCoreTokenKeys, themeSchema, type ThemeCoreTokens, type ThemeMode, type ThemeRepository, type ThemeResult } from "./theme.js";
 import { HttpSkinRepository, skinSchema, type SkinRecipe, type SkinRepository, type SkinResult } from "./skin.js";
-import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRepository, type PlanInputResult, type PlanInputSection } from "./plan-input.js";
+import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputRepository, type PlanInputResult, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type AttachmentProcessingStatus, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { starterPlanForArrival } from "./arrival-presentation.js";
 
@@ -727,7 +727,7 @@ const operatorPreMutationGate = (): Record<string, unknown> => ({
   copiedHandoffIsNotPlanAuthority: true,
 });
 
-const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, planWork: HttpPlanWorkRepository, input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<ToolResult> => {
+const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, planInputs: PlanInputRepository, planWork: HttpPlanWorkRepository, input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<ToolResult> => {
   const kitchen = await runtime.openKitchen(context);
   if (!kitchen.ok) return kitchen;
 
@@ -830,8 +830,64 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     };
     chefMenu = { ...currentMenu, items: [primary, ...currentItems.slice(1)] };
   }
-  let planWorkPacket: Record<string, unknown> = { status: "not_read", sourceAttachmentCount: 0, attentionCount: 0, attachments: [] };
   const mayPrioritizeAcceptedPlanWork = entryIntent !== "start_new" && Boolean(active?.planId) && (entryIntent === "continue_current" || !orientation || orientation.order.status === "accepted" || orientation.order.status === "closed");
+  let planInputPacket: Record<string, unknown> = { status: "not_read", openCount: 0, pendingCodexCount: 0, items: [] };
+  let pendingPlanInputPriority = false;
+  if (mayPrioritizeAcceptedPlanWork) {
+    try {
+      const listed = await planInputs.list({ planId: String(active!.planId) }, context);
+      if (listed.ok) {
+        const current = listed.inputs.filter((item) => item.status === "open" && item.baseCurrent);
+        const pending = current.filter((item) => item.mode === "codex");
+        planInputPacket = {
+          status: "ready",
+          openCount: current.length,
+          pendingCodexCount: pending.length,
+          items: pending.slice(0, 8).map((item: PlanInputRecord) => ({ inputId: item.inputId, kind: item.kind, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, message: item.message, createdAt: item.createdAt })),
+        };
+        if (pending.length) {
+          const item = pending[0]!;
+          pendingPlanInputPriority = true;
+          nextAction = {
+            actionVersion: "finite-next-action.v1",
+            stage: "plan_input_pending",
+            reason: "A current-plan update is explicitly waiting for Codex and outranks reference maintenance or ordinary execution work.",
+            nextTool: "finite_list_plan_inputs",
+            knownArgs: {},
+            knownArgsComplete: true,
+            derivedArgs: [],
+            missingInputs: [],
+            requiresHuman: false,
+            exactQuestion: null,
+            targetId: item.inputId,
+            authorityPresent: false,
+          };
+          const currentMenu = record(chefMenu);
+          const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
+          chefMenu = {
+            ...currentMenu,
+            items: [{
+              menuItemId: `handle_plan_input_${item.inputId}`,
+              rank: 1,
+              kind: "operator_action",
+              title: item.contextLabel ? `Handle update in ${item.contextLabel}` : `Handle ${item.kind}`,
+              offer: item.message,
+              status: "ready",
+              viability: "not_yet_tested",
+              nextTool: "finite_list_plan_inputs",
+              knownArgs: {},
+              missingInputs: [],
+              tradeoffs: ["The update is working-plan input, not authority to relax constraints or commit external action"],
+              evidence: { status: "available", refs: [item.inputId] },
+            }, ...currentItems.filter((menuItem) => record(menuItem).menuItemId !== `handle_plan_input_${item.inputId}`).slice(0, 3)],
+          };
+        }
+      } else planInputPacket = { status: "unavailable", code: listed.code, openCount: 0, pendingCodexCount: 0, items: [] };
+    } catch (error) {
+      planInputPacket = { status: "unavailable", code: "PLAN_INPUT_READ_FAILED", detail: error instanceof Error ? error.message : String(error), openCount: 0, pendingCodexCount: 0, items: [] };
+    }
+  }
+  let planWorkPacket: Record<string, unknown> = { status: "not_read", sourceAttachmentCount: 0, attentionCount: 0, attachments: [] };
   if (mayPrioritizeAcceptedPlanWork) {
     try {
       const work = await planWork.list(String(active!.planId), context);
@@ -849,7 +905,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
           attentionCount: attention.length,
           attachments: attention.map((item: PlanAttachment) => ({ attachmentId: item.attachmentId, label: item.label, kind: item.kind, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, processingStatus: item.processingStatus })),
         };
-        if (attention.length) {
+        if (attention.length && !pendingPlanInputPriority) {
           const attachment = attention[0]!;
           nextAction = {
             actionVersion: "finite-next-action.v1",
@@ -953,6 +1009,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       openQuestions: arrivalOpenQuestionPacket(orientation),
       humanChanges: arrivalHumanChangesPacket(orientation),
       operatorPhase: arrivalOperatorPhasePacket(orientation),
+      planInputs: planInputPacket,
       planWork: planWorkPacket,
       currency: currencyContract,
       humanReality: humanRealityContract,
@@ -965,8 +1022,8 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   };
 };
 
-const getChefMenu = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, planWork: HttpPlanWorkRepository, input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<ToolResult> => {
-  const entered = await enterKitchen(runtime, arrival, planWork, input, context);
+const getChefMenu = async (runtime: FinitePlanRuntime, arrival: ArrivalRepository, planInputs: PlanInputRepository, planWork: HttpPlanWorkRepository, input: Record<string, unknown>, context: { signal?: AbortSignal } = {}): Promise<ToolResult> => {
+  const entered = await enterKitchen(runtime, arrival, planInputs, planWork, input, context);
   if (!entered.ok) return entered;
   const packet = record(entered.operatorPacket);
   return {
@@ -1077,8 +1134,8 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's guided-view permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, and highlight one bounded named area or exact rough-plan section. This cannot change plan truth, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" }, sectionId: { type: "string", pattern: "^[a-z][a-z0-9_]{0,99}$", maxLength: 100, description: "Exact rough-plan section identity, used only with target priority." } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true, ...(input.sectionId !== undefined ? { sectionId: String(input.sectionId) } : {}) }) }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
-  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted-plan source-work queue, one authoritative next action, and a state-grounded chef menu. New human source material becomes the first operator action without granting authority. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, sinceVersion: { type: "integer", minimum: 0, description: "Cursor returned by operatorPacket.humanChanges.nextSinceVersion when hasMore is true." }, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, planWork, input, context) }),
-  define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It prioritizes new accepted-plan source material, then distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, planWork, input, context) }),
+  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, pending current-plan updates, accepted-plan source-work queue, one authoritative next action, and a state-grounded chef menu. A plan update explicitly waiting for Codex outranks reference maintenance; neither grants authority. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, sinceVersion: { type: "integer", minimum: 0, description: "Cursor returned by operatorPacket.humanChanges.nextSinceVersion when hasMore is true." }, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, planInputs, planWork, input, context) }),
+  define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It prioritizes current-plan updates explicitly waiting for Codex, then source material, and distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, planInputs, planWork, input, context) }),
   define({ name: "finite_create_arrival_order", title: "Capture a human order", description: "Persist the human's requested outcome exactly as supplied from Codex. This creates append-only non-authoritative intake, not a plan, interpretation, or human approval.", inputSchema: objectSchema({ idempotencyKey, rawOutcome: { type: "string", minLength: 1, maxLength: 4000 }, structured: { type: "object" }, attachments: { type: "array", maxItems: 20 } }, ["idempotencyKey", "rawOutcome"]), execute: (input, context) => arrival.create({ idempotencyKey: String(input.idempotencyKey), rawOutcome: String(input.rawOutcome), structured: input.structured && typeof input.structured === "object" && !Array.isArray(input.structured) ? input.structured as Record<string, unknown> : {}, attachments: Array.isArray(input.attachments) ? input.attachments : [], sourceSurface: "codex" }, context) }),
   define({ name: "finite_append_arrival_input", title: "Append human-supplied arrival detail", description: "Append one human-supplied detail, constraint, preference, commitment, answer, evidence reference, or correction against an exact order version. This records provenance and never converts Codex inference into human fact.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, kind: { type: "string", enum: ["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"] }, payload: { type: "object" } }, ["orderId", "expectedVersion", "kind", "payload"]), execute: (input, context) => arrival.appendInput({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), kind: input.kind as ArrivalInputKind, payload: input.payload as Record<string, unknown>, sourceSurface: "codex" }, context) }),
   define({ name: "finite_save_workspace_records", title: "Develop rough-plan items", description: "Atomically add, update, or remove up to twenty-four provisional working items across exact editable rough-plan sections. Every change is validated before one versioned save; if any item is stale, invalid, or human-settled, none of the batch lands.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, changes: { type: "array", minItems: 1, maxItems: 24, items: objectSchema({ operation: { type: "string", enum: ["add", "update", "delete"] }, moduleId: { type: "string", minLength: 1, maxLength: 100, description: "Exact section identity returned by Finite." }, recordId: { type: "string", minLength: 1, maxLength: 160, description: "Stable identity for the new or existing rough-plan record." }, label: { type: "string", maxLength: 200 }, fields: { type: "object", maxProperties: 40, additionalProperties: { type: ["string", "boolean"] }, description: "Only fields exposed by the exact section schema. Finite always forces provisional true." } }, ["operation", "moduleId", "recordId"]) } }, ["orderId", "expectedVersion", "changes"]), execute: (input, context) => arrival.saveWorkspaceRecords({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), changes: Array.isArray(input.changes) ? input.changes.map((change) => { const value = record(change); return { operation: value.operation as "add" | "update" | "delete", moduleId: String(value.moduleId), recordId: String(value.recordId), ...(value.label !== undefined ? { label: String(value.label) } : {}), ...(value.fields && typeof value.fields === "object" && !Array.isArray(value.fields) ? { fields: value.fields as Record<string, string | boolean> } : {}) }; }) : [] }, context) }),
@@ -1673,7 +1730,7 @@ export class FinitePlanWebMCPAdapter {
         let routedResult: ToolResult = result;
         const effectivelyReadOnly = tool.annotations?.readOnlyHint === true || (tool.name === "finite_invoke" && result.dispatchedReadOnly === true);
         if (!cancelled && !kitchenReset && !effectivelyReadOnly && tool.name !== "finite_open_toolset") {
-          const entered = await enterKitchen(this.runtime, this.arrival, this.planWork, { entryIntent: "continue_current" }, context);
+          const entered = await enterKitchen(this.runtime, this.arrival, this.planInputs, this.planWork, { entryIntent: "continue_current" }, context);
           if (entered.ok) {
             const packet = record(entered.operatorPacket);
             routedResult = { ...result, operatorContinuation: { nextAction: packet.nextAction, currency: packet.currency, externalActionLaw: packet.externalActionLaw } };
