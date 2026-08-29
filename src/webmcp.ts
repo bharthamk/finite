@@ -9,6 +9,7 @@ import { HttpThemeRepository, themeCoreTokenKeys, themeSchema, type ThemeCoreTok
 import { HttpSkinRepository, skinSchema, type SkinRecipe, type SkinRepository, type SkinResult } from "./skin.js";
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRepository, type PlanInputResult, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type PlanWorkResult } from "./plan-work.js";
+import { starterPlanForArrival } from "./arrival-presentation.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -299,6 +300,15 @@ const routeRefreshToolNames = new Set([
   "finite_stage_plan_draft", "finite_stage_plan_amendment", "finite_activate_confirmed_plan", "finite_switch_plan", "finite_switch_profile",
 ]);
 
+const arrivalOpenQuestionPacket = (orientation: ArrivalOrientation | null): Record<string, unknown> => {
+  if (!orientation) return { total: 0, firstPriority: null, sections: [] };
+  const starter = starterPlanForArrival(orientation.order);
+  const sections = starter?.sections.filter((section) => section.openQuestions.length).map((section) => ({ sectionId: section.sectionId, label: section.label, count: section.openQuestions.length, questions: section.openQuestions })) ?? [];
+  const safetyFirst = /allerg/i.test(orientation.order.rawOutcome) ? sections.find((section) => section.sectionId === "requirements") : null;
+  const firstPriority = safetyFirst ?? sections[0] ?? null;
+  return { total: sections.reduce((sum, section) => sum + section.count, 0), firstPriority, sections };
+};
+
 const arrivalHumanBoundary = (orientation: ArrivalOrientation): { prompt: string; answerKind: string; fieldPaths: string[]; choices: string[]; reason: string } => {
   const interpretation = orientation.order.interpretation;
   const explicit = interpretation?.nextHumanBoundary;
@@ -480,9 +490,11 @@ const arrivalDraftPreparationContract = (): Record<string, unknown> => ({
 });
 
 const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unknown> => {
+  const openQuestions = arrivalOpenQuestionPacket(orientation);
+  const firstPriority = record(openQuestions.firstPriority);
   if (orientation.unprocessedHumanInputCount > 0) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_draft_preparation", reason: `${orientation.unprocessedHumanInputCount} human-supplied arrival update(s) are ready for Codex to read and develop locally before any sensitive write back to Finite.`,
-    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(),
+    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   if (orientation.order.status === "clarification_required" && orientation.order.pendingClarification) return {
@@ -534,7 +546,7 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
     actionVersion: "finite-next-action.v1", stage: "arrival_draft_preparation", reason: interpretation
       ? `Human input advanced to version ${orientation.latestHumanInputVersion}. Prepare the updated draft locally from canonical human state before proposing a sensitive write.`
       : "The human order and editable rough plan are ready for read-only Codex development.",
-    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(),
+    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
 };
@@ -550,6 +562,8 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
   const basis = orientation
     ? { orderId: orientation.order.orderId, orderVersion: orientation.exactOrderVersion, orderChecksum: orientation.exactOrderChecksum, status: orientation.order.status, latestHumanInputVersion: orientation.latestHumanInputVersion, latestOperatorEventVersion: orientation.latestOperatorEventVersion, interpretationBasedOnVersion: orientation.interpretationBasedOnVersion }
     : { orderId: null, status: "no_arrival" };
+  const openQuestions = arrivalOpenQuestionPacket(orientation);
+  const firstPriority = record(openQuestions.firstPriority);
   if (orientation?.order.status === "clarification_required" && orientation.order.pendingClarification) {
     const question = orientation.order.pendingClarification;
     return { menuVersion: "finite-chef-menu.v1", basis, items: [
@@ -585,7 +599,7 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
   menuVersion: "finite-chef-menu.v1",
   basis,
   items: orientation ? [
-    { menuItemId: "arrival_develop_before_save", rank: 1, kind: "operator_action", title: "Develop what I already entered", offer: "I will read the saved plan, load the matching planning structure, and prepare a concrete draft before asking you to save anything.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), tradeoffs: ["The working draft stays non-authoritative until you choose to save it"], evidence: { status: "available", refs: [] } },
+    { menuItemId: "arrival_develop_before_save", rank: 1, kind: "operator_action", title: "Develop what I already entered", offer: "I will read the saved plan, load the matching planning structure, prepare a concrete draft, and keep the first priority section visible while I work.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total, tradeoffs: ["The working draft stays non-authoritative until you choose to save it"], evidence: { status: "available", refs: [] } },
     { menuItemId: "arrival_research_dependencies", rank: 2, kind: "suggested_route", title: "Check useful dependencies", offer: "I will inspect the evidence rules and research queue without turning results into bookings, commitments, or accepted facts.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_evidence_policy", knownArgs: {}, missingInputs: [], tradeoffs: ["Live research may narrow the draft before saving"], evidence: { status: "not_required", refs: [] } },
     { menuItemId: "arrival_preserve_save_boundary", rank: 3, kind: "operator_action", title: "Keep the save decision meaningful", offer: "I will bring back the concrete draft first, then ask once before sending its specific plan details back to Finite.", status: "blocked", viability: "not_yet_tested", nextTool: null, knownArgs: {}, missingInputs: [{ argument: "prepared_draft", source: "operator", reason: "There is nothing useful to approve before the draft exists." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
   ] : [
@@ -810,6 +824,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       packetVersion: "finite-operator-packet.v1",
       nextAction,
       chefMenu,
+      openQuestions: arrivalOpenQuestionPacket(orientation),
       currency: currencyContract,
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
@@ -864,15 +879,15 @@ const skinDraftSchema = {
 };
 
 export const finiteGuideSurfaces = ["current", "arrival", "plan"] as const;
-export const finiteGuideTargets = ["top", "starting_point", "status", "question", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"] as const;
+export const finiteGuideTargets = ["top", "starting_point", "status", "question", "priority", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"] as const;
 export type FiniteGuideSurface = typeof finiteGuideSurfaces[number];
 export type FiniteGuideTarget = typeof finiteGuideTargets[number];
-export interface FiniteGuideViewRequest { surface: FiniteGuideSurface; target: FiniteGuideTarget; refresh: boolean }
+export interface FiniteGuideViewRequest { surface: FiniteGuideSurface; target: FiniteGuideTarget; refresh: boolean; sectionId?: string }
 export type FiniteGuideViewHandler = (request: FiniteGuideViewRequest) => Promise<ToolResult>;
 
 const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Promise<void>, arrival: ArrivalRepository, reset: KitchenResetRepository, onKitchenReset: (result: KitchenResetResult) => Promise<void>, themes: ThemeRepository, onThemeChanged: (result: ThemeResult) => Promise<void>, skins: SkinRepository, onSkinChanged: (result: SkinResult) => Promise<void>, planInputs: PlanInputRepository, onPlanInputsChanged: (result: PlanInputResult) => Promise<void>, planWork: HttpPlanWorkRepository, onPlanWorkChanged: (result: PlanWorkResult) => Promise<void>, guideView: FiniteGuideViewHandler): WebMCPToolDefinition[] => [
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
-  define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's Follow Codex permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, and temporarily highlight one named section. This cannot change plan truth, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true }) }),
+  define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's guided-view permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, and highlight one bounded named area or exact rough-plan section. This cannot change plan truth, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" }, sectionId: { type: "string", pattern: "^[a-z][a-z0-9_]{0,99}$", maxLength: 100, description: "Exact rough-plan section identity, used only with target priority." } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true, ...(input.sectionId !== undefined ? { sectionId: String(input.sectionId) } : {}) }) }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
   define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, accepted plan kitchen, one authoritative next action, and a state-grounded chef menu. The copied prompt is never treated as authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, input, context) }),
   define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions, with exact known and missing inputs.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, input, context) }),

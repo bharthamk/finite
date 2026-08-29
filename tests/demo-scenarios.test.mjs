@@ -76,7 +76,7 @@ test("four demo scenarios cover the standard workspace and bounded specialist ex
   }));
   assert.equal(dinner.family, "event");
   assert.equal(dinner.sections.find((section) => section.sectionId === "scope").items.find((item) => item.itemId === "guest_group").fields.headcount, "8");
-  assert.equal(dinner.sections.find((section) => section.sectionId === "custom_menu_dietary").items[0].fields.course, "Main");
+  assert.equal(dinner.sections.find((section) => section.sectionId === "custom_menu_dietary").items.find((item) => item.itemId === "dish_main").fields.course, "Main");
 
   const interviewId = "arrival_demo_interview";
   const interview = starterPlanForArrival(scenario({

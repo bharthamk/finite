@@ -288,7 +288,7 @@ test("guided view is a bounded read-only action and delegates consent to the hum
   const guide = opened.actions.find((action) => action.name === "finite_guide_view");
   assert.equal(guide.readOnly, true);
   assert.deepEqual(guide.inputSchema.properties.surface.enum, ["current", "arrival", "plan"]);
-  assert.deepEqual(guide.inputSchema.properties.target.enum, ["top", "starting_point", "status", "question", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"]);
+  assert.deepEqual(guide.inputSchema.properties.target.enum, ["top", "starting_point", "status", "question", "priority", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"]);
   const invalid = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "https://example.com", target: "#password" } });
   assert.equal(invalid.code, "INVALID_ACTION_ARGUMENTS");
   assert.equal(requests.length, 0);
@@ -296,4 +296,7 @@ test("guided view is a bounded read-only action and delegates consent to the hum
   assert.equal(result.code, "VIEW_GUIDED");
   assert.equal(result.acceptedStateChanged, false);
   assert.deepEqual(requests, [{ surface: "plan", target: "approval", refresh: true }]);
+  const priority = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "arrival", target: "priority", sectionId: "requirements", refresh: true } });
+  assert.equal(priority.code, "VIEW_GUIDED");
+  assert.deepEqual(requests.at(-1), { surface: "arrival", target: "priority", refresh: true, sectionId: "requirements" });
 });

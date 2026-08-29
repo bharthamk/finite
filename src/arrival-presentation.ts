@@ -131,6 +131,8 @@ export interface StarterPlanSection {
   items: StarterPlanItem[];
   options: StarterPlanItem[];
   comments: Array<{ commentId: string; text: string; forCodex: boolean }>;
+  openQuestions: Array<{ questionId: string; prompt: string }>;
+  answers: Array<{ questionId: string; prompt: string; answer: string }>;
   custom?: boolean;
   customSource?: "human" | "working";
 }
@@ -171,7 +173,7 @@ const starterFamily = (value: string | null | undefined): StarterPlanPresentatio
   return "general";
 };
 
-type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "options" | "comments"> & { keywords: string[] };
+type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "options" | "comments" | "openQuestions" | "answers"> & { keywords: string[] };
 
 const field = (fieldId: string, label: string, inputType: StarterPlanField["inputType"] = "text", placeholder = "", options?: StarterPlanField["options"]): StarterPlanField => ({ fieldId, label, inputType, ...(placeholder ? { placeholder } : {}), ...(options ? { options } : {}) });
 const statusOptions = [{ value: "open", label: "Not started" }, { value: "in_progress", label: "In progress" }, { value: "ready", label: "Ready" }];
@@ -220,6 +222,53 @@ const starterSections: Record<StarterPlanPresentation["family"], StarterSectionD
     { sectionId: "requirements", label: "Requirements & limits", description: "Keep approvals, commitments and hard limits visible.", emptyLabel: "No requirements or limits added yet.", variant: "requirements", fields: requirementFields, keywords: ["approval", "requirement", "commitment", "fixed", "confirmed", "must", "constraint", "nonnegotiable", "hard"] },
     { sectionId: "tasks", label: "To-do list", description: "Track practical work without waiting for Codex.", emptyLabel: "Nothing on the to-do list yet.", variant: "checklist", fields: taskFields, keywords: ["open", "optional", "preference", "idea", "possible", "missing", "decision", "dependency", "todo", "task"] },
   ],
+};
+
+const dinnerMenuFields = [
+  field("title", "Dish or menu item"),
+  field("course", "Course"),
+  field("vegetarian", "Vegetarian", "select", "", [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]),
+  field("nutSafe", "Nut-allergy plan", "text", "Ingredients and cross-contact controls"),
+  field("prepAhead", "Prep ahead", "text", "What can be completed before guests arrive?"),
+  field("notes", "Notes", "textarea"),
+];
+
+const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
+  const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
+  if (family === "event" && dinner) return {
+    schedule: ["What time should guests arrive, and roughly when should the evening finish?"],
+    scope: ["Which guests are confirmed, and does the table and seating comfortably fit all 10 people?"],
+    custom_menu_dietary: ["Do the vegetarian guests eat dairy and eggs, and are there any dislikes the menu should avoid?"],
+    resources: ["Will you cook everything yourself, buy any prepared dishes, or have someone help?"],
+    money: ["Should the AUD 500 budget include alcohol, or only food and non-alcoholic drinks?"],
+    requirements: ["How severe is the nut allergy, including whether trace cross-contact or ‘may contain’ ingredients must be avoided?"],
+    tasks: ["Who, if anyone, can help with setup, serving, or cleanup on the day?"],
+  };
+  if (family === "travel") return {
+    itinerary: ["Which dates or locations are fixed, and which can move?"],
+    people: ["Whose dates or commitments must this plan fit around?"],
+    stays: ["What accommodation style and minimum standard should the plan use?"],
+    transport: ["Which departure point, baggage needs, and comfort trade-offs should guide transport choices?"],
+    money: ["Where should the budget flex first if researched prices run high?"],
+    requirements: ["Which passport, visa, insurance, accessibility, or health requirements need checking?"],
+    tasks: ["Which planning tasks do you want to handle yourself?"],
+  };
+  if (family === "renovation") return {
+    schedule: ["Is there a hard completion date or any period when work cannot happen?"],
+    scope: ["Which finish, function, or room outcome is non-negotiable?"],
+    resources: ["Which trades or materials are already chosen, quoted, or unavailable?"],
+    money: ["How much contingency should remain untouched?"],
+    requirements: ["Which approvals, access limits, or household constraints still need checking?"],
+    tasks: ["Which work will you do yourself?"],
+  };
+  return {
+    schedule: ["Which date or sequence is fixed, and what can move?"],
+    scope: ["What would make this plan complete enough to use?"],
+    resources: ["Which people, tools, or providers are already available?"],
+    money: ["Where can the plan flex if the first-pass cost is too high?"],
+    requirements: ["Which requirement or approval still needs a human decision?"],
+    tasks: ["Which next action do you want to own yourself?"],
+  };
 };
 
 type FlatPlanFact = { path: string[]; label: string; value: unknown; valueKey: string; valueParent: Record<string, unknown> };
@@ -450,6 +499,64 @@ const seedRoughPlan = (
     (["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
     return;
   }
+  const sourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""}`;
+  if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
+    const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const dinnerDate = dateIso(sourceText, year);
+    const budgetText = sourceText.match(/\bbudget(?:\s+is|\s+of|\s*:)?\s*(?:aud|a\$|\$)?\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
+      ?? sourceText.match(/\b(?:aud|a\$)\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
+      ?? "";
+    const budget = Number(budgetText.replaceAll(",", "")) || 0;
+    const schedule = sectionItems.get("schedule") ?? [];
+    if (!schedule.length) {
+      [
+        ["guest_check", "Confirm guests and dietary detail", addDays(dinnerDate, -7), "", "Close the guest list and resolve allergy and vegetarian details before finalising the menu."],
+        ["menu_lock", "Lock menu and shopping list", addDays(dinnerDate, -4), "", "Choose the courses, quantities and ingredient substitutions."],
+        ["shop_prep", "Main shop and make-ahead prep", addDays(dinnerDate, -1), "16:00", "Complete shopping, dessert, sauces and other safe make-ahead work."],
+        ["day_setup", "Finish prep and set the room", dinnerDate, "14:00", "Set the table, chill drinks and complete most preparation before guests arrive."],
+        ["guest_arrival", "Guests arrive", dinnerDate, "18:30", "Working time only; confirm it in Open questions."],
+        ["serve_dinner", "Serve dinner", dinnerDate, "19:00", "Working service time with a calm buffer after arrival."],
+        ["close_out", "Dessert, coffee and cleanup", dinnerDate, "21:00", "Leave only light clearing and storage for after the meal."],
+      ].forEach(([id, title, start, startTime, notes]) => seed("schedule", String(id), String(title), { title: String(title), kind: "event", location: "Home", start: String(start), startTime: String(startTime), end: String(start), notes: String(notes) }));
+    }
+    const scope = sectionItems.get("scope") ?? [];
+    if (!scope.length) {
+      seed("scope", "guest_group", "Dinner guests", { title: "Dinner guests", headcount: "10", bookingStatus: "idea", location: "Home", start: dinnerDate, notes: "Ten people total. Two guests are vegetarian and one guest has a nut allergy." });
+      seed("scope", "home_setup", "Dining and seating setup", { title: "Dining and seating setup", headcount: "10", bookingStatus: "idea", location: "Home", start: dinnerDate, notes: "Check table space, chairs, serving flow and a safe place for nut-free preparation." });
+    }
+    const menu = sectionItems.get("custom_menu_dietary") ?? [];
+    if (!menu.length) {
+      seed("custom_menu_dietary", "starter", "Roasted tomato and red pepper soup", { title: "Roasted tomato and red pepper soup", course: "Starter", vegetarian: "yes", nutSafe: "Use verified nut-free stock; protect against cross-contact.", prepAhead: "Make the day before; reheat before serving.", notes: "Working menu choice — replace freely." });
+      seed("custom_menu_dietary", "main", "Mushroom and spinach lasagne with green salad", { title: "Mushroom and spinach lasagne with green salad", course: "Main", vegetarian: "yes", nutSafe: "Check pasta, cheese and dressing labels; use separate clean utensils.", prepAhead: "Assemble lasagne and salad components before guests arrive; bake and dress at service.", notes: "One main for everyone keeps the vegetarian requirement simple." });
+      seed("custom_menu_dietary", "dessert", "Lemon posset with berries", { title: "Lemon posset with berries", course: "Dessert", vegetarian: "yes", nutSafe: "Use label-checked ingredients and no nut garnish.", prepAhead: "Prepare and chill the day before.", notes: "Working make-ahead dessert." });
+    }
+    const resources = sectionItems.get("resources") ?? [];
+    if (!resources.length) {
+      seed("resources", "groceries", "Groceries and fresh ingredients", { title: "Groceries and fresh ingredients", provider: "Local supermarket / grocer", bookingStatus: "idea", start: addDays(dinnerDate, -1), cost: String(Math.round(budget * 0.5)), notes: "Planning allowance; check allergy-safe labels during the shop." });
+      seed("resources", "drinks", "Drinks and ice", { title: "Drinks and ice", provider: "Bottle shop / supermarket", bookingStatus: "idea", start: addDays(dinnerDate, -1), cost: String(Math.round(budget * 0.24)), notes: "Allowance assumes drinks are inside the AUD 500 cap until answered otherwise." });
+      seed("resources", "table", "Table, serving and storage check", { title: "Table, serving and storage check", provider: "At home", bookingStatus: "idea", start: addDays(dinnerDate, -3), cost: String(Math.round(budget * 0.08)), notes: "Check chairs, platters, fridge space, serving utensils and food-storage containers." });
+    }
+    const moneyItems = sectionItems.get("money") ?? [];
+    if (budget && !moneyItems.some((item) => item.fields.moneyRole === "limit")) seed("money", "limit", "Total budget", { title: "Total budget", amount: String(budget), currency: "AUD", moneyRole: "limit", notes: "Human-supplied event budget." });
+    if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
+      [["food", "Food and ingredients", 50], ["drinks", "Drinks and ice", 24], ["table", "Table and atmosphere", 8], ["buffer", "Contingency", 18]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: "AUD", moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+    }
+    if (!requirements.length) {
+      seed("requirements", "nut_safety", "Nut-allergy safety", { title: "Nut-allergy safety", status: "open", due: addDays(dinnerDate, -4), notes: "Confirm severity and cross-contact threshold; check every packaged ingredient and keep preparation surfaces and utensils safe." });
+      seed("requirements", "vegetarian", "Vegetarian coverage", { title: "Vegetarian coverage", status: "open", due: addDays(dinnerDate, -4), notes: "The working menu is vegetarian for everyone; confirm dairy, egg and other preferences." });
+      seed("requirements", "prep_ahead", "Most preparation finished before arrival", { title: "Most preparation finished before arrival", status: "in_progress", due: dinnerDate, notes: "Choose make-ahead dishes and leave only reheating, baking, salad dressing and plating near service." });
+    }
+    [
+      ["guest_details", "Confirm guest list, vegetarian preferences and allergy severity", addDays(dinnerDate, -7)],
+      ["menu", "Confirm the menu and quantities", addDays(dinnerDate, -4)],
+      ["equipment", "Check seating, serving dishes, fridge and oven capacity", addDays(dinnerDate, -3)],
+      ["shop", "Buy groceries, drinks and ice", addDays(dinnerDate, -1)],
+      ["make_ahead", "Complete make-ahead cooking and prep", addDays(dinnerDate, -1)],
+      ["setup", "Set the table and finish the room", dinnerDate],
+      ["service_plan", "Write the final cooking and serving run sheet", addDays(dinnerDate, -1)],
+    ].forEach(([id, title, due]) => { if (!tasks.some((item) => String(item.fields.title).toLowerCase() === String(title).toLowerCase())) seed("tasks", String(id), String(title), { title: String(title), due: String(due), done: false, notes: "Open until completed." }); });
+    return;
+  }
   const schedule = sectionItems.get("schedule") ?? [];
   if (!schedule.length) {
     const labels = family === "renovation" ? ["Confirm scope", "Design and quotes", "Order and prepare", "Build", "Handover"] : family === "event" ? ["Confirm venue and people", "Book key suppliers", "Prepare programme", "Run the event", "Close out"] : ["Confirm the outcome", "Prepare", "Deliver", "Review"];
@@ -496,6 +603,19 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     ...(interpretation?.missing ?? []).map((item) => item.trim()),
   ].filter(Boolean))];
   const definitions: StarterSectionDefinition[] = starterSections[family].map((definition) => ({ ...definition, fields: definition.fields.map((entry) => ({ ...entry })) }));
+  if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome)) {
+    definitions.splice(2, 0, {
+      sectionId: "custom_menu_dietary",
+      label: "Menu & dietary fit",
+      description: "Shape the courses, prep-ahead work and dietary safety in one editable place.",
+      emptyLabel: "No menu items added yet.",
+      variant: "cards",
+      fields: dinnerMenuFields.map((entry) => ({ ...entry })),
+      keywords: ["menu", "dish", "course", "vegetarian", "allergy", "nut", "food", "prep"],
+      custom: true,
+      customSource: "working",
+    });
+  }
   order.inputs.forEach((input) => {
     const operation = safePayloadText(input.payload, "workspaceOperation");
     if (!operation.startsWith("module_")) return;
@@ -514,6 +634,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const sectionItems = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionOptions = new Map(definitions.map((definition) => [definition.sectionId, [] as StarterPlanItem[]]));
   const sectionComments = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ commentId: string; text: string; forCodex: boolean }>]));
+  const sectionAnswers = new Map(definitions.map((definition) => [definition.sectionId, [] as Array<{ questionId: string; prompt: string; answer: string }>]));
   const overviewOverrides: Record<string, string | boolean> = {};
   const addItem = (sectionId: string, item: StarterPlanItem): void => {
     const resolved = sectionItems.has(sectionId) ? sectionId : sectionAliases[sectionId] && sectionItems.has(sectionAliases[sectionId]!) ? sectionAliases[sectionId]! : definitions[0]!.sectionId;
@@ -575,6 +696,18 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       const items = sectionItems.get(sectionId);
       const options = sectionOptions.get(sectionId);
       if (!items) return;
+      if (operation === "question_answer") {
+        const questionId = safePayloadText(input.payload, "questionId");
+        const prompt = safePayloadText(input.payload, "question");
+        const answer = safePayloadText(input.payload, "answer");
+        const answers = sectionAnswers.get(sectionId);
+        if (questionId && prompt && answer && answers) {
+          const existing = answers.find((candidate) => candidate.questionId === questionId);
+          if (existing) Object.assign(existing, { prompt, answer });
+          else answers.push({ questionId, prompt, answer });
+        }
+        return;
+      }
       if (operation === "note") {
         const text = safePayloadText(input.payload, "comment");
         if (text) sectionComments.get(sectionId)?.push({ commentId: recordId || `comment_${index}`, text, forCodex: input.payload.forCodex === true });
@@ -641,8 +774,12 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
   const totalBudget = String(overviewOverrides.totalBudget || (limit ? String(limit) : ""));
   const budgetNumber = Number(totalBudget || 0);
-  const singleDay = overviewOverrides.singleDay === true;
-  const start = String(overviewOverrides.start || dateEntries[0]?.value || "");
+  const eventSourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
+  const anchoredEventDate = family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(eventSourceText)
+    ? dateIso(eventSourceText, Number(eventSourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear()))
+    : "";
+  const singleDay = typeof overviewOverrides.singleDay === "boolean" ? overviewOverrides.singleDay : Boolean(anchoredEventDate);
+  const start = String(overviewOverrides.start || anchoredEventDate || dateEntries[0]?.value || "");
   const requestedDuration = requestedDurationEnd(order, start);
   const explicitEnd = dateEntries.filter((entry) => entry.value !== start && ["request", "known", "human"].includes(entry.item.source)).at(-1)?.value ?? "";
   const end = singleDay ? start : String(overviewOverrides.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
@@ -651,6 +788,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     : Boolean(requestedDuration.end ? requestedDuration.provisional || !dateEntries.some((entry) => entry.value === requestedDuration.end && !starterItemIsProvisional(entry.item)) : dateEntries.some((entry) => starterItemIsProvisional(entry.item)));
   const currency = String(overviewOverrides.currency || moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();
   const budgetProvisional = typeof overviewOverrides.budgetProvisional === "boolean" ? overviewOverrides.budgetProvisional : starterItemIsProvisional(canonicalLimit);
+  const questionTemplates = sectionQuestionTemplates(family, order);
   return {
     family,
     familyLabel: ({ travel: "Travel", renovation: "Renovation", event: "Event", general: "Adaptive" } as const)[family],
@@ -672,7 +810,12 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       categoryAllocated,
       categoryPercent: budgetNumber > 0 ? (categoryAllocated / budgetNumber) * 100 : 0,
     },
-    sections: definitions.map(({ keywords: _keywords, ...definition }) => ({ ...definition, items: sectionItems.get(definition.sectionId) ?? [], options: sectionOptions.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [] })),
+    sections: definitions.map(({ keywords: _keywords, ...definition }) => {
+      const answers = sectionAnswers.get(definition.sectionId) ?? [];
+      const answered = new Set(answers.map((entry) => entry.questionId));
+      const openQuestions = (questionTemplates[definition.sectionId] ?? []).map((prompt, index) => ({ questionId: `${definition.sectionId}_question_${index + 1}`, prompt })).filter((question) => !answered.has(question.questionId));
+      return { ...definition, items: sectionItems.get(definition.sectionId) ?? [], options: sectionOptions.get(definition.sectionId) ?? [], comments: sectionComments.get(definition.sectionId) ?? [], openQuestions, answers };
+    }),
     laterHumanInputs: humanInputsAfterInterpretation,
     interpretationIsCurrent: humanInputsAfterInterpretation.length === 0,
   };

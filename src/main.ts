@@ -516,8 +516,13 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
 let forceArrivalSurface = false;
 let newPlanDraftMode = false;
 let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
+let activeCodexPrioritySectionId = scopedStorage.getItem("finite-plan.codex-priority-section") ?? "";
 const guideView = async (request: FiniteGuideViewRequest) => {
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
+  if (request.target === "priority" && request.sectionId) {
+    activeCodexPrioritySectionId = request.sectionId;
+    scopedStorage.setItem("finite-plan.codex-priority-section", request.sectionId);
+  }
   if (request.refresh) {
     arrivalResult = await arrivalRepository.open();
     await runtime.hydrateAcceptedTruth();
@@ -666,6 +671,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   starting_point: { label: "your starting point", selectors: [".arrival-order", ".arrival-order-source"] },
   status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
+  priority: { label: `${agenticName()}'s current priority section`, selectors: ["[data-codex-priority='true']", ".starter-module__questions"] },
   review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
   interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
@@ -684,7 +690,10 @@ const clearCodexSpotlight = (): void => {
 const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
   clearCodexSpotlight();
   const descriptor = guideTargetSelectors[request.target];
-  const element = descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
+  const exactPriority = request.target === "priority" && request.sectionId
+    ? root.querySelector<HTMLElement>(`[data-workspace-module='${CSS.escape(request.sectionId)}']`)
+    : null;
+  const element = exactPriority ?? descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
   const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
   if (!element) {
     announce(`${agenticName()} refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
@@ -702,8 +711,26 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
 const bindFollowCodexInteractions = (): void => {
   root.querySelector<HTMLInputElement>("[data-action='toggle-follow-codex']")?.addEventListener("change", (event) => {
     followCodexEnabled = (event.currentTarget as HTMLInputElement).checked;
-    if (followCodexEnabled) scopedStorage.setItem("finite-plan.follow-codex", "true");
-    else { scopedStorage.removeItem("finite-plan.follow-codex"); clearCodexSpotlight(); }
+    if (followCodexEnabled) {
+      scopedStorage.setItem("finite-plan.follow-codex", "true");
+      const safetyFirst = /allerg/i.test(currentArrival()?.rawOutcome ?? "")
+        ? root.querySelector<HTMLDetailsElement>("[data-workspace-module='requirements'][data-open-questions]:not([data-open-questions='0'])")
+        : null;
+      const priority = safetyFirst ?? root.querySelector<HTMLDetailsElement>("[data-workspace-module][data-open-questions]:not([data-open-questions='0'])");
+      if (priority) {
+        activeCodexPrioritySectionId = priority.dataset.workspaceModule ?? "";
+        scopedStorage.setItem("finite-plan.codex-priority-section", activeCodexPrioritySectionId);
+        priority.dataset.codexPriority = "true";
+        priority.classList.add("is-codex-priority");
+        priority.open = true;
+      }
+    } else {
+      scopedStorage.removeItem("finite-plan.follow-codex");
+      scopedStorage.removeItem("finite-plan.codex-priority-section");
+      activeCodexPrioritySectionId = "";
+      clearCodexSpotlight();
+      root.querySelectorAll<HTMLElement>("[data-codex-priority]").forEach((element) => { element.removeAttribute("data-codex-priority"); element.classList.remove("is-codex-priority"); });
+    }
     announce(followCodexEnabled ? `${agenticName()} may now refresh, move and highlight this Finite view.` : `${agenticName()} can keep working, but cannot move or highlight this view.`);
   });
 };
@@ -1000,7 +1027,7 @@ const currentCodexHandoff = () => createCodexHandoff({
 
 const renderCodexHandoffButton = (): string => {
   const handoff = currentCodexHandoff();
-  return `<button type="button" class="codex-handoff-trigger" data-action="open-codex-handoff" aria-haspopup="dialog"><span aria-hidden="true"></span>${escapeHtml(handoff.buttonLabel)}</button>`;
+  return `<button type="button" class="codex-handoff-trigger${followCodexEnabled ? " is-guided" : ""}" data-action="open-codex-handoff" aria-haspopup="dialog"><span aria-hidden="true"></span>${escapeHtml(handoff.buttonLabel)}${followCodexEnabled ? `<small>${escapeHtml(agenticName())} view on</small>` : ""}</button>`;
 };
 
 const renderCodexHandoffDialog = (): string => {
@@ -1429,6 +1456,12 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const staysSection = starter.sections.find((section) => section.sectionId === "stays");
   const transportSection = starter.sections.find((section) => section.sectionId === "transport");
   const peopleSection = starter.sections.find((section) => section.sectionId === "people");
+  const defaultPrioritySectionId = (/allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId)
+    || starter.sections.find((section) => section.openQuestions.length)?.sectionId
+    || "";
+  const prioritySectionId = starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length)
+    ? activeCodexPrioritySectionId
+    : defaultPrioritySectionId;
   const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel"].includes(token)) ?? [];
   const samePlace = (left: unknown, right: unknown): boolean => {
     const leftTokens = normalizePlace(left);
@@ -1554,6 +1587,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
   </dialog>`;
   const modules = starter.sections.map((section) => {
+    const isCodexPriority = followCodexEnabled && section.sectionId === prioritySectionId;
     const workspaceLabel = section.custom
       ? `Custom section · ${section.customSource === "working" ? `${agenticName()} built` : "Added by you"}`
       : `${starter.familyLabel} workspace`;
@@ -1640,7 +1674,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     const unlinkedStays = staysSection?.items.filter((item) => !calendarMatches(item.fields.location, item.fields.start, item.fields.end).length).length ?? 0;
     const unlinkedTransportEnds = transportSection?.items.reduce((count, item) => count + (calendarMatches(item.fields.from).length ? 0 : 1) + (calendarMatches(item.fields.to).length ? 0 : 1), 0) ?? 0;
     const moduleWarningCount = section.sectionId === "people" ? unresolvedPeople : section.sectionId === "stays" ? unlinkedStays : section.sectionId === "transport" ? unlinkedTransportEnds : 0;
-    const moduleCountMarkup = `<b>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${section.options.length ? ` · ${section.options.length} ${section.options.length === 1 ? "option" : "options"}` : ""}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</b>`;
+    const moduleCountMarkup = `<b><span>${section.items.length} ${section.items.length === 1 ? "item" : "items"}${section.options.length ? ` · ${section.options.length} ${section.options.length === 1 ? "option" : "options"}` : ""}${moduleWarningCount ? ` · ${moduleWarningCount} to check` : ""}</span><span class="starter-module__question-count">${section.openQuestions.length} open ${section.openQuestions.length === 1 ? "question" : "questions"}</span>${isCodexPriority ? `<span class="starter-module__codex-location">${escapeHtml(agenticName())} is here</span>` : ""}</b>`;
     const categoryAmount = (pattern: RegExp): number => starter.sections.find((candidate) => candidate.sectionId === "money")?.items.filter((item) => item.fields.moneyRole === "cost").filter((item) => pattern.test(String(item.fields.title || item.label))).reduce((sum, item) => sum + starterAmount(item.fields.amount), 0) ?? 0;
     const accommodationEnvelope = categoryAmount(/accommodation|stay|lodg/i);
     const transportEnvelope = categoryAmount(/flight|transport|rail|coach|ferry/i);
@@ -1651,6 +1685,8 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <div><article><span>Stays</span><strong>${escapeHtml(money(staysRecorded))}</strong><small>${accommodationEnvelope ? `${escapeHtml(money(accommodationEnvelope))} envelope · ${escapeHtml(money(Math.abs(accommodationEnvelope - staysRecorded)))} ${accommodationEnvelope >= staysRecorded ? "headroom" : "over"}` : "No accommodation envelope"}</small></article><article><span>Transport</span><strong>${escapeHtml(money(transportRecorded))}</strong><small>${transportEnvelope ? `${escapeHtml(money(transportEnvelope))} envelope · ${escapeHtml(money(Math.abs(transportEnvelope - transportRecorded)))} ${transportEnvelope >= transportRecorded ? "headroom" : "over"}` : "No transport envelope"}</small></article><article><span>Price confidence</span><strong>${pricedStates.length ? pricedStates.map((entry) => `${entry.count} ${entry.state}`).join(" · ") : "Allowances only"}</strong><small>Add a checked date, local price and conversion when a live quote arrives.</small></article></div>
     </section>` : section.sectionId === "people" && !section.items.length ? `<div class="starter-module__empty-callout"><strong>Make people-shaped dependencies explicit.</strong><p>Add each companion, host or appointment once, then connect decisions through location and dates.</p></div>` : "";
     const comments = section.comments.length ? `<div class="starter-module__comments"><span>Notes and requests</span>${section.comments.map((comment) => `<p><b>${comment.forCodex ? `${escapeHtml(agenticName())} request` : "Your note"}</b>${escapeHtml(comment.text)}</p>`).join("")}</div>` : "";
+    const questionMarkup = `<section class="starter-module__questions" aria-label="Open questions for ${escapeHtml(section.label)}"><header><div><span>Open questions</span><strong>${section.openQuestions.length}</strong></div><small>Answer here or in ${escapeHtml(agenticName())}.</small></header>${section.openQuestions.length ? `<div>${section.openQuestions.map((question) => `<form data-arrival-form="workspace-question-answer" data-module-id="${escapeHtml(section.sectionId)}" data-question-id="${escapeHtml(question.questionId)}" data-question-prompt="${escapeHtml(question.prompt)}"><p>${escapeHtml(question.prompt)}</p><label><span>Your answer</span><textarea name="answer" required maxlength="2000" placeholder="Type an answer, or reply in ${escapeHtml(agenticName())}"></textarea></label><button class="button button--secondary" type="submit" ${busy ? "disabled" : ""}>Save answer</button></form>`).join("")}</div>` : `<p>No open questions in this section.</p>`}</section>`;
+    const answers = section.answers.length ? `<div class="starter-module__answers"><span>Answered</span>${section.answers.map((answer) => `<p><b>${escapeHtml(answer.prompt)}</b>${escapeHtml(answer.answer)}</p>`).join("")}</div>` : "";
     const entryNoun = section.variant === "calendar" ? calendarEntryNoun(starter.family) : section.label;
     const addControl = `<details class="starter-module__add"><summary>＋ Add ${escapeHtml(entryNoun.toLowerCase())}</summary><form data-arrival-form="workspace-add" data-module-id="${escapeHtml(section.sectionId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add to plan</button></form></details>`;
     const commentControl = `<details class="starter-module__comment"><summary>Comment on this section</summary><form data-arrival-form="workspace-comment" data-module-id="${escapeHtml(section.sectionId)}"><label><span>Note or request</span><textarea name="comment" required maxlength="2000" placeholder="Add context, a preference, or something you want changed"></textarea></label><div><button class="text-button" type="submit" name="commentMode" value="note" ${busy ? "disabled" : ""}>Save note</button><button class="button" type="submit" name="commentMode" value="codex" ${busy ? "disabled" : ""}>Ask ${escapeHtml(agenticName())}</button></div></form></details>`;
@@ -1671,9 +1707,10 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
           ${recordOptionsDialog(item)}
         </article>`;
       }).join("");
-      return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+      return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
         <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.custom ? section.label : "Calendar")}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
         <div class="starter-module__body">
+          ${questionMarkup}${answers}
           <div class="starter-calendar__toolbar"><div><span>View</span><strong>${escapeHtml(entryNoun)}</strong></div><div class="starter-calendar__view-toggle" role="group" aria-label="Calendar display"><button type="button" data-action="calendar-view" data-calendar-view="calendar" aria-pressed="true">Calendar</button><button type="button" data-action="calendar-view" data-calendar-view="list" aria-pressed="false">List</button></div></div>
           ${section.custom ? "" : `<div class="starter-calendar__filters" role="group" aria-label="Show calendar item types"><button type="button" data-action="calendar-filter" data-calendar-kind="all" aria-pressed="true">All</button>${calendarFilterOptions.map((option) => `<button type="button" data-action="calendar-filter" data-calendar-kind="${escapeHtml(option.value)}" aria-pressed="false">${escapeHtml(option.label)}</button>`).join("")}</div>`}
           <div data-calendar-pane="calendar"><div class="starter-calendar__layout"><div class="starter-calendar__grid">${renderCalendarMonths(section, overview, selectedId)}</div><aside class="starter-calendar__selection" aria-label="Selected calendar item">${details || `<div class="starter-calendar__empty-selection"><strong>No item selected</strong><p>Add the first item below to place it on the calendar.</p></div>`}</aside></div></div>
@@ -1683,9 +1720,9 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         </div>
       </details>`;
     }
-    return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
+    return `<details class="starter-module starter-module--${section.variant}${section.custom ? " is-custom" : ""}${isCodexPriority ? " is-codex-priority" : ""}" data-workspace-module="${escapeHtml(section.sectionId)}" data-open-questions="${section.openQuestions.length}" ${isCodexPriority ? `data-codex-priority="true" open` : ""} aria-labelledby="starter_module_${escapeHtml(section.sectionId)}">
       <summary class="starter-module__summary"><div><span>${escapeHtml(workspaceLabel)}</span><strong id="starter_module_${escapeHtml(section.sectionId)}">${escapeHtml(section.label)}</strong><small>${escapeHtml(section.description)}</small></div>${moduleCountMarkup}</summary>
-      <div class="starter-module__body">${moduleInsight}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
+      <div class="starter-module__body">${moduleInsight}${questionMarkup}${answers}<div class="starter-module__records" data-workspace-records>${items || `<p class="starter-plan__empty">${escapeHtml(section.emptyLabel)}</p>`}</div>
         ${comments}
         <div class="starter-module__controls">${addControl}${commentControl}</div>
         ${section.custom ? `<div class="starter-module__custom-footer"><span>This section extends the standard workspace.</span><button class="text-button" type="button" data-action="workspace-module-delete" data-module-id="${escapeHtml(section.sectionId)}" ${busy ? "disabled" : ""}>Remove section</button></div>` : ""}
@@ -2000,7 +2037,7 @@ const restoreWorkspaceUiState = (): void => {
   if (customWorkspaceOpen && customDialog && !customDialog.open) customDialog.showModal();
 };
 
-const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" = "detail", message = "Your plan is updated."): Promise<boolean> => {
+const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" | "answer" = "detail", message = "Your plan is updated."): Promise<boolean> => {
   const order = currentArrival();
   if (!order || busy) return false;
   captureWorkspaceUiState();
@@ -2242,6 +2279,14 @@ const addWorkspaceComment = async (form: HTMLFormElement, forCodex: boolean): Pr
   if (!comment) return;
   const saved = await saveWorkspaceMutation({ workspaceOperation: "note", moduleId: form.dataset.moduleId, recordId: `comment_${crypto.randomUUID().replaceAll("-", "")}`, comment, forCodex }, "detail", forCodex ? `Your section request is saved for ${agenticName()}.` : "Your section note is saved.");
   if (saved && forCodex) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+};
+
+const answerWorkspaceQuestion = async (form: HTMLFormElement): Promise<void> => {
+  const answer = String(new FormData(form).get("answer") ?? "").trim();
+  const questionId = String(form.dataset.questionId ?? "").trim();
+  const question = String(form.dataset.questionPrompt ?? "").trim();
+  if (!answer || !questionId || !question) return;
+  await saveWorkspaceMutation({ workspaceOperation: "question_answer", moduleId: form.dataset.moduleId, questionId, question, answer }, "answer", "Your answer is saved in this section.");
 };
 
 const bindWorkspaceCurrencyConversions = (): void => {
@@ -2524,6 +2569,7 @@ function bindArrivalInteractions(): void {
     const forCodex = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "codex";
     void addWorkspaceComment(event.currentTarget as HTMLFormElement, forCodex);
   }));
+  root?.querySelectorAll<HTMLFormElement>("[data-arrival-form='workspace-question-answer']").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void answerWorkspaceQuestion(event.currentTarget as HTMLFormElement); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-record], [data-record-context]"); if (record) void deleteWorkspaceRecord(record); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-module-delete']").forEach((button) => button.addEventListener("click", () => { void deleteWorkspaceModule(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='workspace-option-delete']").forEach((button) => button.addEventListener("click", () => { const record = button.closest<HTMLElement>("[data-workspace-option]"); if (record) void deleteWorkspaceOption(record); }));

@@ -389,7 +389,13 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
+  assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} view on/);
+  assert.match(source, /starter-module__question-count/);
+  assert.match(source, /data-arrival-form="workspace-question-answer"/);
+  assert.match(source, /data-codex-priority="true" open/);
   assert.match(styles, /\[data-codex-spotlight="true"\]/);
+  assert.match(styles, /\[data-codex-priority="true"\]/);
+  assert.match(styles, /\.starter-module__questions/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.codex-handoff-guidance \{ grid-column:1\/-1; display:grid;/);
   assert.match(styles, /\.codex-handoff-choice \{ display:grid; grid-template-rows:auto auto 1fr auto;/);

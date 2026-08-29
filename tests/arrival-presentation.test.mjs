@@ -333,6 +333,32 @@ test("a Codex-first order exposes its populated rough plan immediately without a
   assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.length > 0);
 });
 
+test("a dinner handoff opens as a detailed editable draft with section questions and human answers", () => {
+  const base = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_dinner_draft", version: 1, status: "waiting_for_codex", rawOutcome: "Plan a dinner party at home for 10 people on Saturday 17 October 2026 with an AUD 500 budget. Two guests are vegetarian, one has a nut allergy, and most preparation should be done before guests arrive.", structured: { planningMode: "codex" }, attachments: [], pendingClarification: null,
+    inputs: [], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z", checksum: "b".repeat(64),
+  };
+  const starter = starterPlanForArrival(base);
+  assert.equal(starter.overview.start, "2026-10-17");
+  assert.equal(starter.overview.end, "2026-10-17");
+  assert.equal(starter.overview.totalBudget, "500");
+  assert.equal(starter.overview.currency, "AUD");
+  assert.equal(starter.sections.find((section) => section.sectionId === "schedule").items.length, 7);
+  assert.equal(starter.sections.find((section) => section.sectionId === "scope").items.length, 2);
+  assert.equal(starter.sections.find((section) => section.sectionId === "custom_menu_dietary").items.length, 3);
+  assert.equal(starter.sections.find((section) => section.sectionId === "resources").items.length, 3);
+  assert.equal(starter.sections.find((section) => section.sectionId === "requirements").items.length, 3);
+  assert.equal(starter.sections.find((section) => section.sectionId === "tasks").items.length, 7);
+  assert.equal(starter.sections.find((section) => section.sectionId === "money").items.filter((item) => item.fields.moneyRole === "cost").length, 4);
+  const safety = starter.sections.find((section) => section.sectionId === "requirements");
+  assert.match(safety.openQuestions[0].prompt, /allergy/i);
+
+  const answered = starterPlanForArrival({ ...base, version: 2, inputs: [{ inputId: "arrival_input_arrival_dinner_draft_2", kind: "answer", payload: { workspaceOperation: "question_answer", moduleId: "requirements", questionId: "requirements_question_1", question: safety.openQuestions[0].prompt, answer: "Avoid trace cross-contact and may-contain ingredients." }, sourceSurface: "site", createdAt: "2026-08-30T00:00:01.000Z" }] });
+  const answeredSafety = answered.sections.find((section) => section.sectionId === "requirements");
+  assert.equal(answeredSafety.openQuestions.length, 0);
+  assert.equal(answeredSafety.answers[0].answer, "Avoid trace cross-contact and may-contain ingredients.");
+});
+
 test("custom sections survive human and Codex creation, accept normal records, and can be removed", () => {
   const base = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_custom_workspace", version: 5, status: "waiting_for_codex", rawOutcome: "Prepare for a job interview.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
