@@ -3615,6 +3615,8 @@ const renderPlanDraft = (): string => {
     ["constraints and preferences", JSON.stringify({ locks: priorProfile.locks, preferenceLabels: priorProfile.preferenceLabels, preferenceWeights: priorProfile.preferenceWeights, relationships: priorProfile.relationships }) !== JSON.stringify({ locks: draft.profile.locks, preferenceLabels: draft.profile.preferenceLabels, preferenceWeights: draft.profile.preferenceWeights, relationships: draft.profile.relationships })],
   ].filter((entry) => entry[1]).map((entry) => String(entry[0])) : [];
   const revisionReceipt = priorReview ? `<section class="draft-revision-diff" aria-label="Revision response"><div><p class="eyebrow">Revised from your returned draft</p><h3>${escapeHtml(priorReview.message)}</h3></div><div><span>Codex changed</span><strong>${escapeHtml(changedSinceReturn.join(" · ") || "the compiled plan content")}</strong></div></section>` : "";
+  const activeArrival = currentArrival();
+  if (draft.sourceArrival && activeArrival && draft.sourceArrival.orderId !== activeArrival.orderId) return "";
   const orientation = arrivalResult.ok ? arrivalResult.orientation : undefined;
   if (orientation && !pendingDraftMatchesArrival()) return `<section class="zone zone--approval_panel plan-intake" aria-label="Plan update queued">
     <div class="zone__heading"><p class="eyebrow">New detail saved</p><h2>The previous draft is no longer confirmable.</h2></div>

@@ -483,6 +483,7 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
   assert.match(source, /if \(!demoPlaybackMode\) void prepareArrivalPlanDraft\(arrivalResult\)/);
+  assert.match(source, /draft\.sourceArrival && activeArrival && draft\.sourceArrival\.orderId !== activeArrival\.orderId\) return ""/);
   assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
   assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
   assert.match(source, /No plan exists yet\./);
