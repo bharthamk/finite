@@ -19,6 +19,13 @@ export interface ArrivalProgression {
   tasks: ArrivalContinuityTask[];
 }
 
+const comparableTaskLabel = (value: string): string => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+
+export const arrivalContinuityTasks = (progression: ArrivalProgression, stageLabels: string[]): ArrivalProgression["tasks"] => {
+  const acceptedStages = new Set(stageLabels.map(comparableTaskLabel));
+  return progression.tasks.filter((task) => !acceptedStages.has(comparableTaskLabel(task.label)));
+};
+
 const boundedSlug = (value: string): string => value.toLowerCase()
   .normalize("NFKD")
   .replace(/[^a-z0-9]+/g, "_")

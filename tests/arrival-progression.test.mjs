@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivalProgressionFromStarter } from "../dist-test/src/arrival-progression.js";
+import { arrivalContinuityTasks, arrivalProgressionFromStarter } from "../dist-test/src/arrival-progression.js";
 import { starterPlanForArrival, workspaceInterpretationForConstruction } from "../dist-test/src/arrival-presentation.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
@@ -47,6 +47,7 @@ test("a complete editable workspace becomes one compiler-valid adaptive plan wit
   assert.equal(progression.intake.entityValues.guest_headcount.count, 10);
   assert.equal(progression.intake.entityValues.venue.capacity, 10);
   assert.deepEqual(progression.tasks, [{ label: "Buy groceries", done: false }, { label: "Set the table", done: true }]);
+  assert.deepEqual(arrivalContinuityTasks(progression, progression.intake.stages.map((stage) => stage.label)), progression.tasks);
   assert(progression.inputs.some((entry) => entry.section === "boundaries" && entry.message.includes("Nut-allergy controls")));
   assert(progression.inputs.every((entry) => Array.from(entry.message).length <= 1_950));
 
@@ -200,6 +201,7 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.equal(progression.intake.stages.some((entry) => /known costs/.test(entry.label)), false);
   assert.match(progression.intake.stages[0].label, /^Research Northstar AI/);
   assert.equal(progression.tasks.length, 7);
+  assert.equal(arrivalContinuityTasks(progression, progression.intake.stages.map((stage) => stage.label)).length, 0);
   assert(progression.inputs.some((entry) => entry.message.includes("Interview evidence bank")));
 
   const profiles = await compileBuiltInProfiles();

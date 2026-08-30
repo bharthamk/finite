@@ -20,6 +20,10 @@ const parseBody = async (request: Request): Promise<JsonRecord> => {
 };
 const toRetrospective = (row: RetrospectiveRow, revision: number): PlanRetrospective => ({ planId: row.plan_id, planRevision: row.plan_revision, worked: row.worked, changed: row.changed, nextTime: row.next_time, updatedAt: row.updated_at, baseCurrent: row.plan_revision === revision });
 const toMemory = (row: MemoryRow): ProfileMemory => ({ memoryId: row.memory_id, family: row.family, kind: row.kind, statement: row.statement, evidence: row.evidence, sourcePlanId: row.source_plan_id, sourceSurface: row.source_surface, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at, decidedAt: row.decided_at });
+const nextUpdatedAt = (prior: string): string => {
+  const priorTime = Date.parse(prior);
+  return new Date(Math.max(Date.now(), Number.isFinite(priorTime) ? priorTime + 1 : 0)).toISOString();
+};
 const listMemories = async (db: D1Database, scopeId: string): Promise<ProfileMemory[]> => {
   const { results } = await db.prepare("SELECT memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at FROM profile_memories WHERE scope_id = ? ORDER BY CASE status WHEN 'proposed' THEN 0 WHEN 'accepted' THEN 1 WHEN 'retired' THEN 2 ELSE 3 END, updated_at DESC").bind(scopeId).all<MemoryRow>();
   return (results ?? []).map(toMemory);
@@ -86,7 +90,7 @@ export const handlePlanLearningRequest = async (request: Request, db: D1Database
       const existing = await db.prepare("SELECT memory_id, family, kind, statement, evidence, source_plan_id, source_surface, status, created_at, updated_at, decided_at FROM profile_memories WHERE scope_id = ? AND memory_id = ?").bind(scopeId, memoryId).first<MemoryRow>();
       if (!existing) return response(404, { ok: false, code: "PROFILE_MEMORY_NOT_FOUND", retrospective: null, memories: [], acceptedStateChanged: false });
       if (existing.updated_at !== expectedUpdatedAt) return response(409, { ok: false, code: "PROFILE_MEMORY_CONFLICT", retrospective: null, memories: await listMemories(db, scopeId), acceptedStateChanged: false, message: "This item changed elsewhere. Review the current version before saving." });
-      const now = new Date().toISOString();
+      const now = nextUpdatedAt(existing.updated_at);
       const current = await listMemories(db, scopeId);
       if (action === "delete") {
         const memories = current.filter((item) => item.memoryId !== memoryId);

@@ -22,7 +22,7 @@ import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type P
 import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryAction, type ProfileMemoryKind } from "./plan-learning.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
-import { arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
+import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -3884,6 +3884,7 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
   const planId = runtime.kernel.profile.planId;
   const revision = runtime.kernel.revision;
   const sourceKey = progression.intake.sourceArrival?.orderId.replace(/[^a-zA-Z0-9_-]/g, "_") ?? "arrival";
+  const continuityTasks = arrivalContinuityTasks(progression, runtime.kernel.profile.surface.stages.map((stage) => stage.label));
   const inputWrites = progression.inputs.map((input, index) => planInputRepository.add({
     planId,
     expectedRevision: revision,
@@ -3896,7 +3897,7 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
     idempotencyKey: `arrival-continuity-${sourceKey}-input-${index}`,
     sourceSurface: "site",
   }));
-  const taskWrites = progression.tasks.map(async (task, index) => {
+  const taskWrites = continuityTasks.map(async (task, index) => {
     const created = await planWorkRepository.addChecklist({
       planId,
       expectedRevision: revision,

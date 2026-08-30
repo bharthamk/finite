@@ -126,6 +126,7 @@ test("About you exposes every memory and uses optimistic human controls independ
   const accepted = await (await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${memoryId}`, "PATCH", { action: "accept", expectedUpdatedAt: proposed.memory.updatedAt, kind: "preference", statement: "I enjoy cooking with guests.", idempotencyKey: "learning-profile-accept", sourceSurface: "site" }), db)).json();
   assert.equal(accepted.memory.status, "accepted");
   assert.equal(accepted.memory.statement, "I enjoy cooking with guests.");
+  assert.notEqual(accepted.memory.updatedAt, proposed.memory.updatedAt);
 
   const stale = await handlePlanLearningRequest(request(`/api/plan-learning/profile/memories/${memoryId}`, "PATCH", { action: "retire", expectedUpdatedAt: proposed.memory.updatedAt, kind: "preference", statement: "I enjoy cooking with guests.", idempotencyKey: "learning-profile-stale", sourceSurface: "site" }), db);
   assert.equal(stale.status, 409);
