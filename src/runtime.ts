@@ -210,12 +210,17 @@ export class FinitePlanRuntime {
     const baseCurrent = packet.basePlanId === this.kernel.profile.planId
       && packet.baseProfileHash === this.kernel.profile.profileHash
       && packet.baseRevision === this.kernel.revision;
+    const draftPlanId = packet.kind === "intake" ? packet.payload.facts.planId ?? null : packet.payload.profile.planId;
+    const sourceArrival = packet.kind === "intake" ? packet.payload.facts.sourceArrival ?? null : packet.payload.sourceArrival;
     return {
       packetId: packet.packetId,
       kind: packet.kind,
+      draftNamespace: sourceArrival ? `arrival:${sourceArrival.orderId}:${sourceArrival.orderVersion}` : `draft:${draftPlanId ?? packet.packetId}`,
+      draftPlanId,
       basePlanId: packet.basePlanId,
       baseProfileHash: packet.baseProfileHash,
       baseRevision: packet.baseRevision,
+      acceptedBaseRole: "concurrency_guard_only",
       createdAt: packet.createdAt,
       expiresAt: packet.expiresAt,
       status: expired ? "expired" : baseCurrent ? "resumable" : "stale",
@@ -602,7 +607,14 @@ export class FinitePlanRuntime {
           travel: ["trip_days.days", "booked_segment_days.days", "timeline_lane"],
           renovation: ["completion_day.day", "committed_completion_day.day", "phase_lane"],
           event: ["guest_headcount.count", "venue.capacity", "run_of_show"],
+          general: ["timeline", "tasks", "records", "people", "decisions", "dependencies", "evidence", "constraints"],
         }[profileId],
+        optionalDimensions: {
+          money: ["not_applicable", "unknown", "zero", "positive"],
+          location: ["not_applicable", "unknown", "zero", "positive"],
+          capacity: ["not_applicable", "unknown", "zero", "positive"],
+          law: "A dimension may be absent or unresolved without inventing a positive value. Zero and not applicable remain distinct states.",
+        },
         bounds: { serializedCharacters: 100_000, actuals: 100, entities: 50, relationships: 100, moves: 12, stages: 12, primaryMeasures: 8 },
         authority: "Codex may edit and stage the profile. Only the human surface can confirm its exact compiled hashes; only then may Codex activate it.",
       },
@@ -644,19 +656,33 @@ export class FinitePlanRuntime {
       if (!boundedText(dependency.title, 500) || typeof dependency.blocking !== "boolean" || dependency.sourcePaths.length > 20 || dependency.sourcePaths.some((sourcePath) => !boundedText(sourcePath, 200))) conflict(path, "DEPENDENCY_INVALID", "Keep dependency title, blocking state, and source paths bounded and explicit.");
     }
     const profileId = facts.profileId;
-    if (!(profileId === "travel" || profileId === "renovation" || profileId === "event")) ask("profileId", "FAMILY_REQUIRED", "Is this best operated as travel/calendar, renovation/phases, or event/run-of-show?");
+    if (!(profileId === "travel" || profileId === "renovation" || profileId === "event" || profileId === "general")) ask("profileId", "FAMILY_REQUIRED", "Use travel, renovation, event, or the composable general planning contract.");
     if (!boundedText(facts.planId, 64) || !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(facts.planId ?? "")) ask("planId", "PLAN_ID_REQUIRED", "Provide a new lowercase plan identifier.");
     else if (this.plans.has(facts.planId!)) conflict("planId", "PLAN_ID_ALREADY_EXISTS", "Use a new plan id, or derive an immutable amendment blueprint from the active version.");
     if (!boundedText(facts.name, 120)) ask("name", "PLAN_NAME_REQUIRED", "What should the human call this plan?");
     if (!boundedText(facts.brief, 500)) ask("brief", "OUTCOME_BRIEF_REQUIRED", "What useful outcome is the human ordering, in one bounded sentence?");
 
+    const dimensionStates = new Set(["not_applicable", "unknown", "zero", "positive"]);
+    const suppliedDimensions = facts.planningDimensions ?? {};
+    for (const [dimension, state] of Object.entries(suppliedDimensions)) if (!["money", "location", "capacity"].includes(dimension) || !dimensionStates.has(String(state))) conflict(`planningDimensions.${dimension}`, "PLANNING_DIMENSION_INVALID", "Use not_applicable, unknown, zero, or positive for each optional planning dimension.");
+    const suppliedTotal = facts.allocation?.totalBudgetMinor;
+    const moneyState = suppliedDimensions.money
+      ?? (Number.isSafeInteger(suppliedTotal) ? Number(suppliedTotal) > 0 ? "positive" : "zero" : profileId === "general" ? "unknown" : "positive");
+    facts.planningDimensions = {
+      money: moneyState,
+      location: suppliedDimensions.location ?? (profileId === "travel" || profileId === "event" ? "unknown" : "not_applicable"),
+      capacity: suppliedDimensions.capacity ?? (profileId === "event" ? "unknown" : "not_applicable"),
+    };
     const allocationFields = ["totalBudgetMinor", "spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
     const allocation = { ...(facts.allocation ?? {}) };
     for (const field of allocationFields) {
       const value = allocation[field];
       if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) conflict(`allocation.${field}`, "INVALID_MONEY", `${field} must be a non-negative safe integer in minor units.`);
     }
-    if (allocation.totalBudgetMinor === undefined) ask("allocation.totalBudgetMinor", "TOTAL_REQUIRED", "What is the fixed finite total?");
+    if (allocation.totalBudgetMinor === undefined && moneyState === "positive") ask("allocation.totalBudgetMinor", "TOTAL_REQUIRED", "What is the fixed finite money total?");
+    if (allocation.totalBudgetMinor === undefined && moneyState !== "positive") allocation.totalBudgetMinor = 0;
+    if (moneyState === "positive" && allocation.totalBudgetMinor !== undefined && allocation.totalBudgetMinor <= 0) conflict("allocation.totalBudgetMinor", "POSITIVE_TOTAL_REQUIRED", "A positive money dimension needs a positive total.");
+    if (moneyState !== "positive" && allocation.totalBudgetMinor !== undefined && allocation.totalBudgetMinor !== 0) conflict("allocation.totalBudgetMinor", "MONEY_STATE_TOTAL_CONFLICT", `The money dimension is ${moneyState}, so its total must be zero.`);
     const componentFields = ["spentMinor", "committedMinor", "forecastMinor", "bufferMinor"] as const;
     let absentComponents = componentFields.filter((field) => allocation[field] === undefined);
     if (adaptiveShell && allocation.totalBudgetMinor !== undefined && conflicts.length === 0) {
@@ -698,11 +724,20 @@ export class FinitePlanRuntime {
         if (!this.kernel.evidence.has(actual.evidenceRef)) ask(`actuals.${index}.evidenceRef`, "EVIDENCE_REQUIRED", `Register evidence for ${actual.label || actual.actualId || `actual ${index + 1}`}.`);
       }
     }
+    const normalizeIdentifier = (value: string, fallback: string): string => {
+      const normalized = value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+      return /^[a-z0-9][a-z0-9_-]{2,63}$/.test(normalized) ? normalized : fallback;
+    };
     if (!facts.locks?.length) ask("locks", "LOCKS_REQUIRED", "What must Codex protect even when the plan is under pressure?");
+    else facts.locks = [...new Set(facts.locks.slice(0, 30).map((value, index) => normalizeIdentifier(String(value), `protected_item_${index + 1}`)))];
     if (!facts.preferenceLabels?.length) ask("preferenceLabels", "PREFERENCES_REQUIRED", "What should Codex preserve when trade-offs are necessary?");
+    else facts.preferenceLabels = [...new Set(facts.preferenceLabels.slice(0, 20).map((value, index) => normalizeIdentifier(String(value), `preference_${index + 1}`)))];
     if (facts.moves && Object.keys(facts.moves).length > 12) conflict("moves", "TOO_MANY_MOVES", "Keep the bounded recovery menu to twelve moves or fewer.");
     if (facts.searchPolicy && (!Number.isSafeInteger(facts.searchPolicy.optionCount) || !Number.isSafeInteger(facts.searchPolicy.maxMovesPerOption) || !Number.isSafeInteger(facts.searchPolicy.maxCombinations))) conflict("searchPolicy", "SEARCH_POLICY_INVALID", "Use bounded integer option, move, and combination limits.");
-    if (!facts.stages?.length) ask("stages", "TIME_SHAPE_REQUIRED", "What are the plan's meaningful calendar stops, phases, or run-of-show stages?");
+    if (!facts.stages?.length && profileId === "general" && adaptiveShell) {
+      facts.stages = [{ stageId: "begin", label: "Begin the plan", detail: "Choose the first practical action.", marker: "Up next", status: "current" }];
+      constructionAssumptions.push({ path: "stages.begin", value: 1, basis: "No sequence was supplied, so the general plan begins with one editable starter action.", sourcePaths: ["reviewed_interpretation"], status: "working" });
+    } else if (!facts.stages?.length) ask("stages", "TIME_SHAPE_REQUIRED", "What are the plan's meaningful calendar stops, phases, or run-of-show stages?");
     if (profileId === "travel" || profileId === "renovation" || profileId === "event") {
       const required = {
         travel: [["trip_days", "days"], ["booked_segment_days", "days"]],
@@ -786,6 +821,10 @@ export class FinitePlanRuntime {
     }));
     const entities = clone(template.entities);
     for (const [entityId, values] of Object.entries(entityValues)) if (entities[entityId]) entities[entityId] = { ...entities[entityId]!, values: { ...entities[entityId]!.values, ...clone(values) } };
+    if (profileId === "general") {
+      entities.plan_items = { ...entities.plan_items!, values: { count: stages.length } };
+      entities.open_dependencies = { ...entities.open_dependencies!, values: { count: (facts.dependencies ?? []).filter((dependency) => dependency.status === "open").length } };
+    }
     const adaptiveShell = facts.constructionMode === "adaptive_shell";
     const relationships = adaptiveShell && profileId === "travel" ? [{
       relationshipId: "booked_days_within_trip",
@@ -809,6 +848,7 @@ export class FinitePlanRuntime {
         ? clone(facts.searchPolicy ?? template.searchPolicy)
         : { ...clone(template.searchPolicy), maxMovesPerOption: 0 },
       evidencePolicy: { ...clone(template.evidencePolicy), asOf: this.now().toISOString().slice(0, 10) },
+      ...((facts.planningDimensions ?? template.planningDimensions) ? { planningDimensions: clone((facts.planningDimensions ?? template.planningDimensions) as NonNullable<ProfileDefinition["planningDimensions"]>) } : {}),
       surface: {
         ...clone(template.surface),
         hero: { eyebrow: adaptiveShell ? "Adaptive planning shell" : "Finite plan", title: facts.name!, brief: facts.brief! },

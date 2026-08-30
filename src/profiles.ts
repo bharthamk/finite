@@ -155,6 +155,41 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       ],
     },
   },
+  general: {
+    schemaVersion: "finite-plan-profile.v1",
+    profileId: "general",
+    planId: "plan_general_adaptive",
+    name: "Adaptive plan",
+    accepted: { totalBudgetMinor: 0, spentMinor: 0, committedMinor: 0, forecastMinor: 0, bufferMinor: 0 },
+    locks: ["preserve_human_set_details"],
+    preferenceLabels: ["keep_working_assumptions_visible"],
+    preferenceWeights: { comfort: 50, experience: 50, buffer: 50, schedule: 50 },
+    actuals: [],
+    entities: {
+      plan_items: { entityId: "plan_items", kind: "quantity", values: { count: 1 } },
+      open_dependencies: { entityId: "open_dependencies", kind: "quantity", values: { count: 0 } },
+    },
+    relationships: [],
+    moves: {},
+    searchPolicy: { objectives: ["balanced"], optionCount: 1, maxMovesPerOption: 0, maxCombinations: 1 },
+    evidencePolicy: { asOf: "2026-08-30", materialityMinor: 0, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 30 } },
+    contextualCapabilities: [],
+    planningDimensions: { money: "unknown", location: "unknown", capacity: "unknown" },
+    surface: {
+      version: "surface-profile.v1",
+      timeModel: "calendar",
+      nouns: { plan: "plan", commitment: "commitment", buffer: "room to move", event: "change", option: "option" },
+      hero: { eyebrow: "Adaptive plan", title: "A useful plan you can keep shaping.", brief: "Organise the outcome, sequence, tasks, evidence, decisions, and constraints without forcing irrelevant planning dimensions." },
+      primaryMeasures: [
+        { label: "Plan items", selector: "entities", path: ["plan_items", "values", "count"], format: "number" },
+        { label: "Open dependencies", selector: "entities", path: ["open_dependencies", "values", "count"], format: "number" },
+      ],
+      preferredComponents: ["timeline_lane", "entity_table", "constraint_panel", "change_tray"],
+      stages: [
+        { stageId: "begin", label: "Begin the plan", detail: "Choose the first practical action.", marker: "Up next", status: "current" },
+      ],
+    },
+  },
 };
 
 const allocationTotal = (profile: ProfileDefinition): number => {
@@ -173,7 +208,7 @@ const unsafeSurfaceText = (value: string): boolean => /<\/?(?:script|style|ifram
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const safeBoundedText = (value: unknown, max = 200): value is string => typeof value === "string" && Boolean(value.trim()) && value.length <= max && !unsafeSurfaceText(value);
 const boundedId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9_-]{2,63}$/.test(value);
-const topLevelKeys = new Set(["schemaVersion", "profileId", "planId", "name", "accepted", "locks", "preferenceLabels", "preferenceWeights", "actuals", "entities", "relationships", "moves", "searchPolicy", "evidencePolicy", "contextualCapabilities", "surface"]);
+const topLevelKeys = new Set(["schemaVersion", "profileId", "planId", "name", "accepted", "locks", "preferenceLabels", "preferenceWeights", "actuals", "entities", "relationships", "moves", "searchPolicy", "evidencePolicy", "contextualCapabilities", "planningDimensions", "surface"]);
 
 export class ProfileValidationError extends Error {
   constructor(readonly issues: string[]) {
@@ -188,7 +223,7 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   const raw = clone(input as unknown);
   if (!isRecord(raw)) throw new ProfileValidationError(["profile must be an object"]);
   const structuralIssues: string[] = [];
-  if (!(raw.profileId === "travel" || raw.profileId === "renovation" || raw.profileId === "event")) structuralIssues.push("profileId must be travel, renovation, or event");
+  if (!(raw.profileId === "travel" || raw.profileId === "renovation" || raw.profileId === "event" || raw.profileId === "general")) structuralIssues.push("profileId must be travel, renovation, event, or general");
   if (!isRecord(raw.accepted)) structuralIssues.push("accepted allocation is required");
   if (!Array.isArray(raw.actuals)) structuralIssues.push("actuals must be an array");
   if (!Array.isArray(raw.locks)) structuralIssues.push("locks must be an array");
@@ -212,7 +247,13 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   if (new Set(profile.locks).size !== profile.locks.length) issues.push("locks must be unique");
   if (profile.preferenceLabels.length > 20 || profile.preferenceLabels.some((label) => !boundedId(label))) issues.push("preferenceLabels must contain at most 20 bounded identifiers");
   for (const [field, value] of Object.entries(profile.accepted)) if (!Number.isInteger(value) || value < 0) issues.push(`accepted ${field} must be a non-negative integer`);
-  if (profile.accepted.totalBudgetMinor <= 0) issues.push("totalBudgetMinor must be positive");
+  const moneyState = profile.planningDimensions?.money ?? "positive";
+  const dimensionStates = new Set(["not_applicable", "unknown", "zero", "positive"]);
+  if (profile.planningDimensions) {
+    for (const dimension of ["money", "location", "capacity"] as const) if (!dimensionStates.has(profile.planningDimensions[dimension])) issues.push(`planning dimension ${dimension} has an unsupported state`);
+  }
+  if (moneyState === "positive" && profile.accepted.totalBudgetMinor <= 0) issues.push("totalBudgetMinor must be positive when the money dimension is positive");
+  if ((moneyState === "zero" || moneyState === "not_applicable" || moneyState === "unknown") && profile.accepted.totalBudgetMinor !== 0) issues.push(`totalBudgetMinor must be zero when the money dimension is ${moneyState}`);
   if (allocationTotal(profile) !== profile.accepted.totalBudgetMinor) issues.push("accepted allocations do not conserve totalBudgetMinor");
   if (profile.actuals.length > 100) issues.push("actual ledger must contain at most 100 records");
   for (const actual of profile.actuals) {
@@ -269,9 +310,9 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   if (profile.contextualCapabilities.some((name) => !name.startsWith(`${profile.profileId}_`))) issues.push("contextual capability prefix must match profileId");
   if (profile.contextualCapabilities.length !== expectedCapabilities.length || expectedCapabilities.some((name) => !profile.contextualCapabilities.includes(name))) issues.push("contextual capabilities must match the implemented profile tool set");
   if (profile.surface.version !== "surface-profile.v1") issues.push("unsupported surface profile version");
-  const expectedTimeModel = ({ travel: "calendar", renovation: "phases", event: "run_of_show" } as const)[profile.profileId];
+  const expectedTimeModel = ({ travel: "calendar", renovation: "phases", event: "run_of_show", general: "calendar" } as const)[profile.profileId];
   if (profile.surface.timeModel !== expectedTimeModel) issues.push(`surface time model for ${profile.profileId} must be ${expectedTimeModel}`);
-  const expectedLane = ({ travel: "timeline_lane", renovation: "phase_lane", event: "run_of_show" } as const)[profile.profileId];
+  const expectedLane = ({ travel: "timeline_lane", renovation: "phase_lane", event: "run_of_show", general: "timeline_lane" } as const)[profile.profileId];
   if (!profile.surface.preferredComponents.includes(expectedLane)) issues.push(`surface for ${profile.profileId} must include ${expectedLane}`);
   if (profile.surface.preferredComponents.some((component) => !surfaceComponents.has(component))) issues.push("surface contains an unknown component");
   if (new Set(profile.surface.preferredComponents).size !== profile.surface.preferredComponents.length) issues.push("surface components must be unique");
@@ -320,6 +361,7 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
     travel: [["trip_days", "days"], ["booked_segment_days", "days"]],
     renovation: [["completion_day", "day"], ["committed_completion_day", "day"]],
     event: [["guest_headcount", "count"], ["venue", "capacity"]],
+    general: [["plan_items", "count"], ["open_dependencies", "count"]],
   } as const;
   for (const [entityId, field] of requiredFields[profile.profileId]) if (!(field in (profile.entities[entityId]?.values ?? {}))) issues.push(`${profile.profileId} contextual tools require ${entityId}.${field}`);
   if (issues.length) throw new ProfileValidationError(issues);

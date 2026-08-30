@@ -127,6 +127,43 @@ test("kitchen entry prioritises new human source material without asking for ano
   assert.equal(JSON.stringify(read).length <= 1500, true);
 });
 
+test("a resumed new-plan handoff never inherits accepted-plan attachments or priorities", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "event");
+  const host = new MemoryModelContext();
+  const arrivals = new MemoryArrivalRepository();
+  const created = await arrivals.create({
+    idempotencyKey: "isolated-interview-handoff-0001",
+    rawOutcome: "Prepare for a job interview with zero paid budget.",
+    structured: { planningMode: "codex" },
+    sourceSurface: "site",
+  });
+  let planInputReads = 0;
+  let planWorkReads = 0;
+  const planInputs = {
+    list: async () => {
+      planInputReads += 1;
+      return { ok: true, code: "PLAN_INPUTS_LISTED", inputs: [{ inputId: "accepted_dinner_input", status: "open", baseCurrent: true, mode: "codex" }], acceptedStateChanged: false };
+    },
+  };
+  const planWork = {
+    list: async () => {
+      planWorkReads += 1;
+      return { ok: true, code: "PLAN_WORK_LISTED", checklist: [], attachments: [{ attachmentId: "accepted_dinner_attachment", attachmentRole: "source", processingStatus: "unread" }], acceptedStateChanged: false };
+    },
+  };
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals, false, undefined, undefined, undefined, undefined, undefined, undefined, planInputs, undefined, planWork);
+  await adapter.register();
+  const entered = await adapter.enterKitchen({ entryIntent: "resume_handoff", orderId: created.order.orderId });
+  assert.equal(entered.code, "KITCHEN_ENTERED");
+  assert.equal(planInputReads, 0);
+  assert.equal(planWorkReads, 0);
+  assert.equal(entered.operatorPacket.planInputs.status, "not_read");
+  assert.equal(entered.operatorPacket.planWork.status, "not_read");
+  assert.match(entered.operatorPacket.nextAction.stage, /^arrival_/);
+  assert.equal(JSON.stringify(entered).includes("accepted_dinner"), false);
+});
+
 test("a pending current-plan update outranks attachment maintenance after reload", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "event");

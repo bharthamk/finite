@@ -47,7 +47,7 @@ test("staging forces comparison and approval zones into every surface", async ()
   const profiles = await compileBuiltInProfiles();
   for (const profile of profiles.values()) {
     const kernel = new FinitePlanKernel(profile);
-    const event = kernel.recordChangeEvent({ type: "fixture_change", title: "Surface decision", costDeltaMinor: 10_000, daysDelta: 0, minimumBufferMinor: 0, evidenceRefs: ["evidence_current"], expectedRevision: 1 });
+    const event = kernel.recordChangeEvent({ type: "fixture_change", title: "Surface decision", costDeltaMinor: profile.profileId === "general" ? 0 : 10_000, daysDelta: 0, minimumBufferMinor: 0, evidenceRefs: ["evidence_current"], expectedRevision: 1 });
     const simulation = await kernel.simulateReallocation({ eventId: event.event.eventId, moveIds: [], objective: "custom" });
     assert.equal(simulation.candidate.valid, true);
     await kernel.stageOption({ candidateId: simulation.candidate.candidateId, expectedRevision: 1 });

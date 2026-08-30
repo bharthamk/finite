@@ -35,6 +35,10 @@ const parameterDescriptions: Record<string, string> = {
   inputId: "Exact open decision, update, or question identity returned by Finite.",
   expectedChecksum: "Checksum the durable packet must match.",
   profileId: "Compiled planning-family identity.",
+  planningDimensions: "Applicability state for optional money, location, and capacity dimensions.",
+  money: "Whether money is irrelevant, unknown, explicitly zero, or positive.",
+  location: "Whether location is irrelevant, unknown, empty, or supplied.",
+  capacity: "Whether capacity is irrelevant, unknown, zero, or positive.",
   planId: "Canonical plan identity.",
   selectors: "Canonical state sections to return.",
   group: "Bounded tool group to advertise for the current work.",
@@ -276,7 +280,11 @@ const constructionMatchesArrival = (construction: Record<string, unknown>, orien
     && String(source.orderChecksum ?? "") === orientation.exactOrderChecksum;
 };
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
-const builtInArrivalFamilies = new Set(["travel", "renovation", "event"]);
+const builtInArrivalFamilies = new Set<ProfileId>(["travel", "renovation", "event", "general"]);
+const compilerProfileForArrival = (orientation: ArrivalOrientation): ProfileId => {
+  const family = starterPlanForArrival(orientation.order)?.family ?? "general";
+  return builtInArrivalFamilies.has(family as ProfileId) ? family as ProfileId : "general";
+};
 const toolsetGroups = {
   arrival: ["finite_create_arrival_order", "finite_append_arrival_input", "finite_save_workspace_records", "finite_reconcile_arrival", "finite_stage_clarification", "finite_checkpoint_arrival", "finite_stage_interpretation"],
   construction: ["finite_list_plans", "finite_get_plan_blueprint", "finite_assess_plan_intake", "finite_compile_intake_to_draft", "finite_get_construction_packet", "finite_get_returned_plan_draft", "finite_resume_build_packet", "finite_discard_build_packet", "finite_get_evidence_policy", "finite_register_evidence", "finite_read_evidence", "finite_stage_plan_draft"],
@@ -564,13 +572,13 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
   };
   const interpretation = orientation.order.interpretation;
   if (isArrivalDraftReady(orientation.order.status) && interpretation && orientation.interpretationIsCurrent) {
-    const profileId = interpretation.inferredFamily && builtInArrivalFamilies.has(interpretation.inferredFamily) ? interpretation.inferredFamily : null;
+    const profileId = compilerProfileForArrival(orientation);
     return {
       actionVersion: "finite-next-action.v1",
-      stage: profileId ? "arrival_construction_ready" : "arrival_construction_family_required",
-      reason: profileId ? "The editable rough plan is current. Codex can load the compiler contract and continue non-authoritative plan development." : "The rough plan is current, but Codex must select a supported compiler route before continuing.",
-      nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities",
-      knownArgs: profileId ? { profileId } : {},
+      stage: "arrival_construction_ready",
+      reason: "The editable rough plan is current. Codex can load its composable compiler contract and continue non-authoritative plan development.",
+      nextTool: "finite_get_plan_blueprint",
+      knownArgs: { profileId },
       derivedArgs: [{ argument: "profileId", source: "current_rough_plan", provenance: { interpretationBasedOnVersion: orientation.interpretationBasedOnVersion } }],
       missingInputs: [],
       requiresHuman: false,
@@ -640,9 +648,9 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
     ], law: "The menu offers routes, not authority. Suggested routes are not constraint-validated outcomes." };
   }
   if (orientation && isArrivalDraftReady(orientation.order.status) && orientation.order.interpretation && orientation.interpretationIsCurrent) {
-    const profileId = orientation.order.interpretation.inferredFamily && builtInArrivalFamilies.has(orientation.order.interpretation.inferredFamily) ? orientation.order.interpretation.inferredFamily : null;
+    const profileId = compilerProfileForArrival(orientation);
     return { menuVersion: "finite-chef-menu.v1", basis, items: [
-      { menuItemId: "arrival_develop_rough_plan", rank: 1, kind: "operator_action", title: "Develop the rough plan", offer: "Load the exact compiler contract, then turn the current rough plan into typed construction inputs.", status: "ready", viability: "not_yet_tested", nextTool: profileId ? "finite_get_plan_blueprint" : "finite_get_capabilities", knownArgs: profileId ? { profileId } : {}, missingInputs: [], tradeoffs: ["Construction remains non-authoritative until a compiled draft is separately confirmed"], evidence: { status: "available", refs: [] } },
+      { menuItemId: "arrival_develop_rough_plan", rank: 1, kind: "operator_action", title: "Develop the rough plan", offer: "Load the exact composable compiler contract, then turn the current rough plan into typed construction inputs.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_plan_blueprint", knownArgs: { profileId }, missingInputs: [], tradeoffs: ["Construction remains non-authoritative until a compiled draft is separately confirmed"], evidence: { status: "available", refs: [] } },
       { menuItemId: "arrival_research_dependencies", rank: 2, kind: "suggested_route", title: "Research unresolved dependencies", offer: "Use the saved research queue for dates, transport and evidence without turning results into human facts.", status: "research_required", viability: "not_yet_tested", nextTool: "finite_get_evidence_policy", knownArgs: {}, missingInputs: [], tradeoffs: ["Live evidence may narrow the plan before drafting"], evidence: { status: "required", refs: [] } },
       { menuItemId: "arrival_preserve_activation_boundary", rank: 3, kind: "operator_action", title: "Keep activation separate", offer: "Construct and validate first; return the exact compiled draft to the Site for a later human activation decision.", status: "blocked", viability: "not_yet_tested", nextTool: null, knownArgs: {}, missingInputs: [{ argument: "compiled_draft", source: "canonical", reason: "A plan cannot be authorized before it exists." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
     ], law: "A rough plan may be developed without approval. It is never plan activation or external-action authority." };
@@ -1241,8 +1249,8 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
     if (result.ok && result.code === "KITCHEN_RESET") await onKitchenReset(result);
     return result;
   } }),
-  define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid travel, renovation, or event-family profile plus its fixed fields, conservation law, evidence prerequisites, semantic requirements, bounds, and authority path.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
-  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, including a bounded plan-specific recovery menu, classify dependencies, derive only source-labelled working assumptions, and replace the durable non-authoritative construction packet. Arrival construction is bound automatically to the exact current rough plan. Never interprets language or changes accepted truth.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event"] }, planId: string, name: string, brief: { type: "string", minLength: 1, maxLength: 500 }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: string }, preferenceLabels: { type: "array", maxItems: 20, items: string }, moves: { type: "object", maxProperties: 12, additionalProperties: { type: "object" } }, searchPolicy: { type: "object" }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input, context) => {
+  define({ name: "finite_get_plan_blueprint", title: "Read a complete plan blueprint", description: "Read one editable, compiler-valid planning contract. Travel, renovation, and event are presets; general composes timeline, tasks, records, people, decisions, dependencies, evidence, and constraints without forcing irrelevant dimensions.", readOnly: true, inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event", "general"] } }, ["profileId"]), execute: ({ profileId }) => runtime.getPlanBlueprint(profileId as ProfileId) }),
+  define({ name: "finite_assess_plan_intake", title: "Assess and save typed construction facts", description: "Check exact facts or a visibly provisional adaptive shell, including optional planning dimensions, a bounded plan-specific recovery menu, dependencies, and source-labelled working assumptions. Arrival construction is bound automatically to the exact current rough plan and remains isolated from accepted-plan work.", inputSchema: objectSchema({ constructionMode: { type: "string", enum: ["exact", "adaptive_shell"] }, profileId: { type: "string", enum: ["travel", "renovation", "event", "general"] }, planId: string, name: { type: "string", minLength: 1, maxLength: 120 }, brief: { type: "string", minLength: 1, maxLength: 500 }, planningDimensions: { type: "object", properties: { money: { type: "string", enum: ["not_applicable", "unknown", "zero", "positive"] }, location: { type: "string", enum: ["not_applicable", "unknown", "zero", "positive"] }, capacity: { type: "string", enum: ["not_applicable", "unknown", "zero", "positive"] } }, additionalProperties: false }, allocation: { type: "object" }, actuals: { type: "array", maxItems: 100, items: { type: "object" } }, locks: { type: "array", maxItems: 30, items: { type: "string", minLength: 1, maxLength: 200 } }, preferenceLabels: { type: "array", maxItems: 20, items: { type: "string", minLength: 1, maxLength: 200 } }, moves: { type: "object", maxProperties: 12, additionalProperties: { type: "object" } }, searchPolicy: { type: "object" }, entityValues: { type: "object" }, entityEstimates: { type: "object" }, dependencies: { type: "array", maxItems: 50, items: arrivalInterpretationProperties.dependencies.items }, assumptions: { type: "array", maxItems: 50, items: { type: "object" } }, stages: { type: "array", maxItems: 12, items: { type: "object" } }, sourceArrival: { type: "object", properties: { orderId: string, orderVersion: revision, orderChecksum: { type: "string", minLength: 64, maxLength: 64 } }, required: ["orderId", "orderVersion", "orderChecksum"], additionalProperties: false } }), execute: async (input, context) => {
     const opened = await arrival.open({}, context);
     if (opened.ok && opened.orientation) {
       const orientation = opened.orientation;
@@ -1330,7 +1338,7 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
     return result;
   } }),
   define({ name: "finite_switch_plan", title: "Switch to a compiled plan", description: "Verify durable accepted truth and switch to an exact planId already in the compiled catalog, guarded by the current plan and revision and returned with a context receipt.", inputSchema: objectSchema({ planId: string, expectedCurrentPlanId: string, expectedCurrentRevision: revision }, ["planId", "expectedCurrentPlanId", "expectedCurrentRevision"]), execute: async (input) => { const result = await runtime.switchPlanPersisted(String(input.planId), { expectedCurrentPlanId: String(input.expectedCurrentPlanId), expectedCurrentRevision: Number(input.expectedCurrentRevision) }); if (result.ok) await onProfileChanged(); return result; } }),
-  define({ name: "finite_switch_profile", title: "Switch active finite plan", description: "Switch travel, renovation, or event against the exact current context, invalidate page staging, replace contextual tools, and return a context receipt.", inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event"] }, expectedCurrentPlanId: string, expectedCurrentRevision: revision }, ["profileId", "expectedCurrentPlanId", "expectedCurrentRevision"]), execute: async (input) => { const result = await runtime.switchProfilePersisted(input.profileId as ProfileId, { expectedCurrentPlanId: String(input.expectedCurrentPlanId), expectedCurrentRevision: Number(input.expectedCurrentRevision) }); if (result.ok) await onProfileChanged(); return result; } }),
+  define({ name: "finite_switch_profile", title: "Switch active finite plan", description: "Switch a built-in travel, renovation, event, or general planning contract against the exact current context, invalidate page staging, replace contextual tools, and return a context receipt.", inputSchema: objectSchema({ profileId: { type: "string", enum: ["travel", "renovation", "event", "general"] }, expectedCurrentPlanId: string, expectedCurrentRevision: revision }, ["profileId", "expectedCurrentPlanId", "expectedCurrentRevision"]), execute: async (input) => { const result = await runtime.switchProfilePersisted(input.profileId as ProfileId, { expectedCurrentPlanId: String(input.expectedCurrentPlanId), expectedCurrentRevision: Number(input.expectedCurrentRevision) }); if (result.ok) await onProfileChanged(); return result; } }),
 ];
 
 const contextualDefinitions = (runtime: FinitePlanRuntime): WebMCPToolDefinition[] => {
@@ -1352,6 +1360,7 @@ const contextualDefinitions = (runtime: FinitePlanRuntime): WebMCPToolDefinition
       define({ name: "event_replace_vendor", title: "Record vendor replacement", description: "Compile vendor replacement cost into a typed event.", inputSchema: objectSchema({ vendor: string, replacement: string, costDeltaMinor: integer, minimumBufferMinor: { type: "integer", minimum: 0 } }, ["vendor", "replacement", "costDeltaMinor", "minimumBufferMinor"]), execute: ({ vendor, replacement, ...input }) => commonEvent(input, { type: "vendor_change", title: `Replace ${String(vendor)} with ${String(replacement)}`, daysDelta: 0 }) }),
       define({ name: "event_move_run_item", title: "Record run-item move", description: "Compile run-of-show timing and cost impact into a typed event.", inputSchema: objectSchema({ item: string, costDeltaMinor: integer, minimumBufferMinor: { type: "integer", minimum: 0 } }, ["item", "costDeltaMinor", "minimumBufferMinor"]), execute: ({ item, ...input }) => commonEvent(input, { type: "run_item_change", title: `Move ${String(item)}`, daysDelta: 0 }) }),
     ],
+    general: [],
   };
   return tools[kernel().profile.profileId];
 };

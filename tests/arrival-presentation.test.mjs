@@ -197,7 +197,7 @@ test("plan overview settings support a timed single-day event and category alloc
   };
   const starter = starterPlanForArrival(order);
   assert.deepEqual(starter.overview, {
-    start: "2026-10-03", end: "2026-10-03", datesProvisional: false, singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD", budgetProvisional: false,
+    start: "2026-10-03", end: "2026-10-03", datesProvisional: false, singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD", moneyState: "positive", budgetProvisional: false,
     categories: starter.overview.categories, categoryAllocated: 1250, categoryPercent: 125,
   });
 });

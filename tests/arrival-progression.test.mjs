@@ -102,3 +102,89 @@ test("a reviewed editable workspace round-trips into a compiler-valid plan", asy
   const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
   assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE", JSON.stringify({ reviewedStarter, intake: progression.intake, staged }));
 });
+
+test("a zero-budget job interview becomes an isolated general plan and activates without event semantics", async () => {
+  const interviewOrder = {
+    ...structuredClone(order),
+    orderId: "arrival_job_interview_canary_01",
+    version: 4,
+    status: "interpretation_confirmed",
+    rawOutcome: "Prepare for a fictional second-round Senior Strategy & Operations interview with Northstar AI on 18 September 2026. It is a 60-minute video interview with the COO. I have three prep evenings and zero paid budget.",
+    structured: { planningMode: "codex" },
+    inputs: [{
+      inputId: "arrival_input_interview_module",
+      kind: "detail",
+      sourceSurface: "codex",
+      createdAt: "2026-08-30T00:00:00.000Z",
+      payload: {
+        workspaceOperation: "module_add",
+        moduleId: "custom_interview_evidence",
+        moduleSource: "codex",
+        label: "Interview evidence bank",
+        description: "Connect each competency to a concise example and result.",
+        variant: "cards",
+        fields: [
+          { fieldId: "title", label: "Competency", inputType: "text" },
+          { fieldId: "situation", label: "Situation", inputType: "textarea" },
+          { fieldId: "action", label: "Action", inputType: "textarea" },
+          { fieldId: "result", label: "Result", inputType: "textarea" },
+          { fieldId: "proof", label: "Proof", inputType: "textarea" },
+          { fieldId: "confidence", label: "Confidence", inputType: "text" },
+        ],
+      },
+    }],
+    interpretation: {
+      ...order.interpretation,
+      basedOnVersion: 4,
+      inferredFamily: "job_interview",
+      summary: "Prepare for a second-round strategy and operations interview with Northstar AI.",
+      known: { interviewDate: "2026-09-18", interviewLengthMinutes: 60, interviewer: "COO", prepEvenings: 3, paidBudget: 0 },
+    },
+    checksum: "b".repeat(64),
+  };
+
+  const interviewStarter = starterPlanForArrival(interviewOrder);
+  assert.equal(interviewStarter.family, "general");
+  assert.equal(interviewStarter.title, "Northstar AI interview preparation · 18 Sept 2026");
+  assert.equal(interviewStarter.overview.moneyState, "zero");
+  assert.equal(interviewStarter.overview.totalBudget, "0");
+  assert.equal(interviewStarter.overview.categories.length, 0);
+  assert(interviewStarter.sections.some((entry) => entry.sectionId === "custom_interview_evidence"));
+  assert.equal(interviewStarter.sections.some((entry) => /guest|venue|supplier/i.test(entry.label)), false);
+
+  const progression = arrivalProgressionFromStarter(interviewOrder, interviewStarter);
+  assert.equal(progression.intake.profileId, "general");
+  assert.equal(progression.intake.planningDimensions.money, "zero");
+  assert.deepEqual(progression.intake.allocation, { totalBudgetMinor: 0, spentMinor: 0, committedMinor: 0, forecastMinor: 0, bufferMinor: 0 });
+  assert.deepEqual(Object.keys(progression.intake.entityValues).sort(), ["open_dependencies", "plan_items"]);
+  assert.equal(progression.intake.stages.length <= 12, true);
+  assert(progression.inputs.some((entry) => entry.message.includes("Interview evidence bank")));
+
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const catalog = new PlanCatalogStore(storage);
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "event", catalog);
+  const acceptedBefore = runtime.kernel.profile.planId;
+  const assessed = await runtime.assessPlanIntake(progression.intake);
+  assert.match(assessed.code, /^INTAKE_FACTS_COMPLETE/, JSON.stringify(assessed));
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE", JSON.stringify(staged));
+  assert.equal(staged.draft.profile.profileId, "general");
+  assert.equal(staged.draft.profile.name, "Northstar AI interview preparation · 18 Sept 2026");
+  assert.equal(staged.draft.profile.planningDimensions.money, "zero");
+  assert.equal(runtime.kernel.profile.planId, acceptedBefore);
+
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  assert.equal(confirmed.code, "HUMAN_PLAN_ACTIVATION_CONFIRMED");
+  const activated = await runtime.activateConfirmedPlanDraft({
+    draftId: staged.draft.draftId,
+    confirmationId: confirmed.confirmation.confirmationId,
+    expectedPlanId: acceptedBefore,
+    expectedRevision: 1,
+    idempotencyKey: "activate-job-interview-canary-01",
+  });
+  assert.equal(activated.code, "PLAN_ACTIVATED", JSON.stringify(activated));
+  assert.equal(runtime.kernel.profile.profileId, "general");
+  assert.equal(runtime.kernel.accepted.totalBudgetMinor, 0);
+  assert.equal(runtime.listPlans().plans.some((entry) => entry.planId === progression.intake.planId), true);
+});

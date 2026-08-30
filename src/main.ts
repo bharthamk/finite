@@ -790,9 +790,10 @@ const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): 
   const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId) || (surface === "plan" && plan.active));
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
+  const arrivalDraftTitle = surface === "arrival" && currentArrival() ? starterPlanForArrival(currentArrival()!)?.title ?? "Current draft" : null;
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : planDisplayNames.get(plan.planId) ?? plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
   return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan" ${busy ? "disabled" : ""}>
-    ${surface === "arrival" ? `<option value="" selected>View a plan…</option>` : ""}
+    ${arrivalDraftTitle ? `<optgroup label="Drafts"><option value="" selected>${escapeHtml(arrivalDraftTitle)} · draft</option></optgroup>` : ""}
     <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
     ${current.length ? `<optgroup label="Current plans">${options(current)}</optgroup>` : ""}
     ${earlier.length ? `<optgroup label="Earlier versions">${options(earlier, true)}</optgroup>` : ""}
@@ -1503,7 +1504,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const startMs = /^\d{4}-\d{2}-\d{2}$/.test(overview.start) ? Date.parse(`${overview.start}T12:00:00Z`) : Number.NaN;
   const endMs = /^\d{4}-\d{2}-\d{2}$/.test(overview.end) ? Date.parse(`${overview.end}T12:00:00Z`) : Number.NaN;
   const nights = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 86_400_000)) : 0;
-  const duration = Number.isFinite(startMs) ? overview.singleDay || !Number.isFinite(endMs) ? "1 day" : `${nights + 1} ${nights === 0 ? "day" : "days"}${nights ? ` · ${nights} ${nights === 1 ? "night" : "nights"}` : ""}` : "Dates open";
+  const duration = Number.isFinite(startMs) ? overview.singleDay || !Number.isFinite(endMs) ? "1 day" : `${nights + 1} ${nights === 0 ? "day" : "days"}${starter.family === "travel" && nights ? ` · ${nights} ${nights === 1 ? "night" : "nights"}` : ""}` : "Dates open";
   const scheduleSection = starter.sections.find((section) => section.sectionId === "itinerary" || section.sectionId === "schedule");
   const staysSection = starter.sections.find((section) => section.sectionId === "stays");
   const transportSection = starter.sections.find((section) => section.sectionId === "transport");
@@ -1560,7 +1561,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const scheduleCount = starter.family === "travel" ? scheduleSection?.items.filter((item) => String(item.fields.kind || "location") === "location").length ?? 0 : scheduleSection?.items.length ?? 0;
   const timingDetail = overview.includeTime
     ? `${overview.startTime || "Start open"}${overview.endTime ? ` – ${overview.endTime}` : ""}${overview.timeZone ? ` · ${overview.timeZone}` : ""}`
-    : overview.singleDay ? "Single-day plan" : `${scheduleCount} ${starter.family === "travel" ? "stops" : "stages"}`;
+    : overview.singleDay ? "Single-day plan" : `${scheduleCount} ${starter.family === "travel" ? "stops" : starter.family === "general" ? "scheduled items" : "stages"}`;
   const splitDetail = overview.categories.slice(0, 2).map((item) => {
     const amount = starterAmount(item.fields.amount);
     const percentage = limit > 0 ? (amount / limit) * 100 : 0;
@@ -1584,6 +1585,47 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       </form>
     </article>`;
   }).join("");
+  const planItemCount = starter.sections
+    .filter((section) => !["money", "requirements", "tasks"].includes(section.sectionId))
+    .reduce((sum, section) => sum + section.items.length, 0);
+  const requirementsLabel = openRequirements === 1 ? "requirement" : "requirements";
+  const adaptiveMetricCards = overview.moneyState === "zero" ? `
+      <article class="starter-report-card">
+        <header><span>Paid budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="budget" data-overview-focus="totalBudget" aria-label="Edit budget state"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${escapeHtml(money(0))}</strong>
+        <small>No paid spend planned · change this any time</small>
+      </article>` : `
+      <article class="starter-report-card">
+        <header><span>Plan items</span><button type="button" data-action="open-workspace-module" data-module-id="${escapeHtml(scheduleSection?.sectionId ?? starter.sections[0]?.sectionId ?? "scope")}" aria-label="Open plan items"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${planItemCount}</strong>
+        <small>Across ${starter.sections.filter((section) => !["money", "requirements", "tasks"].includes(section.sectionId)).length} editable sections</small>
+      </article>`;
+  const nonFinancialCards = overview.moneyState === "positive" ? `
+      <article class="starter-report-card${overview.budgetProvisional ? " is-provisional" : ""}">
+        <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="budget" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${escapeHtml(money(limit))}</strong>
+        <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated${recordedCosts ? ` · ${escapeHtml(money(recordedCosts))} in linked records` : ""}</small>
+      </article>
+      <article class="starter-report-card${allocationClass}${splitProvisional ? " is-provisional" : ""}">
+        <header><span>Budget split</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit budget split"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${overview.categoryPercent.toFixed(0)}%</strong>
+        <small>${overview.categories.length} ${overview.categories.length === 1 ? "category" : "categories"}${splitDetail ? ` · ${escapeHtml(splitDetail)}` : ""}</small>
+      </article>
+      <article class="starter-report-card${allocationClass}${availableProvisional ? " is-provisional" : ""}">
+        <header><span>${allocationDelta < 0 ? "Over" : "Available"}</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit available budget"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${escapeHtml(money(Math.abs(allocationDelta)))}</strong>
+        <small>${availablePercent.toFixed(0)}% ${allocationDelta < 0 ? "over" : "remaining"} · ${openItems} open ${openItems === 1 ? "item" : "items"}</small>
+      </article>` : `${adaptiveMetricCards}
+      <article class="starter-report-card">
+        <header><span>Open questions</span><button type="button" data-action="open-workspace-module" data-module-id="${escapeHtml(prioritySectionId || starter.sections[0]?.sectionId || "scope")}" aria-label="Open questions"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${openQuestionCount}</strong>
+        <small>${openQuestionCount === 1 ? "question" : "questions"} remaining</small>
+      </article>
+      <article class="starter-report-card">
+        <header><span>Requirements</span><button type="button" data-action="open-workspace-module" data-module-id="requirements" aria-label="Open requirements"><span aria-hidden="true">✎</span></button></header>
+        <strong class="starter-report-card__value">${openRequirements}</strong>
+        <small>open ${requirementsLabel}</small>
+      </article>`;
   const overviewMarkup = `<details class="starter-plan__overview" open>
     <summary><span>Plan at a glance</span></summary>
     <div class="starter-report-strip" aria-label="Plan at a glance">
@@ -1592,21 +1634,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
         <strong class="starter-report-card__value">${escapeHtml(dateRange)}</strong>
         <small>${escapeHtml(duration)} · ${escapeHtml(timingDetail)}</small>
       </article>
-      <article class="starter-report-card${overview.budgetProvisional ? " is-provisional" : ""}">
-        <header><span>Total budget</span><button type="button" data-action="open-overview-editor" data-overview-editor="budget" data-overview-focus="totalBudget" aria-label="Edit total budget"><span aria-hidden="true">✎</span></button></header>
-        <strong class="starter-report-card__value">${limit ? escapeHtml(money(limit)) : "Not set"}</strong>
-        <small>${escapeHtml(currency)} base · ${escapeHtml(money(overview.categoryAllocated))} allocated${recordedCosts ? ` · ${escapeHtml(money(recordedCosts))} in linked records` : ""}</small>
-      </article>
-      <article class="starter-report-card${allocationClass}${splitProvisional ? " is-provisional" : ""}">
-        <header><span>Budget split</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit budget split"><span aria-hidden="true">✎</span></button></header>
-        <strong class="starter-report-card__value">${limit ? `${overview.categoryPercent.toFixed(0)}%` : "—"}</strong>
-        <small>${overview.categories.length} ${overview.categories.length === 1 ? "category" : "categories"}${splitDetail ? ` · ${escapeHtml(splitDetail)}` : ""}</small>
-      </article>
-      <article class="starter-report-card${allocationClass}${availableProvisional ? " is-provisional" : ""}">
-        <header><span>${allocationDelta < 0 ? "Over" : "Available"}</span><button type="button" data-action="open-overview-editor" data-overview-editor="split" aria-label="Edit available budget"><span aria-hidden="true">✎</span></button></header>
-        <strong class="starter-report-card__value">${limit ? escapeHtml(money(Math.abs(allocationDelta))) : "—"}</strong>
-        <small>${limit ? `${availablePercent.toFixed(0)}% ${allocationDelta < 0 ? "over" : "remaining"}` : escapeHtml(allocationLabel)} · ${openItems} open ${openItems === 1 ? "item" : "items"}</small>
-      </article>
+      ${nonFinancialCards}
       <article class="starter-report-card">
         <header><span>To-do</span><button type="button" data-action="open-workspace-module" data-module-id="tasks" aria-label="Open to-do list"><span aria-hidden="true">✎</span></button></header>
         <strong class="starter-report-card__value">${openTasks}</strong>
@@ -1630,7 +1658,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close total budget editor">×</button>
     <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_budget_title">Total budget</h3></header>
     <form class="starter-overview-dialog__form starter-overview-dialog__form--single" data-arrival-form="workspace-overview">
-      <section><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
+      <section><label><span>How money fits this plan</span><select name="moneyState"><option value="positive" ${overview.moneyState === "positive" ? "selected" : ""}>A positive budget applies</option><option value="zero" ${overview.moneyState === "zero" ? "selected" : ""}>The paid budget is zero</option><option value="unknown" ${overview.moneyState === "unknown" ? "selected" : ""}>Not decided yet</option><option value="not_applicable" ${overview.moneyState === "not_applicable" ? "selected" : ""}>Money is not part of this plan</option></select></label><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or EUR</small></label></div>
         <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
         <label class="starter-certainty-toggle"><input name="budgetProvisional" type="checkbox" ${overview.budgetProvisional ? "checked" : ""}><span><strong>Placeholder budget</strong><small>Italic until settled. Calculations stay the same.</small></span></label>
       </section>
@@ -1868,8 +1896,8 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
   if (!profileContextReady) return `<div class="arrival-profile-context arrival-profile-context--loading"><span>Checking what you asked Finite to remember…</span></div>`;
   const accepted = profileMemories.filter((memory) => memory.status === "accepted");
   if (!accepted.length) return `<div class="arrival-profile-context arrival-profile-context--empty"><span>No saved preferences are being added to this plan.</span><a href="${escapeHtml(aboutPath)}">About you</a></div>`;
-  return `<details class="arrival-profile-context">
-    <summary><div><span>From About you</span><strong>Using ${accepted.length} saved ${accepted.length === 1 ? "thing" : "things"}</strong><small>Open this to skip or change anything for this plan.</small></div><em>${accepted.length} on</em></summary>
+  return `<details class="arrival-profile-context" data-profile-selection>
+    <summary><div><span>From About you</span><strong data-profile-selection-title>${accepted.length} selected for this plan</strong><small>Open this to skip or change anything for this plan.</small></div><em data-profile-selection-count>${accepted.length} on</em></summary>
     <div class="arrival-profile-context__items">${accepted.map((memory) => `<label class="arrival-profile-context__item"><input type="checkbox" name="profileUse" value="${escapeHtml(memory.memoryId)}" checked data-arrival-mode-control ${mode === "manual" ? "disabled" : ""}><span><small>${escapeHtml(profileMemoryKindLabel(memory.kind))}</small><input name="profileStatement:${escapeHtml(memory.memoryId)}" maxlength="500" value="${escapeHtml(memory.statement)}" aria-label="Change ${escapeHtml(memory.statement)} for this plan" data-arrival-mode-control ${mode === "manual" ? "disabled" : ""}><em>Used only for this plan; changing it here does not edit About you.</em></span></label>`).join("")}</div>
     <footer><p>These are revisable starting context—not current facts, permission, or approval.</p><a href="${escapeHtml(aboutPath)}">Manage About you</a></footer>
   </details>`;
@@ -2298,11 +2326,15 @@ const saveWorkspaceOverview = async (form: HTMLFormElement): Promise<void> => {
       timeZone: includeTime ? String(data.get("timeZone") ?? "").trim() : "",
     });
   }
-  if (hasBudget) Object.assign(fields, {
-    totalBudget: String(data.get("totalBudget") ?? "").trim(),
-    currency: String(data.get("currency") ?? "AUD").trim().toUpperCase(),
-    budgetProvisional: form.querySelector<HTMLInputElement>("input[name='budgetProvisional']")?.checked === true,
-  });
+  if (hasBudget) {
+    const moneyState = String(data.get("moneyState") ?? "unknown");
+    Object.assign(fields, {
+      totalBudget: moneyState === "positive" ? String(data.get("totalBudget") ?? "").trim() : moneyState === "unknown" ? "" : "0",
+      currency: String(data.get("currency") ?? "AUD").trim().toUpperCase(),
+      moneyState,
+      budgetProvisional: form.querySelector<HTMLInputElement>("input[name='budgetProvisional']")?.checked === true,
+    });
+  }
   await saveWorkspaceMutation({ workspaceOperation: "overview", moduleId: "overview", fields }, "correction", hasDates ? "Your plan dates are saved." : "Your total budget is saved.");
 };
 
@@ -2636,6 +2668,16 @@ function bindArrivalInteractions(): void {
   bindWorkspaceOverviewEditors();
   bindWorkspaceOverviewToggles();
   bindWorkspaceCurrencyConversions();
+  const syncProfileSelectionCount = (): void => {
+    const selection = root?.querySelector<HTMLElement>("[data-profile-selection]");
+    if (!selection) return;
+    const count = selection.querySelectorAll<HTMLInputElement>("input[name='profileUse']:checked").length;
+    const countLabel = selection.querySelector<HTMLElement>("[data-profile-selection-count]");
+    const title = selection.querySelector<HTMLElement>("[data-profile-selection-title]");
+    if (countLabel) countLabel.textContent = `${count} on`;
+    if (title) title.textContent = `${count} selected for this plan`;
+  };
+  root?.querySelectorAll<HTMLInputElement>("input[name='profileUse']").forEach((input) => input.addEventListener("change", syncProfileSelectionCount));
   root?.querySelector<HTMLButtonElement>("[data-action='open-custom-workspace']")?.addEventListener("click", () => {
     customWorkspaceOpen = true;
     const dialog = root.querySelector<HTMLDialogElement>("[data-custom-workspace-dialog]");
@@ -3086,6 +3128,7 @@ const renderPlanFactDialog = (): string => {
 
 const visibleManagingZones = (manifest: SurfaceManifest): SurfaceZone[] => {
   const hiddenDuplicates = new Set<SurfaceZone["component"]>(["pressure_meter", "entity_table", "commitment_stack"]);
+  if (runtime.kernel.profile.profileId === "general") hiddenDuplicates.delete("entity_table");
   const hasCurrentChange = Boolean(runtime.kernel.activeEventId);
   const priority = (zone: SurfaceZone): number => stageComponents.has(zone.component) ? 0
     : zone.component === "finite_summary" ? 1
@@ -3196,6 +3239,8 @@ const humanPlanLabel = (value: string): string => {
 
 const renderPlanDraftContent = (profile: ProfileDefinition): string => {
   const { accepted, surface } = profile;
+  const moneyState = profile.planningDimensions?.money ?? "positive";
+  const moneyApplies = moneyState === "positive";
   const guestCount = profile.entities.guest_headcount?.values.count;
   const committedMinor = accepted.spentMinor + accepted.committedMinor;
   const allocationAssumptions = (surface.assumptions ?? []).filter((assumption) => assumption.path.startsWith("allocation."));
@@ -3218,10 +3263,9 @@ const renderPlanDraftContent = (profile: ProfileDefinition): string => {
 
   return `<div class="draft-review__content">
     <dl class="draft-review__summary" aria-label="Plan at a glance">
-      <div><dt>Total limit</dt><dd>${money(accepted.totalBudgetMinor)}</dd></div>
+      ${moneyApplies ? `<div><dt>Total limit</dt><dd>${money(accepted.totalBudgetMinor)}</dd></div>` : `<div><dt>Paid budget</dt><dd>${moneyState === "zero" ? money(0) : moneyState === "not_applicable" ? "Not part of this plan" : "Not decided"}</dd></div>`}
       ${Number.isFinite(guestCount) ? `<div><dt>Guests</dt><dd>${escapeHtml(guestCount)}</dd></div>` : ""}
-      <div><dt>Already committed</dt><dd>${money(committedMinor)}</dd></div>
-      <div><dt>Available to plan</dt><dd>${money(accepted.bufferMinor)}</dd></div>
+      ${moneyApplies ? `<div><dt>Already committed</dt><dd>${money(committedMinor)}</dd></div><div><dt>Available to plan</dt><dd>${money(accepted.bufferMinor)}</dd></div>` : `<div><dt>Plan stages</dt><dd>${surface.stages.length}</dd></div><div><dt>Open dependencies</dt><dd>${openDependencies.length}</dd></div>`}
     </dl>
     <section class="draft-review__section draft-review__plan" aria-labelledby="draft_plan_steps">
       <div class="draft-review__section-heading"><p class="eyebrow">The plan</p><h3 id="draft_plan_steps">What happens next</h3></div>
@@ -3931,7 +3975,9 @@ const progressArrivalPlan = async (): Promise<void> => {
     const code = error instanceof Error ? error.message : String(error);
     announce(code === "ARRIVAL_NOT_READY" || code === "ARRIVAL_WORKSPACE_NOT_READY"
       ? "This rough plan still needs its current interpretation completed before it can start."
-      : `Finite could not start this plan. Nothing changed (${code}).`);
+      : code === "PLAN_DRAFT_INVALID"
+        ? "One saved detail does not yet fit the managed plan. Your draft is safe; review the highlighted section or ask Codex to repair it, then try again."
+        : "Finite could not start this plan. Your draft is safe—please try again.");
     await render();
   }
 };

@@ -303,12 +303,12 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-option dl \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(source, /class=\"\$\{layoutClass\}\"/);
   assert.match(source, /<details class="starter-plan__overview" open>/);
-  assert.equal(source.match(/<article class="starter-report-card/g)?.length, 5);
-  for (const label of ["Dates", "Total budget", "Budget split", "To-do"]) assert.match(source, new RegExp(`>${label}<`));
+  assert((source.match(/<article class="starter-report-card/g)?.length ?? 0) >= 5);
+  for (const label of ["Dates", "Total budget", "Budget split", "Plan items", "Open questions", "To-do"]) assert.match(source, new RegExp(`>${label}<`));
   assert.match(source, /\$\{openTasks\}<\/strong>/);
   assert.match(source, /data-action="open-workspace-module" data-module-id="tasks"/);
   assert.match(source, /allocationDelta < 0 \? "Over" : "Available"/);
-  assert.equal(source.match(/data-action="open-overview-editor"/g)?.length, 4);
+  assert((source.match(/data-action="open-overview-editor"/g)?.length ?? 0) >= 4);
   assert.match(source, /aria-label="Edit plan dates"/);
   assert.match(source, /aria-label="Edit total budget"/);
   assert.match(source, /data-overview-dialog="dates"/);

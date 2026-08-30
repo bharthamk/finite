@@ -1,4 +1,4 @@
-const genericRoughPlan = /^(?:travel|renovation|event|adaptive)\s+rough plan$/i;
+const genericRoughPlan = /^(?:travel|renovation|event|adaptive|general)\s+rough plan$/i;
 
 const humanDate = (value: string): string => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
@@ -14,6 +14,8 @@ const humanDate = (value: string): string => {
 const coreTitle = (text: string): string => {
   const source = text.trim();
   if (/\b(?:dinner party|dinner plan|dinner at home|host(?:ing)? (?:a )?dinner)\b/i.test(source)) return "Dinner party";
+  const interviewCompany = source.match(/\binterview\b[^.!?\n]{0,80}?\bwith\s+([^,.;]+?)(?=\s+(?:for|on|at|about)\b|[,.;]|$)/i)?.[1]?.trim();
+  if (interviewCompany) return `${interviewCompany} interview preparation`;
   const interviewRole = source.match(/(?:job )?interview (?:for|as) (?:an? |the )?([^.,;]+?)(?:\s+(?:role|position))?(?:[.,;]|$)/i)?.[1]?.trim();
   if (interviewRole) return `${interviewRole.replace(/\s+(?:role|position)$/i, "")} interview`;
   const weekendDestination = source.match(/weekend (?:trip|away|break)(?:\s+to)?\s+([^.,;]+?)(?:\s+for\s+\w+|[.,;]|$)/i)?.[1]?.trim();

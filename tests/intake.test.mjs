@@ -166,7 +166,7 @@ test("Codex receives a compiler-valid blueprint and the human can return an iner
   assert.equal(rejected.code, "HUMAN_PLAN_DRAFT_RETURNED");
   assert.equal(runtime.pendingPlanDraft, null);
   assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
-  assert.equal(runtime.listPlans().plans.length, 3);
+  assert.equal(runtime.listPlans().plans.length, 4);
 });
 
 test("typed partial intake returns exact missing paths, conflicts, and one safe residual without changing truth", async () => {

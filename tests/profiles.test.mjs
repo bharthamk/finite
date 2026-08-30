@@ -4,7 +4,8 @@ import { compileBuiltInProfiles, compileProfile, getProfileDefinition, ProfileVa
 
 test("built-in profiles compile into immutable hashed operating contracts", async () => {
   const profiles = await compileBuiltInProfiles();
-  assert.equal(profiles.size, 3);
+  assert.equal(profiles.size, 4);
+  assert.equal(profiles.get("general").planningDimensions.money, "unknown");
   for (const [profileId, profile] of profiles) {
     assert.equal(profile.profileId, profileId);
     assert.match(profile.profileHash, /^[a-f0-9]{64}$/);

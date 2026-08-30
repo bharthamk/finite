@@ -30,6 +30,11 @@ test("bounded search enumerates legal combinations and returns three determinist
   const profiles = await compileBuiltInProfiles();
   const expectedCombinationCounts = { travel: 26, renovation: 15, event: 15 };
   for (const [profileId, profile] of profiles) {
+    if (profileId === "general") {
+      assert.deepEqual(profile.moves, {});
+      assert.equal(profile.searchPolicy.maxMovesPerOption, 0);
+      continue;
+    }
     const kernel = new FinitePlanKernel(profile);
     const capabilities = kernel.getCapabilities();
     assert.equal(capabilities.optionSearch.strategy, "bounded_legal_move_enumeration");

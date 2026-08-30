@@ -127,7 +127,7 @@ test("activation storage failure rolls back snapshot, catalog, and active select
   const failed = await runtime.activateConfirmedPlanDraft(command);
   assert.equal(failed.code, "PLAN_ACTIVATION_STORAGE_FAILED");
   assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
-  assert.equal(runtime.listPlans().plans.length, 3);
+  assert.equal(runtime.listPlans().plans.length, 4);
   assert.equal(catalogStore.load().length, 0);
   assert.equal(storage.getItem(`finite-plan.v1:${blueprint.profile.planId}`), null);
   assert.equal(runtime.pendingPlanDraft.draftId, staged.draft.draftId);

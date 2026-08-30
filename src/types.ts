@@ -1,4 +1,10 @@
-export type ProfileId = "travel" | "renovation" | "event";
+export type ProfileId = "travel" | "renovation" | "event" | "general";
+export type PlanningDimensionState = "not_applicable" | "unknown" | "zero" | "positive";
+export interface PlanningDimensions {
+  money: PlanningDimensionState;
+  location: PlanningDimensionState;
+  capacity: PlanningDimensionState;
+}
 export type PreferenceKey = "comfort" | "experience" | "buffer" | "schedule";
 export type StateSelector =
   | "identity"
@@ -218,6 +224,8 @@ export interface ProfileDefinition {
   searchPolicy: SearchPolicy;
   evidencePolicy: EvidencePolicy;
   contextualCapabilities: string[];
+  /** Optional because accepted profiles created before the general-plan contract must retain their exact hash. */
+  planningDimensions?: PlanningDimensions;
   surface: SurfaceProfileDefinition;
 }
 
@@ -438,6 +446,7 @@ export interface PlanIntakeInput {
   planId?: string;
   name?: string;
   brief?: string;
+  planningDimensions?: Partial<PlanningDimensions>;
   allocation?: Partial<Allocation>;
   actuals?: ActualDefinition[];
   locks?: string[];

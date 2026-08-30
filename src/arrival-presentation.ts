@@ -149,6 +149,7 @@ export interface StarterPlanOverview {
   timeZone: string;
   totalBudget: string;
   currency: string;
+  moneyState: "not_applicable" | "unknown" | "zero" | "positive";
   budgetProvisional: boolean;
   categories: StarterPlanItem[];
   categoryAllocated: number;
@@ -262,11 +263,12 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     requirements: ["Which approvals, access limits, or household constraints still need checking?"],
     tasks: ["Which work will you do yourself?"],
   };
+  const noPaidBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`);
   return {
     schedule: ["Which date or sequence is fixed, and what can move?"],
     scope: ["What would make this plan complete enough to use?"],
     resources: ["Which people, tools, or providers are already available?"],
-    money: ["Where can the plan flex if the first-pass cost is too high?"],
+    money: noPaidBudget ? [] : ["Is money relevant to this plan, and if so what limit should it respect?"],
     requirements: ["Which requirement or approval still needs a human decision?"],
     tasks: ["Which next action do you want to own yourself?"],
   };
@@ -593,7 +595,7 @@ const seedRoughPlan = (
       : family === "event"
         ? [["venue", "Venue", 25], ["food", "Food & drink", 35], ["production", "Suppliers & production", 25], ["contingency", "Contingency", 15]]
         : [["delivery", "Core delivery", 50], ["people", "People & resources", 25], ["tools", "Tools & logistics", 15], ["buffer", "Flexible buffer", 10]];
-    splits.forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(limit * Number(percent) / 100)), currency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change the category or amount freely.` }));
+    if (family !== "general" || limit > 0) splits.forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(limit * Number(percent) / 100)), currency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change the category or amount freely.` }));
   }
 };
 
@@ -843,8 +845,17 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const limit = Number(canonicalLimit?.fields.amount || 0);
   const categories = moneyItems.filter((item) => item.fields.moneyRole === "cost");
   const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
-  const totalBudget = String(overviewOverrides.totalBudget || (limit ? String(limit) : ""));
+  const totalBudget = overviewOverrides.totalBudget !== undefined ? String(overviewOverrides.totalBudget) : (canonicalLimit ? String(canonicalLimit.fields.amount ?? "") : "");
   const budgetNumber = Number(totalBudget || 0);
+  const explicitNoBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(interpretation?.known ?? {})}`);
+  const overrideMoneyState = String(overviewOverrides.moneyState ?? "");
+  const moneyState = (["not_applicable", "unknown", "zero", "positive"] as const).includes(overrideMoneyState as "not_applicable" | "unknown" | "zero" | "positive")
+    ? overrideMoneyState as "not_applicable" | "unknown" | "zero" | "positive"
+    : totalBudget.trim() === ""
+      ? explicitNoBudget ? "zero" as const : "unknown" as const
+      : budgetNumber > 0
+        ? "positive" as const
+        : explicitNoBudget ? "zero" as const : "not_applicable" as const;
   const eventSourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
   const anchoredEventDate = family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(eventSourceText)
     ? dateIso(eventSourceText, Number(eventSourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear()))
@@ -877,6 +888,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       timeZone: String(overviewOverrides.timeZone || ""),
       totalBudget,
       currency,
+      moneyState,
       budgetProvisional,
       categories,
       categoryAllocated,

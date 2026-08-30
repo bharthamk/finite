@@ -48,7 +48,7 @@ const profileFor = (starter: StarterPlanPresentation): ProfileId => starter.fami
   ? "travel"
   : starter.family === "renovation"
     ? "renovation"
-    : "event";
+    : starter.family === "event" ? "event" : "general";
 
 const sectionSummary = (section: StarterPlanSection): string => {
   const entries = section.items.map((item) => {
@@ -142,7 +142,9 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     }
     : profileId === "renovation"
       ? { completion_day: { day: Math.max(1, stages.length) }, committed_completion_day: { day: Math.max(1, stages.length) } }
-      : { guest_headcount: { count: guestCount }, venue: { capacity: venueCapacity } };
+      : profileId === "event"
+        ? { guest_headcount: { count: guestCount }, venue: { capacity: venueCapacity } }
+        : { plan_items: { count: stages.length }, open_dependencies: { count: dependencies.filter((dependency) => dependency.status === "open").length } };
 
   const suffix = order.orderId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(-10) || String(order.version);
   const planSlug = boundedSlug(starter.title).slice(0, Math.max(3, 58 - suffix.length));
@@ -153,6 +155,11 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     planId: `plan_${planSlug}_${suffix}`,
     name: starter.title.slice(0, 120),
     brief: starter.brief.slice(0, 500),
+    planningDimensions: {
+      money: starter.overview.moneyState ?? (totalBudgetMinor > 0 ? "positive" : "zero"),
+      location: starter.sections.some((section) => section.items.some((item) => String(item.fields.location ?? "").trim())) ? "positive" : "unknown",
+      capacity: profileId === "event" ? "positive" : "not_applicable",
+    },
     allocation: { totalBudgetMinor, spentMinor: 0, committedMinor: 0, forecastMinor, bufferMinor: totalBudgetMinor - forecastMinor },
     actuals: [],
     locks,
