@@ -532,7 +532,7 @@ test("each natural demo pause offers Next or a Codex question without another co
 test("guided highlights point at one exact surface at a time", () => {
   assert.match(source, /top: \{ label: "the top of this page", selectors: \["\.site-header"/);
   assert.match(source, /root\.querySelectorAll<HTMLElement>\("\[data-codex-priority\]"\)\.forEach/);
-  assert.match(source, /if \(request\.target === "priority"\) \{ element\.dataset\.codexPriority = "true"/);
+  assert.match(source, /if \(request\.target === "priority"\) \{[^]*element\.dataset\.codexPriority = "true"/);
 });
 
 test("starting or restarting a demo cannot inherit a hidden prior Next gate", () => {
@@ -621,6 +621,8 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /overlay\.setAttribute\("popover", "manual"\)/);
   assert.match(source, /typeof overlay\.showPopover === "function"/);
   assert.match(source, /demoNextRequired = false;\s+demoNextAdvanced = true;/);
+  assert.match(source, /root\.querySelectorAll<HTMLElement>\("\.starter-module__codex-location"\)\.forEach\(\(location\) => location\.remove\(\)\)/);
+  assert.match(source, /location\.textContent = Number\(element\.dataset\.openQuestions/);
   assert.match(styles, /\.codex-guide-overlay \{ position:fixed; top:auto;/);
   assert.match(source, /class="starter-overview__field-hint" id="currency_hint"/);
   assert.match(styles, /\.starter-overview__field-grid \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\); align-items:start;/);

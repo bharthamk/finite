@@ -868,7 +868,18 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   }
   const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
   if (disclosure) disclosure.open = true;
-  if (request.target === "priority") { element.dataset.codexPriority = "true"; element.classList.add("is-codex-priority"); }
+  if (request.target === "priority") {
+    root.querySelectorAll<HTMLElement>(".starter-module__codex-location").forEach((location) => location.remove());
+    element.dataset.codexPriority = "true";
+    element.classList.add("is-codex-priority");
+    const counts = element.querySelector<HTMLElement>(":scope > summary > b");
+    if (counts) {
+      const location = document.createElement("span");
+      location.className = "starter-module__codex-location";
+      location.textContent = Number(element.dataset.openQuestions ?? "0") > 0 ? `${agenticName()} is here` : `${agenticName()} working section`;
+      counts.append(location);
+    }
+  }
   element.setAttribute("data-codex-spotlight", "true");
   element.scrollIntoView({ behavior: "smooth", block: "center" });
   if (demoPlaybackMode && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
