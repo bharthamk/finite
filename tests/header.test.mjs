@@ -487,6 +487,17 @@ test("each natural demo pause offers Next or a Codex question without another co
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-question/);
 });
 
+test("starting or restarting a demo cannot inherit a hidden prior Next gate", () => {
+  const startNew = source.slice(source.indexOf("const startNewPlan"), source.indexOf("const bindPlanSwitcherInteractions"));
+  const openEntry = source.slice(source.indexOf("const openEntryRoute"), source.indexOf("const renderCodexLaunch"));
+  for (const block of [startNew, openEntry]) {
+    assert.match(block, /demoNextRequired = false;/);
+    assert.match(block, /demoNextAdvanced = false;/);
+    assert.match(block, /demoPaused = false;/);
+  }
+  assert.match(startNew, /lastDemoGuide = null;/);
+});
+
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
   assert.match(source, /params\.get\("settings"\) === "1"/);
   assert.match(source, /<p class="eyebrow">Agentic name<\/p>/);

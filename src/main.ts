@@ -1358,7 +1358,13 @@ const startNewPlan = async (): Promise<void> => {
   forceArrivalSurface = false;
   entryGatewayOpen = true;
   entryPrefill = "";
+  codexLaunchMode = null;
   guidedWalkthroughMode = false;
+  demoPlaybackMode = false;
+  demoNextRequired = false;
+  demoNextAdvanced = false;
+  demoPaused = false;
+  lastDemoGuide = null;
   const target = new URL(location.href);
   target.searchParams.delete("plan");
   target.searchParams.delete("kitchen");
@@ -2006,6 +2012,8 @@ const openEntryRoute = async ({ prefill = "", codexMode = null }: { prefill?: st
   codexLaunchMode = codexMode;
   guidedWalkthroughMode = codexMode !== null;
   demoPlaybackMode = codexMode === "demo";
+  demoNextRequired = false;
+  demoNextAdvanced = false;
   demoPaused = false;
   lastDemoGuide = null;
   codexLaunchCopied = false;
