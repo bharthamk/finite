@@ -111,7 +111,7 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /three-night Hobart trip/i);
   assert.match(handoff.prompt, /pauseForNext true/);
   assert.match(handoff.prompt, /fully specified synthetic template/i);
-  assert.match(handoff.prompt, /Run four prepared chapters/i);
+  assert.match(handoff.prompt, /Run five prepared chapters/i);
   assert.match(handoff.prompt, /ordinary blank starting screen headed 'What are you trying to make happen\?'/i);
   assert.match(handoff.prompt, /with no plan created/i);
   assert.match(handoff.prompt, /This is where every Finite plan begins\. Start with an idea, describe what you want to make happen, or add the details yourself\./i);
@@ -157,6 +157,10 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /plan_summary target/i);
   assert.match(handoff.prompt, /keep every workspace section collapsed/i);
   assert.match(handoff.prompt, /This is your plan at a glance\. Dates, budget, remaining money, and open work stay visible here/i);
+  assert.match(handoff.prompt, /budget_editor target/i);
+  assert.match(handoff.prompt, /Amount from 2400 to 2600 and Base currency from AUD to NZD/i);
+  assert.match(handoff.prompt, /does not pretend to perform a live exchange conversion/i);
+  assert.match(handoff.prompt, /NZD 2,600 total, NZD 2,400 allocated, 92% assigned, and NZD 200 still available/i);
   assert.doesNotMatch(handoff.prompt, /Use finite_guide_view on the priority target to explain the plan-at-a-glance summary/i);
   assert.match(handoff.prompt, /Do not approve the plan, start managing, create human authority/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
@@ -207,7 +211,7 @@ test("complete demo adds safe custom and comparison capabilities", () => {
     order: null,
     plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
   });
-  assert.match(handoff.prompt, /Run six prepared chapters/i);
+  assert.match(handoff.prompt, /Run seven prepared chapters/i);
   assert.match(handoff.prompt, /finite_save_workspace_module/i);
   assert.match(handoff.prompt, /custom_weather_watch/i);
   assert.match(handoff.prompt, /finite_save_workspace_option/i);

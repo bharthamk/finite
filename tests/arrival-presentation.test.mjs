@@ -189,19 +189,21 @@ test("real-plan sentence dates and shorthand money produce the intended editable
 
 test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {
   const order = {
-    orderVersion: "finite-arrival-order.v1", orderId: "arrival_overview", version: 5, status: "waiting_for_codex", rawOutcome: "Plan a one-day event.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_overview", version: 6, status: "waiting_for_codex", rawOutcome: "Plan a one-day event.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
     inputs: [
       { inputId: "arrival_input_arrival_overview_2", kind: "correction", payload: { workspaceOperation: "overview", moduleId: "overview", fields: { start: "2026-10-03", end: "2026-10-04", singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "aud" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:00.000Z" },
       { inputId: "arrival_input_arrival_overview_3", kind: "detail", payload: { workspaceOperation: "add", moduleId: "money", recordId: "category_venue", label: "Venue", fields: { title: "Venue", amount: "750", currency: "AUD", moneyRole: "cost" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:01.000Z" },
       { inputId: "arrival_input_arrival_overview_4", kind: "detail", payload: { workspaceOperation: "add", moduleId: "money", recordId: "category_food", label: "Food", fields: { title: "Food", amount: "500", currency: "AUD", moneyRole: "cost" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:02.000Z" },
+      { inputId: "arrival_input_arrival_overview_5", kind: "correction", payload: { workspaceOperation: "overview", moduleId: "overview", fields: { totalBudget: "1000", currency: "nzd", moneyState: "positive" } }, sourceSurface: "site", createdAt: "2026-08-28T00:00:03.000Z" },
     ],
     interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:02.000Z", checksum: "e".repeat(64),
   };
   const starter = starterPlanForArrival(order);
   assert.deepEqual(starter.overview, {
-    start: "2026-10-03", end: "2026-10-03", datesProvisional: false, singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "AUD", moneyState: "positive", budgetProvisional: false,
+    start: "2026-10-03", end: "2026-10-03", datesProvisional: false, singleDay: true, includeTime: true, startTime: "09:00", endTime: "23:30", timeZone: "Australia/Sydney", totalBudget: "1000", currency: "NZD", moneyState: "positive", budgetProvisional: false,
     categories: starter.overview.categories, categoryAllocated: 1250, categoryPercent: 125,
   });
+  assert.ok(starter.sections.flatMap((section) => section.items).filter((item) => item.fields.currency).every((item) => item.fields.currency === "NZD"));
 });
 
 test("human draft edits remain visible and mark the starter interpretation for reconciliation", () => {

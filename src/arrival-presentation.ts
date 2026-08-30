@@ -1042,7 +1042,9 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
             });
           } else addItem("money", { itemId: "human_overall_budget", label: "Total budget", fields: { title: "Total budget", amount: totalBudget, currency: currency || "AUD", moneyRole: "limit", notes: "Plan-wide budget set in Plan at a glance." }, source: "human" });
         }
-        if (currency) moneyItems.forEach((item) => { item.fields.currency = currency; });
+        if (currency) sectionItems.forEach((items) => items.forEach((item) => {
+          if (Object.prototype.hasOwnProperty.call(item.fields, "currency")) item.fields.currency = currency;
+        }));
         return;
       }
       const rawSection = safePayloadText(input.payload, "moduleId");
