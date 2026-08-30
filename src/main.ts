@@ -583,12 +583,13 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     await refreshPlanLearning();
   }
   if (request.surface !== "current") {
+    const openingFreshCodexRun = codexLaunchMode !== null;
     if (codexLaunchMode) {
       codexLaunchMode = null;
       guidedWalkthroughAutoOpened = true;
     }
     forceArrivalSurface = request.surface === "arrival";
-    newPlanDraftMode = false;
+    newPlanDraftMode = openingFreshCodexRun;
     const target = new URL(location.href);
     target.searchParams.delete("kitchen");
     target.searchParams.delete("lab");
@@ -2319,7 +2320,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
   }
   await render();
   void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
-  if (planningMode === "codex") root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+  if (planningMode === "codex" && !demoPlaybackMode) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const appendArrivalDetail = async (form: HTMLFormElement, answer = false): Promise<void> => {

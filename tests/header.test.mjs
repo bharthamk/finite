@@ -465,6 +465,14 @@ test("the guided workspace keeps a truthful Codex phase after questions are answ
   assert.match(styles, /\.starter-operator-phase/);
 });
 
+test("the live demo starts from the real blank first form and keeps its controls readable", () => {
+  assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null;/);
+  assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
+  assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
+  assert.match(styles, /\.codex-guide-overlay footer \{[^}]*min-height:0;[^}]*color:var\(--deep\);[^}]*background:transparent;/);
+  assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-next \{[^}]*min-height:42px;[^}]*color:var\(--on-deep\);[^}]*background:var\(--deep\);/);
+});
+
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
   assert.match(source, /params\.get\("settings"\) === "1"/);
   assert.match(source, /<p class="eyebrow">Agentic name<\/p>/);

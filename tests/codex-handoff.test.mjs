@@ -111,6 +111,13 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /pauseForNext true/);
   assert.match(handoff.prompt, /fully specified synthetic template/i);
   assert.match(handoff.prompt, /Run four prepared chapters/i);
+  assert.match(handoff.prompt, /real blank starting screen/i);
+  assert.match(handoff.prompt, /What do you want to plan\?/i);
+  assert.match(handoff.prompt, /visibly type/i);
+  assert.match(handoff.prompt, /character by character/i);
+  assert.match(handoff.prompt, /do not call finite_create_arrival_order/i);
+  assert.match(handoff.prompt, /Build my rough plan/i);
+  assert.match(handoff.prompt, /visibly present but still unsubmitted/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
   assert.match(handoff.prompt, /GUIDE_PAUSED_FOR_QUESTION/);
