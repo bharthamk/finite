@@ -168,8 +168,10 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.ok(handoff.prompt.indexOf("sectionId itinerary") < handoff.prompt.indexOf("budget_editor target"));
   assert.ok(handoff.prompt.indexOf("open_questions target") < handoff.prompt.indexOf("budget_editor target"));
   assert.match(handoff.prompt, /budget_editor target/i);
+  assert.match(handoff.prompt, /budget_editor target with pauseForNext true/i);
+  assert.match(handoff.prompt, /Budgets change\. Edit the total or base currency here, and Finite updates the rest of the plan around it\. Next I’ll change both so you can see that happen\./i);
   assert.match(handoff.prompt, /Amount from 2400 to 2600 and Base currency from AUD to NZD/i);
-  assert.match(handoff.prompt, /does not pretend to perform a live exchange conversion/i);
+  assert.match(handoff.prompt, /does not perform a live exchange conversion/i);
   assert.match(handoff.prompt, /NZD 2,600 total, NZD 2,400 allocated, 92% assigned, and NZD 200 still available/i);
   assert.doesNotMatch(handoff.prompt, /Use finite_guide_view on the priority target to explain the plan-at-a-glance summary/i);
   assert.match(handoff.prompt, /Do not approve the plan, start managing, create human authority/i);
