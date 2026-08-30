@@ -477,7 +477,7 @@ test("the guided workspace keeps a truthful Codex phase after questions are answ
 });
 
 test("the live demo starts on the ordinary blank first form even when saved work exists", () => {
-  assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null;/);
+  assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null \|\| \(demoPlaybackMode && request\.surface === "arrival"\);/);
   assert.match(source, /entryGatewayOpen = false;/);
   assert.match(source, /forceArrivalSurface = request\.surface === "arrival";/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
@@ -568,6 +568,11 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /request\.surface !== "current"/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
+  assert.match(source, /plan_ideas: \{ label: "the ready-made plan ideas", selectors: \["\.arrival-examples"\] \}/);
+  assert.match(source, /planning_window: \{ label: "the planning window", selectors: \["\.arrival-order__outcome"\] \}/);
+  assert.match(source, /build_method: \{ label: "the two ways to begin", selectors: \["\.arrival-start-tabs"\] \}/);
+  assert.match(source, /manual_details: \{ label: "the structured plan details", selectors: \["\.arrival-start-panel--manual"\] \}/);
+  assert.match(source, /demoPlaybackMode && request\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
   assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} view on/);

@@ -583,7 +583,7 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     await refreshPlanLearning();
   }
   if (request.surface !== "current") {
-    const openingFreshCodexRun = codexLaunchMode !== null;
+    const openingFreshCodexRun = codexLaunchMode !== null || (demoPlaybackMode && request.surface === "arrival");
     if (codexLaunchMode) {
       codexLaunchMode = null;
       guidedWalkthroughAutoOpened = true;
@@ -747,6 +747,10 @@ const renderHeaderControls = (): string => {
 
 const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
   top: { label: "the top of this page", selectors: [".entry-card--product", ".codex-launch", ".arrival-compose", ".arrival-order-head", ".hero"] },
+  plan_ideas: { label: "the ready-made plan ideas", selectors: [".arrival-examples"] },
+  planning_window: { label: "the planning window", selectors: [".arrival-order__outcome"] },
+  build_method: { label: "the two ways to begin", selectors: [".arrival-start-tabs"] },
+  manual_details: { label: "the structured plan details", selectors: [".arrival-start-panel--manual"] },
   starting_point: { label: "your starting point", selectors: [".codex-launch", ".arrival-order", ".arrival-order-source"] },
   status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
