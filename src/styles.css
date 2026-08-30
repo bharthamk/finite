@@ -336,8 +336,10 @@ html,body,button,input,textarea,select { font-family:var(--skin-body); }
 .entry-intro h1 { grid-area:title; }
 .entry-intro .entry-lede { grid-area:lede; margin:0 0 5px; font-size:clamp(.98rem,1.3vw,1.16rem); }
 .entry-route-grid { display:grid; grid-template-columns:.88fr 1.12fr; grid-template-areas:"fresh examples" "guided guided"; gap:12px; margin-top:clamp(38px,5vw,64px); }
-.entry-route { min-width:0; border:1px solid var(--ink); padding:clamp(24px,3.2vw,40px); color:var(--ink); background:var(--paper); text-align:left; }
+.entry-route { min-width:0; border:1px solid var(--ink); padding:clamp(24px,3.2vw,40px); color:var(--ink); background:var(--paper); text-align:left; text-decoration:none; }
 button.entry-route { font:inherit; cursor:pointer; }
+button.entry-route:disabled,.entry-example-list button:disabled { cursor:wait; opacity:.68; }
+button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .entry-route>span { display:block; margin-bottom:22px; font:650 .66rem/1.25 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
 .entry-route>strong { display:block; max-width:580px; font-size:clamp(1.45rem,2.4vw,2.4rem); font-weight:600; line-height:1.04; letter-spacing:-.04em; }
 .entry-route>p { max-width:590px; margin:14px 0 0; color:var(--muted); font-size:.88rem; line-height:1.55; }

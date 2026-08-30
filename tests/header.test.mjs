@@ -11,6 +11,7 @@ const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSyn
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../src/webmcp-bootstrap.ts", import.meta.url), "utf8");
 const entry = readFileSync(new URL("../src/entry.ts", import.meta.url), "utf8");
+const publicGate = readFileSync(new URL("../src/public-gate.ts", import.meta.url), "utf8");
 const shareEntry = readFileSync(new URL("../src/share-entry.ts", import.meta.url), "utf8");
 const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
 const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
@@ -37,6 +38,18 @@ test("public bootstrap routes do not preload the authenticated operator surface"
   assert.match(viteConfig, /transformIndexHtml/);
   assert.match(viteConfig, /content="\$\{finiteRelease\.build\}"/);
   assert.doesNotMatch(viteConfig, /fileName: "_headers"/);
+});
+
+test("the signed-out first page is the three-route Finite gateway", () => {
+  assert.match(publicGate, /How do you want to begin\?/);
+  assert.match(publicGate, /data-public-entry="fresh"/);
+  assert.match(publicGate, /data-public-example=/);
+  assert.match(publicGate, /data-public-entry="guided"/);
+  assert.match(publicGate, /return_to/);
+  assert.match(publicGate, /\/?start=guided/);
+  assert.match(publicGate, /\/?start=example&example=/);
+  assert.match(publicGate, /isolated 24-hour workspace/);
+  assert.doesNotMatch(publicGate, /Continue with ChatGPT|Try the demo/);
 });
 
 test("blocked option cards never claim that no compromise is required", () => {

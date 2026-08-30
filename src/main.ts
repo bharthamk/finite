@@ -25,6 +25,7 @@ import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from ".
 import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
+import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -545,9 +546,11 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
 let forceArrivalSurface = false;
 let newPlanDraftMode = false;
 let entryGatewayOpen = false;
-let entryPrefill = "";
+let entryPrefill = finiteEntryExample(startupParams.get("example"))?.outcome ?? "";
 let guidedWalkthroughMode = startupParams.get("start") === "guided";
-let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
+let guidedWalkthroughAutoOpened = false;
+let followCodexEnabled = guidedWalkthroughMode || scopedStorage.getItem("finite-plan.follow-codex") === "true";
+if (guidedWalkthroughMode) scopedStorage.setItem("finite-plan.follow-codex", "true");
 let activeCodexPrioritySectionId = scopedStorage.getItem("finite-plan.codex-priority-section") ?? "";
 const guideView = async (request: FiniteGuideViewRequest) => {
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
@@ -1937,12 +1940,6 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
   </details>`;
 };
 
-const entryExamples = [
-  { id: "trip", label: "Weekend away", detail: "Places, timing and a sensible budget", outcome: "Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do." },
-  { id: "dinner", label: "Dinner for eight", detail: "Menu, shopping, timing and dietary needs", outcome: "Plan a dinner party at home for eight people, with menu, timing, shopping and dietary needs covered." },
-  { id: "interview", label: "Job interview", detail: "Preparation, evidence and the week before", outcome: "Help me prepare for a job interview for an operations lead role next month." },
-] as const;
-
 const openEntryRoute = async ({ prefill = "", guided = false }: { prefill?: string; guided?: boolean } = {}): Promise<void> => {
   entryGatewayOpen = false;
   entryPrefill = prefill;
@@ -1961,6 +1958,7 @@ const openEntryRoute = async ({ prefill = "", guided = false }: { prefill?: stri
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
   if (guided) {
+    guidedWalkthroughAutoOpened = true;
     root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
     return;
   }
@@ -1980,7 +1978,7 @@ const renderEntryGateway = (): void => {
         </button>
         <section class="entry-route entry-route--examples" aria-labelledby="entry_examples_title">
           <span>02 / Start from an example</span><strong id="entry_examples_title">Borrow a useful beginning.</strong><p>Pick one, then change any wording before Finite builds it.</p>
-          <div class="entry-example-list">${entryExamples.map((example) => `<button type="button" data-entry-example="${example.id}"><strong>${escapeHtml(example.label)}</strong><small>${escapeHtml(example.detail)}</small><i aria-hidden="true">→</i></button>`).join("")}</div>
+          <div class="entry-example-list">${finiteEntryExamples.map((example) => `<button type="button" data-entry-example="${example.id}"><strong>${escapeHtml(example.label)}</strong><small>${escapeHtml(example.detail)}</small><i aria-hidden="true">→</i></button>`).join("")}</div>
         </section>
         <button type="button" class="entry-route entry-route--guided" data-entry-action="guided">
           <span>03 / Walk through with ${escapeHtml(agenticName())}</span><strong>Let ${escapeHtml(agenticName())} show you around, live.</strong><p>It explains the actual page, glows the relevant area and moves one step at a time. Its guidance appears as typed notes; it cannot choose or approve for you.</p><em>Start the live walkthrough →</em>
@@ -1993,7 +1991,7 @@ const renderEntryGateway = (): void => {
   root.querySelector<HTMLButtonElement>("[data-entry-action='guided']")?.addEventListener("click", () => { void openEntryRoute({ guided: true }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void openPlan(runtime.kernel.profile.planId); });
   root.querySelectorAll<HTMLButtonElement>("[data-entry-example]").forEach((button) => button.addEventListener("click", () => {
-    const example = entryExamples.find((candidate) => candidate.id === button.dataset.entryExample);
+    const example = finiteEntryExample(button.dataset.entryExample);
     if (example) void openEntryRoute({ prefill: example.outcome });
   }));
 };
@@ -2112,6 +2110,10 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   enableNativeWritingAssistance();
   bindArrivalInteractions();
   restoreWorkspaceUiState();
+  if (guidedWalkthroughMode && !guidedWalkthroughAutoOpened) {
+    guidedWalkthroughAutoOpened = true;
+    root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+  }
 };
 
 const renderPlanActivationTransition = (): void => {
