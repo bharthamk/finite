@@ -476,13 +476,10 @@ test("the guided workspace keeps a truthful Codex phase after questions are answ
   assert.match(styles, /\.starter-operator-phase/);
 });
 
-test("the live demo starts on the true first page before opening the blank first form", () => {
+test("the live demo starts on the ordinary blank first form even when saved work exists", () => {
   assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null;/);
-  assert.match(source, /const openingDemoAtFirstPage = openingFreshCodexRun && demoPlaybackMode && request\.surface === "arrival";/);
-  assert.match(source, /entryGatewayOpen = openingDemoAtFirstPage;/);
-  assert.match(source, /forceArrivalSurface = request\.surface === "arrival" && !openingDemoAtFirstPage;/);
-  assert.match(source, /openEntryRoute\(\{ continueDemo: demoPlaybackMode \}\)/);
-  assert.match(source, /const preservingDemo = continueDemo && demoPlaybackMode;/);
+  assert.match(source, /entryGatewayOpen = false;/);
+  assert.match(source, /forceArrivalSurface = request\.surface === "arrival";/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
   assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);

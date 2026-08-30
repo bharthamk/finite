@@ -584,13 +584,12 @@ const guideView = async (request: FiniteGuideViewRequest) => {
   }
   if (request.surface !== "current") {
     const openingFreshCodexRun = codexLaunchMode !== null;
-    const openingDemoAtFirstPage = openingFreshCodexRun && demoPlaybackMode && request.surface === "arrival";
     if (codexLaunchMode) {
       codexLaunchMode = null;
       guidedWalkthroughAutoOpened = true;
     }
-    entryGatewayOpen = openingDemoAtFirstPage;
-    forceArrivalSurface = request.surface === "arrival" && !openingDemoAtFirstPage;
+    entryGatewayOpen = false;
+    forceArrivalSurface = request.surface === "arrival";
     newPlanDraftMode = openingFreshCodexRun;
     const target = new URL(location.href);
     target.searchParams.delete("kitchen");
