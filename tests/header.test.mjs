@@ -479,6 +479,14 @@ test("guiding the current surface preserves unsaved browser input", () => {
   assert.match(source, /const guidedView = guideRequest \? applyCodexSpotlight\(guideRequest\) : null;/);
 });
 
+test("each natural demo pause offers Next or a Codex question without another continuation message", () => {
+  assert.match(source, /Paused at a natural stopping point/);
+  assert.match(source, /class="codex-guide-question">Or ask/);
+  assert.match(source, /GUIDE_WAITING_FOR_PERSON[^]*pausedAt: lastDemoGuide/);
+  assert.match(source, /do not move the demo until the person clicks Next/);
+  assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-question/);
+});
+
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
   assert.match(source, /params\.get\("settings"\) === "1"/);
   assert.match(source, /<p class="eyebrow">Agentic name<\/p>/);

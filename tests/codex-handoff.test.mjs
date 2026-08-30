@@ -118,6 +118,11 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /do not call finite_create_arrival_order/i);
   assert.match(handoff.prompt, /Build my rough plan/i);
   assert.match(handoff.prompt, /visibly present but still unsubmitted/i);
+  assert.match(handoff.prompt, /Next click is the complete continuation signal/i);
+  assert.match(handoff.prompt, /do not ask them to type 'proceed'/i);
+  assert.match(handoff.prompt, /keep the Codex turn alive/i);
+  assert.match(handoff.prompt, /Every Next gate is already a natural pause/i);
+  assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
   assert.match(handoff.prompt, /GUIDE_PAUSED_FOR_QUESTION/);
