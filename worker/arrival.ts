@@ -303,8 +303,9 @@ const createOrder = async (db: D1Database, scopeId: string, body: JsonRecord): P
 };
 
 type OrderPatch = Pick<ArrivalOrder, "status" | "inputs" | "pendingClarification" | "interpretation" | "lastOperatorCheckpoint">;
+type AcceptedPlanWriteGuard = { planId: string; profileHash: string; revision: number };
 
-const mutateOrder = async (db: D1Database, scopeId: string, order: ArrivalOrder, expectedVersion: number, patch: Partial<OrderPatch>, event: Omit<ArrivalEvent, "eventVersion" | "eventId" | "eventHash" | "orderId" | "version" | "createdAt">, code: string): Promise<Response> => {
+const mutateOrder = async (db: D1Database, scopeId: string, order: ArrivalOrder, expectedVersion: number, patch: Partial<OrderPatch>, event: Omit<ArrivalEvent, "eventVersion" | "eventId" | "eventHash" | "orderId" | "version" | "createdAt">, code: string, acceptedPlanGuard?: AcceptedPlanWriteGuard): Promise<Response> => {
   if (order.version !== expectedVersion) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: order.version, currentChecksum: order.checksum, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409);
   const updatedAt = new Date().toISOString();
   const { checksum: _oldChecksum, ...currentBase } = order;
@@ -314,8 +315,8 @@ const mutateOrder = async (db: D1Database, scopeId: string, order: ArrivalOrder,
   const completeEvent = { ...eventBase, eventHash: await sha256(eventBase) };
   const writeStartedAt = performance.now();
   const results = await db.batch([
-    db.prepare("UPDATE arrival_orders SET version = ?, status = ?, inputs_json = ?, pending_clarification_json = ?, interpretation_json = ?, last_operator_checkpoint = ?, packet_checksum = ?, updated_at = ? WHERE scope_id = ? AND order_id = ? AND version = ?")
-      .bind(next.version, next.status, JSON.stringify(next.inputs), next.pendingClarification ? JSON.stringify(next.pendingClarification) : null, next.interpretation ? JSON.stringify(next.interpretation) : null, next.lastOperatorCheckpoint, next.checksum, next.updatedAt, scopeId, order.orderId, expectedVersion),
+    db.prepare(`UPDATE arrival_orders SET version = ?, status = ?, inputs_json = ?, pending_clarification_json = ?, interpretation_json = ?, last_operator_checkpoint = ?, packet_checksum = ?, updated_at = ? WHERE scope_id = ? AND order_id = ? AND version = ?${acceptedPlanGuard ? " AND EXISTS (SELECT 1 FROM plan_heads WHERE scope_id = ? AND plan_id = ? AND profile_hash = ? AND revision = ?)" : ""}`)
+      .bind(next.version, next.status, JSON.stringify(next.inputs), next.pendingClarification ? JSON.stringify(next.pendingClarification) : null, next.interpretation ? JSON.stringify(next.interpretation) : null, next.lastOperatorCheckpoint, next.checksum, next.updatedAt, scopeId, order.orderId, expectedVersion, ...(acceptedPlanGuard ? [scopeId, acceptedPlanGuard.planId, acceptedPlanGuard.profileHash, acceptedPlanGuard.revision] : [])),
     db.prepare("INSERT INTO arrival_events (scope_id, order_id, version, event_id, event_type, actor, source_surface, payload_json, event_hash, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM arrival_orders WHERE scope_id = ? AND order_id = ? AND version = ? AND packet_checksum = ?)")
       .bind(scopeId, order.orderId, next.version, completeEvent.eventId, completeEvent.eventType, completeEvent.actor, completeEvent.sourceSurface, JSON.stringify(completeEvent.payload), completeEvent.eventHash, updatedAt, scopeId, order.orderId, next.version, next.checksum),
   ]);
@@ -323,6 +324,10 @@ const mutateOrder = async (db: D1Database, scopeId: string, order: ArrivalOrder,
   if ((results[0]?.meta?.changes ?? 0) !== 1) {
     const current = await loadOrder(db, scopeId, order.orderId);
     if (!current) return errorResponse(404, "ARRIVAL_NOT_FOUND", "The human order no longer exists.");
+    if (acceptedPlanGuard) {
+      const acceptedHead = await acceptedPlanHeadIsCurrent(db, scopeId, acceptedPlanGuard.planId, acceptedPlanGuard.profileHash, acceptedPlanGuard.revision);
+      if (!acceptedHead.matches) return withPersistenceTiming(await openedResponse(db, scopeId, current, "ARRIVAL_ACCEPTED_PLAN_NOT_CURRENT", undefined, { ok: false, message: "The arrival can close only against the exact durable accepted plan head.", currentPlanRevision: acceptedHead.currentRevision, currentProfileHash: acceptedHead.currentProfileHash, persistenceTiming }, 409), persistenceTiming);
+    }
     return withPersistenceTiming(await openedResponse(db, scopeId, current, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The human order changed after this Codex work began.", currentVersion: current.version, currentChecksum: current.checksum, persistenceTiming, next: "Discard stale staged work, re-open the arrival, and process the returned delta." }, 409), persistenceTiming);
   }
   const durable = await loadOrder(db, scopeId, order.orderId);
@@ -650,11 +655,9 @@ const acceptPlan = async (db: D1Database, scopeId: string, order: ArrivalOrder, 
   if (!/^[a-z0-9][a-z0-9_-]{2,100}$/.test(planId) || !/^[a-f0-9]{64}$/.test(profileHash) || !Number.isInteger(planRevision) || planRevision < 1) return errorResponse(422, "ARRIVAL_PLAN_BINDING_INVALID", "The accepted plan binding is invalid.");
   if (order.version !== expectedVersion || order.checksum !== expectedChecksum) return openedResponse(db, scopeId, order, "ORDER_VERSION_CONFLICT", undefined, { ok: false, message: "The arrival changed before its plan binding was recorded.", currentVersion: order.version, currentChecksum: order.checksum }, 409);
   if (order.status !== "interpretation_confirmed" || !order.interpretation?.complete) return openedResponse(db, scopeId, order, "ARRIVAL_NOT_ACCEPTABLE", undefined, { ok: false, message: "Only a reviewed complete interpretation can be bound to an activated plan." }, 409);
-  const acceptedHead = await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, planRevision);
-  if (!acceptedHead.matches) return openedResponse(db, scopeId, order, "ARRIVAL_ACCEPTED_PLAN_NOT_CURRENT", undefined, { ok: false, message: "The arrival can close only against the exact durable accepted plan head.", currentPlanRevision: acceptedHead.currentRevision, currentProfileHash: acceptedHead.currentProfileHash }, 409);
   return mutateOrder(db, scopeId, order, expectedVersion, { status: "accepted", lastOperatorCheckpoint: expectedVersion + 1 }, {
     eventType: "plan_activated", actor: "codex", sourceSurface: "codex", payload: { planId, profileHash, planRevision },
-  }, "ARRIVAL_PLAN_ACCEPTED");
+  }, "ARRIVAL_PLAN_ACCEPTED", { planId, profileHash, revision: planRevision });
 };
 
 const listOrders = async (db: D1Database, scopeId: string): Promise<Response> => {

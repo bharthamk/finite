@@ -1241,6 +1241,7 @@ export class FinitePlanRuntime {
       activePlanId: priorKernel.profile.planId,
       next: "The prior plan remains active. Restore accepted-truth storage and retry the exact human-confirmed activation with the same idempotency key.",
     };
+    let browserPersistence: { ok: true } | { ok: false; code: "PLAN_ACTIVATION_BROWSER_CACHE_FAILED"; message: string } = { ok: true };
     try {
       try { priorKernel.persist(); } catch { /* accepted repository remains authoritative */ }
       newKernel.persist();
@@ -1250,7 +1251,8 @@ export class FinitePlanRuntime {
       try { this.store.clear(draft.profile.planId); } catch { /* best-effort rollback */ }
       try { this.catalogStore.remove(draft.profile.planId); } catch { /* best-effort rollback */ }
       try { this.catalogStore.removeActivationReceipt(idempotencyKey); } catch { /* best-effort rollback */ }
-      return { ok: false, code: "PLAN_ACTIVATION_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, activePlanId: priorKernel.profile.planId, next: "Accepted truth remains on the prior plan. Repair storage and retry the exact activation." };
+      if (!this.acceptedRepository) return { ok: false, code: "PLAN_ACTIVATION_STORAGE_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false, activePlanId: priorKernel.profile.planId, next: "Local accepted truth remains on the prior plan. Repair storage and retry the exact activation." };
+      browserPersistence = { ok: false, code: "PLAN_ACTIVATION_BROWSER_CACHE_FAILED", message: error instanceof Error ? error.message : String(error) };
     }
     const entry: CompiledCatalogEntry = { profile: draft.profile, evidenceRecords: clone(draft.evidenceRecords), lineage };
     this.plans.set(draft.profile.planId, entry);
@@ -1273,6 +1275,7 @@ export class FinitePlanRuntime {
       plan: this.listPlans(),
       constructionPacketCleared,
       acceptedStateChanged: true,
+      browserPersistence,
       ...((activationChallengeTiming || activationInitializeTiming) ? {
         activationTiming: {
           measurementVersion: "finite-plan-activation-sequence-timing.v1",
@@ -1280,7 +1283,9 @@ export class FinitePlanRuntime {
           initialize: activationInitializeTiming ?? null,
         },
       } : {}),
-      next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another.",
+      next: browserPersistence.ok
+        ? constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another."
+        : "The plan is accepted remotely and active in this session. Browser cache persistence is degraded; rehydrate from accepted truth on reload.",
     };
   }
 

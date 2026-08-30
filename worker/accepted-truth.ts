@@ -330,6 +330,24 @@ const catalogUpsert = (db: D1Database, scopeId: string, entry: CatalogEntry, env
     updated_at = excluded.updated_at
 `).bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, JSON.stringify(entry.definition), JSON.stringify(entry.evidenceRecords), entry.lineage ? JSON.stringify(entry.lineage) : null, now, now);
 
+type ActivationWriteGuard = { challengeId: string; receiptId: string; requestHash: string };
+
+const activationWriteGuardSql = "EXISTS (SELECT 1 FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ? AND receipt_id = ? AND request_hash = ?)";
+const activationWriteGuardValues = (scopeId: string, guard: ActivationWriteGuard): unknown[] => [scopeId, guard.challengeId, guard.receiptId, guard.requestHash];
+
+const guardedCatalogUpsert = (db: D1Database, scopeId: string, entry: CatalogEntry, envelope: Envelope, now: string, guard: ActivationWriteGuard): D1PreparedStatement => db.prepare(`
+  INSERT INTO plan_catalog (scope_id, plan_id, profile_id, profile_hash, definition_json, evidence_json, lineage_json, created_at, updated_at)
+  SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+   WHERE ${activationWriteGuardSql}
+  ON CONFLICT(scope_id, plan_id) DO UPDATE SET
+    profile_id = excluded.profile_id,
+    profile_hash = excluded.profile_hash,
+    definition_json = excluded.definition_json,
+    evidence_json = excluded.evidence_json,
+    lineage_json = excluded.lineage_json,
+    updated_at = excluded.updated_at
+`).bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, JSON.stringify(entry.definition), JSON.stringify(entry.evidenceRecords), entry.lineage ? JSON.stringify(entry.lineage) : null, now, now, ...activationWriteGuardValues(scopeId, guard));
+
 const envelopeIssues = async (envelope: Envelope): Promise<string[]> => {
   const issues: string[] = [];
   const snapshot = envelope.snapshot;
@@ -486,6 +504,7 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
   issues.push(...await catalogIssues(catalogEntry, envelope, activationReceipt));
   if (envelope.previousSnapshotHash !== null || envelope.revision !== 1) issues.push("initial accepted truth must begin at revision one without a predecessor");
   let challenge: ChallengeRow | null = null;
+  let activationCommandHash: string | null = null;
   let guardedExistingTarget: Envelope | null | undefined;
   if (activationReceipt) {
     if (!await activationReceiptValid(activationReceipt)) issues.push("invalid activation receipt checksum");
@@ -533,8 +552,8 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
         const consumed = hasActivationGate ? guardedConsumed : Boolean(await db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, challenge.challenge_id).first());
         if (consumed) issues.push("plan activation authority challenge already consumed");
         if (Date.parse(challenge.expires_at) <= Date.now()) issues.push("plan activation authority challenge expired");
-        const expectedCommandHash = await sha256({ targetType: "plan_activation", targetId: activationReceipt.draftId, planId: activationReceipt.fromPlanId, profileHash: challenge.profile_hash, revision: activationReceipt.baseRevision, contentHash: activationReceipt.contentHash, authorityId: activationReceipt.confirmationId });
-        if (challenge.plan_id !== activationReceipt.fromPlanId || challenge.revision !== activationReceipt.baseRevision || challenge.target_type !== "plan_activation" || challenge.target_id !== activationReceipt.draftId || challenge.content_hash !== activationReceipt.contentHash || challenge.authority_id !== activationReceipt.confirmationId || challenge.command_hash !== expectedCommandHash) issues.push("plan activation authority challenge does not bind this exact command");
+        activationCommandHash = await sha256({ targetType: "plan_activation", targetId: activationReceipt.draftId, planId: activationReceipt.fromPlanId, profileHash: challenge.profile_hash, revision: activationReceipt.baseRevision, contentHash: activationReceipt.contentHash, authorityId: activationReceipt.confirmationId });
+        if (challenge.plan_id !== activationReceipt.fromPlanId || challenge.revision !== activationReceipt.baseRevision || challenge.target_type !== "plan_activation" || challenge.target_id !== activationReceipt.draftId || challenge.content_hash !== activationReceipt.contentHash || challenge.authority_id !== activationReceipt.confirmationId || challenge.command_hash !== activationCommandHash) issues.push("plan activation authority challenge does not bind this exact command");
       }
     }
     if (hasActivationGate) {
@@ -554,23 +573,90 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
 
   const now = new Date().toISOString();
   const result = { ok: true, code: "ACCEPTED_TRUTH_INITIALIZED", envelope, receipt: activationReceipt, requestHash: activationRequestHash, replay: false, ...(hasActivationGate ? { constructionPacketCleared: true } : {}) };
-  const statements = [
-    db.prepare("INSERT INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, envelope.revision, envelope.snapshotHash, now),
-    db.prepare("INSERT INTO plan_revisions (scope_id, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(scopeId, envelope.planId, envelope.revision, envelope.profileId, envelope.profileHash, JSON.stringify(envelope.snapshot), envelope.snapshotHash, null, activationReceipt?.receiptId ?? null, now),
-    ...((envelope.snapshot.evidenceRecords ?? []).map((evidence) => db.prepare("INSERT OR IGNORE INTO evidence_records (scope_id, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(scopeId, envelope.planId, evidence.evidenceId, evidence.recordHash, evidence.contentHash, envelope.revision, JSON.stringify(evidence), now))),
-    catalogUpsert(db, scopeId, catalogEntry!, envelope, now),
-  ];
-  if (activationReceipt && activationRequestHash) statements.push(db.prepare("INSERT INTO activation_receipts (scope_id, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(scopeId, activationReceipt.idempotencyKey, activationReceipt.receiptId, activationReceipt.fromPlanId, activationReceipt.toPlanId, activationRequestHash, JSON.stringify(activationReceipt), now));
-  if (challenge && activationReceipt) statements.push(db.prepare("INSERT INTO challenge_consumptions (scope_id, challenge_id, plan_id, receipt_id, request_hash, consumed_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(scopeId, challenge.challenge_id, activationReceipt.toPlanId, activationReceipt.receiptId, activationRequestHash, now));
-  if (hasActivationGate) statements.push(db.prepare("UPDATE construction_packets SET cleared_at = ?, disposition = 'discarded', return_reason_code = NULL, return_message = NULL, returned_at = NULL, updated_at = ? WHERE scope_id = ? AND packet_id = ? AND cleared_at IS NULL AND disposition = 'current'")
-    .bind(now, now, scopeId, activationGate.constructionPacketId));
+  const guardedActivation = hasActivationGate && activationReceipt && activationRequestHash && challenge && activationCommandHash
+    ? {
+      guard: { challengeId: challenge.challenge_id, receiptId: activationReceipt.receiptId, requestHash: activationRequestHash } satisfies ActivationWriteGuard,
+      source: asRecord(activationGate.sourceArrival),
+    }
+    : null;
+  const statements: D1PreparedStatement[] = [];
+  let constructionClearIndex = -1;
+  if (guardedActivation) {
+    const { guard, source } = guardedActivation;
+    const guardedReceipt = activationReceipt!;
+    statements.push(db.prepare(`
+      INSERT INTO challenge_consumptions (scope_id, challenge_id, plan_id, receipt_id, request_hash, consumed_at)
+      SELECT ?, ?, ?, ?, ?, ?
+       WHERE EXISTS (
+        SELECT 1 FROM authority_challenges
+         WHERE scope_id = ? AND challenge_id = ? AND plan_id = ? AND profile_hash = ? AND revision = ?
+           AND target_type = 'plan_activation' AND target_id = ? AND content_hash = ? AND authority_id = ? AND command_hash = ? AND expires_at > ?
+       )
+         AND NOT EXISTS (SELECT 1 FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?)
+         AND EXISTS (SELECT 1 FROM plan_heads WHERE scope_id = ? AND plan_id = ? AND profile_hash = ? AND revision = ?)
+         AND EXISTS (
+          SELECT 1 FROM arrival_orders
+           WHERE scope_id = ? AND order_id = ? AND version = ? AND packet_checksum = ?
+             AND status IN ('interpretation_confirmed', 'proposed_plan_ready')
+         )
+         AND EXISTS (
+          SELECT 1 FROM construction_packets
+           WHERE scope_id = ? AND packet_id = ? AND kind = 'draft' AND cleared_at IS NULL AND disposition = 'current' AND expires_at > ?
+             AND base_plan_id = ? AND base_profile_hash = ? AND base_revision = ?
+             AND source_order_id = ? AND source_order_version = ? AND source_order_checksum = ?
+             AND json_extract(packet_json, '$.payload.draftId') = ? AND json_extract(packet_json, '$.payload.contentHash') = ?
+         )
+         AND NOT EXISTS (SELECT 1 FROM plan_heads WHERE scope_id = ? AND plan_id = ?)
+         AND NOT EXISTS (SELECT 1 FROM activation_receipts WHERE scope_id = ? AND idempotency_key = ?)
+    `).bind(
+      scopeId, guard.challengeId, guardedReceipt.toPlanId, guard.receiptId, guard.requestHash, now,
+      scopeId, guard.challengeId, guardedReceipt.fromPlanId, String(activationGate.baseProfileHash), Number(guardedReceipt.baseRevision), guardedReceipt.draftId, String(guardedReceipt.contentHash), guardedReceipt.confirmationId, activationCommandHash, now,
+      scopeId, guard.challengeId,
+      scopeId, guardedReceipt.fromPlanId, String(activationGate.baseProfileHash), Number(guardedReceipt.baseRevision),
+      scopeId, source.orderId, Number(source.orderVersion), source.orderChecksum,
+      scopeId, activationGate.constructionPacketId, now, guardedReceipt.fromPlanId, String(activationGate.baseProfileHash), Number(guardedReceipt.baseRevision), source.orderId, Number(source.orderVersion), source.orderChecksum, guardedReceipt.draftId, String(guardedReceipt.contentHash),
+      scopeId, guardedReceipt.toPlanId,
+      scopeId, guardedReceipt.idempotencyKey,
+    ));
+    statements.push(db.prepare(`INSERT INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${activationWriteGuardSql}`)
+      .bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, envelope.revision, envelope.snapshotHash, now, ...activationWriteGuardValues(scopeId, guard)));
+    statements.push(db.prepare(`INSERT INTO plan_revisions (scope_id, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activationWriteGuardSql}`)
+      .bind(scopeId, envelope.planId, envelope.revision, envelope.profileId, envelope.profileHash, JSON.stringify(envelope.snapshot), envelope.snapshotHash, null, guardedReceipt.receiptId, now, ...activationWriteGuardValues(scopeId, guard)));
+    statements.push(...((envelope.snapshot.evidenceRecords ?? []).map((evidence) => db.prepare(`INSERT OR IGNORE INTO evidence_records (scope_id, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activationWriteGuardSql}`)
+      .bind(scopeId, envelope.planId, evidence.evidenceId, evidence.recordHash, evidence.contentHash, envelope.revision, JSON.stringify(evidence), now, ...activationWriteGuardValues(scopeId, guard)))));
+    statements.push(guardedCatalogUpsert(db, scopeId, catalogEntry!, envelope, now, guard));
+    statements.push(db.prepare(`INSERT INTO activation_receipts (scope_id, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activationWriteGuardSql}`)
+      .bind(scopeId, guardedReceipt.idempotencyKey, guardedReceipt.receiptId, guardedReceipt.fromPlanId, guardedReceipt.toPlanId, activationRequestHash, JSON.stringify(guardedReceipt), now, ...activationWriteGuardValues(scopeId, guard)));
+    constructionClearIndex = statements.length;
+    statements.push(db.prepare(`UPDATE construction_packets SET cleared_at = ?, disposition = 'discarded', return_reason_code = NULL, return_message = NULL, returned_at = NULL, updated_at = ? WHERE scope_id = ? AND packet_id = ? AND cleared_at IS NULL AND disposition = 'current' AND ${activationWriteGuardSql}`)
+      .bind(now, now, scopeId, activationGate.constructionPacketId, ...activationWriteGuardValues(scopeId, guard)));
+  } else {
+    statements.push(
+      db.prepare("INSERT INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, envelope.revision, envelope.snapshotHash, now),
+      db.prepare("INSERT INTO plan_revisions (scope_id, plan_id, revision, profile_id, profile_hash, snapshot_json, snapshot_hash, previous_snapshot_hash, receipt_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(scopeId, envelope.planId, envelope.revision, envelope.profileId, envelope.profileHash, JSON.stringify(envelope.snapshot), envelope.snapshotHash, null, activationReceipt?.receiptId ?? null, now),
+      ...((envelope.snapshot.evidenceRecords ?? []).map((evidence) => db.prepare("INSERT OR IGNORE INTO evidence_records (scope_id, plan_id, evidence_id, record_hash, content_hash, accepted_revision, record_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(scopeId, envelope.planId, evidence.evidenceId, evidence.recordHash, evidence.contentHash, envelope.revision, JSON.stringify(evidence), now))),
+      catalogUpsert(db, scopeId, catalogEntry!, envelope, now),
+    );
+    if (activationReceipt && activationRequestHash) statements.push(db.prepare("INSERT INTO activation_receipts (scope_id, idempotency_key, receipt_id, from_plan_id, to_plan_id, request_hash, receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(scopeId, activationReceipt.idempotencyKey, activationReceipt.receiptId, activationReceipt.fromPlanId, activationReceipt.toPlanId, activationRequestHash, JSON.stringify(activationReceipt), now));
+    if (challenge && activationReceipt) statements.push(db.prepare("INSERT INTO challenge_consumptions (scope_id, challenge_id, plan_id, receipt_id, request_hash, consumed_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(scopeId, challenge.challenge_id, activationReceipt.toPlanId, activationReceipt.receiptId, activationRequestHash, now));
+  }
   try {
-    await db.batch(statements);
+    const writeResults = await db.batch(statements);
+    if (guardedActivation && ((writeResults[0]?.meta?.changes ?? 0) !== 1 || (writeResults[constructionClearIndex]?.meta?.changes ?? 0) !== 1)) {
+      const replay = await loadActivationReplay(db, scopeId, activationReceipt!.idempotencyKey);
+      if (replay?.requestHash === activationRequestHash) {
+        const current = await readHead(db, scopeId, activationReceipt!.toPlanId);
+        if (current) return response(200, { ...result, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, replay: true });
+      }
+      const gateResult = await validatePlanActivationGate(db, scopeId, activationGate, { planId: activationReceipt!.fromPlanId, profileHash: String(activationGate.baseProfileHash ?? ""), revision: Number(activationReceipt!.baseRevision), targetId: activationReceipt!.draftId, contentHash: String(activationReceipt!.contentHash ?? ""), sourceArrival: activationReceipt!.sourceArrival ?? null });
+      if (gateResult instanceof Response) return gateResult;
+      return errorResponse(409, "PLAN_ACTIVATION_GUARD_CONFLICT", "Plan activation authority or target state changed before the atomic write.");
+    }
     return response(201, result);
   } catch {
     if (hasActivationGate && activationReceipt && activationRequestHash) {

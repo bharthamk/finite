@@ -26,6 +26,10 @@ export interface ClickActivationTiming {
   guarded: GuardedActivationTiming | null;
 }
 
+export interface ClickActivationTimingDataset {
+  finiteClickActivationTiming?: string;
+}
+
 const rounded = (value: number): number => Math.max(0, Math.round(value * 10) / 10);
 const defaultNow = (): number => typeof performance === "undefined" ? Date.now() : performance.now();
 
@@ -67,3 +71,14 @@ export class ClickActivationTimer {
     this.phases[phase] = rounded((this.phases[phase] ?? 0) + durationMs);
   }
 }
+
+export const beginClickActivationTimingReceipt = (dataset: ClickActivationTimingDataset, now?: () => number): ClickActivationTimer => {
+  delete dataset.finiteClickActivationTiming;
+  return new ClickActivationTimer(now);
+};
+
+export const publishClickActivationTimingReceipt = (dataset: ClickActivationTimingDataset, timer: ClickActivationTimer, outcome: "ready" | "failed", guarded: GuardedActivationTiming | null = null): ClickActivationTiming => {
+  const receipt = timer.finish(outcome, guarded);
+  dataset.finiteClickActivationTiming = JSON.stringify(receipt);
+  return receipt;
+};

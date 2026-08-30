@@ -24,7 +24,7 @@ import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
-import { ClickActivationTimer, type GuardedActivationTiming } from "./activation-sequence-timing.js";
+import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -3971,11 +3971,10 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
 type PreparedArrivalPlan = { draftId: string; progression: ArrivalProgression; opened: ArrivalResult };
 let arrivalDraftPreparation: Promise<PreparedArrivalPlan> | null = null;
 const beginClickActivationTiming = (): ClickActivationTimer => {
-  delete document.documentElement.dataset.finiteClickActivationTiming;
-  return new ClickActivationTimer();
+  return beginClickActivationTimingReceipt(document.documentElement.dataset);
 };
 const publishClickActivationTiming = (timer: ClickActivationTimer, outcome: "ready" | "failed", guarded: GuardedActivationTiming | null = null): void => {
-  document.documentElement.dataset.finiteClickActivationTiming = JSON.stringify(timer.finish(outcome, guarded));
+  publishClickActivationTimingReceipt(document.documentElement.dataset, timer, outcome, guarded);
 };
 const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArrivalPlan> => {
   if (arrivalDraftPreparation) return arrivalDraftPreparation;
@@ -4108,7 +4107,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
 
   const { activatedPlanId, continuityWork, postActivationSync } = activationTimer.measureSync("localActivation", () => {
     persistedPlanIds.add(runtime.kernel.profile.planId);
-    scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+    try { scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId); } catch { /* accepted truth remains authoritative */ }
     planWorkLoading = true;
     planInputs = [];
     checklistItems = [];

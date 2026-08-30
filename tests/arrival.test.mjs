@@ -7,6 +7,7 @@ import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { FinitePlanWebMCPAdapter } from "../dist-test/src/webmcp.js";
 import { acceptedPlanHeadIsCurrent, buildArrivalPersistenceTiming, handleArrivalRequest } from "../dist-test/worker/arrival.js";
+import { sha256 } from "../dist-test/src/crypto.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -502,6 +503,54 @@ test("an arrival can close only against the exact durable accepted plan head", a
   assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, false);
   rows.set(`${scopeId}:${planId}`, { profile_hash: profileHash, revision: 3 });
   assert.equal((await acceptedPlanHeadIsCurrent(db, scopeId, planId, profileHash, 3)).matches, true);
+});
+
+test("arrival closure atomically refuses a plan-head advance during the write", async () => {
+  const arrivals = new MemoryArrivalRepository(() => new Date("2026-08-30T05:00:00.000Z"));
+  const created = await arrivals.create({ idempotencyKey: "arrival-close-race-0001", rawOutcome: "Plan a guarded trip.", structured: {}, attachments: [], sourceSurface: "site" });
+  const checkpoint = await arrivals.checkpoint({ orderId: created.order.orderId, expectedVersion: created.order.version });
+  const staged = await arrivals.stageInterpretation({ orderId: checkpoint.order.orderId, expectedVersion: checkpoint.order.version, inferredFamily: "travel", summary: "A guarded trip.", known: {}, inferred: {}, missing: [], contradictions: [], savedOperatorWork: {}, complete: true });
+  const reviewed = await arrivals.reviewInterpretation({ orderId: staged.order.orderId, expectedVersion: staged.order.version, expectedChecksum: staged.order.checksum, sourceSurface: "site" });
+  const order = reviewed.order;
+  const row = {
+    order_id: order.orderId, idempotency_key: "arrival-close-race-0001", request_hash: "request", version: order.version, status: order.status, raw_outcome: order.rawOutcome,
+    structured_json: JSON.stringify(order.structured), attachments_json: JSON.stringify(order.attachments), inputs_json: JSON.stringify(order.inputs), pending_clarification_json: order.pendingClarification ? JSON.stringify(order.pendingClarification) : null,
+    interpretation_json: JSON.stringify(order.interpretation), last_operator_checkpoint: order.lastOperatorCheckpoint, packet_checksum: order.checksum, created_at: order.createdAt, updated_at: order.updatedAt,
+  };
+  row.packet_checksum = await sha256({ orderVersion: "finite-arrival-order.v1", orderId: row.order_id, version: row.version, status: row.status, rawOutcome: row.raw_outcome, structured: JSON.parse(row.structured_json), attachments: JSON.parse(row.attachments_json), inputs: JSON.parse(row.inputs_json), pendingClarification: null, interpretation: JSON.parse(row.interpretation_json), lastOperatorCheckpoint: row.last_operator_checkpoint, createdAt: row.created_at, updatedAt: row.updated_at });
+  const planId = "plan_arrival_close_race";
+  const profileHash = "a".repeat(64);
+  const state = { head: { profile_hash: profileHash, revision: 1 }, row, interleaved: false };
+  class Statement {
+    values = [];
+    constructor(query) { this.query = query; }
+    bind(...values) { this.values = values; return this; }
+    async first() {
+      if (this.query.includes("FROM tenant_accounts")) return { scope_id: "scope_test" };
+      if (this.query.includes("FROM arrival_orders")) return state.row;
+      if (this.query.includes("FROM plan_heads")) return state.head;
+      throw new Error(`Unhandled arrival guard first query: ${this.query}`);
+    }
+    async all() {
+      if (this.query.includes("FROM arrival_events")) return { results: [] };
+      throw new Error(`Unhandled arrival guard all query: ${this.query}`);
+    }
+  }
+  const db = {
+    prepare(query) { return new Statement(query); },
+    async batch(statements) {
+      if (!state.interleaved) { state.head = { profile_hash: profileHash, revision: 2 }; state.interleaved = true; }
+      const update = statements[0];
+      const exactHead = state.head.profile_hash === update.values[13] && state.head.revision === update.values[14];
+      return [{ success: true, meta: { changes: exactHead ? 1 : 0 } }, { success: true, meta: { changes: 0 } }];
+    },
+  };
+  const response = await handleArrivalRequest(new Request(`https://finite.example/api/arrivals/${order.orderId}/accept`, { method: "POST", headers: { origin: "https://finite.example", "content-type": "application/json", "oai-authenticated-user-id": "site-user-123" }, body: JSON.stringify({ expectedVersion: order.version, expectedChecksum: row.packet_checksum, planId, profileHash, planRevision: 1 }) }), db);
+  const body = await response.json();
+  assert.equal(response.status, 409, JSON.stringify(body));
+  assert.equal(body.code, "ARRIVAL_ACCEPTED_PLAN_NOT_CURRENT");
+  assert.equal(body.currentPlanRevision, 2);
+  assert.equal(state.row.status, "interpretation_confirmed");
 });
 
 test("kitchen entry distinguishes no waiting order from an unreadable arrival service", async () => {

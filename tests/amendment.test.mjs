@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
+import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
 import { compileBuiltInProfiles, getProfileDefinition } from "../dist-test/src/profiles.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "../dist-test/src/runtime.js";
 
@@ -14,11 +15,11 @@ class FailingStorage extends MemoryStorage {
   }
 }
 
-const setup = async (storage = new MemoryStorage()) => {
+const setup = async (storage = new MemoryStorage(), acceptedRepository = undefined) => {
   const profiles = await compileBuiltInProfiles();
   const snapshotStore = new PlanSnapshotStore(storage);
   const catalogStore = new PlanCatalogStore(storage);
-  const runtime = new FinitePlanRuntime(profiles, snapshotStore, "travel", catalogStore);
+  const runtime = new FinitePlanRuntime(profiles, snapshotStore, "travel", catalogStore, [], () => new Date("2026-08-26T00:00:00.000Z"), acceptedRepository);
   return { profiles, storage, snapshotStore, catalogStore, runtime };
 };
 
@@ -135,4 +136,27 @@ test("activation storage failure rolls back snapshot, catalog, and active select
   storage.armed = false;
   assert.equal((await runtime.activateConfirmedPlanDraft(command)).code, "PLAN_AMENDMENT_ACTIVATED");
   assert.equal(runtime.kernel.profile.planId, blueprint.profile.planId);
+});
+
+test("hosted activation remains successful when only the browser cache fails after remote acceptance", async () => {
+  const storage = new FailingStorage();
+  const accepted = new MemoryAcceptedTruthRepository(() => new Date("2026-08-26T00:00:00.000Z"));
+  const { runtime } = await setup(storage, accepted);
+  assert.equal((await runtime.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_INITIALIZED");
+  const blueprint = runtime.getAmendmentBlueprint();
+  blueprint.profile.accepted.forecastMinor -= 5_000;
+  blueprint.profile.accepted.bufferMinor += 5_000;
+  const staged = await runtime.stagePlanAmendment({ profile: blueprint.profile, supersedesPlanId: blueprint.supersedesPlanId, expectedRevision: blueprint.supersedesRevision });
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  storage.failKey = "finite-plan.activation-receipts.v1";
+  storage.armed = true;
+
+  const activated = await runtime.activateConfirmedPlanDraft({ draftId: staged.draft.draftId, confirmationId: confirmed.confirmation.confirmationId, expectedPlanId: "plan_travel_europe", expectedRevision: 1, idempotencyKey: "activate-hosted-cache-failure-0001" });
+  assert.equal(activated.ok, true);
+  assert.equal(activated.acceptedStateChanged, true);
+  assert.equal(activated.browserPersistence.ok, false);
+  assert.equal(activated.browserPersistence.code, "PLAN_ACTIVATION_BROWSER_CACHE_FAILED");
+  assert.equal(runtime.kernel.profile.planId, blueprint.profile.planId);
+  const durable = await accepted.load(blueprint.profile.planId, runtime.kernel.profile.profileHash);
+  assert.equal(durable.planId, blueprint.profile.planId);
 });

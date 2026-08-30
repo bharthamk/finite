@@ -214,9 +214,35 @@ const savePacket = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
     const priorPacket = record(JSON.parse(returnReview.packet_json));
     if (record(priorPacket.payload).contentHash === record(packet.payload).contentHash) return errorResponse(409, "CONSTRUCTION_RETURN_UNCHANGED", "A returned draft must be materially revised before it can be served again.", { returnedDraftId: returnReview.draft_id });
   }
+  const guardClauses = ["EXISTS (SELECT 1 FROM plan_heads WHERE scope_id = ? AND plan_id = ? AND profile_hash = ? AND revision = ?)"];
+  const guardValues: unknown[] = [scopeId, packet.basePlanId, packet.baseProfileHash, packet.baseRevision];
+  if (source) {
+    guardClauses.push("EXISTS (SELECT 1 FROM arrival_orders WHERE scope_id = ? AND order_id = ? AND version = ? AND packet_checksum = ? AND status IN ('proposed_plan_ready', 'interpretation_confirmed'))");
+    guardValues.push(scopeId, source.orderId, source.orderVersion, source.orderChecksum);
+    guardClauses.push("? = (SELECT order_id FROM arrival_orders WHERE scope_id = ? ORDER BY updated_at DESC LIMIT 1)");
+    guardValues.push(source.orderId, scopeId);
+  } else if (!Object.keys(amendment).length) {
+    guardClauses.push("NOT EXISTS (SELECT 1 FROM arrival_orders WHERE scope_id = ? AND status IN ('proposed_plan_ready', 'interpretation_confirmed') AND order_id = (SELECT order_id FROM arrival_orders WHERE scope_id = ? ORDER BY updated_at DESC LIMIT 1))");
+    guardValues.push(scopeId, scopeId);
+  }
+  if (existing) {
+    guardClauses.push("EXISTS (SELECT 1 FROM construction_packets WHERE scope_id = ? AND packet_id = ? AND updated_at = ? AND disposition = ? AND COALESCE(cleared_at, '') = COALESCE(?, ''))");
+    guardValues.push(scopeId, existing.packet_id, existing.updated_at, existing.disposition, existing.cleared_at);
+  } else {
+    guardClauses.push("NOT EXISTS (SELECT 1 FROM construction_packets WHERE scope_id = ?)");
+    guardValues.push(scopeId);
+  }
+  if (returnReview) {
+    guardClauses.push("EXISTS (SELECT 1 FROM construction_return_reviews WHERE scope_id = ? AND return_id = ? AND status = ? AND updated_at = ?)");
+    guardValues.push(scopeId, returnReview.return_id, returnReview.status, returnReview.updated_at);
+  } else {
+    guardClauses.push("NOT EXISTS (SELECT 1 FROM construction_return_reviews WHERE scope_id = ? AND status = 'returned')");
+    guardValues.push(scopeId);
+  }
   const statements = [db.prepare(`
     INSERT INTO construction_packets (scope_id, packet_id, packet_json, checksum, base_plan_id, base_profile_hash, base_revision, kind, source_order_id, source_order_version, source_order_checksum, created_at, expires_at, cleared_at, disposition, return_reason_code, return_message, returned_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'current', NULL, NULL, NULL, ?)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'current', NULL, NULL, NULL, ?
+     WHERE ${guardClauses.join(" AND ")}
     ON CONFLICT(scope_id) DO UPDATE SET
       packet_id = excluded.packet_id,
       packet_json = excluded.packet_json,
@@ -236,10 +262,21 @@ const savePacket = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
       return_message = NULL,
       returned_at = NULL,
       updated_at = excluded.updated_at
-  `).bind(scopeId, packet.packetId, JSON.stringify(packet), packet.checksum, packet.basePlanId, packet.baseProfileHash, packet.baseRevision, packet.kind, source?.orderId ?? null, source?.orderVersion ?? null, source?.orderChecksum ?? null, packet.createdAt, packet.expiresAt, now)];
+  `).bind(scopeId, packet.packetId, JSON.stringify(packet), packet.checksum, packet.basePlanId, packet.baseProfileHash, packet.baseRevision, packet.kind, source?.orderId ?? null, source?.orderVersion ?? null, source?.orderChecksum ?? null, packet.createdAt, packet.expiresAt, now, ...guardValues)];
   if (returnReview?.status === "returned" && packet.kind === "draft") statements.push(db.prepare("UPDATE construction_return_reviews SET status = 'resolved', resolved_by_packet_id = ?, resolved_at = ?, updated_at = ? WHERE scope_id = ? AND return_id = ?")
     .bind(packet.packetId, now, now, scopeId, returnReview.return_id));
-  await db.batch(statements);
+  const results = await db.batch(statements);
+  if ((results[0]?.meta?.changes ?? 0) !== 1) {
+    const concurrent = await loadRow(db, scopeId);
+    if (concurrent && concurrent.packet_id === packet.packetId) return response(200, { ok: true, code: "CONSTRUCTION_PACKET_REPLAY", packet: JSON.parse(concurrent.packet_json), replay: true });
+    const currentHead = await db.prepare("SELECT profile_hash, revision FROM plan_heads WHERE scope_id = ? AND plan_id = ?")
+      .bind(scopeId, packet.basePlanId).first<HeadRow>();
+    if (!currentHead || currentHead.profile_hash !== packet.baseProfileHash || currentHead.revision !== packet.baseRevision) return errorResponse(409, "CONSTRUCTION_PACKET_BASE_STALE", "Construction work is not bound to current accepted truth.", { currentRevision: currentHead?.revision ?? null, currentProfileHash: currentHead?.profile_hash ?? null });
+    const currentArrival = await db.prepare("SELECT order_id, version, status, packet_checksum FROM arrival_orders WHERE scope_id = ? ORDER BY updated_at DESC LIMIT 1")
+      .bind(scopeId).first<ArrivalRow>();
+    if (source && (!currentArrival || source.orderId !== currentArrival.order_id || source.orderVersion !== currentArrival.version || source.orderChecksum !== currentArrival.packet_checksum || !arrivalDraftReady(currentArrival.status))) return errorResponse(409, "CONSTRUCTION_ARRIVAL_STALE", "Construction work does not match the current rough plan.", { currentOrderId: currentArrival?.order_id ?? null, currentOrderVersion: currentArrival?.version ?? null, currentOrderChecksum: currentArrival?.packet_checksum ?? null, currentOrderStatus: currentArrival?.status ?? null });
+    return errorResponse(409, "CONSTRUCTION_PACKET_CONFLICT", "Construction work changed before this packet could become current.", { currentPacketId: concurrent?.packet_id ?? null });
+  }
   return response(existing ? 200 : 201, { ok: true, code: existing ? "CONSTRUCTION_PACKET_REPLACED" : "CONSTRUCTION_PACKET_SAVED", packet, replay: false });
 };
 

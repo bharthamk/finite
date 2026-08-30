@@ -9,7 +9,7 @@ import { handleConstructionPacketRequest } from "../dist-test/worker/constructio
 class Statement {
   values = [];
   constructor(db, query) { this.db = db; this.query = query; }
-  bind(...values) { this.values = values; return this; }
+  bind(...values) { assert.equal((this.query.match(/\?/g) ?? []).length, values.length, this.query); this.values = values; return this; }
   async first() { return this.db.first(this.query, this.values); }
   async all() { return { results: [] }; }
 }
@@ -17,6 +17,7 @@ class Statement {
 class PacketDb {
   packet = null;
   review = null;
+  beforeGuardedWrite = null;
   constructor({ profileHash, orderId, orderVersion, orderChecksum }) {
     this.profileHash = profileHash;
     this.orderId = orderId;
@@ -33,25 +34,40 @@ class PacketDb {
     throw new Error(`Unhandled first query: ${query}`);
   }
   async batch(statements) {
+    const results = [];
     for (const statement of statements) {
       if (statement.query.includes("INSERT INTO construction_packets")) {
+        if (this.beforeGuardedWrite) {
+          const interleave = this.beforeGuardedWrite;
+          this.beforeGuardedWrite = null;
+          interleave(this);
+        }
         const values = statement.values;
-        this.packet = {
-          packet_id: values[1], packet_json: values[2], checksum: values[3], base_plan_id: values[4], base_profile_hash: values[5], base_revision: values[6], kind: values[7],
-          source_order_id: values[8], source_order_version: values[9], source_order_checksum: values[10], created_at: values[11], expires_at: values[12], cleared_at: null,
-          disposition: "current", return_reason_code: null, return_message: null, returned_at: null, updated_at: values[13],
-        };
+        const permitted = this.profileHash === values[5]
+          && values[6] === 1
+          && (!values[8] || (this.orderId === values[8] && this.orderVersion === values[9] && this.orderChecksum === values[10]));
+        if (permitted) {
+          this.packet = {
+            packet_id: values[1], packet_json: values[2], checksum: values[3], base_plan_id: values[4], base_profile_hash: values[5], base_revision: values[6], kind: values[7],
+            source_order_id: values[8], source_order_version: values[9], source_order_checksum: values[10], created_at: values[11], expires_at: values[12], cleared_at: null,
+            disposition: "current", return_reason_code: null, return_message: null, returned_at: null, updated_at: values[13],
+          };
+        }
+        results.push({ success: true, meta: { changes: permitted ? 1 : 0 } });
       } else if (statement.query.includes("INSERT INTO construction_return_reviews")) {
         const values = statement.values;
         this.review = { return_id: values[1], packet_id: values[2], packet_json: values[3], draft_id: values[4], reason_code: values[5], message: values[6], status: "returned", returned_at: values[7], resolved_by_packet_id: null, resolved_at: null, updated_at: values[8] };
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("UPDATE construction_return_reviews SET status = 'resolved'")) {
         this.review.status = "resolved";
         this.review.resolved_by_packet_id = statement.values[0];
         this.review.resolved_at = statement.values[1];
         this.review.updated_at = statement.values[2];
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("UPDATE construction_return_reviews SET status = 'discarded'")) {
         this.review.status = "discarded";
         this.review.updated_at = statement.values[0];
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("disposition = 'returned'")) {
         this.packet.cleared_at = statement.values[0];
         this.packet.disposition = "returned";
@@ -59,6 +75,7 @@ class PacketDb {
         this.packet.return_message = statement.values[2];
         this.packet.returned_at = statement.values[3];
         this.packet.updated_at = statement.values[4];
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("UPDATE construction_packets SET cleared_at")) {
         this.packet.cleared_at = statement.values[0];
         this.packet.disposition = "discarded";
@@ -66,10 +83,11 @@ class PacketDb {
         this.packet.return_message = null;
         this.packet.returned_at = null;
         this.packet.updated_at = statement.values[1];
+        results.push({ success: true, meta: { changes: 1 } });
       }
       else throw new Error(`Unhandled batch query: ${statement.query}`);
     }
-    return statements.map(() => ({ success: true, meta: { changes: 1 } }));
+    return results;
   }
 }
 
@@ -159,4 +177,27 @@ test("authenticated construction API shares only the exact current arrival-bound
   const nextSavedBody = await nextSaved.json();
   assert.equal(nextSaved.status, 200, JSON.stringify(nextSavedBody));
   assert.equal(nextSavedBody.code, "CONSTRUCTION_PACKET_REPLACED");
+});
+
+test("construction persistence refuses an arrival change between validation and upsert", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const catalog = new PlanCatalogStore(storage);
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", catalog, [], () => new Date("2026-08-30T04:00:00.000Z"));
+  const orderId = "arrival_construction_interleave";
+  const orderChecksum = "c".repeat(64);
+  const assessed = await runtime.assessPlanIntake({
+    sourceArrival: { orderId, orderVersion: 4, orderChecksum }, constructionMode: "adaptive_shell", profileId: "travel", planId: "plan_construction_interleave", name: "Guarded construction", brief: "Keep this packet bound to the reviewed arrival.", allocation: { totalBudgetMinor: 1_000_000 }, actuals: [], locks: ["total_budget"], preferenceLabels: ["preserve_flexibility"],
+    entityEstimates: { trip_days: { days: { value: 30, basis: "One month.", sourcePaths: ["reviewed_interpretation"] } }, booked_segment_days: { days: { value: 0, basis: "No bookings.", sourcePaths: ["reviewed_interpretation"] } } }, stages: [{ stageId: "route", label: "Route", status: "planned" }],
+  });
+  await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  const packet = catalog.loadConstructionPacket();
+  const db = new PacketDb({ profileHash: runtime.kernel.profile.profileHash, orderId, orderVersion: 4, orderChecksum });
+  db.beforeGuardedWrite = (current) => { current.orderVersion = 5; };
+
+  const response = await handleConstructionPacketRequest(new Request("https://finite.example/api/construction-packet", { method: "PUT", headers: requestHeaders, body: JSON.stringify({ packet }) }), db);
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.code, "CONSTRUCTION_ARRIVAL_STALE");
+  assert.equal(db.packet, null);
 });

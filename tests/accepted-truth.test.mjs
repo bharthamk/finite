@@ -10,7 +10,7 @@ import { sha256 } from "../dist-test/src/crypto.js";
 class ActivationStatement {
   values = [];
   constructor(db, query) { this.db = db; this.query = query; }
-  bind(...values) { this.values = values; return this; }
+  bind(...values) { assert.equal((this.query.match(/\?/g) ?? []).length, values.length, this.query); this.values = values; return this; }
   async first() { return this.db.first(this.query, this.values); }
   async all() { return { results: [] }; }
 }
@@ -22,6 +22,7 @@ class ActivationGateDb {
   targetEnvelope = null;
   batchCalls = 0;
   firstCalls = 0;
+  beforeGuardedWrite = null;
   constructor({ baseEnvelope, arrival, construction }) {
     this.baseEnvelope = baseEnvelope;
     this.arrival = arrival;
@@ -45,8 +46,15 @@ class ActivationGateDb {
   }
   async batch(statements) {
     this.batchCalls += 1;
+    if (statements[0]?.query.includes("INSERT INTO challenge_consumptions") && statements[0]?.query.includes("WHERE EXISTS") && this.beforeGuardedWrite) {
+      const interleave = this.beforeGuardedWrite;
+      this.beforeGuardedWrite = null;
+      interleave(this);
+    }
     const results = [];
     for (const statement of statements) {
+      const guardedWrite = statement.query.includes("WHERE EXISTS (SELECT 1 FROM challenge_consumptions");
+      const guardActive = Boolean(this.consumption);
       if (statement.query.includes("SELECT profile_hash, revision FROM plan_heads")) {
         const envelope = statement.values[1] === this.baseEnvelope.planId ? this.baseEnvelope : this.targetEnvelope;
         results.push({ success: true, results: envelope ? [{ profile_hash: envelope.profileHash, revision: envelope.revision }] : [] });
@@ -56,9 +64,9 @@ class ActivationGateDb {
         results.push({ success: true, results: this.construction ? [this.construction] : [] });
       } else if (statement.query.includes("SELECT request_hash, receipt_json FROM activation_receipts")) {
         results.push({ success: true, results: this.activation ? [this.activation] : [] });
-      } else if (statement.query.includes("FROM authority_challenges")) {
+      } else if (statement.query.trimStart().startsWith("SELECT") && statement.query.includes("FROM authority_challenges")) {
         results.push({ success: true, results: this.challenge ? [this.challenge] : [] });
-      } else if (statement.query.includes("FROM challenge_consumptions")) {
+      } else if (statement.query.trimStart().startsWith("SELECT") && statement.query.includes("FROM challenge_consumptions")) {
         results.push({ success: true, results: this.consumption ? [this.consumption] : [] });
       } else if (statement.query.includes("FROM plan_heads h") && statement.query.includes("JOIN plan_revisions")) {
         const planId = statement.values[1];
@@ -69,24 +77,68 @@ class ActivationGateDb {
         this.challenge = { challenge_id: v[1], plan_id: v[2], profile_hash: v[3], revision: v[4], target_type: v[5], target_id: v[6], content_hash: v[7], authority_id: v[8], command_hash: v[9], created_at: v[10], expires_at: v[11] };
         results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_heads")) {
+        if (guardedWrite && !guardActive) { results.push({ success: true, meta: { changes: 0 } }); continue; }
         const v = statement.values;
         this.targetEnvelope = { envelopeVersion: "finite-plan-accepted-truth.v1", scopeId: "authenticated-user-v1", planId: v[1], profileId: v[2], profileHash: v[3], revision: v[4], snapshotHash: v[5], previousSnapshotHash: null, snapshot: null };
         results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_revisions")) {
+        if (guardedWrite && !guardActive) { results.push({ success: true, meta: { changes: 0 } }); continue; }
         this.targetEnvelope.snapshot = JSON.parse(statement.values[5]);
         results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO activation_receipts")) {
+        if (guardedWrite && !guardActive) { results.push({ success: true, meta: { changes: 0 } }); continue; }
         const v = statement.values;
         this.activation = { request_hash: v[5], receipt_json: v[6] };
         results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO challenge_consumptions")) {
-        this.consumption = { challenge_id: statement.values[1] };
-        results.push({ success: true, meta: { changes: 1 } });
+        if (statement.query.includes("WHERE EXISTS")) {
+          const v = statement.values;
+          const currentPayload = this.construction ? JSON.parse(this.construction.packet_json).payload : null;
+          const permitted = this.challenge?.challenge_id === v[7]
+            && this.challenge?.plan_id === v[8]
+            && this.challenge?.profile_hash === v[9]
+            && this.challenge?.revision === v[10]
+            && this.challenge?.target_id === v[11]
+            && this.challenge?.content_hash === v[12]
+            && this.challenge?.authority_id === v[13]
+            && this.challenge?.command_hash === v[14]
+            && Date.parse(this.challenge?.expires_at ?? "") > Date.parse(v[15])
+            && this.baseEnvelope.planId === v[19]
+            && this.baseEnvelope.profileHash === v[20]
+            && this.baseEnvelope.revision === v[21]
+            && this.arrival?.order_id === v[23]
+            && this.arrival?.version === v[24]
+            && this.arrival?.packet_checksum === v[25]
+            && ["interpretation_confirmed", "proposed_plan_ready"].includes(this.arrival?.status)
+            && this.construction?.packet_id === v[27]
+            && this.construction?.base_plan_id === v[29]
+            && this.construction?.base_profile_hash === v[30]
+            && this.construction?.base_revision === v[31]
+            && this.construction?.source_order_id === v[32]
+            && this.construction?.source_order_version === v[33]
+            && this.construction?.source_order_checksum === v[34]
+            && this.construction?.kind === "draft"
+            && !this.construction?.cleared_at
+            && this.construction?.disposition === "current"
+            && Date.parse(this.construction?.expires_at ?? "") > Date.parse(v[28])
+            && currentPayload?.draftId === v[35]
+            && currentPayload?.contentHash === v[36]
+            && !this.targetEnvelope
+            && !this.activation
+            && !this.consumption;
+          if (permitted) this.consumption = { challenge_id: v[1], receipt_id: v[3], request_hash: v[4] };
+          results.push({ success: true, meta: { changes: permitted ? 1 : 0 } });
+        } else {
+          this.consumption = { challenge_id: statement.values[1] };
+          results.push({ success: true, meta: { changes: 1 } });
+        }
       } else if (statement.query.includes("UPDATE construction_packets SET cleared_at")) {
+        if (guardedWrite && !guardActive) { results.push({ success: true, meta: { changes: 0 } }); continue; }
         this.construction.cleared_at = statement.values[0];
         this.construction.disposition = "discarded";
         results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_catalog") || statement.query.includes("INSERT OR IGNORE INTO evidence_records")) {
+        if (guardedWrite && !guardActive) { results.push({ success: true, meta: { changes: 0 } }); continue; }
         // Catalog and evidence rows are covered by integrity validation; the fake stores only activation state.
         results.push({ success: true, meta: { changes: 1 } });
       } else throw new Error(`Unhandled activation-gate batch query: ${statement.query}`);
@@ -222,6 +274,47 @@ test("accepted initialization consumes the prior guarded challenge and retires t
   assert.equal(replayed.status, 200, JSON.stringify(replayedBody));
   assert.equal(replayedBody.code, "ACCEPTED_TRUTH_CURRENT");
   assert.equal(replayedBody.replay, true);
+});
+
+test("guarded initialization aborts when source truth changes between validation and the write batch", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const scenarios = [
+    { name: "source plan", code: "PLAN_ACTIVATION_BASE_STALE", mutate: (db) => { db.baseEnvelope.revision += 1; } },
+    { name: "arrival", code: "PLAN_ACTIVATION_ARRIVAL_STALE", mutate: (db) => { db.arrival.version += 1; } },
+    { name: "draft", code: "PLAN_ACTIVATION_DRAFT_STALE", mutate: (db) => { db.construction.disposition = "returned"; } },
+  ];
+  for (const scenario of scenarios) {
+    const baseSnapshot = makeRuntime(profiles, "travel", undefined).kernel.snapshot();
+    const targetSnapshot = makeRuntime(profiles, "event", undefined).kernel.snapshot();
+    const baseEnvelope = await createAcceptedTruthEnvelope(baseSnapshot, null);
+    const sourceArrival = { orderId: `arrival_interleaved_${scenario.name.replace(" ", "_")}`, orderVersion: 5, orderChecksum: "d".repeat(64) };
+    const draftId = `plan_draft_${scenario.code.toLowerCase().replaceAll("_", "").slice(0, 16)}`;
+    const contentHash = "e".repeat(64);
+    const packetId = `construction_${contentHash.slice(0, 16)}`;
+    const construction = { packet_id: packetId, packet_json: JSON.stringify({ kind: "draft", payload: { draftId, contentHash } }), base_plan_id: baseSnapshot.planId, base_profile_hash: baseSnapshot.profileHash, base_revision: 1, kind: "draft", source_order_id: sourceArrival.orderId, source_order_version: sourceArrival.orderVersion, source_order_checksum: sourceArrival.orderChecksum, expires_at: "2099-08-30T00:00:00.000Z", cleared_at: null, disposition: "current" };
+    const db = new ActivationGateDb({ baseEnvelope, arrival: { order_id: sourceArrival.orderId, version: 5, status: "interpretation_confirmed", packet_checksum: sourceArrival.orderChecksum }, construction });
+    const gate = { gateVersion: "finite-plan-activation-gate.v1", source: "human_action", constructionPacketId: packetId, baseProfileHash: baseSnapshot.profileHash, sourceArrival };
+    const confirmationId = `plan_confirmation_${scenario.code.toLowerCase()}`;
+    const challengeBody = { planId: baseSnapshot.planId, profileHash: baseSnapshot.profileHash, revision: 1, targetType: "plan_activation", targetId: draftId, contentHash, authorityId: confirmationId, ttlSeconds: 300, gate };
+    const headers = { origin: "https://finite.example", "content-type": "application/json", "oai-authenticated-user-id": "site-user-123" };
+    const challengeResponse = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(challengeBody) }), db);
+    assert.equal(challengeResponse.status, 201, scenario.name);
+    const challenge = (await challengeResponse.json()).challenge;
+    const receiptBase = { idempotencyKey: `interleaved-${scenario.name}-0001`, fromPlanId: baseSnapshot.planId, toPlanId: targetSnapshot.planId, profileId: targetSnapshot.profileId, profileHash: targetSnapshot.profileHash, draftId, confirmationId, contentHash, baseRevision: 1, activationKind: "new_plan", sourceArrival };
+    const replayChecksum = await sha256(receiptBase);
+    const activationReceipt = { receiptId: `plan_activation_${replayChecksum.slice(0, 16)}`, ...receiptBase, replayChecksum };
+    const catalogEntry = { definition: getProfileDefinition("event"), evidenceRecords: [], lineage: { activationKind: "new_plan", supersedesPlanId: null, supersedesProfileHash: null, diffHash: null, activationReceiptId: activationReceipt.receiptId } };
+    const envelope = await createAcceptedTruthEnvelope(targetSnapshot, null);
+    const activationRequestHash = await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId: challenge.challengeId, activationGate: gate });
+    db.beforeGuardedWrite = scenario.mutate;
+    const response = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/initialize", { method: "POST", headers, body: JSON.stringify({ envelope, activationReceipt, catalogEntry, authorityChallengeId: challenge.challengeId, activationGate: gate, activationRequestHash }) }), db);
+    const body = await response.json();
+    assert.equal(response.status, 409, scenario.name);
+    assert.equal(body.code, scenario.code, scenario.name);
+    assert.equal(db.targetEnvelope, null, scenario.name);
+    assert.equal(db.activation, null, scenario.name);
+    assert.equal(db.consumption, null, scenario.name);
+  }
 });
 
 for (const profileId of ["travel", "renovation", "event"]) {
