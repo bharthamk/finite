@@ -146,7 +146,7 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /const renderCodexLaunch = \(\): void =>/);
   assert.match(source, /Copy setup for Codex/);
   assert.match(source, /Loading your live demo…/);
-  assert.match(source, /pause anywhere to ask about the exact screen you are seeing/);
+  assert.match(source, /pausing for Next and questions/);
   assert.match(source, /Click Next when you are ready to keep watching, or ask Codex about anything you see/);
   assert.match(source, /Live demo · click Next when this chapter makes sense/);
   assert.match(source, /Paused here · ask Codex anything about this screen/);
@@ -158,10 +158,10 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(styles, /\.codex-launch/);
 });
 
-test("Codex handoff keeps the person and operator on one visible Finite tab", () => {
-  assert.match(source, /run the real Hobart template in this exact Finite tab/);
-  assert.match(source, /Keep it open: you will watch each step here/);
-  assert.match(source, /Keep this Finite tab open so Codex takes over the page you can see/);
+test("Codex handoff asks where the person wants to watch before operating Finite", () => {
+  assert.match(source, /first ask where you want to watch: a controlled browser window or the Codex built-in browser/);
+  assert.match(source, /Its first question will be where you want to watch/);
+  assert.match(source, /Codex will ask where you want the visible run before it touches Finite/);
 });
 
 test("account and destructive actions live in a labelled account menu", () => {

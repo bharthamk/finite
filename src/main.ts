@@ -2049,9 +2049,9 @@ const renderCodexLaunch = (): void => {
       <div class="codex-launch__copy">
         <p class="eyebrow">One quick handoff</p>
         <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? "Loading your live demo…" : `Loading ${escapeHtml(agenticName())} beside you…`}</h1>
-        <p>${isDemo ? `${escapeHtml(agenticName())} will run the real Hobart template in this exact Finite tab. Keep it open: you will watch each step here, press Next at key moments, or pause anywhere to ask about the exact screen you are seeing.` : `${escapeHtml(agenticName())} will take over this exact Finite tab, build with you and pause whenever your input matters.`}</p>
+        <p>${isDemo ? `${escapeHtml(agenticName())} will first ask where you want to watch: a controlled browser window or the Codex built-in browser. It will then run the real Hobart template there, pausing for Next and questions.` : `${escapeHtml(agenticName())} will first ask which browser you want to use, then build with you there and pause whenever your input matters.`}</p>
         <button type="button" class="button codex-launch__copy-button" data-action="copy-codex-launch">${codexLaunchCopied ? "Copy again" : "Copy setup for Codex"}</button>
-        <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex. Keep this Finite tab open." : "Copy this once, open Codex and paste it. Keep this Finite tab open so Codex takes over the page you can see."}</small>
+        <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex. Its first question will be where you want to watch." : "Copy this once, open Codex and paste it. Codex will ask where you want the visible run before it touches Finite."}</small>
       </div>
       <details class="codex-launch__details"><summary>See what will be copied</summary><label><span>Codex setup</span><textarea readonly spellcheck="false" data-codex-launch-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
       <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? "Click Next when you are ready to keep watching, or ask Codex about anything you see." : "You can stop the guided view at any time."}</p></footer>
@@ -2066,7 +2066,7 @@ const renderCodexLaunch = (): void => {
       const button = root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']");
       if (heading) heading.textContent = "Copied. Paste it into Codex.";
       if (button) button.textContent = "Copy again";
-      if (status) status.textContent = "Ready to paste into Codex.";
+      if (status) status.textContent = "Ready to paste into Codex. Its first question will be where you want to watch.";
       announce("Codex setup copied. Paste it into Codex to begin.");
     } catch {
       const textarea = root.querySelector<HTMLTextAreaElement>("[data-codex-launch-prompt]");

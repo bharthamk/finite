@@ -106,6 +106,7 @@ test("live demo handoff runs a real template and waits for the person's Next cli
     plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
   });
   assert.match(handoff.detail, /real example/i);
+  assert.match(handoff.detail, /first ask where you want to watch/i);
   assert.match(handoff.detail, /Next click/i);
   assert.match(handoff.prompt, /three-night Hobart trip/i);
   assert.match(handoff.prompt, /pauseForNext true/);
@@ -128,10 +129,16 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
-  assert.match(handoff.prompt, /already-open Finite Site tab/i);
-  assert.match(handoff.prompt, /Claim that exact user-owned built-in-browser tab/i);
-  assert.match(handoff.prompt, /do not create another tab, open a background duplicate, or switch to Chrome/i);
-  assert.match(handoff.prompt, /Keep the built-in browser visibly presented throughout/i);
+  assert.match(handoff.prompt, /Your first interaction with the person must be this exact question, with no browser action or Finite action before it/i);
+  assert.match(handoff.prompt, /Where would you like to watch me run Finite: in a controlled browser window, or in the Codex built-in browser\?/i);
+  assert.match(handoff.prompt, /Wait for their explicit answer/i);
+  assert.match(handoff.prompt, /Do not infer the choice from open tabs, ambient browser context/i);
+  assert.ok(handoff.prompt.indexOf("Where would you like to watch me run Finite") < handoff.prompt.indexOf("Finite at https://finite.example is the live plan surface"));
+  assert.match(handoff.prompt, /choose a controlled browser window/i);
+  assert.match(handoff.prompt, /exactly one visible controlled browser instance/i);
+  assert.match(handoff.prompt, /choose the Codex built-in browser/i);
+  assert.match(handoff.prompt, /claim an already-open user-owned Finite tab when one exists/i);
+  assert.match(handoff.prompt, /Do not switch browser surfaces after the choice/i);
   assert.match(handoff.prompt, /stop without making any Finite call or page change/i);
   assert.match(handoff.prompt, /GUIDE_PAUSED_FOR_QUESTION/);
   assert.match(handoff.prompt, /pausedAt surface, target, targetLabel, and message/i);
