@@ -4047,7 +4047,7 @@ async function render(): Promise<SurfaceManifest> {
   }
   const hasWaitingArrival = isWaitingArrivalStatus(currentArrival()?.status);
   const explicitWorkingSurface = params.has("plan") || params.has("kitchen") || params.has("lab") || params.has("start");
-  if (codexLaunchMode && !hasWaitingArrival) {
+  if (codexLaunchMode) {
     renderCodexLaunch();
     return manifest;
   }

@@ -164,6 +164,11 @@ test("Codex handoff asks where the person wants to watch before operating Finite
   assert.match(source, /Codex will ask where you want the visible run before it touches Finite/);
 });
 
+test("an explicit Codex or demo launch outranks an older waiting arrival", () => {
+  assert.match(source, /if \(codexLaunchMode\) \{\s*renderCodexLaunch\(\);/);
+  assert.doesNotMatch(source, /if \(codexLaunchMode && !hasWaitingArrival\)/);
+});
+
 test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /aria-label="Open account menu for/);
   assert.match(source, /<span>Signed in as<\/span>/);
