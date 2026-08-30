@@ -121,7 +121,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 11);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 12);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -469,6 +469,13 @@ test("the live demo starts from the real blank first form and keeps its controls
   assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null;/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
+  assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
+  assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
+  assert.match(source, /No plan exists yet\./);
+  assert.match(source, /The planning workspace opens only after this starting point is submitted\./);
+  assert.match(styles, /\.arrival-entry-shell \{[^}]*min-height:100svh;/);
+  const freshShell = source.slice(source.indexOf('freshArrivalEntry ? `<div class="arrival-entry-shell"'), source.indexOf(': `<div class="private-top-shell"'));
+  assert.doesNotMatch(freshShell, /renderPlanSwitcher|renderLifecycleRail/);
   assert.match(styles, /\.codex-guide-overlay footer \{[^}]*min-height:0;[^}]*color:var\(--deep\);[^}]*background:transparent;/);
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-next \{[^}]*min-height:42px;[^}]*color:var\(--on-deep\);[^}]*background:var\(--deep\);/);
 });

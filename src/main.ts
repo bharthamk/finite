@@ -2123,6 +2123,7 @@ const renderEntryGateway = (): void => {
 
 const renderArrival = (manifest: SurfaceManifest): void => {
   const order = currentArrival();
+  const freshArrivalEntry = !order && newPlanDraftMode;
   const status = order ? arrivalStatus(order) : null;
   const interpretation = order?.interpretation;
   const question = order?.pendingClarification;
@@ -2132,10 +2133,10 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const planDraftMarkup = order ? renderPlanDraft() : "";
   const starterPlanMarkup = order ? renderStarterPlan(order) : "";
   const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup);
-  surfaceRoot.dataset.profile = "arrival";
+  surfaceRoot.dataset.profile = freshArrivalEntry ? "entry" : "arrival";
   surfaceRoot.setAttribute("aria-busy", String(busy));
   surfaceRoot.innerHTML = `
-    <div class="private-top-shell">
+    ${freshArrivalEntry ? `<div class="arrival-entry-shell"><header class="arrival-entry-header">${renderBrand()}<button type="button" class="entry-return" data-action="back-from-arrival-entry">Back to ways to begin</button></header>` : `<div class="private-top-shell">
       <header class="site-header arrival-header">
         ${renderBrand()}
         ${renderPlanSwitcher("arrival")}
@@ -2146,7 +2147,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
         </div>
       </header>
       ${renderLifecycleRail(order ? "planning" : "starting")}
-    </div>
+    </div>`}
     <main id="main" class="arrival-main">
       ${!order ? `
         <section class="arrival-compose" aria-labelledby="arrival_title">
@@ -2227,7 +2228,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
       `}
       ${labMode ? `<details class="protocol-lab"><summary>Protocol lab</summary><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, arrival: order, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [] }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>You define the outcome. ${escapeHtml(agenticName())} works through the plan. Finite keeps it together as things change.</p><span>${order ? "Your starting point is saved" : "No request waiting · your plans remain available"}</span></footer>
+    ${freshArrivalEntry ? `<div class="entry-boundary arrival-entry-boundary"><span>No plan exists yet.</span><p>The planning workspace opens only after this starting point is submitted.</p></div></div>` : `<footer><p>You define the outcome. ${escapeHtml(agenticName())} works through the plan. Finite keeps it together as things change.</p><span>${order ? "Your starting point is saved" : "No request waiting · your plans remain available"}</span></footer>`}
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderKitchenResetDialog()}
@@ -2235,6 +2236,22 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   enableNativeWritingAssistance();
   bindArrivalInteractions();
   restoreWorkspaceUiState();
+  root.querySelector<HTMLButtonElement>("[data-action='back-from-arrival-entry']")?.addEventListener("click", async () => {
+    entryGatewayOpen = true;
+    entryPrefill = "";
+    codexLaunchMode = null;
+    guidedWalkthroughMode = false;
+    demoPlaybackMode = false;
+    demoNextRequired = false;
+    demoNextAdvanced = false;
+    demoPaused = false;
+    lastDemoGuide = null;
+    forceArrivalSurface = false;
+    const target = new URL(location.href);
+    target.searchParams.delete("start");
+    history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+    await render();
+  });
   if (guidedWalkthroughMode && !guidedWalkthroughAutoOpened) {
     guidedWalkthroughAutoOpened = true;
     root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
