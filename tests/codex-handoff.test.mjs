@@ -155,6 +155,9 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /Do not use the human 'Add to request' form/i);
   assert.match(handoff.prompt, /Do not approve, start managing, compile away from/i);
   assert.match(handoff.prompt, /plan_summary target/i);
+  assert.match(handoff.prompt, /keep every workspace section collapsed/i);
+  assert.match(handoff.prompt, /This is your plan at a glance\. Dates, budget, remaining money, and open work stay visible here/i);
+  assert.doesNotMatch(handoff.prompt, /Use finite_guide_view on the priority target to explain the plan-at-a-glance summary/i);
   assert.match(handoff.prompt, /Do not approve the plan, start managing, create human authority/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
   assert.match(handoff.prompt, /Your first interaction with the person must be this exact question, with no browser action or Finite action before it/i);
