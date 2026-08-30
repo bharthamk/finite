@@ -136,7 +136,7 @@ test("a zero-budget job interview becomes an isolated general plan and activates
     interpretation: {
       ...order.interpretation,
       basedOnVersion: 4,
-      inferredFamily: "job_interview",
+      inferredFamily: "event",
       summary: "Prepare for a second-round strategy and operations interview with Northstar AI.",
       known: { interviewDate: "2026-09-18", interviewLengthMinutes: 60, interviewer: "COO", prepEvenings: 3, paidBudget: 0 },
     },

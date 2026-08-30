@@ -616,7 +616,8 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const manual = arrivalUsesManualWorkspace(order);
   const editableWorkspace = manual || arrivalUsesCodexWaitingWorkspace(order) || order.structured.planningMode === "codex";
   if (!interpretation?.complete && !editableWorkspace) return null;
-  const family = starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
+  const explicitlyComposableOutcome = /\b(?:job interview|interview preparation|prepare(?:d|s|ing)?\s+for\s+(?:an?\s+)?(?:[^.!?\n]{0,80}\s+)?interview)\b/i.test(order.rawOutcome);
+  const family = explicitlyComposableOutcome ? "general" : starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
   const openItems = [...new Set([

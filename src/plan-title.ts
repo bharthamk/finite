@@ -14,6 +14,8 @@ const humanDate = (value: string): string => {
 const coreTitle = (text: string): string => {
   const source = text.trim();
   if (/\b(?:dinner party|dinner plan|dinner at home|host(?:ing)? (?:a )?dinner)\b/i.test(source)) return "Dinner party";
+  const interviewEmployer = source.match(/\b(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:for|on|at|about|with)\b|[,.;]|$)/i)?.[1]?.trim();
+  if (interviewEmployer) return `${interviewEmployer} interview preparation`;
   const interviewCompany = source.match(/\binterview\b[^.!?\n]{0,80}?\bwith\s+([^,.;]+?)(?=\s+(?:for|on|at|about)\b|[,.;]|$)/i)?.[1]?.trim();
   if (interviewCompany) return `${interviewCompany} interview preparation`;
   const interviewRole = source.match(/(?:job )?interview (?:for|as) (?:an? |the )?([^.,;]+?)(?:\s+(?:role|position))?(?:[.,;]|$)/i)?.[1]?.trim();
