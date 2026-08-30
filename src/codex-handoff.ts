@@ -5,6 +5,7 @@ export interface CodexHandoffContext {
   inline: boolean;
   agenticName?: string;
   guidedWalkthrough?: boolean;
+  demoPlayback?: boolean;
   entryIntent?: "start_new" | "continue_current" | "resume_handoff";
   order: Pick<ArrivalOrder, "orderId" | "version" | "status" | "lastOperatorCheckpoint" | "checksum"> | null;
   plan: { planId: string; profileId: string; profileHash: string; revision: number; snapshotHash: string | null };
@@ -40,6 +41,7 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
   const agenticName = context.agenticName?.trim() || "Codex";
   const order = context.order;
   const guidedWalkthrough = context.guidedWalkthrough === true;
+  const demoPlayback = context.demoPlayback === true;
   const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
   const toolInput = {
     entryIntent,
@@ -59,7 +61,10 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     entryIntent === "start_new" ? "Start a new Finite plan as the Codex operator." : "Take over this Finite plan as the Codex operator.",
     "",
     `Finite at ${siteOrigin} is the live plan surface. Operate the application for the person while keeping their preferences, decisions, and approval with them.`,
-    ...(guidedWalkthrough ? [
+    ...(demoPlayback ? [
+      "",
+      "Run Finite's live product demo for the person using the real interface and the public example: Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do. The person should not type or operate Finite. Create and develop the non-sensitive example through Finite's normal page tools, showing real saved state rather than a simulation. Use finite_guide_view with a short message and pauseForNext true at each meaningful chapter. After showing a chapter, do not advance until Finite allows the next guide call; retry that intended call at short intervals while the visible Next gate is waiting. Never convert Next into plan approval or external authority. End at a real human decision boundary and explain that boundary rather than approving it.",
+    ] : guidedWalkthrough ? [
       "",
       "This is a live guided walkthrough of the real product, not an autoplay or a simulated demo. After entering Finite, use finite_guide_view to move through one meaningful area at a time. Supply a short, plain-language message with each guide call so the person can follow the glow and typed guidance overlay. Pause after each step. Never type into a human field, choose an option, or approve on the person's behalf. Start by showing the starting point, then help them create or adapt a rough plan, inspect its structure, make one useful change, and reach an actual human decision boundary.",
     ] : []),
@@ -80,8 +85,10 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     handoffVersion: "finite-codex-handoff.v1",
     buttonLabel: `Hand off to ${agenticName}`,
     title: order ? `Bring ${agenticName} into this plan.` : `Start this with ${agenticName}.`,
-    detail: guidedWalkthrough
-      ? "Copy one introduction into Codex. It will use Finite’s consented guide controls on the real page and pause for you at every human decision."
+    detail: demoPlayback
+      ? "Copy one introduction into Codex. It will run a real example in Finite and wait for your Next click between key chapters."
+      : guidedWalkthrough
+        ? "Copy one introduction into Codex. It will use Finite’s consented guide controls on the real page and pause for you at every human decision."
       : context.inline
         ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
         : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",

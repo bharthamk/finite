@@ -40,15 +40,21 @@ test("public bootstrap routes do not preload the authenticated operator surface"
   assert.doesNotMatch(viteConfig, /fileName: "_headers"/);
 });
 
-test("the signed-out first page is the three-route Finite gateway", () => {
+test("the signed-out first page is the four-route Finite gateway", () => {
   assert.match(publicGate, /How do you want to begin\?/);
   assert.match(publicGate, /data-public-entry="fresh"/);
   assert.match(publicGate, /data-public-example=/);
-  assert.match(publicGate, /data-public-entry="guided"/);
+  assert.match(publicGate, /data-public-entry="codex-live"/);
+  assert.match(publicGate, /data-public-entry="live-demo"/);
   assert.match(publicGate, /return_to/);
-  assert.match(publicGate, /\/?start=guided/);
+  assert.match(publicGate, /\/?start=codex-live/);
+  assert.match(publicGate, /\/?start=live-demo/);
   assert.match(publicGate, /\/?start=example&example=/);
   assert.match(publicGate, /isolated 24-hour workspace/);
+  assert.match(publicGate, /Choose a template\./);
+  assert.match(publicGate, /Use Codex live/);
+  assert.match(publicGate, /Watch live demo/);
+  assert.doesNotMatch(publicGate, /Borrow a useful beginning/);
   assert.doesNotMatch(publicGate, /Continue with ChatGPT|Try the demo/);
 });
 
@@ -115,7 +121,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 10);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 11);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -126,17 +132,25 @@ test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(shell, /href="\/finite-mark\.png" type="image\/png"/);
 });
 
-test("first-use entry offers fresh, example, and live guided routes before the planning surface", () => {
+test("first-use entry offers fresh, template, Codex live, and live-demo routes", () => {
   assert.match(source, /const renderEntryGateway = \(\): void =>/);
   assert.match(source, /How do you want to begin\?/);
   assert.match(source, /data-entry-action="fresh"/);
   assert.match(source, /data-entry-example=/);
-  assert.match(source, /data-entry-action="guided"/);
+  assert.match(source, /data-entry-action="codex-live"/);
+  assert.match(source, /data-entry-action="live-demo"/);
+  assert.match(source, /Choose a template\./);
   assert.match(source, /Same real product in every route\./);
-  assert.match(source, /guidedWalkthroughMode = guided/);
+  assert.match(source, /codexLaunchMode = codexMode/);
   assert.match(source, /scopedStorage\.setItem\("finite-plan\.follow-codex", "true"\)/);
+  assert.match(source, /const renderCodexLaunch = \(\): void =>/);
+  assert.match(source, /Copy setup for Codex/);
+  assert.match(source, /Loading your live demo…/);
+  assert.match(source, /You only press Next at the key moments/);
   assert.match(styles, /\.entry-route-grid/);
-  assert.match(styles, /\.entry-route--guided/);
+  assert.match(styles, /\.entry-route--codex-live/);
+  assert.match(styles, /\.entry-route--live-demo/);
+  assert.match(styles, /\.codex-launch/);
 });
 
 test("account and destructive actions live in a labelled account menu", () => {
@@ -166,7 +180,7 @@ test("the header plan dropdown creates and opens plans from every private produc
   assert.match(source, /optgroup label="Earlier versions"/);
   assert.match(source, /if \(planId === newPlanChoice\) \{ void startNewPlan\(\); return; \}/);
   assert.equal(source.match(/bindPlanSwitcherInteractions\(\);/g)?.length, 2);
-  assert.match(source, /newPlanDraftMode = true;\s*forceArrivalSurface = true;/);
+  assert.match(source, /newPlanDraftMode = true;\s*forceArrivalSurface = false;\s*entryGatewayOpen = true;/);
   assert.match(source, /const currentArrival = \(\): ArrivalOrder \| null => !newPlanDraftMode/);
   assert.match(source, /const openPlan = async \(planId: string\): Promise<void> => \{\s*if \(!planId \|\| busy\) return;\s*newPlanDraftMode = false;\s*forceArrivalSurface = false;/);
   assert.match(source, /runtime\.switchPlanPersisted\(planId, \{ expectedCurrentPlanId:/);

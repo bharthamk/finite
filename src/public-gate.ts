@@ -20,17 +20,20 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
   root.innerHTML = `<main class="entry-shell" id="main">
     <section class="entry-card entry-card--product" aria-labelledby="entry_title">
       <header class="entry-card__top"><a class="brand" href="#main" aria-label="Finite home"><img src="/finite-wordmark.png" width="98" height="30" alt=""></a></header>
-      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start with your own words, borrow a useful example, or let Codex walk beside you through the real product.</p></div>
+      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with Codex, or watch the product run itself.</p></div>
       <div class="entry-route-grid">
         <a class="entry-route entry-route--fresh" data-public-entry="fresh" href="${escapeHtml(signInRoute(signInPath, "/?start=fresh"))}">
           <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. Continue into your private workspace, with hints waiting if you want them.</p><em>Start with my plan →</em>
         </a>
         <section class="entry-route entry-route--examples" aria-labelledby="entry_examples_title">
-          <span>02 / Start from an example</span><strong id="entry_examples_title">Borrow a useful beginning.</strong><p>Open a temporary example, then change any wording before Finite builds it.</p>
+          <span>02 / Start from a template</span><strong id="entry_examples_title">Choose a template.</strong><p>Pick a ready-made starting point and tailor it to your plan.</p>
           <div class="entry-example-list">${finiteEntryExamples.map((example) => `<button type="button" data-public-example="${example.id}"><strong>${escapeHtml(example.label)}</strong><small>${escapeHtml(example.detail)}</small><i aria-hidden="true">→</i></button>`).join("")}</div>
         </section>
-        <button type="button" class="entry-route entry-route--guided" data-public-entry="guided">
-          <span>03 / Walk through with Codex</span><strong>Let Codex show you around, live.</strong><p>It opens the actual product, explains what matters, glows each step and pauses whenever your judgment is needed.</p><em>Start the live walkthrough →</em>
+        <button type="button" class="entry-route entry-route--codex-live" data-public-entry="codex-live">
+          <span>03 / Use Codex live</span><strong>Build with Codex beside you.</strong><p>Codex runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use Codex live →</em>
+        </button>
+        <button type="button" class="entry-route entry-route--live-demo" data-public-entry="live-demo">
+          <span>04 / Watch live demo</span><strong>Let Codex run Finite for you.</strong><p>Watch a real template become a working plan. You only press Next at key points.</p><em>Watch the live demo →</em>
         </button>
       </div>
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Fresh plans use your ChatGPT identity. Examples and walkthroughs open in an isolated 24-hour workspace.</p></footer>
@@ -51,6 +54,7 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
     announcer.textContent = "Finite could not open that workspace. Nothing was saved.";
   };
 
-  root.querySelector<HTMLButtonElement>("[data-public-entry='guided']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=guided"); });
+  root.querySelector<HTMLButtonElement>("[data-public-entry='codex-live']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=codex-live"); });
+  root.querySelector<HTMLButtonElement>("[data-public-entry='live-demo']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=live-demo"); });
   root.querySelectorAll<HTMLButtonElement>("[data-public-example]").forEach((button) => button.addEventListener("click", () => { void openDemoRoute(button, `/?start=example&example=${encodeURIComponent(button.dataset.publicExample ?? "")}`); }));
 };

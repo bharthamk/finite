@@ -95,3 +95,20 @@ test("guided handoff walks the real product without taking human input or author
   assert.match(handoff.prompt, /Never type into a human field/);
   assert.match(handoff.prompt, /Pause after each step/);
 });
+
+test("live demo handoff runs a real template and waits for the person's Next click", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    demoPlayback: true,
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.detail, /real example/i);
+  assert.match(handoff.detail, /Next click/i);
+  assert.match(handoff.prompt, /weekend trip to Hobart/i);
+  assert.match(handoff.prompt, /pauseForNext true/);
+  assert.match(handoff.prompt, /person should not type or operate Finite/i);
+  assert.match(handoff.prompt, /Never convert Next into plan approval/i);
+});
