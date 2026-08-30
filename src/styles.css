@@ -580,13 +580,14 @@ button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .starter-overview-dialog__form--single { grid-template-columns:1fr; }
 .starter-overview-dialog__form>section { min-width:0; padding:20px; background:var(--paper); }
 .starter-overview-dialog__form h4 { margin:0 0 16px; font-size:.86rem; }
-.starter-overview__field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.starter-overview__field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:12px; }
 .starter-overview__field,.starter-overview__field-grid label,.starter-overview__category label,.starter-overview__add label { display:grid; gap:6px; min-width:0; }
 .starter-overview__field-grid label.is-wide { grid-column:1/-1; }
 .starter-overview__field>span,.starter-overview__field-grid label>span,.starter-overview__category label>span:first-child,.starter-overview__add label>span { color:var(--muted); font:700 .56rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }
 .starter-overview__field select,.starter-overview__field-grid input,.starter-overview__category input,.starter-overview__add input { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--line); border-radius:0; color:var(--ink); background:var(--panel); font:inherit; }
 .starter-overview__field+.starter-overview__field-grid { margin-top:14px; }
 .starter-overview__field-grid small { color:var(--muted); font-size:.65rem; line-height:1.35; }
+.starter-overview__field-hint { grid-column:1/-1; margin-top:-3px; }
 .starter-overview__toggles { display:flex; gap:18px; margin:15px 0; color:var(--muted); font-size:.76rem; }
 .starter-overview__toggles label { display:flex; align-items:center; gap:7px; cursor:pointer; }
 .starter-overview__toggles input { accent-color:var(--accent); }
