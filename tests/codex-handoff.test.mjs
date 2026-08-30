@@ -167,9 +167,14 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /Calendar keeps the plan’s dates, places and activities together\. Select any item to see or change its details; related stays and transport remain connected to the same working plan\./i);
   assert.match(handoff.prompt, /open_questions target with pauseForNext true/i);
   assert.match(handoff.prompt, /Anything Finite still needs is gathered here\. Answer on the page or in Codex, and the answer becomes part of the working plan while the question clears\./i);
+  assert.match(handoff.prompt, /close Calendar, open the real People & commitments section with its visible header/i);
+  assert.match(handoff.prompt, /priority target with sectionId people and pauseForNext true/i);
+  assert.match(handoff.prompt, /People & commitments keeps companions, hosts and fixed appointments tied to the dates or decisions they affect\. Dependencies stay visible instead of getting buried in notes\./i);
+  assert.match(handoff.prompt, /continue through stays, transport, money, requirements and tasks in their visible on-page order before entering Chapter three/i);
   assert.ok(handoff.prompt.indexOf("section_headers target") < handoff.prompt.indexOf("budget_editor target"));
   assert.ok(handoff.prompt.indexOf("sectionId itinerary") < handoff.prompt.indexOf("budget_editor target"));
   assert.ok(handoff.prompt.indexOf("open_questions target") < handoff.prompt.indexOf("budget_editor target"));
+  assert.ok(handoff.prompt.indexOf("sectionId people") < handoff.prompt.indexOf("budget_editor target"));
   assert.match(handoff.prompt, /budget_editor target/i);
   assert.match(handoff.prompt, /budget_editor target with pauseForNext true/i);
   assert.match(handoff.prompt, /Budgets change\. Edit the total or base currency here, and Finite updates the rest of the plan around it\. Next I’ll change both so you can see that happen\./i);
