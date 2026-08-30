@@ -620,6 +620,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /open_questions: \{ label: "the open questions", selectors: \["\.starter-module\[open\] \.starter-module__questions"\] \}/);
   assert.match(source, /overlay\.setAttribute\("popover", "manual"\)/);
   assert.match(source, /typeof overlay\.showPopover === "function"/);
+  assert.match(source, /demoNextRequired = false;\s+demoNextAdvanced = true;/);
   assert.match(styles, /\.codex-guide-overlay \{ position:fixed; top:auto;/);
   assert.match(source, /class="starter-overview__field-hint" id="currency_hint"/);
   assert.match(styles, /\.starter-overview__field-grid \{ display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\); align-items:start;/);

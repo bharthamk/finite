@@ -839,6 +839,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     announce(demoPaused ? `Demo paused. Ask ${agenticName()} about this exact screen.` : `Demo resumed. ${agenticName()} can continue from this exact place.`);
   });
   overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']")?.addEventListener("click", (event) => {
+    demoNextRequired = false;
     demoNextAdvanced = true;
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
