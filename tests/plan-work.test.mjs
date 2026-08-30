@@ -148,6 +148,8 @@ test("attachment provenance and processing state are bounded", () => {
 test("Managing exposes checkboxes and section-bound attachments without engineering copy", async () => {
   const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
   assert.match(source, /Plan-stage tasks are ticked off in the timeline below\./);
+  assert.match(source, /Loading progress…/);
+  assert.match(source, /Loading the saved plan checklist…/);
   assert.match(source, /data-action="toggle-checklist"/);
   assert.match(source, /Files &amp; links/);
   assert.match(source, /data-attachment-context/);

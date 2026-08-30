@@ -491,6 +491,7 @@ const refreshPlanDisplayNames = async (): Promise<void> => {
 let planInputs: PlanInputRecord[] = [];
 let checklistItems: ChecklistItem[] = [];
 let planAttachments: PlanAttachment[] = [];
+let planWorkLoading = false;
 let planRetrospective: PlanRetrospective | null = null;
 let profileMemories: ProfileMemory[] = [];
 let profileContextReady = false;
@@ -3023,9 +3024,10 @@ const renderAttachmentItems = (items: PlanAttachment[], compact = false): string
 const renderPlanWork = (): string => {
   const done = checklistItems.filter((item) => item.status === "done");
   const custom = checklistItems.filter((item) => item.origin !== "adaptive");
+  const progressReady = secondaryPlanDataReady && !planWorkLoading;
   return `<section class="plan-work" id="plan_work" aria-label="Plan progress and attachments">
     <article class="plan-work__checklist">
-      <header><div><p class="eyebrow">Progress</p><h2>${done.length} of ${checklistItems.length} done</h2><small>Plan-stage tasks are ticked off in the timeline below.</small></div></header>
+      <header><div><p class="eyebrow">Progress</p><h2>${progressReady ? `${done.length} of ${checklistItems.length} done` : "Loading progress…"}</h2><small>${progressReady ? "Plan-stage tasks are ticked off in the timeline below." : "Loading the saved plan checklist…"}</small></div></header>
       ${custom.length ? `<div class="checklist-items">${custom.sort((a, b) => Number(a.status === "done") - Number(b.status === "done")).map((item) => `<label class="checklist-item${item.status === "done" ? " is-done" : ""}"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(item.itemId)}" ${item.status === "done" ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span><strong>${escapeHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapeHtml(item.contextLabel)}</small>` : ""}</span></label>`).join("")}</div>` : ""}
       <form class="checklist-add" data-checklist-add><label><span class="sr-only">Add something to do</span><input name="label" type="text" maxlength="240" placeholder="Add something to do…" required></label><button type="submit" ${planWorkBusy ? "disabled" : ""}>Add</button></form>
     </article>
@@ -4096,6 +4098,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
 
   persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+  planWorkLoading = true;
   planInputs = [];
   checklistItems = [];
   planAttachments = [];
@@ -4139,6 +4142,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
   void Promise.all([continuityWork, postActivationSync]).then(async ([continuitySaved, arrivalClosed]) => {
+    planWorkLoading = false;
     if (runtime.kernel.profile.planId !== activatedPlanId) return;
     if (!continuitySaved) announce("Your plan is active. Some editable planning notes need to be retried from the saved arrival history.");
     else if (!arrivalClosed) announce("Your plan is active. Finite is still syncing the completed starting request.");
