@@ -758,7 +758,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
   interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
-  plan_summary: { label: "the plan summary", selectors: [".hero", ".plan-orbit"] },
+  plan_summary: { label: "the plan summary", selectors: [".starter-plan__overview", ".arrival-starter-plan", ".draft-review__summary", ".hero", ".plan-orbit"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
   approval: { label: "the approval area", selectors: [".zone--approval_panel", ".plan-intake", ".lifecycle-control--pending"] },
@@ -2352,7 +2352,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     return;
   }
   await render();
-  void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
+  if (!demoPlaybackMode) void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
   if (planningMode === "codex" && !demoPlaybackMode) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 

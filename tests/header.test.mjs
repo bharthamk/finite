@@ -482,6 +482,7 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(source, /forceArrivalSurface = request\.surface === "arrival";/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
+  assert.match(source, /if \(!demoPlaybackMode\) void prepareArrivalPlanDraft\(arrivalResult\)/);
   assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
   assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
   assert.match(source, /No plan exists yet\./);
@@ -572,6 +573,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /planning_window: \{ label: "the planning window", selectors: \["\.arrival-order__outcome"\] \}/);
   assert.match(source, /build_method: \{ label: "the two ways to begin", selectors: \["\.arrival-start-tabs"\] \}/);
   assert.match(source, /manual_details: \{ label: "the structured plan details", selectors: \["\.arrival-start-panel--manual"\] \}/);
+  assert.match(source, /plan_summary: \{ label: "the plan summary", selectors: \["\.starter-plan__overview", "\.arrival-starter-plan", "\.draft-review__summary", "\.hero", "\.plan-orbit"\] \}/);
   assert.match(source, /demoPlaybackMode && request\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);

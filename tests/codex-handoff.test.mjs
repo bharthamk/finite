@@ -137,6 +137,13 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /Every Next gate is already a natural pause/i);
   assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
+  assert.match(handoff.prompt, /finite_save_workspace_records/i);
+  assert.match(handoff.prompt, /operator-editable provisional record/i);
+  assert.match(handoff.prompt, /Do not call finite_append_arrival_input/i);
+  assert.match(handoff.prompt, /Do not use the human 'Add to request' form/i);
+  assert.match(handoff.prompt, /Do not approve, start managing, compile away from/i);
+  assert.match(handoff.prompt, /plan_summary target/i);
+  assert.match(handoff.prompt, /Do not approve the plan, start managing, create human authority/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
   assert.match(handoff.prompt, /Your first interaction with the person must be this exact question, with no browser action or Finite action before it/i);
   assert.match(handoff.prompt, /Where would you like to watch me run Finite: in a controlled browser window, or in the Codex built-in browser\?/i);
