@@ -512,9 +512,16 @@ test("guiding the current surface preserves unsaved browser input", () => {
 test("each natural demo pause offers Next or a Codex question without another continuation message", () => {
   assert.match(source, /Paused at a natural stopping point/);
   assert.match(source, /class="codex-guide-question">Or ask/);
+  assert.match(source, /or tell it to keep going/);
   assert.match(source, /GUIDE_WAITING_FOR_PERSON[^]*pausedAt: lastDemoGuide/);
-  assert.match(source, /do not move the demo until the person clicks Next/);
+  assert.match(source, /use the normal visible interface to click Next for them/);
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-question/);
+});
+
+test("guided highlights point at one exact surface at a time", () => {
+  assert.match(source, /top: \{ label: "the top of this page", selectors: \["\.site-header"/);
+  assert.match(source, /root\.querySelectorAll<HTMLElement>\("\[data-codex-priority\]"\)\.forEach/);
+  assert.match(source, /if \(request\.target === "priority"\) \{ element\.dataset\.codexPriority = "true"/);
 });
 
 test("starting or restarting a demo cannot inherit a hidden prior Next gate", () => {

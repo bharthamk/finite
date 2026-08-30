@@ -578,7 +578,7 @@ let codexLaunchCopied = false;
 const guideView = async (request: FiniteGuideViewRequest) => {
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
   if (demoPlaybackMode && demoPaused) return { ok: true, code: "GUIDE_PAUSED_FOR_QUESTION", acceptedStateChanged: false, pausedAt: lastDemoGuide, next: "The person paused the live demo. Make no product changes. Answer their Codex questions using pausedAt and canonical Finite state, then retry the intended guide call at a modest interval until they resume." };
-  if (demoPlaybackMode && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, pausedAt: lastDemoGuide, next: "The live demo is paused at a visible Next button. If the person asks a question in Codex, answer it from pausedAt and canonical Finite state without changing the product. Otherwise wait briefly and retry the intended finite_guide_view call; do not move the demo until the person clicks Next." };
+  if (demoPlaybackMode && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, pausedAt: lastDemoGuide, next: "The live demo is paused at a visible Next button. If the person asks a question in Codex, answer it from pausedAt and canonical Finite state without changing the product. If they explicitly say next, proceed, keep going, continue, or equivalent in Codex, use the normal visible interface to click Next for them, then retry the intended finite_guide_view call. Otherwise keep waiting." };
   if (demoNextAdvanced) {
     demoNextRequired = false;
     demoNextAdvanced = false;
@@ -767,7 +767,7 @@ const renderHeaderControls = (): string => {
 };
 
 const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
-  top: { label: "the top of this page", selectors: [".entry-card--product", ".codex-launch", ".arrival-compose", ".arrival-order-head", ".hero"] },
+  top: { label: "the top of this page", selectors: [".site-header", ".entry-card--product", ".codex-launch", ".arrival-compose", ".arrival-order-head", ".hero"] },
   plan_ideas: { label: "the ready-made plan ideas", selectors: [".arrival-examples"] },
   planning_window: { label: "the planning window", selectors: [".arrival-order__outcome"] },
   build_method: { label: "the two ways to begin", selectors: [".arrival-start-tabs"] },
@@ -798,7 +798,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   overlay.dataset.codexGuideOverlay = "true";
   overlay.setAttribute("aria-live", "polite");
   const runningDemo = demoPlaybackMode;
-  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${runningDemo ? "data-demo-guide-state" : ""}>${runningDemo ? pauseForNext ? "Paused at a natural stopping point" : "Live demo · Codex is operating the real page" : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${runningDemo ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause demo</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && runningDemo ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} any questions you have.</p>` : ""}</footer>`;
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${runningDemo ? "data-demo-guide-state" : ""}>${runningDemo ? pauseForNext ? "Paused at a natural stopping point" : "Live demo · Codex is operating the real page" : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${runningDemo ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause demo</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && runningDemo ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
   const endGuidance = (): void => {
     followCodexEnabled = false;
     guidedWalkthroughMode = false;
@@ -845,6 +845,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
 };
 const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
   clearCodexSpotlight();
+  root.querySelectorAll<HTMLElement>("[data-codex-priority]").forEach((priority) => { priority.removeAttribute("data-codex-priority"); priority.classList.remove("is-codex-priority"); });
   const descriptor = guideTargetSelectors[request.target];
   const exactPriority = request.target === "priority" && request.sectionId
     ? root.querySelector<HTMLElement>(`[data-workspace-module='${CSS.escape(request.sectionId)}']`)
@@ -861,6 +862,7 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   }
   const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
   if (disclosure) disclosure.open = true;
+  if (request.target === "priority") { element.dataset.codexPriority = "true"; element.classList.add("is-codex-priority"); }
   element.setAttribute("data-codex-spotlight", "true");
   element.scrollIntoView({ behavior: "smooth", block: "center" });
   if (demoPlaybackMode && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
