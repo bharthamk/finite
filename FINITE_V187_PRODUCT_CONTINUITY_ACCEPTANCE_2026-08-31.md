@@ -25,3 +25,7 @@ Finite v187 repairs a live cross-route continuity defect and makes the existing 
 ## Product boundary
 
 The underlying authority, evidence, deterministic constraint, and atomic receipt contracts are unchanged. v187 improves continuity and comprehension on top of those contracts; it does not weaken the human confirmation boundary or imply that Finite books, buys, cancels, or contacts anyone.
+
+## Canonical URL follow-through
+
+After v187 reached production, the Sites project slug was shortened from `finite-plan-kitchen` to `finite`. The source canonical, Open Graph, Twitter image, and README links were updated in the immediately following v188 metadata-only release so viewers and link previews use `https://finite.bharthamk.chatgpt.site`.

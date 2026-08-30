@@ -80,7 +80,7 @@ product. Production continues to use the Sites-managed `DB` binding from
 
 The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
 
-The deployed owner-private build is [Finite](https://finite-plan-kitchen.bharthamk.chatgpt.site). Sign in with ChatGPT to open it.
+The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). Sign in with ChatGPT to open it.
 
 ## Product transaction
 
