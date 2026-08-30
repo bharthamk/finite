@@ -114,6 +114,7 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /Run four prepared chapters/i);
   assert.match(handoff.prompt, /ordinary blank starting screen headed 'What are you trying to make happen\?'/i);
   assert.match(handoff.prompt, /with no plan created/i);
+  assert.match(handoff.prompt, /This is where every Finite plan begins\. Start with an idea, describe what you want to make happen, or add the details yourself\./i);
   assert.match(handoff.prompt, /same ordinary first form as a new user/i);
   assert.match(handoff.prompt, /What do you want to plan\?/i);
   assert.match(handoff.prompt, /idea labelled 'Weekend trip'/i);
