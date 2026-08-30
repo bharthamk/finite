@@ -83,6 +83,7 @@ interface ActivationReceipt extends JsonRecord {
   confirmationId: string;
   contentHash?: string;
   baseRevision?: number;
+  sourceArrival?: { orderId: string; orderVersion: number; orderChecksum: string } | null;
 }
 
 interface CatalogEntry extends JsonRecord {
@@ -190,6 +191,8 @@ const response = (status: number, body: JsonRecord): Response => new Response(JS
 
 const errorResponse = (status: number, code: string, message: string, details: JsonRecord = {}): Response =>
   response(status, { ok: false, code, message, ...details });
+
+const asRecord = (value: unknown): JsonRecord => value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 
 const parseJson = async (request: Request): Promise<JsonRecord> => {
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) throw new Error("JSON_CONTENT_TYPE_REQUIRED");
@@ -356,11 +359,49 @@ const listCatalog = async (db: D1Database, scopeId: string): Promise<Response> =
   });
 };
 
+const validatePlanActivationGate = async (db: D1Database, scopeId: string, gate: JsonRecord, expected: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; sourceArrival?: unknown }): Promise<{ packetId: string } | Response> => {
+  const source = asRecord(gate.sourceArrival);
+  if (gate.gateVersion !== "finite-plan-activation-gate.v1" || gate.source !== "human_action"
+    || typeof gate.constructionPacketId !== "string" || !/^construction_[a-f0-9]{16}$/.test(gate.constructionPacketId)
+    || gate.baseProfileHash !== expected.profileHash
+    || typeof source.orderId !== "string" || !source.orderId
+    || !Number.isInteger(source.orderVersion) || Number(source.orderVersion) < 1
+    || typeof source.orderChecksum !== "string" || !/^[a-f0-9]{64}$/.test(source.orderChecksum)
+    || (expected.sourceArrival !== undefined && JSON.stringify(expected.sourceArrival) !== JSON.stringify(source))) {
+    return errorResponse(422, "PLAN_ACTIVATION_GATE_INVALID", "Plan activation requires the exact reviewed arrival and draft binding.");
+  }
+  const head = await readHead(db, scopeId, expected.planId);
+  if (!head || head.profileHash !== expected.profileHash || head.revision !== expected.revision) return errorResponse(409, "PLAN_ACTIVATION_BASE_STALE", "The accepted source plan changed before activation.", { currentRevision: head?.revision ?? null, currentProfileHash: head?.profileHash ?? null });
+  const arrival = await db.prepare("SELECT order_id, version, status, packet_checksum FROM arrival_orders WHERE scope_id = ? AND order_id = ?")
+    .bind(scopeId, source.orderId).first<{ order_id: string; version: number; status: string; packet_checksum: string }>();
+  if (!arrival || arrival.version !== source.orderVersion || arrival.packet_checksum !== source.orderChecksum || !(arrival.status === "interpretation_confirmed" || arrival.status === "proposed_plan_ready")) return errorResponse(409, "PLAN_ACTIVATION_ARRIVAL_STALE", "The starting request changed before activation.", { currentOrderVersion: arrival?.version ?? null, currentOrderChecksum: arrival?.packet_checksum ?? null, currentOrderStatus: arrival?.status ?? null });
+  const construction = await db.prepare("SELECT packet_id, packet_json, base_plan_id, base_profile_hash, base_revision, kind, source_order_id, source_order_version, source_order_checksum, expires_at, cleared_at, disposition FROM construction_packets WHERE scope_id = ? AND packet_id = ?")
+    .bind(scopeId, gate.constructionPacketId).first<{ packet_id: string; packet_json: string; base_plan_id: string; base_profile_hash: string; base_revision: number; kind: string; source_order_id: string | null; source_order_version: number | null; source_order_checksum: string | null; expires_at: string; cleared_at: string | null; disposition: string }>();
+  let payload: JsonRecord = {};
+  try { payload = asRecord(asRecord(construction ? JSON.parse(construction.packet_json) : null).payload); } catch { /* invalid stored packet fails closed below */ }
+  const current = construction
+    && construction.kind === "draft"
+    && !construction.cleared_at
+    && construction.disposition === "current"
+    && Date.parse(construction.expires_at) > Date.now()
+    && construction.base_plan_id === expected.planId
+    && construction.base_profile_hash === expected.profileHash
+    && construction.base_revision === expected.revision
+    && construction.source_order_id === source.orderId
+    && construction.source_order_version === source.orderVersion
+    && construction.source_order_checksum === source.orderChecksum
+    && payload.draftId === expected.targetId
+    && payload.contentHash === expected.contentHash;
+  return current ? { packetId: construction.packet_id } : errorResponse(409, "PLAN_ACTIVATION_DRAFT_STALE", "The exact reviewed draft is no longer current.");
+};
+
 const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Promise<Response> => {
   const envelope = body.envelope as Envelope;
   const activationReceipt = body.activationReceipt as ActivationReceipt | null;
   const catalogEntry = body.catalogEntry as CatalogEntry | null;
   const authorityChallengeId = typeof body.authorityChallengeId === "string" ? body.authorityChallengeId : null;
+  const activationGate = asRecord(body.activationGate);
+  const hasActivationGate = Object.keys(activationGate).length > 0;
   const activationRequestHash = body.activationRequestHash as string | null;
   const issues = await envelopeIssues(envelope);
   issues.push(...await catalogIssues(catalogEntry, envelope, activationReceipt));
@@ -369,13 +410,16 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
   if (activationReceipt) {
     if (!await activationReceiptValid(activationReceipt)) issues.push("invalid activation receipt checksum");
     if (activationReceipt.toPlanId !== envelope.planId) issues.push("activation target does not match envelope plan");
-    if (activationRequestHash !== await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId })) issues.push("activation request hash mismatch");
+    const expectedActivationHash = hasActivationGate
+      ? await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId, activationGate })
+      : await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId });
+    if (activationRequestHash !== expectedActivationHash) issues.push("activation request hash mismatch");
     const replay = await loadActivationReplay(db, scopeId, activationReceipt.idempotencyKey);
     if (replay) {
       if (replay.requestHash !== activationRequestHash) return errorResponse(409, "IDEMPOTENCY_KEY_REUSED", "Activation idempotency key was reused with different content.");
       const current = await readHead(db, scopeId, replay.receipt.toPlanId);
       if (!current) return errorResponse(500, "ACTIVATION_REPLAY_HEAD_MISSING", "Activation receipt exists without its accepted head.");
-      return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, requestHash: activationRequestHash, replay: true });
+      return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, requestHash: activationRequestHash, replay: true, ...(hasActivationGate ? { constructionPacketCleared: true } : {}) });
     }
     if (!authorityChallengeId) issues.push("live human authority challenge required for plan activation");
     else {
@@ -390,18 +434,23 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
         if (challenge.plan_id !== activationReceipt.fromPlanId || challenge.revision !== activationReceipt.baseRevision || challenge.target_type !== "plan_activation" || challenge.target_id !== activationReceipt.draftId || challenge.content_hash !== activationReceipt.contentHash || challenge.authority_id !== activationReceipt.confirmationId || challenge.command_hash !== expectedCommandHash) issues.push("plan activation authority challenge does not bind this exact command");
       }
     }
+    if (hasActivationGate) {
+      const gateResult = await validatePlanActivationGate(db, scopeId, activationGate, { planId: activationReceipt.fromPlanId, profileHash: String(activationGate.baseProfileHash ?? ""), revision: Number(activationReceipt.baseRevision), targetId: activationReceipt.draftId, contentHash: String(activationReceipt.contentHash ?? ""), sourceArrival: activationReceipt.sourceArrival ?? null });
+      if (gateResult instanceof Response) return gateResult;
+    }
   } else if (activationRequestHash !== null) issues.push("activation request hash present without receipt");
   if (issues.length) return errorResponse(422, "ACCEPTED_TRUTH_INTEGRITY_FAILED", "Initial accepted truth failed validation.", { issues });
 
   const existing = await readHead(db, scopeId, envelope.planId);
   if (existing) {
+    if (hasActivationGate) return errorResponse(409, "PLAN_ACTIVATION_TARGET_CONFLICT", "The target plan already exists without this activation receipt.", { currentRevision: existing.revision, currentProfileHash: existing.profileHash });
     if (existing.profileHash !== envelope.profileHash) return errorResponse(409, "ACCEPTED_PROFILE_CONFLICT", "Plan id is already bound to another profile hash.", { currentRevision: existing.revision, currentProfileHash: existing.profileHash });
     if (catalogEntry) await db.batch([catalogUpsert(db, scopeId, catalogEntry, envelope, new Date().toISOString())]);
     return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: existing, receipt: activationReceipt, requestHash: activationRequestHash, replay: true });
   }
 
   const now = new Date().toISOString();
-  const result = { ok: true, code: "ACCEPTED_TRUTH_INITIALIZED", envelope, receipt: activationReceipt, requestHash: activationRequestHash, replay: false };
+  const result = { ok: true, code: "ACCEPTED_TRUTH_INITIALIZED", envelope, receipt: activationReceipt, requestHash: activationRequestHash, replay: false, ...(hasActivationGate ? { constructionPacketCleared: true } : {}) };
   const statements = [
     db.prepare("INSERT INTO plan_heads (scope_id, plan_id, profile_id, profile_hash, revision, snapshot_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .bind(scopeId, envelope.planId, envelope.profileId, envelope.profileHash, envelope.revision, envelope.snapshotHash, now),
@@ -415,6 +464,8 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
     .bind(scopeId, activationReceipt.idempotencyKey, activationReceipt.receiptId, activationReceipt.fromPlanId, activationReceipt.toPlanId, activationRequestHash, JSON.stringify(activationReceipt), now));
   if (challenge && activationReceipt) statements.push(db.prepare("INSERT INTO challenge_consumptions (scope_id, challenge_id, plan_id, receipt_id, request_hash, consumed_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(scopeId, challenge.challenge_id, activationReceipt.toPlanId, activationReceipt.receiptId, activationRequestHash, now));
+  if (hasActivationGate) statements.push(db.prepare("UPDATE construction_packets SET cleared_at = ?, disposition = 'discarded', return_reason_code = NULL, return_message = NULL, returned_at = NULL, updated_at = ? WHERE scope_id = ? AND packet_id = ? AND cleared_at IS NULL AND disposition = 'current'")
+    .bind(now, now, scopeId, activationGate.constructionPacketId));
   try {
     await db.batch(statements);
     return response(201, result);
@@ -599,6 +650,20 @@ const createAuthorityChallenge = async (db: D1Database, scopeId: string, body: J
   return response(201, { ok: true, code: "AUTHORITY_CHALLENGE_CREATED", challenge: { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, planId, profileHash, revision, targetType, targetId, contentHash, authorityId, commandHash, createdAt, expiresAt } });
 };
 
+const createPlanActivationChallenge = async (db: D1Database, scopeId: string, body: JsonRecord): Promise<Response> => {
+  if (body.targetType !== "plan_activation") return errorResponse(422, "PLAN_ACTIVATION_GATE_INVALID", "Only an exact plan-activation challenge can use this route.");
+  const gate = asRecord(body.gate);
+  const gateResult = await validatePlanActivationGate(db, scopeId, gate, {
+    planId: String(body.planId ?? ""),
+    profileHash: String(body.profileHash ?? ""),
+    revision: Number(body.revision),
+    targetId: String(body.targetId ?? ""),
+    contentHash: String(body.contentHash ?? ""),
+  });
+  if (gateResult instanceof Response) return gateResult;
+  return createAuthorityChallenge(db, scopeId, body);
+};
+
 const loadAuthorityChallenge = async (db: D1Database, scopeId: string, challengeId: string): Promise<Response> => {
   const row = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
     .bind(scopeId, challengeId).first<ChallengeRow>();
@@ -618,6 +683,7 @@ export const handleAcceptedTruthRequest = async (request: Request, db: D1Databas
     if (request.method === "GET" && url.pathname === "/api/plan-catalog") return listCatalog(db, scopeId);
     if (request.method === "POST" && url.pathname === "/api/operator-sessions") return createOperatorSession(db, scopeId, await parseJson(request));
     if (request.method === "GET" && url.pathname === "/api/operator-sessions") return listOperatorSessions(db, scopeId);
+    if (request.method === "POST" && url.pathname === "/api/authority-challenges/plan-activation") return createPlanActivationChallenge(db, scopeId, await parseJson(request));
     if (request.method === "POST" && url.pathname === "/api/authority-challenges") return createAuthorityChallenge(db, scopeId, await parseJson(request));
     if (request.method === "GET" && url.pathname.startsWith("/api/authority-challenges/")) {
       const challengeId = decodeURIComponent(url.pathname.slice("/api/authority-challenges/".length));

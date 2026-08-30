@@ -1,10 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
+import { createAcceptedTruthEnvelope, MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
 import { compileBuiltInProfiles, getProfileDefinition } from "../dist-test/src/profiles.js";
 import { compileCatalogEntries, FinitePlanRuntime } from "../dist-test/src/runtime.js";
 import { handleAcceptedTruthRequest } from "../dist-test/worker/accepted-truth.js";
+import { sha256 } from "../dist-test/src/crypto.js";
+
+class ActivationStatement {
+  values = [];
+  constructor(db, query) { this.db = db; this.query = query; }
+  bind(...values) { this.values = values; return this; }
+  async first() { return this.db.first(this.query, this.values); }
+  async all() { return { results: [] }; }
+}
+
+class ActivationGateDb {
+  challenge = null;
+  activation = null;
+  consumption = null;
+  targetEnvelope = null;
+  constructor({ baseEnvelope, arrival, construction }) {
+    this.baseEnvelope = baseEnvelope;
+    this.arrival = arrival;
+    this.construction = construction;
+  }
+  prepare(query) { return new ActivationStatement(this, query); }
+  async first(query, values) {
+    if (query.includes("FROM tenant_accounts")) return { scope_id: "scope_test" };
+    if (query.includes("FROM plan_heads h") && query.includes("JOIN plan_revisions")) {
+      const planId = values[1];
+      const envelope = planId === this.baseEnvelope.planId ? this.baseEnvelope : this.targetEnvelope?.planId === planId ? this.targetEnvelope : null;
+      return envelope ? { profile_id: envelope.profileId, profile_hash: envelope.profileHash, revision: envelope.revision, snapshot_hash: envelope.snapshotHash, snapshot_json: JSON.stringify(envelope.snapshot), previous_snapshot_hash: envelope.previousSnapshotHash } : null;
+    }
+    if (query.includes("FROM arrival_orders")) return this.arrival;
+    if (query.includes("FROM construction_packets")) return this.construction;
+    if (query.includes("SELECT request_hash, receipt_json FROM activation_receipts")) return this.activation;
+    if (query.includes("FROM challenge_consumptions")) return this.consumption;
+    if (query.includes("FROM authority_challenges")) return this.challenge;
+    throw new Error(`Unhandled activation-gate first query: ${query}`);
+  }
+  async batch(statements) {
+    for (const statement of statements) {
+      if (statement.query.includes("INSERT INTO authority_challenges")) {
+        const v = statement.values;
+        this.challenge = { challenge_id: v[1], plan_id: v[2], profile_hash: v[3], revision: v[4], target_type: v[5], target_id: v[6], content_hash: v[7], authority_id: v[8], command_hash: v[9], created_at: v[10], expires_at: v[11] };
+      } else if (statement.query.includes("INSERT INTO plan_heads")) {
+        const v = statement.values;
+        this.targetEnvelope = { envelopeVersion: "finite-plan-accepted-truth.v1", scopeId: "authenticated-user-v1", planId: v[1], profileId: v[2], profileHash: v[3], revision: v[4], snapshotHash: v[5], previousSnapshotHash: null, snapshot: null };
+      } else if (statement.query.includes("INSERT INTO plan_revisions")) {
+        this.targetEnvelope.snapshot = JSON.parse(statement.values[5]);
+      } else if (statement.query.includes("INSERT INTO activation_receipts")) {
+        const v = statement.values;
+        this.activation = { request_hash: v[5], receipt_json: v[6] };
+      } else if (statement.query.includes("INSERT INTO challenge_consumptions")) {
+        this.consumption = { challenge_id: statement.values[1] };
+      } else if (statement.query.includes("UPDATE construction_packets SET cleared_at")) {
+        this.construction.cleared_at = statement.values[0];
+        this.construction.disposition = "discarded";
+      } else if (statement.query.includes("INSERT INTO plan_catalog") || statement.query.includes("INSERT OR IGNORE INTO evidence_records")) {
+        // Catalog and evidence rows are covered by integrity validation; the fake stores only activation state.
+      } else throw new Error(`Unhandled activation-gate batch query: ${statement.query}`);
+    }
+    return statements.map(() => ({ success: true, meta: { changes: 1 } }));
+  }
+}
 
 const makeRuntime = (profiles, profileId, repository, storage = new MemoryStorage()) =>
   new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), profileId, undefined, [], () => new Date("2026-08-26T00:00:00.000Z"), repository);
@@ -35,6 +95,80 @@ const prepareApprovedOption = async (runtime, title) => {
     expectedRevision: kernel.revision,
   };
 };
+
+test("the hosted activation challenge validates current arrival and exact draft before minting authority", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = makeRuntime(profiles, "travel", undefined);
+  const snapshot = runtime.kernel.snapshot();
+  const baseEnvelope = { planId: snapshot.planId, profileId: snapshot.profileId, profileHash: snapshot.profileHash, revision: snapshot.revision, snapshot, snapshotHash: "c".repeat(64), previousSnapshotHash: null };
+  const sourceArrival = { orderId: "arrival_guarded_activation", orderVersion: 7, orderChecksum: "a".repeat(64) };
+  const draftId = "plan_draft_1234567890abcdef";
+  const contentHash = "b".repeat(64);
+  const packetId = "construction_1234567890abcdef";
+  const construction = { packet_id: packetId, packet_json: JSON.stringify({ kind: "draft", payload: { draftId, contentHash } }), base_plan_id: snapshot.planId, base_profile_hash: snapshot.profileHash, base_revision: 1, kind: "draft", source_order_id: sourceArrival.orderId, source_order_version: sourceArrival.orderVersion, source_order_checksum: sourceArrival.orderChecksum, expires_at: "2099-08-30T00:00:00.000Z", cleared_at: null, disposition: "current" };
+  const db = new ActivationGateDb({ baseEnvelope, arrival: { order_id: sourceArrival.orderId, version: 7, status: "interpretation_confirmed", packet_checksum: sourceArrival.orderChecksum }, construction });
+  const body = { planId: snapshot.planId, profileHash: snapshot.profileHash, revision: 1, targetType: "plan_activation", targetId: draftId, contentHash, authorityId: "plan_confirmation_guarded", ttlSeconds: 300, gate: { gateVersion: "finite-plan-activation-gate.v1", source: "human_action", constructionPacketId: packetId, baseProfileHash: snapshot.profileHash, sourceArrival } };
+  const headers = { origin: "https://finite.example", "content-type": "application/json", "oai-authenticated-user-id": "site-user-123" };
+  const accepted = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(body) }), db);
+  assert.equal(accepted.status, 201);
+  assert.equal((await accepted.json()).code, "AUTHORITY_CHALLENGE_CREATED");
+  assert.equal(db.challenge.target_id, draftId);
+
+  db.arrival.version = 8;
+  const stale = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(body) }), db);
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).code, "PLAN_ACTIVATION_ARRIVAL_STALE");
+
+  db.arrival.version = 7;
+  const untrusted = structuredClone(body);
+  untrusted.gate.source = "operator_claim";
+  const refused = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(untrusted) }), db);
+  assert.equal(refused.status, 422);
+  assert.equal((await refused.json()).code, "PLAN_ACTIVATION_GATE_INVALID");
+});
+
+test("accepted initialization consumes the prior guarded challenge and retires the exact draft in one batch", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const baseRuntime = makeRuntime(profiles, "travel", undefined);
+  const targetRuntime = makeRuntime(profiles, "event", undefined);
+  const baseSnapshot = baseRuntime.kernel.snapshot();
+  const targetSnapshot = targetRuntime.kernel.snapshot();
+  const baseEnvelope = await createAcceptedTruthEnvelope(baseSnapshot, null);
+  const sourceArrival = { orderId: "arrival_batched_activation", orderVersion: 5, orderChecksum: "d".repeat(64) };
+  const draftId = "plan_draft_fedcba0987654321";
+  const contentHash = "e".repeat(64);
+  const packetId = "construction_fedcba0987654321";
+  const construction = { packet_id: packetId, packet_json: JSON.stringify({ kind: "draft", payload: { draftId, contentHash } }), base_plan_id: baseSnapshot.planId, base_profile_hash: baseSnapshot.profileHash, base_revision: 1, kind: "draft", source_order_id: sourceArrival.orderId, source_order_version: sourceArrival.orderVersion, source_order_checksum: sourceArrival.orderChecksum, expires_at: "2099-08-30T00:00:00.000Z", cleared_at: null, disposition: "current" };
+  const db = new ActivationGateDb({ baseEnvelope, arrival: { order_id: sourceArrival.orderId, version: 5, status: "interpretation_confirmed", packet_checksum: sourceArrival.orderChecksum }, construction });
+  const gate = { gateVersion: "finite-plan-activation-gate.v1", source: "human_action", constructionPacketId: packetId, baseProfileHash: baseSnapshot.profileHash, sourceArrival };
+  const challengeBody = { planId: baseSnapshot.planId, profileHash: baseSnapshot.profileHash, revision: 1, targetType: "plan_activation", targetId: draftId, contentHash, authorityId: "plan_confirmation_batched", ttlSeconds: 300, gate };
+  const headers = { origin: "https://finite.example", "content-type": "application/json", "oai-authenticated-user-id": "site-user-123" };
+  const challengeResponse = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(challengeBody) }), db);
+  const challenge = (await challengeResponse.json()).challenge;
+  const receiptBase = { idempotencyKey: "batched-activation-0001", fromPlanId: baseSnapshot.planId, toPlanId: targetSnapshot.planId, profileId: targetSnapshot.profileId, profileHash: targetSnapshot.profileHash, draftId, confirmationId: "plan_confirmation_batched", contentHash, baseRevision: 1, activationKind: "new_plan", sourceArrival };
+  const replayChecksum = await sha256(receiptBase);
+  const activationReceipt = { receiptId: `plan_activation_${replayChecksum.slice(0, 16)}`, ...receiptBase, replayChecksum };
+  const targetDefinition = getProfileDefinition("event");
+  const catalogEntry = { definition: targetDefinition, evidenceRecords: [], lineage: { activationKind: "new_plan", supersedesPlanId: null, supersedesProfileHash: null, diffHash: null, activationReceiptId: activationReceipt.receiptId } };
+  const envelope = await createAcceptedTruthEnvelope(targetSnapshot, null);
+  const activationRequestHash = await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId: challenge.challengeId, activationGate: gate });
+  const activationBody = { envelope, activationReceipt, catalogEntry, authorityChallengeId: challenge.challengeId, activationGate: gate, activationRequestHash };
+
+  const activated = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/initialize", { method: "POST", headers, body: JSON.stringify(activationBody) }), db);
+  const activatedBody = await activated.json();
+  assert.equal(activated.status, 201, JSON.stringify(activatedBody));
+  assert.equal(activatedBody.code, "ACCEPTED_TRUTH_INITIALIZED");
+  assert.equal(activatedBody.constructionPacketCleared, true);
+  assert.equal(db.consumption.challenge_id, challenge.challengeId);
+  assert.equal(db.construction.disposition, "discarded");
+  assert.equal(db.targetEnvelope.planId, targetSnapshot.planId);
+
+  const replayed = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/initialize", { method: "POST", headers, body: JSON.stringify(activationBody) }), db);
+  const replayedBody = await replayed.json();
+  assert.equal(replayed.status, 200, JSON.stringify(replayedBody));
+  assert.equal(replayedBody.code, "ACCEPTED_TRUTH_CURRENT");
+  assert.equal(replayedBody.replay, true);
+});
 
 for (const profileId of ["travel", "renovation", "event"]) {
   test(`${profileId} human authority and Codex operation commit to remote truth and survive a browser-empty reload`, async () => {

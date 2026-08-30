@@ -1,6 +1,6 @@
 import { clone, sha256 } from "./crypto.js";
 import { externalActionStatuses } from "./operator-policy.js";
-import type { CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanCatalogEntry, PlanSnapshot, Receipt } from "./types.js";
+import type { ArrivalSourceBinding, CompiledProfile, EvidenceRecord, PlanActivationReceipt, PlanCatalogEntry, PlanSnapshot, Receipt } from "./types.js";
 
 export const acceptedTruthScope = "authenticated-user-v1";
 
@@ -119,8 +119,17 @@ export class AcceptedTruthRepositoryError extends Error {
 
 export type RepositoryRequestContext = { signal?: AbortSignal };
 
+export interface AtomicPlanActivationGate {
+  gateVersion: "finite-plan-activation-gate.v1";
+  source: "human_action";
+  constructionPacketId: string;
+  baseProfileHash: string;
+  sourceArrival: ArrivalSourceBinding;
+}
+
 export interface AcceptedTruthRepository {
   initialize(snapshot: PlanSnapshot, activationReceipt?: PlanActivationReceipt, catalogEntry?: PlanCatalogEntry, authorityChallengeId?: string | null, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
+  initializePlanActivation?(snapshot: PlanSnapshot, activationReceipt: PlanActivationReceipt, catalogEntry: PlanCatalogEntry, authorityChallengeId: string, gate: AtomicPlanActivationGate, context?: RepositoryRequestContext): Promise<AcceptedTruthCommitResult>;
   load(planId: string, profileHash: string, context?: RepositoryRequestContext): Promise<AcceptedTruthEnvelope | null>;
   listCatalog?(context?: RepositoryRequestContext): Promise<DurablePlanCatalog>;
   commit(input: {
@@ -139,6 +148,15 @@ export interface AcceptedTruthRepository {
     targetId: string;
     contentHash: string;
     authorityId: string;
+  }, context?: RepositoryRequestContext): Promise<AuthorityChallenge>;
+  createPlanActivationChallenge?(input: {
+    planId: string;
+    profileHash: string;
+    revision: number;
+    targetId: string;
+    contentHash: string;
+    authorityId: string;
+    gate: AtomicPlanActivationGate;
   }, context?: RepositoryRequestContext): Promise<AuthorityChallenge>;
   loadAuthorityChallenge?(challengeId: string, context?: RepositoryRequestContext): Promise<AuthorityChallenge>;
   saveOperatorSession?(input: {
@@ -279,6 +297,18 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
     return decodeJson<AcceptedTruthCommitResult>(response);
   }
 
+  async initializePlanActivation(snapshot: PlanSnapshot, activationReceipt: PlanActivationReceipt, catalogEntry: PlanCatalogEntry, authorityChallengeId: string, activationGate: AtomicPlanActivationGate, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
+    const envelope = await createAcceptedTruthEnvelope(snapshot, null);
+    const activationRequestHash = await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId, activationGate });
+    const response = await fetch(`${this.baseUrl}/initialize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ envelope, activationReceipt: clone(activationReceipt), catalogEntry: clone(catalogEntry), authorityChallengeId, activationGate: clone(activationGate), activationRequestHash }),
+      ...(context.signal ? { signal: context.signal } : {}),
+    });
+    return decodeJson<AcceptedTruthCommitResult>(response);
+  }
+
   async listCatalog(context: RepositoryRequestContext = {}): Promise<DurablePlanCatalog> {
     const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/plan-catalog`, { headers: { accept: "application/json" }, ...(context.signal ? { signal: context.signal } : {}) });
     const payload = await decodeJson<{ ok: true; entries: PlanCatalogEntry[]; activationReceipts: PlanActivationReceipt[] }>(response);
@@ -308,6 +338,16 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...input, ttlSeconds: 300 }),
+      ...(context.signal ? { signal: context.signal } : {}),
+    });
+    return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
+  }
+
+  async createPlanActivationChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string; gate: AtomicPlanActivationGate }, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
+    const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges/plan-activation`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "plan_activation", ...clone(input), ttlSeconds: 300 }),
       ...(context.signal ? { signal: context.signal } : {}),
     });
     return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;

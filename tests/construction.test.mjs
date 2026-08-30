@@ -7,6 +7,7 @@ import { FinitePlanWebMCPAdapter, humanOnlyActions } from "../dist-test/src/webm
 import { MemoryConstructionPacketRepository } from "../dist-test/src/construction-packet.js";
 import { sha256 } from "../dist-test/src/crypto.js";
 import { constructionPacketIntegrityIssues } from "../dist-test/worker/construction-packet.js";
+import { AcceptedTruthRepositoryError, MemoryAcceptedTruthRepository } from "../dist-test/src/accepted-truth.js";
 
 class MemoryModelContext {
   tools = new Map();
@@ -135,6 +136,88 @@ test("accepted activation retires its identity-bound remote draft without re-rea
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal(activated.constructionPacketCleared, true);
   assert.equal(construction.loads, loadsBeforeActivation);
+});
+
+test("hosted arrival activation uses one guarded challenge and one accepted-truth initialization", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const construction = new CountingConstructionPacketRepository(() => new Date("2026-08-26T01:00:00.000Z"));
+  const durable = new MemoryAcceptedTruthRepository(() => new Date("2026-08-26T01:00:00.000Z"));
+  const calls = { guardedChallenge: 0, atomicInitialize: 0, genericChallenge: 0 };
+  const accepted = {
+    initialize: (...args) => durable.initialize(...args),
+    load: (...args) => durable.load(...args),
+    commit: (...args) => durable.commit(...args),
+    createAuthorityChallenge: (...args) => { calls.genericChallenge += 1; return durable.createAuthorityChallenge(...args); },
+    async createPlanActivationChallenge(input) {
+      calls.guardedChallenge += 1;
+      return durable.createAuthorityChallenge({ targetType: "plan_activation", planId: input.planId, profileHash: input.profileHash, revision: input.revision, targetId: input.targetId, contentHash: input.contentHash, authorityId: input.authorityId });
+    },
+    async initializePlanActivation(snapshot, receipt, catalogEntry, challengeId, gate) {
+      calls.atomicInitialize += 1;
+      const result = await durable.initialize(snapshot, receipt, catalogEntry, challengeId);
+      await construction.clear(gate.constructionPacketId);
+      return result;
+    },
+  };
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage), [], () => new Date("2026-08-26T01:00:00.000Z"), accepted, construction);
+  assert.equal((await runtime.hydrateAcceptedTruth()).code, "ACCEPTED_TRUTH_INITIALIZED");
+  const sourceArrival = { orderId: "arrival_atomic_activation", orderVersion: 4, orderChecksum: "a".repeat(64) };
+  const assessed = await runtime.assessPlanIntake({
+    sourceArrival,
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_atomic_activation",
+    name: "Atomic activation trip",
+    brief: "A current arrival-bound plan.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [],
+    locks: ["total_budget"],
+    preferenceLabels: ["preserve_flexibility"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "One-month working estimate.", sourcePaths: ["reviewed_interpretation"] } },
+      booked_segment_days: { days: { value: 0, basis: "No confirmed bookings.", sourcePaths: ["reviewed_interpretation"] } },
+    },
+    stages: [{ stageId: "journey", label: "Journey", status: "planned" }],
+  });
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  const loadsBeforeActivation = construction.loads;
+  const activated = await runtime.activateConfirmedPlanDraft({ draftId: staged.draft.draftId, confirmationId: confirmed.confirmation.confirmationId, expectedPlanId: "plan_travel_europe", expectedRevision: 1, idempotencyKey: "atomic-activation-0001" });
+
+  assert.equal(activated.code, "PLAN_ACTIVATED");
+  assert.equal(activated.constructionPacketCleared, true);
+  assert.deepEqual(calls, { guardedChallenge: 1, atomicInitialize: 1, genericChallenge: 0 });
+  assert.equal(construction.loads, loadsBeforeActivation);
+  assert.equal(runtime.kernel.profile.planId, "plan_atomic_activation");
+  await assert.rejects(construction.load(), (error) => error.code === "CONSTRUCTION_PACKET_CLEARED");
+});
+
+test("guarded arrival activation surfaces a stale-arrival refusal before accepted initialization", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const construction = new MemoryConstructionPacketRepository(() => new Date("2026-08-26T01:00:00.000Z"));
+  const durable = new MemoryAcceptedTruthRepository(() => new Date("2026-08-26T01:00:00.000Z"));
+  let atomicInitializations = 0;
+  const accepted = {
+    initialize: (...args) => durable.initialize(...args),
+    load: (...args) => durable.load(...args),
+    commit: (...args) => durable.commit(...args),
+    createPlanActivationChallenge: async () => { throw new AcceptedTruthRepositoryError("PLAN_ACTIVATION_ARRIVAL_STALE", "The arrival changed."); },
+    initializePlanActivation: async () => { atomicInitializations += 1; throw new Error("must not initialize"); },
+  };
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage), [], () => new Date("2026-08-26T01:00:00.000Z"), accepted, construction);
+  await runtime.hydrateAcceptedTruth();
+  const sourceArrival = { orderId: "arrival_stale_activation", orderVersion: 2, orderChecksum: "b".repeat(64) };
+  const assessed = await runtime.assessPlanIntake({ sourceArrival, constructionMode: "adaptive_shell", profileId: "travel", planId: "plan_stale_activation", name: "Stale activation trip", brief: "A stale-bound plan.", allocation: { totalBudgetMinor: 1_000_000 }, actuals: [], locks: ["total_budget"], preferenceLabels: ["preserve_flexibility"], entityEstimates: { trip_days: { days: { value: 30, basis: "One month.", sourcePaths: ["reviewed_interpretation"] } }, booked_segment_days: { days: { value: 0, basis: "Nothing booked.", sourcePaths: ["reviewed_interpretation"] } } }, stages: [{ stageId: "journey", label: "Journey", status: "planned" }] });
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  const refused = await runtime.activateConfirmedPlanDraft({ draftId: staged.draft.draftId, confirmationId: confirmed.confirmation.confirmationId, expectedPlanId: "plan_travel_europe", expectedRevision: 1, idempotencyKey: "stale-atomic-activation-0001" });
+
+  assert.equal(refused.code, "PLAN_ACTIVATION_ARRIVAL_STALE");
+  assert.equal(atomicInitializations, 0);
+  assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
+  assert(runtime.pendingPlanDraft);
 });
 
 test("a human-confirmed amendment draft resumes without authority and activates only after fresh confirmation", async () => {

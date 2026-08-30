@@ -84,6 +84,10 @@ export class FinitePlanRuntime {
     return this.activationReceipts.size > 0;
   }
 
+  supportsAtomicArrivalPlanActivation(): boolean {
+    return Boolean(this.acceptedRepository?.initializePlanActivation && this.acceptedRepository.createPlanActivationChallenge && this.constructionRepository);
+  }
+
   private durableCatalogEntry(planId = this.kernel.profile.planId): PlanCatalogEntry | undefined {
     const entry = this.plans.get(planId);
     if (!entry) return undefined;
@@ -1180,8 +1184,29 @@ export class FinitePlanRuntime {
       diffHash: draft.amendment?.diffHash ?? null,
       activationReceiptId: receipt.receiptId,
     };
+    const constructionBinding = this.pendingConstructionDraftBinding;
+    const activationGate = draft.sourceArrival
+      && constructionBinding?.draftId === draftId
+      && this.acceptedRepository?.initializePlanActivation
+      && this.acceptedRepository.createPlanActivationChallenge
+      && this.constructionRepository
+      ? {
+        gateVersion: "finite-plan-activation-gate.v1" as const,
+        source: "human_action" as const,
+        constructionPacketId: constructionBinding.packetId,
+        baseProfileHash: priorKernel.profile.profileHash,
+        sourceArrival: clone(draft.sourceArrival),
+      }
+      : null;
     let authorityChallengeId: string | null = null;
-    if (this.acceptedRepository?.createAuthorityChallenge) {
+    if (activationGate && this.acceptedRepository?.createPlanActivationChallenge) {
+      try {
+        const challenge = await this.acceptedRepository.createPlanActivationChallenge({ planId: fromPlanId, profileHash: priorKernel.profile.profileHash, revision: expectedRevision, targetId: draftId, contentHash: draft.contentHash, authorityId: confirmationId, gate: activationGate }, context);
+        authorityChallengeId = challenge.challengeId;
+      } catch (error) {
+        return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "PLAN_ACTIVATION_AUTHORITY_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
+      }
+    } else if (this.acceptedRepository?.createAuthorityChallenge) {
       try {
         const challenge = await this.acceptedRepository.createAuthorityChallenge({ targetType: "plan_activation", planId: fromPlanId, profileHash: priorKernel.profile.profileHash, revision: expectedRevision, targetId: draftId, contentHash: draft.contentHash, authorityId: confirmationId }, context);
         authorityChallengeId = challenge.challengeId;
@@ -1190,7 +1215,7 @@ export class FinitePlanRuntime {
       }
     }
     const catalogEntry: PlanCatalogEntry = { definition: profileDefinition(draft.profile), evidenceRecords: clone(draft.evidenceRecords), lineage };
-    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt, catalogEntry, authorityChallengeId, context);
+    const remoteInitialization = await newKernel.hydrateAcceptedTruth(receipt, catalogEntry, authorityChallengeId, context, activationGate ?? undefined);
     if (!remoteInitialization.ok) return {
       ok: false,
       code: "PLAN_ACTIVATION_DURABLE_TRUTH_FAILED",
@@ -1218,7 +1243,12 @@ export class FinitePlanRuntime {
     this.pendingPlanDraft = null;
     this.planActivationConfirmation = null;
     let constructionPacketCleared = true;
-    try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId, context); } catch { constructionPacketCleared = false; }
+    if (activationGate) {
+      try { this.catalogStore.clearConstructionPacket(); } catch { /* atomic remote activation remains authoritative */ }
+      this.pendingConstructionDraftBinding = null;
+    } else {
+      try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId, context); } catch { constructionPacketCleared = false; }
+    }
     return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), constructionPacketCleared, acceptedStateChanged: true, next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another." };
   }
 

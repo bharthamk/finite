@@ -3983,7 +3983,9 @@ const progressArrivalPlan = async (): Promise<void> => {
   announce("Starting this plan…");
   await render();
   try {
-    const latest = await arrivalRepository.open();
+    const latest = runtime.supportsAtomicArrivalPlanActivation() && arrivalResult?.ok && arrivalResult.order
+      ? arrivalResult
+      : await arrivalRepository.open();
     const prepared = await prepareArrivalPlanDraft(latest);
     busy = false;
     await confirmPlanDraft(prepared.draftId, prepared.progression, prepared.opened);
@@ -4043,7 +4045,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   });
   if (!activation.ok) {
     busy = false;
-    planActivationError = activation.code === "PLAN_DRAFT_STALE" || activation.code === "PLAN_DRAFT_ARRIVAL_STALE"
+    planActivationError = activation.code === "PLAN_DRAFT_STALE" || activation.code === "PLAN_DRAFT_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_DRAFT_STALE" || activation.code === "PLAN_ACTIVATION_BASE_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_DRAFT_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_BASE_STALE"
       ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
       : "Finite could not start the plan. Your approval is still here—please try again.";
     announce(planActivationError);

@@ -4,6 +4,7 @@ import {
   createAcceptedTruthEnvelope,
   snapshotIntegrityIssues,
   type AcceptedTruthRepository,
+  type AtomicPlanActivationGate,
   type RepositoryRequestContext,
 } from "./accepted-truth.js";
 import type {
@@ -289,7 +290,7 @@ export class FinitePlanKernel {
     this.restore(snapshot);
   }
 
-  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt, catalogEntry?: import("./types.js").PlanCatalogEntry, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}): Promise<ToolResult> {
+  async hydrateAcceptedTruth(activationReceipt?: import("./types.js").PlanActivationReceipt, catalogEntry?: import("./types.js").PlanCatalogEntry, authorityChallengeId: string | null = null, context: RepositoryRequestContext = {}, activationGate?: AtomicPlanActivationGate): Promise<ToolResult> {
     if (!this.acceptedRepository) return { ok: true, code: "LOCAL_ACCEPTED_TRUTH", acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     const localIssues = await snapshotIntegrityIssues(this.profile, this.snapshot());
     if (localIssues.length) {
@@ -297,10 +298,12 @@ export class FinitePlanKernel {
       return { ok: false, code: "LOCAL_ACCEPTED_TRUTH_INTEGRITY_FAILED", issues: localIssues, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
     }
     try {
-      const existing = await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash, context);
+      const existing = activationGate ? null : await this.acceptedRepository.load(this.profile.planId, this.profile.profileHash, context);
       const result = existing
         ? { ok: true as const, code: "ACCEPTED_TRUTH_CURRENT" as const, envelope: existing, receipt: null, requestHash: null, replay: true }
-        : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt, catalogEntry, authorityChallengeId, context);
+        : activationGate && activationReceipt && catalogEntry && this.acceptedRepository.initializePlanActivation
+          ? await this.acceptedRepository.initializePlanActivation(this.snapshot(), activationReceipt, catalogEntry, authorityChallengeId!, activationGate, context)
+          : await this.acceptedRepository.initialize(this.snapshot(), activationReceipt, catalogEntry, authorityChallengeId, context);
       const issues = await snapshotIntegrityIssues(this.profile, result.envelope.snapshot);
       const computed = await createAcceptedTruthEnvelope(result.envelope.snapshot, result.envelope.previousSnapshotHash);
       if (computed.snapshotHash !== result.envelope.snapshotHash) issues.push("accepted envelope snapshot hash is invalid");
