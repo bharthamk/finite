@@ -107,8 +107,14 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   });
   assert.match(handoff.detail, /real example/i);
   assert.match(handoff.detail, /Next click/i);
-  assert.match(handoff.prompt, /weekend trip to Hobart/i);
+  assert.match(handoff.prompt, /three-night Hobart trip/i);
   assert.match(handoff.prompt, /pauseForNext true/);
-  assert.match(handoff.prompt, /person should not type or operate Finite/i);
-  assert.match(handoff.prompt, /Never convert Next into plan approval/i);
+  assert.match(handoff.prompt, /fully specified synthetic template/i);
+  assert.match(handoff.prompt, /Run four prepared chapters/i);
+  assert.match(handoff.prompt, /synthetic rainy-day change/i);
+  assert.match(handoff.prompt, /never ask the person to type, choose, confirm, or operate the product/i);
+  assert.match(handoff.prompt, /Demo complete\. Ask me anything/i);
+  assert.match(handoff.prompt, /Do not ask the person for missing facts or decisions/i);
+  assert.doesNotMatch(handoff.prompt, /End at a real human decision boundary/i);
+  assert.doesNotMatch(handoff.prompt, /return to the human only when their judgment/i);
 });

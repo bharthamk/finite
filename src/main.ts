@@ -764,9 +764,9 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   overlay.className = "codex-guide-overlay";
   overlay.dataset.codexGuideOverlay = "true";
   overlay.setAttribute("aria-live", "polite");
-  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is guiding</strong><button type="button" aria-label="Dismiss this guidance">×</button></header><p>${escapeHtml(messageText)}</p><small>Showing ${escapeHtml(targetLabel)} · you remain in control</small><footer>${pauseForNext && demoPlaybackMode ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}<button type="button" data-action="stop-codex-guidance">Stop guided view</button></footer>`;
-  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => overlay.remove());
-  overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", () => {
+  const runningDemo = demoPlaybackMode;
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small>${runningDemo ? `Live demo · click Next when this chapter makes sense` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer>${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></footer>`;
+  const endGuidance = (): void => {
     followCodexEnabled = false;
     guidedWalkthroughMode = false;
     demoPlaybackMode = false;
@@ -776,10 +776,15 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     scopedStorage.removeItem("finite-plan.follow-codex");
     scopedStorage.removeItem("finite-plan.codex-priority-section");
     activeCodexPrioritySectionId = "";
+    const target = new URL(location.href);
+    target.searchParams.delete("start");
+    history.replaceState({}, "", target);
     clearCodexSpotlight();
     overlay.remove();
-    announce(`${agenticName()} can keep working, but can no longer move or highlight this view.`);
-  });
+    announce(runningDemo ? "The live demo has ended." : `${agenticName()} can keep working, but can no longer move or highlight this view.`);
+  };
+  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => { if (runningDemo) endGuidance(); else overlay.remove(); });
+  overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", endGuidance);
   overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']")?.addEventListener("click", (event) => {
     demoNextAdvanced = true;
     const button = event.currentTarget as HTMLButtonElement;
@@ -2012,7 +2017,7 @@ const renderCodexLaunch = (): void => {
         <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex." : "Copy this once, open Codex and paste it. Finite supplies the live product state from here."}</small>
       </div>
       <details class="codex-launch__details"><summary>See what will be copied</summary><label><span>Codex setup</span><textarea readonly spellcheck="false" data-codex-launch-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
-      <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? "Next advances the story. It never counts as plan approval." : "You can stop the guided view at any time."}</p></footer>
+      <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? "Click Next when you are ready to keep watching, or ask Codex about anything you see." : "You can stop the guided view at any time."}</p></footer>
     </section>
   </main>`;
   root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']")?.addEventListener("click", async () => {

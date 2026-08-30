@@ -147,6 +147,8 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /Copy setup for Codex/);
   assert.match(source, /Loading your live demo…/);
   assert.match(source, /You only press Next at the key moments/);
+  assert.match(source, /Click Next when you are ready to keep watching, or ask Codex about anything you see/);
+  assert.match(source, /Live demo · click Next when this chapter makes sense/);
   assert.match(styles, /\.entry-route-grid/);
   assert.match(styles, /\.entry-route--codex-live/);
   assert.match(styles, /\.entry-route--live-demo/);
