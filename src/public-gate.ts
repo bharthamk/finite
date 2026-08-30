@@ -33,7 +33,7 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
           <span>03 / Use Codex live</span><strong>Build with Codex beside you.</strong><p>Codex runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use Codex live →</em>
         </button>
         <button type="button" class="entry-route entry-route--live-demo" data-public-entry="live-demo">
-          <span>04 / Watch live demo</span><strong>Let Codex run Finite for you.</strong><p>Watch a real template become a working plan. You only press Next at key points.</p><em>Watch the live demo →</em>
+          <span>04 / Watch live demo</span><strong>Let Codex run Finite for you.</strong><p>Watch a real template become a working plan. Press Next to continue, or pause anywhere and ask Codex about what you see.</p><em>Watch the live demo →</em>
         </button>
       </div>
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Fresh plans use your ChatGPT identity. Examples and walkthroughs open in an isolated 24-hour workspace.</p></footer>

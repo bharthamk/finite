@@ -146,9 +146,12 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /const renderCodexLaunch = \(\): void =>/);
   assert.match(source, /Copy setup for Codex/);
   assert.match(source, /Loading your live demo…/);
-  assert.match(source, /You only press Next at the key moments/);
+  assert.match(source, /pause anywhere to ask about the exact screen you are seeing/);
   assert.match(source, /Click Next when you are ready to keep watching, or ask Codex about anything you see/);
   assert.match(source, /Live demo · click Next when this chapter makes sense/);
+  assert.match(source, /Paused here · ask Codex anything about this screen/);
+  assert.match(source, /data-action="toggle-codex-demo-pause"/);
+  assert.match(source, /GUIDE_PAUSED_FOR_QUESTION/);
   assert.match(styles, /\.entry-route-grid/);
   assert.match(styles, /\.entry-route--codex-live/);
   assert.match(styles, /\.entry-route--live-demo/);

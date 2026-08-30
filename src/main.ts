@@ -558,9 +558,12 @@ if (guidedWalkthroughMode) scopedStorage.setItem("finite-plan.follow-codex", "tr
 let activeCodexPrioritySectionId = scopedStorage.getItem("finite-plan.codex-priority-section") ?? "";
 let demoNextRequired = false;
 let demoNextAdvanced = false;
+let demoPaused = false;
+let lastDemoGuide: { surface: string; target: FiniteGuideTarget; targetLabel: string; message: string } | null = null;
 let codexLaunchCopied = false;
 const guideView = async (request: FiniteGuideViewRequest) => {
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
+  if (demoPlaybackMode && demoPaused) return { ok: true, code: "GUIDE_PAUSED_FOR_QUESTION", acceptedStateChanged: false, pausedAt: lastDemoGuide, next: "The person paused the live demo. Make no product changes. Answer their Codex questions using pausedAt and canonical Finite state, then retry the intended guide call at a modest interval until they resume." };
   if (demoPlaybackMode && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, next: "The live demo is paused at a visible Next button. Wait briefly and retry the intended finite_guide_view call; do not move the demo until the person advances it." };
   if (demoNextAdvanced) {
     demoNextRequired = false;
@@ -604,7 +607,8 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await refreshPlanLearning(); await syncAdaptiveChecklist(); }
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
-  const manifest = result.code === "GUIDE_WAITING_FOR_PERSON" ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
+  const preservePausedDemoView = demoPlaybackMode && demoPaused;
+  const manifest = preservePausedDemoView || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
   const guidedView = result.code === "VIEW_GUIDED" ? applyCodexSpotlight(result.guide as FiniteGuideViewRequest) : null;
   return {
     toolName,
@@ -765,7 +769,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   overlay.dataset.codexGuideOverlay = "true";
   overlay.setAttribute("aria-live", "polite");
   const runningDemo = demoPlaybackMode;
-  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small>${runningDemo ? `Live demo · click Next when this chapter makes sense` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer>${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></footer>`;
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${runningDemo ? "data-demo-guide-state" : ""}>${runningDemo ? `Live demo · click Next when this chapter makes sense` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer>${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${runningDemo ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause demo</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></footer>`;
   const endGuidance = (): void => {
     followCodexEnabled = false;
     guidedWalkthroughMode = false;
@@ -773,6 +777,8 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     codexLaunchMode = null;
     demoNextRequired = false;
     demoNextAdvanced = false;
+    demoPaused = false;
+    lastDemoGuide = null;
     scopedStorage.removeItem("finite-plan.follow-codex");
     scopedStorage.removeItem("finite-plan.codex-priority-section");
     activeCodexPrioritySectionId = "";
@@ -785,6 +791,20 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   };
   overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => { if (runningDemo) endGuidance(); else overlay.remove(); });
   overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", endGuidance);
+  overlay.querySelector<HTMLButtonElement>("[data-action='toggle-codex-demo-pause']")?.addEventListener("click", (event) => {
+    demoPaused = !demoPaused;
+    const button = event.currentTarget as HTMLButtonElement;
+    const nextButton = overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']");
+    const state = overlay.querySelector<HTMLElement>("[data-demo-guide-state]");
+    const heading = overlay.querySelector<HTMLElement>("header strong");
+    button.textContent = demoPaused ? "Resume demo" : "Pause demo";
+    button.setAttribute("aria-pressed", String(demoPaused));
+    if (nextButton) nextButton.disabled = demoPaused || demoNextAdvanced;
+    if (state) state.textContent = demoPaused ? "Paused here · ask Codex anything about this screen" : "Live demo · click Next when this chapter makes sense";
+    if (heading) heading.textContent = demoPaused ? `${agenticName()} is holding this exact place` : `${agenticName()} is running the demo`;
+    overlay.classList.toggle("is-paused", demoPaused);
+    announce(demoPaused ? `Demo paused. Ask ${agenticName()} about this exact screen.` : `Demo resumed. ${agenticName()} can continue from this exact place.`);
+  });
   overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']")?.addEventListener("click", (event) => {
     demoNextAdvanced = true;
     const button = event.currentTarget as HTMLButtonElement;
@@ -803,6 +823,7 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   const element = exactPriority ?? descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
   const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
   const guideMessage = request.message?.trim() || `Here is ${descriptor.label}. I’ll keep us on the real plan and move one step at a time.`;
+  if (demoPlaybackMode) lastDemoGuide = { surface, target: request.target, targetLabel: descriptor.label, message: guideMessage };
   if (!element) {
     if (demoPlaybackMode && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
     showCodexGuideOverlay(guideMessage, descriptor.label, request.pauseForNext === true);
@@ -1982,6 +2003,8 @@ const openEntryRoute = async ({ prefill = "", codexMode = null }: { prefill?: st
   codexLaunchMode = codexMode;
   guidedWalkthroughMode = codexMode !== null;
   demoPlaybackMode = codexMode === "demo";
+  demoPaused = false;
+  lastDemoGuide = null;
   codexLaunchCopied = false;
   newPlanDraftMode = true;
   forceArrivalSurface = codexMode === null;
@@ -2012,7 +2035,7 @@ const renderCodexLaunch = (): void => {
       <div class="codex-launch__copy">
         <p class="eyebrow">One quick handoff</p>
         <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? "Loading your live demo…" : `Loading ${escapeHtml(agenticName())} beside you…`}</h1>
-        <p>${isDemo ? `${escapeHtml(agenticName())} will run the real Hobart template in Finite. You only press Next at the key moments.` : `${escapeHtml(agenticName())} will take over the interface, build with you and pause whenever your input matters.`}</p>
+        <p>${isDemo ? `${escapeHtml(agenticName())} will run the real Hobart template in Finite. Press Next at key moments, or pause anywhere to ask about the exact screen you are seeing.` : `${escapeHtml(agenticName())} will take over the interface, build with you and pause whenever your input matters.`}</p>
         <button type="button" class="button codex-launch__copy-button" data-action="copy-codex-launch">${codexLaunchCopied ? "Copy again" : "Copy setup for Codex"}</button>
         <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex." : "Copy this once, open Codex and paste it. Finite supplies the live product state from here."}</small>
       </div>
@@ -2042,6 +2065,8 @@ const renderCodexLaunch = (): void => {
     codexLaunchMode = null;
     guidedWalkthroughMode = false;
     demoPlaybackMode = false;
+    demoPaused = false;
+    lastDemoGuide = null;
     entryGatewayOpen = true;
     const target = new URL(location.href);
     target.searchParams.delete("start");
@@ -2069,7 +2094,7 @@ const renderEntryGateway = (): void => {
           <span>03 / Use ${escapeHtml(agenticName())} live</span><strong>Build with ${escapeHtml(agenticName())} beside you.</strong><p>${escapeHtml(agenticName())} runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use ${escapeHtml(agenticName())} live →</em>
         </button>
         <button type="button" class="entry-route entry-route--live-demo" data-entry-action="live-demo">
-          <span>04 / Watch live demo</span><strong>Let ${escapeHtml(agenticName())} run Finite for you.</strong><p>Watch a real template become a working plan. You only press Next at key points.</p><em>Watch the live demo →</em>
+          <span>04 / Watch live demo</span><strong>Let ${escapeHtml(agenticName())} run Finite for you.</strong><p>Watch a real template become a working plan. Press Next to continue, or pause anywhere and ask ${escapeHtml(agenticName())} about what you see.</p><em>Watch the live demo →</em>
         </button>
       </div>
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
