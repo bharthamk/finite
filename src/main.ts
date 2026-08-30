@@ -1090,10 +1090,10 @@ const renderCodexHandoffDialog = (): string => {
         <div><p class="eyebrow">${order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">How do you want to continue?</h2></div>
         <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
-      <p class="codex-handoff-lede">Bring ${escapeHtml(agenticName())} in to develop the plan, or open the unprocessed rough plan and edit it yourself. You can bring ${escapeHtml(agenticName())} in later.</p>
+      <p class="codex-handoff-lede">Bring ${escapeHtml(agenticName())} in to research and develop the rough plan, or keep editing it yourself. You can bring ${escapeHtml(agenticName())} in later.</p>
       <div class="codex-handoff-choices" aria-label="Ways to continue">
         <section class="codex-handoff-choice codex-handoff-choice--codex">
-          <span>With ${escapeHtml(agenticName())}</span><strong>Develop the rough plan</strong><p>${escapeHtml(handoff.detail)}</p>
+          <span>With ${escapeHtml(agenticName())}</span><strong>Research and develop the plan</strong><p>${escapeHtml(handoff.detail)}</p>
           <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
@@ -2076,7 +2076,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
   }
   if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
   busy = false;
-  announce(arrivalResult.ok ? (planningMode === "manual" ? "Your manual planning workspace is ready." : `Your plan is saved and ready for ${agenticName()} to draft.`) : `The request was not saved: ${arrivalResult.code}`);
+  announce(arrivalResult.ok ? (planningMode === "manual" ? "Your manual planning workspace is ready." : `Your rough plan is ready to edit or develop with ${agenticName()}.`) : `The request was not saved: ${arrivalResult.code}`);
   if (!arrivalResult.ok) {
     restoreComposeForm();
     return;

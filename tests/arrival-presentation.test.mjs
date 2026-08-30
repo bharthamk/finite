@@ -6,6 +6,8 @@ import { resolvePlanTitle } from "../dist-test/src/plan-title.js";
 test("legacy generic accepted names project as useful plan names", () => {
   assert.equal(resolvePlanTitle({ proposed: "Event rough plan", brief: "A relaxed dinner party for ten friends." }), "Dinner party");
   assert.equal(resolvePlanTitle({ proposed: "Travel rough plan", brief: "Plan a weekend trip to Hobart for two people.", start: "2026-10-09" }), "Hobart weekend · 9 Oct 2026");
+  assert.equal(resolvePlanTitle({ proposed: "Adaptive rough plan", brief: "I want to learn basic conversational Italian over six weeks.", start: "2026-09-21" }), "Conversational Italian practice · 21 Sept 2026");
+  assert.equal(resolvePlanTitle({ proposed: "Adaptive rough plan", brief: "Build basic conversational Italian over six weeks.", start: "2026-09-21" }), "Basic conversational Italian · 21 Sept 2026");
   assert.equal(resolvePlanTitle({ proposed: "Quarterly launch", brief: "Ignored" }), "Quarterly launch");
 });
 

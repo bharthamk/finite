@@ -232,3 +232,68 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.equal(runtime.kernel.accepted.totalBudgetMinor, 0);
   assert.equal(runtime.listPlans().plans.some((entry) => entry.planId === progression.intake.planId), true);
 });
+
+test("a recurring learning request becomes a useful zero-cost general plan", async () => {
+  const learningOrder = {
+    ...structuredClone(order),
+    orderId: "arrival_learning_canary_01",
+    version: 1,
+    status: "waiting_for_codex",
+    rawOutcome: "I want to learn basic conversational Italian over six weeks, starting Monday 21 September 2026. I can study three evenings a week for 30 minutes, want to focus on greetings, ordering food, directions and listening practice, and do not want to buy anything.",
+    structured: { planningMode: "codex" },
+    inputs: [],
+    interpretation: null,
+    checksum: "c".repeat(64),
+  };
+
+  const learningStarter = starterPlanForArrival(learningOrder);
+  assert.equal(learningStarter.family, "general");
+  assert.equal(learningStarter.title, "Conversational Italian practice · 21 Sept 2026");
+  assert.deepEqual([learningStarter.overview.start, learningStarter.overview.end], ["2026-09-21", "2026-11-02"]);
+  assert.equal(learningStarter.overview.moneyState, "zero");
+  assert.equal(learningStarter.overview.totalBudget, "");
+  assert.equal(learningStarter.sections.some((entry) => entry.sectionId === "custom_practice_log"), true);
+  assert.equal(learningStarter.sections.find((entry) => entry.sectionId === "schedule")?.items.length, 6);
+  assert.equal(learningStarter.sections.find((entry) => entry.sectionId === "tasks")?.items.length, 7);
+  assert.equal(learningStarter.sections.some((entry) => /guest|venue|contractor|material/i.test(entry.label)), false);
+  assert.equal(learningStarter.sections.find((entry) => entry.sectionId === "money")?.openQuestions.length, 0);
+
+  const progression = arrivalProgressionFromStarter(learningOrder, learningStarter);
+  assert.equal(progression.intake.profileId, "general");
+  assert.equal(progression.intake.planningDimensions.money, "zero");
+  assert.equal(progression.intake.stages.length, 7);
+  assert.match(progression.intake.stages[0].label, /^Choose the three repeatable weekly study evenings/);
+  assert.equal(arrivalContinuityTasks(progression, progression.intake.stages.map((stage) => stage.label)).length, 0);
+  assert(progression.inputs.some((entry) => entry.message.includes("Practice log")));
+});
+
+test("manual learning intake does not turn build or minutes into renovation money", async () => {
+  const manualLearningOrder = {
+    ...structuredClone(order),
+    orderId: "arrival_manual_learning_canary_01",
+    version: 1,
+    status: "arrived",
+    rawOutcome: "Build basic conversational Italian over six weeks",
+    structured: {
+      planningMode: "manual",
+      deadline: "21 September to 2 November 2026, three evenings per week, 30 minutes each",
+      finiteLimit: "No paid budget and no more than 90 minutes per week",
+      hardConstraint: "Focus on greetings, ordering food, directions and listening practice; keep every part manually editable",
+    },
+    inputs: [],
+    interpretation: null,
+    checksum: "d".repeat(64),
+  };
+
+  const starter = starterPlanForArrival(manualLearningOrder);
+  assert.equal(starter.family, "general");
+  assert.equal(starter.title, "Basic conversational Italian · 21 Sept 2026");
+  assert.deepEqual([starter.overview.start, starter.overview.end], ["2026-09-21", "2026-11-02"]);
+  assert.equal(starter.overview.moneyState, "zero");
+  assert.equal(starter.overview.totalBudget, "");
+  assert.equal(starter.overview.categories.length, 0);
+  assert.equal(starter.sections.find((entry) => entry.sectionId === "money")?.items.some((entry) => entry.fields.amount === "90"), false);
+  assert.equal(starter.sections.find((entry) => entry.sectionId === "schedule")?.items.length, 6);
+  assert.equal(starter.sections.find((entry) => entry.sectionId === "tasks")?.items.length, 7);
+  assert.equal(starter.sections.some((entry) => /contractor|material|approval|permit/i.test(entry.label)), false);
+});

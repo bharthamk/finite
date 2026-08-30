@@ -170,10 +170,17 @@ export interface StarterPlanPresentation {
 const starterFamily = (value: string | null | undefined): StarterPlanPresentation["family"] => {
   const normalized = String(value ?? "").toLowerCase();
   if (normalized.includes("travel") || normalized.includes("trip") || normalized.includes("calendar")) return "travel";
-  if (normalized.includes("renovation") || normalized.includes("makeover") || normalized.includes("build") || normalized.includes("phase")) return "renovation";
+  if (normalized.includes("renovation") || normalized.includes("makeover") || normalized.includes("remodel") || normalized.includes("refurbish") || normalized.includes("phase")) return "renovation";
   if (normalized.includes("event") || normalized.includes("run_of_show") || normalized.includes("dinner")) return "event";
   return "general";
 };
+
+const isInterviewPlan = (value: string): boolean => /\binterview\b/i.test(value);
+const isRecurringPracticePlan = (value: string): boolean =>
+  /\b(?:learn|study|practise|practice|training|course|conversational|language|vocabulary)\b/i.test(value)
+  && /\b(?:day|week|month|session|evening|lesson|practice|study|listening|speaking)\b/i.test(value);
+const hasExplicitZeroSpendIntent = (value: string): boolean =>
+  /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s*(?:(?:is|of)\s*|:)\s*(?:aud|a\$|\$)?\s*0\b|\b(?:do not|don['’]t)\s+(?:want\s+)?to\s+buy\s+anything\b|\bwithout\s+spending\b/i.test(value);
 
 type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "options" | "comments" | "openQuestions" | "answers"> & { keywords: string[] };
 
@@ -248,6 +255,20 @@ const interviewEvidenceFields = [
   ]),
 ];
 
+const practiceLogFields = [
+  field("title", "Session or checkpoint"),
+  field("date", "Date", "date"),
+  field("focus", "Focus", "text", "Skill, topic, drill, or conversation"),
+  field("durationMinutes", "Minutes", "number", "30"),
+  field("confidence", "Confidence", "select", "", [
+    { value: "new", label: "New" },
+    { value: "developing", label: "Developing" },
+    { value: "comfortable", label: "Comfortable" },
+  ]),
+  field("evidence", "What changed", "textarea", "A phrase used, recording made, score, reflection, or other evidence"),
+  field("notes", "Notes", "textarea"),
+];
+
 const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
   const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
   if (family === "event" && dinner) return {
@@ -285,7 +306,17 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     requirements: ["Which video platform, format, or interview instructions are already confirmed?"],
     tasks: ["Which preparation work do you want to do yourself, and where should Codex help?"],
   };
-  const noPaidBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`);
+  const practiceSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
+  if (family === "general" && isRecurringPracticePlan(practiceSource)) return {
+    schedule: ["Which three weekly study times are most realistic, and may they move from week to week?"],
+    scope: ["What can you already do, and what would count as useful conversational progress after six weeks?"],
+    custom_practice_log: ["How would you like to notice progress: a short recording, self-rating, phrase check, or real conversation?"],
+    resources: ["Which free learning resources or formats do you already enjoy using?"],
+    money: [],
+    requirements: ["Are the 30-minute sessions and 90-minute weekly cap fixed or flexible?"],
+    tasks: ["Do you want to choose the exact session days yourself or use the provisional weekly rhythm?"],
+  };
+  const noPaidBudget = hasExplicitZeroSpendIntent(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`);
   return {
     schedule: ["Which date or sequence is fixed, and what can move?"],
     scope: ["What would make this plan complete enough to use?"],
@@ -389,13 +420,18 @@ const customModuleDefinition = (payload: Record<string, unknown>, sourceSurface:
 const sectionAliases: Record<string, string> = { destinations: "itinerary", dates: "itinerary", travel: "transport", commitments: "requirements", open: "tasks", programme: "schedule", people: "scope", items: "scope" };
 
 const moneyAmount = (text: string): string => {
-  const candidates = [...text.matchAll(/(?:a\$|aud|us\$|usd|€|eur|£|gbp)?\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)\s*([kmb])?\b/gi)]
-    .map((match) => {
-      const base = Number(match[1]!.replaceAll(",", ""));
-      const multiplier = ({ k: 1_000, m: 1_000_000, b: 1_000_000_000 } as const)[String(match[2] ?? "").toLowerCase() as "k" | "m" | "b"] ?? 1;
-      return base * multiplier;
-    })
-    .filter(Number.isFinite);
+  if (hasExplicitZeroSpendIntent(text)) return "0";
+  const value = "(-?\\d+(?:,\\d{3})*(?:\\.\\d+)?)\\s*([kmb])?";
+  const matches = [
+    ...text.matchAll(new RegExp(`(?:a\\$|aud|us\\$|usd|€|eur|£|gbp|\\$)\\s*${value}\\b`, "gi")),
+    ...text.matchAll(new RegExp(`\\b(?:budget|cost|price|spend|financial limit|money|cap)(?:(?:\\s+(?:is|of|at|under|up to|no more than|around|about|roughly))|\\s*:)?\\s*(?:a\\$|aud|us\\$|usd|€|eur|£|gbp|\\$)?\\s*${value}\\b`, "gi")),
+    ...text.matchAll(new RegExp(`\\b${value}\\s*(?:aud|usd|eur|gbp|dollars?|bucks?)\\b`, "gi")),
+  ];
+  const candidates = matches.map((match) => {
+    const base = Number(match[1]!.replaceAll(",", ""));
+    const multiplier = ({ k: 1_000, m: 1_000_000, b: 1_000_000_000 } as const)[String(match[2] ?? "").toLowerCase() as "k" | "m" | "b"] ?? 1;
+    return base * multiplier;
+  }).filter(Number.isFinite);
   if (!candidates.length) return "";
   const amount = candidates.reduce((largest, candidate) => Math.abs(candidate) > Math.abs(largest) ? candidate : largest);
   return String(Number(amount.toFixed(2)));
@@ -413,9 +449,9 @@ const moneyCurrency = (text: string, parent: Record<string, unknown>): string =>
 const fieldsForFact = (sectionId: string, fact: FlatPlanFact, value = fact.value): Record<string, string | boolean> => {
   const text = plainValue(value, fact.valueKey, fact.valueParent);
   const path = normalizedPath(fact.path);
-  if (sectionId === "money") return { title: fact.label, amount: moneyAmount(text), currency: moneyCurrency(text, fact.valueParent), moneyRole: /daily|perday/.test(path) ? "daily" : /limit|budget|maximum|cap/.test(path) ? "limit" : "cost", notes: text };
+  if (sectionId === "money") return { title: fact.label, amount: moneyAmount(`${fact.label}: ${text}`), currency: moneyCurrency(text, fact.valueParent), moneyRole: /daily|perday/.test(path) ? "daily" : /limit|budget|maximum|cap/.test(path) ? "limit" : "cost", notes: text };
   if (sectionId === "tasks") return { title: text === "Not supplied yet" ? fact.label : text, notes: text === fact.label ? "" : fact.label, done: false };
-  if (sectionId === "requirements") return { title: /mustnotchange|constraint|commitment/.test(path) ? text : fact.label, status: "open", notes: text };
+  if (sectionId === "requirements") return { title: /mustnotchange|whatislimited|constraint|commitment/.test(path) ? text : fact.label, status: "open", notes: text };
   if (sectionId === "itinerary" || sectionId === "schedule") return /date|day|month|year|when|deadline|window/.test(path) ? { title: fact.label, start: text, notes: text } : { title: text, location: text, notes: fact.label };
   if (sectionId === "transport") return { title: text, notes: fact.label };
   if (sectionId === "stays") return { title: fact.label, location: /location|city|place/.test(path) ? text : "", nightlyBudget: /cost|budget|price|nightly/.test(path) ? text.replace(/[^0-9.-]/g, "") : "", notes: text };
@@ -437,6 +473,15 @@ const dateIso = (value: string, fallbackYear: number): string => {
   const timestamp = Date.parse(`${candidate} UTC`);
   if (!Number.isFinite(timestamp)) return "";
   return new Date(timestamp).toISOString().slice(0, 10);
+};
+
+const dateRangeIso = (value: string, fallbackYear: number): { start: string; end: string } => {
+  const month = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+  const dateToken = `(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${month})(?:\\s+20\\d{2})?|(?:${month})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?)`;
+  const range = value.match(new RegExp(`\\b(${dateToken})\\s+(?:to|until|through|thru|–|—|-)\\s+(${dateToken})\\b`, "i"));
+  if (!range) return { start: "", end: "" };
+  const explicitYear = Number(`${range[1]} ${range[2]}`.match(/\b(20\d{2})\b/)?.[1] ?? fallbackYear);
+  return { start: dateIso(range[1]!, explicitYear), end: dateIso(range[2]!, explicitYear) };
 };
 
 const addDays = (value: string, days: number): string => {
@@ -598,6 +643,66 @@ const seedRoughPlan = (
     if (!evidenceAlreadySupplied) ["Strategic judgement", "Cross-functional delivery", "Operating through ambiguity", "Executive communication"].forEach((competency, index) => seed("custom_interview_evidence", `evidence_${index + 1}`, competency, { title: competency, situation: "", action: "", result: "", proof: "", confidence: "needs_evidence" }));
     return;
   }
+  if (family === "general" && isRecurringPracticePlan(sourceText) && !isInterviewPlan(sourceText)) {
+    const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const startDate = dateIso(`${order.rawOutcome} ${String(order.structured.deadline ?? "")}`, year);
+    const weekWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12 };
+    const weekMatch = sourceText.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve)\s+weeks?\b/i);
+    const weeks = Math.max(1, Math.min(12, Number(weekMatch?.[1]) || weekWords[String(weekMatch?.[1] ?? "").toLowerCase()] || 6));
+    const sessionWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+    const sessionMatch = sourceText.match(/\b(\d+|one|two|three|four|five|six|seven)\s+(?:evenings?|sessions?|times?)\s+(?:a|per)\s+week\b/i);
+    const sessionsPerWeek = Math.max(1, Math.min(7, Number(sessionMatch?.[1]) || sessionWords[String(sessionMatch?.[1] ?? "").toLowerCase()] || 3));
+    const durationMinutes = Math.max(5, Math.min(180, Number(sourceText.match(/\b(\d{1,3})\s*[- ]?minutes?\b/i)?.[1] ?? 30)));
+    const languagePractice = /\b(?:italian|language|conversational|vocabulary|greetings?|ordering food|directions?|listening)\b/i.test(sourceText);
+    const weeklyFocus = languagePractice
+      ? [
+        ["Foundations and greetings", "Build a small useful phrase set, practise pronunciation and record a short baseline introduction."],
+        ["Ordering food and drink", "Practise a complete café or restaurant exchange, including quantities, preferences and payment."],
+        ["Directions and getting around", "Ask for, understand and repeat simple route instructions using landmarks and transport words."],
+        ["Listening for meaning", "Use short beginner audio to catch key words, numbers, times and the overall intention without translating every word."],
+        ["Mixed short conversations", "Combine the focus areas in two- to three-minute exchanges and repair gaps without abandoning the conversation."],
+        ["Review and final recording", "Repeat the baseline prompt, compare it with week one and choose what to continue next."],
+      ]
+      : [
+        ["Baseline and foundations", "Record the starting point, choose the core material and define one observable success measure."],
+        ["Core skill one", "Practise the first essential component in short repeated sessions."],
+        ["Core skill two", "Add the next component while retaining the first."],
+        ["Combination practice", "Use the main components together in a realistic exercise."],
+        ["Weak-point practice", "Use evidence from the log to target the least comfortable part."],
+        ["Review and continuation", "Repeat the baseline, note the change and choose the next cycle."],
+      ];
+    const scheduleItems = (sectionItems.get("schedule") ?? []).filter((item) => !(item.source === "request" && /^when$/i.test(item.label)));
+    sectionItems.set("schedule", scheduleItems);
+    if (!scheduleItems.some((item) => /^Week \d+/i.test(item.label))) Array.from({ length: weeks }, (_, index) => {
+      const focus = weeklyFocus[Math.min(index, weeklyFocus.length - 1)]!;
+      const weekStart = startDate ? addDays(startDate, index * 7) : "";
+      seed("schedule", `practice_week_${index + 1}`, `Week ${index + 1} · ${focus[0]}`, { title: `Week ${index + 1} · ${focus[0]}`, kind: "milestone", start: weekStart, end: weekStart ? addDays(weekStart, 6) : "", notes: `${sessionsPerWeek} × ${durationMinutes}-minute sessions. ${focus[1]} Provisional rhythm; move the sessions freely.` });
+    });
+    const focusItems: string[] = languagePractice
+      ? ["Greetings and introductions", "Ordering food and drink", "Directions and transport", "Listening for key words and intent"]
+      : weeklyFocus.slice(0, 4).map((focus) => String(focus[0]));
+    const scope = sectionItems.get("scope") ?? [];
+    focusItems.forEach((title, index) => { if (!scope.some((item) => item.label === title)) seed("scope", `practice_focus_${index + 1}`, title, { title, status: "in_progress", start: startDate, notes: "Starter focus from the request; rename, remove or reorder it." }); });
+    const resources = sectionItems.get("resources") ?? [];
+    const practiceResources: Array<[string, string, string]> = [
+      ["reference", "Core phrase and reference source", "Choose one free, reliable beginner reference rather than collecting several overlapping sources."],
+      ["audio", "Short beginner listening source", "Choose free audio with a transcript and replayable clips suitable for 30-minute sessions."],
+      ["recording", "Voice recording and playback", "Use the existing phone or computer recorder for baseline, pronunciation and final comparison."],
+    ];
+    practiceResources.forEach(([id, title, notes]) => { if (!resources.some((item) => item.label === title)) seed("resources", `practice_${id}`, title, { title, provider: "Free resource to choose", status: "open", start: startDate, notes }); });
+    if (!requirements.some((item) => /sessions? per week|weekly practice|minutes? per week/i.test(`${item.label} ${String(item.fields.notes ?? "")}`))) seed("requirements", "practice_time", `${sessionsPerWeek} × ${durationMinutes}-minute sessions per week`, { title: `${sessionsPerWeek} × ${durationMinutes}-minute sessions per week`, status: "in_progress", due: startDate, notes: `${sessionsPerWeek * durationMinutes} minutes per week across ${weeks} weeks. The exact evenings remain editable.` });
+    if (hasExplicitZeroSpendIntent(sourceText) && !requirements.some((item) => /paid budget/i.test(item.label))) seed("requirements", "practice_budget", "Use a zero paid budget", { title: "Use a zero paid budget", status: "ready", due: startDate, notes: "Use existing tools and free resources unless the person changes this limit." });
+    [
+      ["slots", "Choose the three repeatable weekly study evenings", startDate, "Place the real sessions on the calendar; keep them movable when a week changes."],
+      ["resources", "Choose one free reference and one free listening source", startDate, "Avoid collecting more material than the weekly rhythm can use."],
+      ["baseline", "Record a short baseline introduction", startDate, "Keep it as the comparison point for the final week."],
+      ["greetings", "Practise greetings and introductions in complete exchanges", startDate ? addDays(startDate, 6) : "", "Move beyond isolated words into short usable turns."],
+      ["ordering", "Practise a complete food-ordering exchange", startDate ? addDays(startDate, 13) : "", "Include preferences, quantities, a clarification and payment."],
+      ["directions_listening", "Practise directions and complete a listening checkpoint", startDate ? addDays(startDate, 27) : "", "Log what was understood and what still needs repetition."],
+      ["final", "Record a final mixed conversation and choose the next cycle", startDate ? addDays(startDate, Math.max(0, weeks * 7 - 1)) : "", "Compare it with the baseline and retain only the next useful focus."],
+    ].forEach(([id, title, due, notes]) => { if (!tasks.some((item) => item.label === title)) seed("tasks", `practice_${id}`, String(title), { title: String(title), due: String(due), done: false, notes: String(notes) }); });
+    return;
+  }
   if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
     const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dinnerDate = dateIso(sourceText, year);
@@ -663,7 +768,7 @@ const seedRoughPlan = (
   }
   if (!requirements.length) seed("requirements", "key_requirement", family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", { title: family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", status: "open", notes: "First-pass requirement; verify before committing." });
   if (!tasks.length) {
-    const noPaidBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(sourceText);
+    const noPaidBudget = hasExplicitZeroSpendIntent(sourceText);
     const starterTasks = noPaidBudget
       ? ["Confirm the rough sequence", "Confirm key dates and timing", "Check the next external dependency"]
       : ["Confirm the rough sequence", "Add known costs and dates", "Check the next external dependency"];
@@ -700,7 +805,8 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const manual = arrivalUsesManualWorkspace(order);
   const editableWorkspace = manual || arrivalUsesCodexWaitingWorkspace(order) || order.structured.planningMode === "codex";
   if (!interpretation?.complete && !editableWorkspace) return null;
-  const explicitlyComposableOutcome = /\binterview\b/i.test(order.rawOutcome);
+  const requestSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${interpretation?.summary ?? ""}`;
+  const explicitlyComposableOutcome = isInterviewPlan(requestSource) || isRecurringPracticePlan(requestSource);
   const family = explicitlyComposableOutcome ? "general" : starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
@@ -722,7 +828,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       customSource: "working",
     });
   }
-  if (family === "general" && /\binterview\b/i.test(order.rawOutcome)) {
+  if (family === "general" && isInterviewPlan(requestSource)) {
     definitions.splice(2, 0, {
       sectionId: "custom_interview_evidence",
       label: "Interview evidence bank",
@@ -731,6 +837,19 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       variant: "cards",
       fields: interviewEvidenceFields.map((entry) => ({ ...entry })),
       keywords: ["interview", "competency", "story", "stories", "achievement", "evidence", "result", "proof"],
+      custom: true,
+      customSource: "working",
+    });
+  }
+  if (family === "general" && isRecurringPracticePlan(requestSource) && !isInterviewPlan(requestSource)) {
+    definitions.splice(2, 0, {
+      sectionId: "custom_practice_log",
+      label: "Practice log",
+      description: "Record each session, its focus and a small piece of progress evidence without needing Codex.",
+      emptyLabel: "No practice sessions recorded yet.",
+      variant: "cards",
+      fields: practiceLogFields.map((entry) => ({ ...entry })),
+      keywords: ["practice", "study", "session", "lesson", "progress", "confidence", "evidence", "reflection"],
       custom: true,
       customSource: "working",
     });
@@ -773,7 +892,11 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
     ["mustNotChange", order.structured.hardConstraint],
   ].filter((entry) => entry[1] !== null && entry[1] !== undefined && entry[1] !== "")));
   const addFacts = (facts: FlatPlanFact[], source: StarterPlanItemSource, prefix: string): void => facts.forEach((fact, index) => {
-    const sectionId = sectionForFact(definitions, fact.path);
+    const factText = plainValue(fact.value, fact.valueKey, fact.valueParent);
+    const temporalLimit = /whatislimited/.test(normalizedPath(fact.path))
+      && /\b(?:minutes?|hours?|days?|weeks?|months?|sessions?|evenings?)\b/i.test(factText)
+      && !(Number(moneyAmount(factText)) > 0);
+    const sectionId = temporalLimit && sectionItems.has("requirements") ? "requirements" : sectionForFact(definitions, fact.path);
     const values = Array.isArray(fact.value) && fact.value.every((value) => value === null || typeof value !== "object") && ["itinerary", "schedule", "tasks"].includes(sectionId) ? fact.value : [fact.value];
     values.forEach((value, valueIndex) => addItem(sectionId, { itemId: `${prefix}_${index}_${valueIndex}`, label: fact.label, fields: fieldsForFact(sectionId, fact, value), source }));
   });
@@ -947,7 +1070,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const limit = Number(canonicalLimit?.fields.amount || 0);
   const totalBudget = overviewOverrides.totalBudget !== undefined ? String(overviewOverrides.totalBudget) : (canonicalLimit ? String(canonicalLimit.fields.amount ?? "") : "");
   const budgetNumber = Number(totalBudget || 0);
-  const explicitNoBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(interpretation?.known ?? {})}`);
+  const explicitNoBudget = hasExplicitZeroSpendIntent(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(interpretation?.known ?? {})}`);
   const overrideMoneyState = String(overviewOverrides.moneyState ?? "");
   const moneyState = (["not_applicable", "unknown", "zero", "positive"] as const).includes(overrideMoneyState as "not_applicable" | "unknown" | "zero" | "positive")
     ? overrideMoneyState as "not_applicable" | "unknown" | "zero" | "positive"
@@ -966,11 +1089,15 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const anchoredEventDate = family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(eventSourceText)
     ? dateIso(eventSourceText, Number(eventSourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear()))
     : "";
+  const requestDateText = `${order.rawOutcome} ${String(order.structured.deadline ?? "")}`;
+  const requestYear = Number(requestDateText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+  const explicitRequestRange = dateRangeIso(requestDateText, requestYear);
+  const anchoredRequestStart = explicitRequestRange.start || dateIso(requestDateText, requestYear);
   const singleDay = typeof overviewOverrides.singleDay === "boolean" ? overviewOverrides.singleDay : Boolean(anchoredEventDate);
-  const start = String(overviewOverrides.start || anchoredEventDate || dateEntries[0]?.value || "");
+  const start = String(overviewOverrides.start || anchoredEventDate || anchoredRequestStart || dateEntries[0]?.value || "");
   const requestedDuration = requestedDurationEnd(order, start);
   const explicitEnd = dateEntries.filter((entry) => entry.value !== start && ["request", "known", "human"].includes(entry.item.source)).at(-1)?.value ?? "";
-  const end = singleDay ? start : String(overviewOverrides.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
+  const end = singleDay ? start : String(overviewOverrides.end || explicitRequestRange.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
   const datesProvisional = typeof overviewOverrides.datesProvisional === "boolean"
     ? overviewOverrides.datesProvisional
     : Boolean(requestedDuration.end ? requestedDuration.provisional || !dateEntries.some((entry) => entry.value === requestedDuration.end && !starterItemIsProvisional(entry.item)) : dateEntries.some((entry) => starterItemIsProvisional(entry.item)));

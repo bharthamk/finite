@@ -27,10 +27,14 @@ const coreTitle = (text: string): string => {
   if (describedTrip) return `${describedTrip} trip`;
   const destination = source.match(/\btrip\s+to\s+([^.,;]+?)(?:\s+for\s+\w+|[.,;]|$)/i)?.[1]?.trim();
   if (destination) return `${destination} trip`;
+  const learningTopic = source.match(/\b(?:learn|study|practise|practice)\s+(?:basic\s+)?(.+?)(?=\s+(?:over|for|in|by|starting|from|with)\b|[.,;]|$)/i)?.[1]?.trim();
+  if (learningTopic) return `${learningTopic.charAt(0).toUpperCase()}${learningTopic.slice(1)} practice`;
   const cleaned = source
     .split(/[.!?\n]/)[0]!
+    .replace(/^(?:i\s+(?:want|need|would like)\s+to\s+)/i, "")
     .replace(/^(?:please\s+)?(?:help me\s+)?(?:plan|prepare|organise|organize|build|create)\s+(?:for\s+)?/i, "")
     .replace(/^(?:an?|the)\s+/i, "")
+    .replace(/\s+(?:over|for)\s+(?:the\s+)?(?:next\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|weeks?|months?).*$/i, "")
     .replace(/\s+(?:with|within|without|while|before|after)\s+.+$/i, "")
     .trim();
   if (!cleaned) return "My plan";
