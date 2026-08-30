@@ -132,6 +132,19 @@ test("a zero-budget job interview becomes an isolated general plan and activates
           { fieldId: "confidence", label: "Confidence", inputType: "text" },
         ],
       },
+    }, {
+      inputId: "arrival_input_stale_event_budget_2",
+      kind: "detail",
+      sourceSurface: "codex",
+      createdAt: "2026-08-30T00:00:01.000Z",
+      payload: {
+        workspaceOperation: "record_add",
+        moduleId: "money",
+        recordId: "stale_event_venue",
+        recordSource: "codex",
+        label: "Venue",
+        fields: { title: "Venue", amount: "0", currency: "AUD", moneyRole: "cost", notes: "25% first-pass event allocation." },
+      },
     }],
     interpretation: {
       ...order.interpretation,
@@ -149,6 +162,7 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.equal(interviewStarter.overview.moneyState, "zero");
   assert.equal(interviewStarter.overview.totalBudget, "0");
   assert.equal(interviewStarter.overview.categories.length, 0);
+  assert.equal(interviewStarter.sections.find((entry) => entry.sectionId === "money")?.items.some((entry) => entry.label === "Venue"), false);
   assert(interviewStarter.sections.some((entry) => entry.sectionId === "custom_interview_evidence"));
   assert.equal(interviewStarter.sections.some((entry) => /guest|venue|supplier/i.test(entry.label)), false);
 

@@ -844,8 +844,6 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const limitItems = moneyItems.filter((item) => item.fields.moneyRole === "limit");
   const canonicalLimit = limitItems.find((item) => item.source === "human") ?? limitItems.at(-1);
   const limit = Number(canonicalLimit?.fields.amount || 0);
-  const categories = moneyItems.filter((item) => item.fields.moneyRole === "cost");
-  const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
   const totalBudget = overviewOverrides.totalBudget !== undefined ? String(overviewOverrides.totalBudget) : (canonicalLimit ? String(canonicalLimit.fields.amount ?? "") : "");
   const budgetNumber = Number(totalBudget || 0);
   const explicitNoBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(interpretation?.known ?? {})}`);
@@ -857,6 +855,12 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       : budgetNumber > 0
         ? "positive" as const
         : explicitNoBudget ? "zero" as const : "not_applicable" as const;
+  const visibleMoneyItems = moneyState === "positive"
+    ? moneyItems
+    : moneyItems.filter((item) => item.fields.moneyRole !== "cost" || item.source === "human" || Number(item.fields.amount || 0) > 0);
+  if (visibleMoneyItems.length !== moneyItems.length) sectionItems.set("money", visibleMoneyItems);
+  const categories = visibleMoneyItems.filter((item) => item.fields.moneyRole === "cost");
+  const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
   const eventSourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
   const anchoredEventDate = family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(eventSourceText)
     ? dateIso(eventSourceText, Number(eventSourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear()))
