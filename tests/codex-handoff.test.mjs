@@ -159,7 +159,11 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /This is your plan at a glance\. Dates, budget, remaining money, and open work stay visible here/i);
   assert.match(handoff.prompt, /section_headers target/i);
   assert.match(handoff.prompt, /Each section keeps one part of the plan together\. Its header shows what belongs there, how many items and open questions it contains, and whether Codex is currently working there\./i);
+  assert.match(handoff.prompt, /open the real Calendar section with its visible header/i);
+  assert.match(handoff.prompt, /priority target with sectionId itinerary and pauseForNext true/i);
+  assert.match(handoff.prompt, /Calendar keeps the plan’s dates, places and activities together\. Select any item to see or change its details; related stays and transport remain connected to the same working plan\./i);
   assert.ok(handoff.prompt.indexOf("section_headers target") < handoff.prompt.indexOf("budget_editor target"));
+  assert.ok(handoff.prompt.indexOf("sectionId itinerary") < handoff.prompt.indexOf("budget_editor target"));
   assert.match(handoff.prompt, /budget_editor target/i);
   assert.match(handoff.prompt, /Amount from 2400 to 2600 and Base currency from AUD to NZD/i);
   assert.match(handoff.prompt, /does not pretend to perform a live exchange conversion/i);
