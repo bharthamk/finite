@@ -1945,34 +1945,34 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       </article>
     </div>
   </details>
-  <dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="dates" aria-labelledby="overview_dates_title">
-    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close date editor">×</button>
-    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_dates_title">Dates</h3></header>
+  <dialog class="starter-overview-dialog starter-overview-dialog--compact finite-edit-dialog" data-overview-dialog="dates" aria-labelledby="overview_dates_title">
+    <button class="starter-overview-dialog__close finite-edit-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close date editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_dates_title">Dates</h3><p>Set the working date range for this plan.</p></header>
     <form class="starter-overview-dialog__form starter-overview-dialog__form--single" data-arrival-form="workspace-overview">
       <section><div class="starter-overview__field-grid"><label><span>From</span><input name="start" type="date" value="${escapeHtml(overview.start)}"></label><label data-overview-end-date ${overview.singleDay ? "hidden" : ""}><span>To</span><input name="end" type="date" value="${escapeHtml(overview.end)}"></label></div>
         <div class="starter-overview__toggles"><label><input name="singleDay" type="checkbox" ${overview.singleDay ? "checked" : ""}> Single day</label><label><input name="includeTime" type="checkbox" ${overview.includeTime ? "checked" : ""}> Add times</label></div>
         <div class="starter-overview__field-grid" data-overview-times ${overview.includeTime ? "" : "hidden"}><label><span>Start time</span><input name="startTime" type="time" value="${escapeHtml(overview.startTime)}"></label><label><span>End time</span><input name="endTime" type="time" value="${escapeHtml(overview.endTime)}"></label><label class="is-wide"><span>Time zone</span><input name="timeZone" maxlength="80" value="${escapeHtml(overview.timeZone)}" placeholder="e.g. Europe/Berlin"></label></div>
         <label class="starter-certainty-toggle"><input name="datesProvisional" type="checkbox" ${overview.datesProvisional ? "checked" : ""}><span><strong>Placeholder dates</strong><small>Keep the date values italic until you decide they are settled. Calculations stay the same.</small></span></label>
       </section>
-      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save dates</button></div>
+      <div class="starter-overview-dialog__actions"><button class="button button--secondary" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save dates</button></div>
     </form>
   </dialog>
-  <dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="budget" aria-labelledby="overview_budget_title">
-    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close total budget editor">×</button>
-    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_budget_title">Total budget</h3></header>
+  <dialog class="starter-overview-dialog starter-overview-dialog--compact finite-edit-dialog" data-overview-dialog="budget" aria-labelledby="overview_budget_title">
+    <button class="starter-overview-dialog__close finite-edit-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close total budget editor">×</button>
+    <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_budget_title">Total budget</h3><p>Set the limit and base currency used across the plan.</p></header>
     <form class="starter-overview-dialog__form starter-overview-dialog__form--single" data-arrival-form="workspace-overview">
-      <section><label><span>How money fits this plan</span><select name="moneyState"><option value="positive" ${overview.moneyState === "positive" ? "selected" : ""}>A positive budget applies</option><option value="zero" ${overview.moneyState === "zero" ? "selected" : ""}>The paid budget is zero</option><option value="unknown" ${overview.moneyState === "unknown" ? "selected" : ""}>Not decided yet</option><option value="not_applicable" ${overview.moneyState === "not_applicable" ? "selected" : ""}>Money is not part of this plan</option></select></label><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or NZD. This relabels base-currency amounts; it does not convert them.</small></label></div>
+      <section><label class="starter-overview__field"><span>How money fits this plan</span><select name="moneyState"><option value="positive" ${overview.moneyState === "positive" ? "selected" : ""}>A positive budget applies</option><option value="zero" ${overview.moneyState === "zero" ? "selected" : ""}>The paid budget is zero</option><option value="unknown" ${overview.moneyState === "unknown" ? "selected" : ""}>Not decided yet</option><option value="not_applicable" ${overview.moneyState === "not_applicable" ? "selected" : ""}>Money is not part of this plan</option></select></label><div class="starter-overview__field-grid"><label><span>Amount</span><input name="totalBudget" type="number" min="0" step="1" value="${escapeHtml(overview.totalBudget)}" placeholder="0"></label><label><span>Base currency</span><input name="currency" required maxlength="3" pattern="[A-Za-z]{3}" value="${escapeHtml(currency)}" aria-describedby="currency_hint"><small id="currency_hint">Three-letter code, such as AUD or NZD. This relabels base-currency amounts; it does not convert them.</small></label></div>
         <p class="starter-overview__allocation${allocationClass}"><span>${escapeHtml(money(overview.categoryAllocated))} allocated</span><strong>${escapeHtml(allocationLabel)}</strong></p>
         <label class="starter-certainty-toggle"><input name="budgetProvisional" type="checkbox" ${overview.budgetProvisional ? "checked" : ""}><span><strong>Placeholder budget</strong><small>Italic until settled. Calculations stay the same.</small></span></label>
       </section>
-      <div class="starter-overview-dialog__actions"><button class="text-button" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save budget</button></div>
+      <div class="starter-overview-dialog__actions"><button class="button button--secondary" type="button" data-action="close-overview-editor">Cancel</button><button class="button" type="submit" ${busy ? "disabled" : ""}>Save budget</button></div>
     </form>
   </dialog>
-  <dialog class="starter-overview-dialog starter-overview-dialog--split" data-overview-dialog="split" aria-labelledby="overview_split_title">
-    <button class="starter-overview-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close budget split editor">×</button>
+  <dialog class="starter-overview-dialog starter-overview-dialog--split finite-edit-dialog" data-overview-dialog="split" aria-labelledby="overview_split_title">
+    <button class="starter-overview-dialog__close finite-edit-dialog__close" type="button" data-action="close-overview-editor" aria-label="Close budget split editor">×</button>
     <header><p class="eyebrow">Edit plan overview</p><h3 id="overview_split_title">Budget split</h3><p>Category budgets can intentionally add up to more than 100%.</p></header>
-    <div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
-    <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details>
+    <div class="starter-overview-dialog__body"><div class="starter-overview__categories">${categoryRows || `<p class="starter-plan__empty">No budget categories yet.</p>`}</div>
+    <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details></div>
   </dialog>`;
   const modules = starter.sections.map((section) => {
     const isCodexPriority = followCodexEnabled && section.sectionId === prioritySectionId;
@@ -2015,11 +2015,11 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       const title = String(item.fields.title || item.label);
       const attached = optionsForRecord(item);
       const dialogId = `record_options_${section.sectionId}_${item.itemId}`;
-      return `<dialog class="starter-record-options-dialog" id="${escapeHtml(dialogId)}" data-record-options-dialog data-record-options-key="${escapeHtml(`${section.sectionId}:${item.itemId}`)}" aria-labelledby="${escapeHtml(dialogId)}_title">
-        <button class="starter-overview-dialog__close" type="button" data-action="close-record-options" aria-label="Close options for ${escapeHtml(title)}">×</button>
+      return `<dialog class="starter-record-options-dialog finite-edit-dialog" id="${escapeHtml(dialogId)}" data-record-options-dialog data-record-options-key="${escapeHtml(`${section.sectionId}:${item.itemId}`)}" aria-labelledby="${escapeHtml(dialogId)}_title">
+        <button class="starter-overview-dialog__close finite-edit-dialog__close" type="button" data-action="close-record-options" aria-label="Close options for ${escapeHtml(title)}">×</button>
         <header><p class="eyebrow">Options for this item</p><h3 id="${escapeHtml(dialogId)}_title">${escapeHtml(title)}</h3><p>Compare researched or manually added alternatives here. Nothing changes in the working plan until you choose Add to plan.</p></header>
-        <div class="starter-option-grid">${attached.length ? attached.map(renderOptionCard).join("") : `<p class="starter-plan__empty">No options saved for this item yet.</p>`}</div>
-        <details class="starter-module__option-add"><summary>＋ Add an option for this item</summary><form data-arrival-form="workspace-option-add" data-module-id="${escapeHtml(section.sectionId)}" data-parent-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${optionResearchFields()}${renderStarterCertaintyToggle(true)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Save as option</button></form></details>
+        <div class="starter-record-options-dialog__body"><div class="starter-option-grid">${attached.length ? attached.map(renderOptionCard).join("") : `<p class="starter-plan__empty">No options saved for this item yet.</p>`}</div>
+        <details class="starter-module__option-add"><summary>＋ Add an option for this item</summary><form data-arrival-form="workspace-option-add" data-module-id="${escapeHtml(section.sectionId)}" data-parent-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${optionResearchFields()}${renderStarterCertaintyToggle(true)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Save as option</button></form></details></div>
       </dialog>`;
     };
     const renderRecord = (item: import("./arrival-presentation.js").StarterPlanItem, index: number): string => {
@@ -2141,8 +2141,8 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </details>`;
   }).join("");
   const customSections = starter.sections.filter((section) => section.custom);
-  const customWorkspaceMarkup = `<dialog class="custom-workspace-dialog" data-custom-workspace-dialog aria-labelledby="custom_workspace_title">
-    <button class="custom-workspace-dialog__close" type="button" data-action="close-custom-workspace" aria-label="Close custom workspace">×</button>
+  const customWorkspaceMarkup = `<dialog class="custom-workspace-dialog finite-edit-dialog" data-custom-workspace-dialog aria-labelledby="custom_workspace_title">
+    <button class="custom-workspace-dialog__close finite-edit-dialog__close" type="button" data-action="close-custom-workspace" aria-label="Close custom workspace">×</button>
     <header><p class="eyebrow">Custom mode</p><h3 id="custom_workspace_title">Extend this workspace</h3><p>The standard workspace already covers dates, money, people, tasks, requirements, options and evidence. Add a specialist section when this plan needs its own fields or tracker.</p></header>
     ${customSections.length ? `<section class="custom-workspace-dialog__current" aria-labelledby="custom_workspace_current"><h4 id="custom_workspace_current">Custom sections</h4>${customSections.map((section) => `<article><div><strong>${escapeHtml(section.label)}</strong><small>${escapeHtml(section.fields.map((entry) => entry.label).join(" · "))}</small></div><button class="text-button" type="button" data-action="open-custom-module" data-module-id="${escapeHtml(section.sectionId)}">Open</button></article>`).join("")}</section>` : ""}
     <div class="custom-workspace-dialog__paths">

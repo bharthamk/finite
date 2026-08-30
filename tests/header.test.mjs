@@ -381,7 +381,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /data-overview-dialog="dates"/);
   assert.match(source, /data-overview-dialog="budget"/);
   assert.match(source, /data-overview-dialog="split"/);
-  const dateDialog = source.match(/<dialog class="starter-overview-dialog starter-overview-dialog--compact" data-overview-dialog="dates"[^]*?<\/dialog>/)?.[0] ?? "";
+  const dateDialog = source.match(/<dialog class="starter-overview-dialog starter-overview-dialog--compact finite-edit-dialog" data-overview-dialog="dates"[^]*?<\/dialog>/)?.[0] ?? "";
   assert.match(dateDialog, /<h3 id="overview_dates_title">Dates<\/h3>/);
   assert.match(dateDialog, /name="datesProvisional" type="checkbox"/);
   assert.doesNotMatch(dateDialog, /name="totalBudget"|name="currency"|Budget split/);
@@ -399,9 +399,18 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(styles, /\.starter-report-strip \{ display:grid; grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-report-card \{[^}]*min-height:132px/);
   assert.match(styles, /\.starter-overview-dialog \{/);
+  assert.match(source, /starter-overview-dialog starter-overview-dialog--compact finite-edit-dialog/);
+  assert.match(source, /starter-record-options-dialog finite-edit-dialog/);
+  assert.match(source, /custom-workspace-dialog finite-edit-dialog/);
+  assert.match(source, /starter-overview-dialog__body/);
+  assert.match(source, /starter-record-options-dialog__body/);
+  assert.match(source, /class="starter-overview__field"><span>How money fits this plan/);
+  assert.match(styles, /\.finite-edit-dialog>header \{/);
+  assert.match(styles, /\.finite-edit-dialog \.finite-edit-dialog__close \{/);
+  assert.match(styles, /\.starter-overview-dialog__actions \.button--secondary \{/);
   assert.match(styles, /\.starter-report-card\.is-provisional \.starter-report-card__value/);
   assert.match(styles, /\.starter-record\.is-provisional :where\(h4,dd\)/);
-  assert.doesNotMatch(source, /starter-overview__body/);
+  assert.doesNotMatch(source, /starter-overview__settings/);
   assert.doesNotMatch(styles, /\.starter-overview__settings \{ display:contents; \}/);
   assert.match(source, /return `<details class="starter-module starter-module--\$\{section\.variant\}\$\{section\.custom/);
   assert.doesNotMatch(source, /return `<section class="starter-module/);
