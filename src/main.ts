@@ -8,7 +8,7 @@ import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRe
 import { HttpAcceptedTruthRepository, MemoryAcceptedTruthRepository } from "./accepted-truth.js";
 import { HttpConstructionPacketRepository, MemoryConstructionPacketRepository } from "./construction-packet.js";
 import { HttpArrivalRepository, MemoryArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
-import { createCodexHandoff } from "./codex-handoff.js";
+import { createCodexHandoff, type DemoDepth } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
 import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
 import { isWaitingArrivalStatus, selectExperienceSurface, shouldOpenEntryGateway } from "./experience-route.js";
@@ -563,6 +563,9 @@ type CodexLaunchMode = "live" | "demo";
 let codexLaunchMode: CodexLaunchMode | null = startupEntryMode === "live-demo" ? "demo" : startupEntryMode === "codex-live" || startupEntryMode === "guided" ? "live" : null;
 let guidedWalkthroughMode = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active";
 let demoPlaybackMode = codexLaunchMode === "demo" || startupEntryMode === "demo-active";
+const startupDemoDepth = startupParams.get("tour");
+let demoDepth: DemoDepth = startupDemoDepth === "basics" || startupDemoDepth === "complete" ? startupDemoDepth : "standard";
+let demoDepthPickerOpen = false;
 let guidedWalkthroughAutoOpened = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active";
 let followCodexEnabled = guidedWalkthroughMode || scopedStorage.getItem("finite-plan.follow-codex") === "true";
 if (guidedWalkthroughMode) scopedStorage.setItem("finite-plan.follow-codex", "true");
@@ -1199,6 +1202,7 @@ const currentCodexHandoff = () => createCodexHandoff({
   agenticName: agenticName(),
   guidedWalkthrough: guidedWalkthroughMode,
   demoPlayback: demoPlaybackMode,
+  demoDepth,
   order: currentArrival(),
   entryIntent: currentArrival()
     ? "resume_handoff"
@@ -1428,6 +1432,7 @@ const startNewPlan = async (): Promise<void> => {
   codexLaunchMode = null;
   guidedWalkthroughMode = false;
   demoPlaybackMode = false;
+  demoDepthPickerOpen = false;
   demoNextRequired = false;
   demoNextAdvanced = false;
   demoPaused = false;
@@ -2198,8 +2203,10 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
   </details>`;
 };
 
-const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = false }: { prefill?: string; codexMode?: CodexLaunchMode | null; continueDemo?: boolean } = {}): Promise<void> => {
+const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = false, selectedDemoDepth }: { prefill?: string; codexMode?: CodexLaunchMode | null; continueDemo?: boolean; selectedDemoDepth?: DemoDepth } = {}): Promise<void> => {
   const preservingDemo = continueDemo && demoPlaybackMode;
+  if (selectedDemoDepth) demoDepth = selectedDemoDepth;
+  demoDepthPickerOpen = false;
   entryGatewayOpen = false;
   entryPrefill = prefill;
   codexLaunchMode = codexMode;
@@ -2221,6 +2228,8 @@ const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = f
   target.searchParams.delete("kitchen");
   target.searchParams.delete("lab");
   target.searchParams.set("start", preservingDemo ? "demo-active" : codexMode === "demo" ? "live-demo" : codexMode === "live" ? "codex-live" : prefill ? "example" : "fresh");
+  if (codexMode === "demo" || preservingDemo) target.searchParams.set("tour", demoDepth);
+  else target.searchParams.delete("tour");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
   if (codexMode) { root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']")?.focus(); return; }
@@ -2230,12 +2239,17 @@ const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = f
 const renderCodexLaunch = (): void => {
   const handoff = currentCodexHandoff();
   const isDemo = codexLaunchMode === "demo";
+  const demoChoice = demoDepth === "basics"
+    ? { label: "Just the basics", detail: "Two chapters · about 3 minutes" }
+    : demoDepth === "complete"
+      ? { label: "All the bells & whistles", detail: "Six chapters · about 10 minutes" }
+      : { label: "Standard tour", detail: "Four chapters · about 6 minutes" };
   surfaceRoot.dataset.profile = "codex-launch";
   surfaceRoot.setAttribute("aria-busy", "false");
   surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
     <section class="entry-card codex-launch" aria-labelledby="codex_launch_title">
       <header class="entry-card__top">${renderBrand()}<button type="button" class="entry-return" data-action="back-from-codex-launch">Back</button></header>
-      <div class="codex-launch__status"><span aria-hidden="true"><i></i><i></i><i></i></span><p>${isDemo ? "Preparing the live demo" : `Preparing ${escapeHtml(agenticName())} live`}</p></div>
+      <div class="codex-launch__status"><span aria-hidden="true"><i></i><i></i><i></i></span><p>${isDemo ? `Preparing ${escapeHtml(demoChoice.label)} · ${escapeHtml(demoChoice.detail)}` : `Preparing ${escapeHtml(agenticName())} live`}</p></div>
       <div class="codex-launch__copy">
         <p class="eyebrow">One quick handoff</p>
         <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? "Loading your live demo…" : `Loading ${escapeHtml(agenticName())} beside you…`}</h1>
@@ -2271,9 +2285,11 @@ const renderCodexLaunch = (): void => {
     demoPlaybackMode = false;
     demoPaused = false;
     lastDemoGuide = null;
+    demoDepthPickerOpen = false;
     entryGatewayOpen = true;
     const target = new URL(location.href);
     target.searchParams.delete("start");
+    target.searchParams.delete("tour");
     history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
     await render();
   });
@@ -2298,16 +2314,26 @@ const renderEntryGateway = (): void => {
         <button type="button" class="entry-route entry-route--codex-live" data-entry-action="codex-live">
           <span>03 / Use ${escapeHtml(agenticName())} live</span><strong>Build with ${escapeHtml(agenticName())} beside you.</strong><p>${escapeHtml(agenticName())} runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use ${escapeHtml(agenticName())} live →</em>
         </button>
-        <button type="button" class="entry-route entry-route--live-demo" data-entry-action="live-demo">
+        <button type="button" class="entry-route entry-route--live-demo" data-entry-action="live-demo" aria-expanded="${demoDepthPickerOpen}" aria-controls="entry_demo_picker">
           <span>04 / Watch live demo</span><strong>Let ${escapeHtml(agenticName())} run Finite for you.</strong><p>Watch a real template become a working plan. Press Next to continue, or pause anywhere and ask ${escapeHtml(agenticName())} about what you see.</p><em>Watch the live demo →</em>
         </button>
       </div>
+      ${demoDepthPickerOpen ? `<section class="entry-demo-picker" id="entry_demo_picker" aria-labelledby="entry_demo_picker_title">
+        <header><div><p class="eyebrow">Choose your depth</p><h2 id="entry_demo_picker_title">How much Finite do you want to see?</h2><p>Every option uses the real product and the same editable Hobart plan. The longer tours simply keep going.</p></div><button type="button" data-action="close-demo-picker" aria-label="Close demo choices">×</button></header>
+        <div class="entry-demo-picker__options">
+          <button type="button" data-demo-depth="basics"><span>2 chapters · about 3 min</span><strong>Just the basics</strong><p>Watch a template become a tailored, editable plan.</p><em>Choose this tour →</em></button>
+          <button type="button" class="is-recommended" data-demo-depth="standard"><span>4 chapters · about 6 min</span><strong>Standard</strong><p>See the plan take shape, then adapt cleanly when rain changes the trip.</p><em>Best place to start →</em></button>
+          <button type="button" data-demo-depth="complete"><span>6 chapters · about 10 min</span><strong>All the bells &amp; whistles</strong><p>Add a custom tracker and compare ideas without pretending they are decided.</p><em>Show me everything →</em></button>
+        </div>
+      </section>` : ""}
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
     </section>
   </main>`;
   root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute({ continueDemo: demoPlaybackMode }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='codex-live']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "live" }); });
-  root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "demo" }); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", async () => { demoDepthPickerOpen = true; await render(); root.querySelector<HTMLButtonElement>("[data-demo-depth='standard']")?.focus(); });
+  root.querySelector<HTMLButtonElement>("[data-action='close-demo-picker']")?.addEventListener("click", async () => { demoDepthPickerOpen = false; await render(); root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.focus(); });
+  root.querySelectorAll<HTMLButtonElement>("[data-demo-depth]").forEach((button) => button.addEventListener("click", () => { const selected = button.dataset.demoDepth as DemoDepth; void openEntryRoute({ codexMode: "demo", selectedDemoDepth: selected }); }));
   root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void resumeCurrentWork(); });
   root.querySelectorAll<HTMLButtonElement>("[data-entry-example]").forEach((button) => button.addEventListener("click", () => {
     const example = finiteEntryExample(button.dataset.entryExample);

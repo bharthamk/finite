@@ -165,3 +165,37 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.doesNotMatch(handoff.prompt, /End at a real human decision boundary/i);
   assert.doesNotMatch(handoff.prompt, /return to the human only when their judgment/i);
 });
+
+test("basic demo stops after the editable plan appears", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    demoPlayback: true,
+    demoDepth: "basics",
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.prompt, /Run two prepared chapters/i);
+  assert.match(handoff.prompt, /Basics complete/i);
+  assert.doesNotMatch(handoff.prompt, /synthetic rainy-day change/i);
+  assert.doesNotMatch(handoff.prompt, /custom_weather_watch/i);
+});
+
+test("complete demo adds safe custom and comparison capabilities", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    demoPlayback: true,
+    demoDepth: "complete",
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.prompt, /Run six prepared chapters/i);
+  assert.match(handoff.prompt, /finite_save_workspace_module/i);
+  assert.match(handoff.prompt, /custom_weather_watch/i);
+  assert.match(handoff.prompt, /finite_save_workspace_option/i);
+  assert.match(handoff.prompt, /outside plan maths and commitments/i);
+  assert.match(handoff.prompt, /Full tour complete/i);
+});

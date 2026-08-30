@@ -139,6 +139,13 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /data-entry-example=/);
   assert.match(source, /data-entry-action="codex-live"/);
   assert.match(source, /data-entry-action="live-demo"/);
+  assert.match(source, /How much Finite do you want to see\?/);
+  assert.match(source, /data-demo-depth="basics"/);
+  assert.match(source, /data-demo-depth="standard"/);
+  assert.match(source, /data-demo-depth="complete"/);
+  assert.match(source, /Just the basics/);
+  assert.match(source, /All the bells &amp; whistles/);
+  assert.match(source, /selectedDemoDepth: selected/);
   assert.match(source, /Choose a template\./);
   assert.match(source, /Same real product in every route\./);
   assert.match(source, /codexLaunchMode = codexMode/);
@@ -155,6 +162,7 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(styles, /\.entry-route-grid/);
   assert.match(styles, /\.entry-route--codex-live/);
   assert.match(styles, /\.entry-route--live-demo/);
+  assert.match(styles, /\.entry-demo-picker__options/);
   assert.match(styles, /\.codex-launch/);
 });
 
