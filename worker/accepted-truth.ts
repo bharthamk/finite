@@ -334,6 +334,21 @@ const readHead = async (db: D1Database, scopeId: string, planId: string): Promis
   };
 };
 
+const envelopeFromHeadRow = (planId: string, row: HeadRow | null): Envelope | null => {
+  if (!row) return null;
+  return {
+    envelopeVersion: "finite-plan-accepted-truth.v1",
+    scopeId: contractScopeId,
+    planId,
+    profileId: row.profile_id,
+    profileHash: row.profile_hash,
+    revision: row.revision,
+    snapshot: JSON.parse(row.snapshot_json) as Snapshot,
+    snapshotHash: row.snapshot_hash,
+    previousSnapshotHash: row.previous_snapshot_hash,
+  };
+};
+
 const loadReceiptReplay = async (db: D1Database, scopeId: string, planId: string, idempotencyKey: string): Promise<{ requestHash: string; response: JsonRecord } | null> => {
   const row = await db.prepare("SELECT request_hash, response_json FROM receipts WHERE scope_id = ? AND plan_id = ? AND idempotency_key = ?")
     .bind(scopeId, planId, idempotencyKey).first<{ request_hash: string; response_json: string }>();
@@ -370,13 +385,19 @@ const validatePlanActivationGate = async (db: D1Database, scopeId: string, gate:
     || (expected.sourceArrival !== undefined && JSON.stringify(expected.sourceArrival) !== JSON.stringify(source))) {
     return errorResponse(422, "PLAN_ACTIVATION_GATE_INVALID", "Plan activation requires the exact reviewed arrival and draft binding.");
   }
-  const head = await readHead(db, scopeId, expected.planId);
-  if (!head || head.profileHash !== expected.profileHash || head.revision !== expected.revision) return errorResponse(409, "PLAN_ACTIVATION_BASE_STALE", "The accepted source plan changed before activation.", { currentRevision: head?.revision ?? null, currentProfileHash: head?.profileHash ?? null });
-  const arrival = await db.prepare("SELECT order_id, version, status, packet_checksum FROM arrival_orders WHERE scope_id = ? AND order_id = ?")
-    .bind(scopeId, source.orderId).first<{ order_id: string; version: number; status: string; packet_checksum: string }>();
+  type GateHeadRow = Pick<HeadRow, "profile_hash" | "revision">;
+  type GateArrivalRow = { order_id: string; version: number; status: string; packet_checksum: string };
+  type GateConstructionRow = { packet_id: string; packet_json: string; base_plan_id: string; base_profile_hash: string; base_revision: number; kind: string; source_order_id: string | null; source_order_version: number | null; source_order_checksum: string | null; expires_at: string; cleared_at: string | null; disposition: string };
+  const [headResult, arrivalResult, constructionResult] = await db.batch<GateHeadRow | GateArrivalRow | GateConstructionRow>([
+    db.prepare("SELECT profile_hash, revision FROM plan_heads WHERE scope_id = ? AND plan_id = ?").bind(scopeId, expected.planId),
+    db.prepare("SELECT order_id, version, status, packet_checksum FROM arrival_orders WHERE scope_id = ? AND order_id = ?").bind(scopeId, source.orderId),
+    db.prepare("SELECT packet_id, packet_json, base_plan_id, base_profile_hash, base_revision, kind, source_order_id, source_order_version, source_order_checksum, expires_at, cleared_at, disposition FROM construction_packets WHERE scope_id = ? AND packet_id = ?").bind(scopeId, gate.constructionPacketId),
+  ]);
+  const head = headResult?.results?.[0] as GateHeadRow | undefined;
+  if (!head || head.profile_hash !== expected.profileHash || head.revision !== expected.revision) return errorResponse(409, "PLAN_ACTIVATION_BASE_STALE", "The accepted source plan changed before activation.", { currentRevision: head?.revision ?? null, currentProfileHash: head?.profile_hash ?? null });
+  const arrival = arrivalResult?.results?.[0] as GateArrivalRow | undefined;
   if (!arrival || arrival.version !== source.orderVersion || arrival.packet_checksum !== source.orderChecksum || !(arrival.status === "interpretation_confirmed" || arrival.status === "proposed_plan_ready")) return errorResponse(409, "PLAN_ACTIVATION_ARRIVAL_STALE", "The starting request changed before activation.", { currentOrderVersion: arrival?.version ?? null, currentOrderChecksum: arrival?.packet_checksum ?? null, currentOrderStatus: arrival?.status ?? null });
-  const construction = await db.prepare("SELECT packet_id, packet_json, base_plan_id, base_profile_hash, base_revision, kind, source_order_id, source_order_version, source_order_checksum, expires_at, cleared_at, disposition FROM construction_packets WHERE scope_id = ? AND packet_id = ?")
-    .bind(scopeId, gate.constructionPacketId).first<{ packet_id: string; packet_json: string; base_plan_id: string; base_profile_hash: string; base_revision: number; kind: string; source_order_id: string | null; source_order_version: number | null; source_order_checksum: string | null; expires_at: string; cleared_at: string | null; disposition: string }>();
+  const construction = constructionResult?.results?.[0] as GateConstructionRow | undefined;
   let payload: JsonRecord = {};
   try { payload = asRecord(asRecord(construction ? JSON.parse(construction.packet_json) : null).payload); } catch { /* invalid stored packet fails closed below */ }
   const current = construction
@@ -407,6 +428,7 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
   issues.push(...await catalogIssues(catalogEntry, envelope, activationReceipt));
   if (envelope.previousSnapshotHash !== null || envelope.revision !== 1) issues.push("initial accepted truth must begin at revision one without a predecessor");
   let challenge: ChallengeRow | null = null;
+  let guardedExistingTarget: Envelope | null | undefined;
   if (activationReceipt) {
     if (!await activationReceiptValid(activationReceipt)) issues.push("invalid activation receipt checksum");
     if (activationReceipt.toPlanId !== envelope.planId) issues.push("activation target does not match envelope plan");
@@ -414,20 +436,43 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
       ? await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId, activationGate })
       : await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId });
     if (activationRequestHash !== expectedActivationHash) issues.push("activation request hash mismatch");
-    const replay = await loadActivationReplay(db, scopeId, activationReceipt.idempotencyKey);
+    let replay: { requestHash: string; receipt: ActivationReceipt } | null = null;
+    let guardedConsumed = false;
+    if (hasActivationGate) {
+      const guardedReads = await db.batch([
+        db.prepare("SELECT request_hash, receipt_json FROM activation_receipts WHERE scope_id = ? AND idempotency_key = ?").bind(scopeId, activationReceipt.idempotencyKey),
+        db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, authorityChallengeId ?? ""),
+        db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, authorityChallengeId ?? ""),
+        db.prepare(`
+          SELECT h.profile_id, h.profile_hash, h.revision, h.snapshot_hash,
+                 r.snapshot_json, r.previous_snapshot_hash
+            FROM plan_heads h
+            JOIN plan_revisions r
+              ON r.scope_id = h.scope_id AND r.plan_id = h.plan_id AND r.revision = h.revision
+           WHERE h.scope_id = ? AND h.plan_id = ?
+        `).bind(scopeId, activationReceipt.toPlanId),
+      ]);
+      const replayRow = guardedReads[0]?.results?.[0] as { request_hash: string; receipt_json: string } | undefined;
+      replay = replayRow ? { requestHash: replayRow.request_hash, receipt: JSON.parse(replayRow.receipt_json) as ActivationReceipt } : null;
+      challenge = (guardedReads[1]?.results?.[0] as ChallengeRow | undefined) ?? null;
+      guardedConsumed = Boolean(guardedReads[2]?.results?.[0]);
+      guardedExistingTarget = envelopeFromHeadRow(activationReceipt.toPlanId, (guardedReads[3]?.results?.[0] as HeadRow | undefined) ?? null);
+    } else {
+      replay = await loadActivationReplay(db, scopeId, activationReceipt.idempotencyKey);
+    }
     if (replay) {
       if (replay.requestHash !== activationRequestHash) return errorResponse(409, "IDEMPOTENCY_KEY_REUSED", "Activation idempotency key was reused with different content.");
-      const current = await readHead(db, scopeId, replay.receipt.toPlanId);
+      const current = hasActivationGate ? guardedExistingTarget : await readHead(db, scopeId, replay.receipt.toPlanId);
       if (!current) return errorResponse(500, "ACTIVATION_REPLAY_HEAD_MISSING", "Activation receipt exists without its accepted head.");
       return response(200, { ok: true, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, requestHash: activationRequestHash, replay: true, ...(hasActivationGate ? { constructionPacketCleared: true } : {}) });
     }
     if (!authorityChallengeId) issues.push("live human authority challenge required for plan activation");
     else {
-      challenge = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
+      if (!hasActivationGate) challenge = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
         .bind(scopeId, authorityChallengeId).first<ChallengeRow>();
       if (!challenge) issues.push("plan activation authority challenge not found");
       else {
-        const consumed = await db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, challenge.challenge_id).first();
+        const consumed = hasActivationGate ? guardedConsumed : Boolean(await db.prepare("SELECT challenge_id FROM challenge_consumptions WHERE scope_id = ? AND challenge_id = ?").bind(scopeId, challenge.challenge_id).first());
         if (consumed) issues.push("plan activation authority challenge already consumed");
         if (Date.parse(challenge.expires_at) <= Date.now()) issues.push("plan activation authority challenge expired");
         const expectedCommandHash = await sha256({ targetType: "plan_activation", targetId: activationReceipt.draftId, planId: activationReceipt.fromPlanId, profileHash: challenge.profile_hash, revision: activationReceipt.baseRevision, contentHash: activationReceipt.contentHash, authorityId: activationReceipt.confirmationId });
@@ -441,7 +486,7 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
   } else if (activationRequestHash !== null) issues.push("activation request hash present without receipt");
   if (issues.length) return errorResponse(422, "ACCEPTED_TRUTH_INTEGRITY_FAILED", "Initial accepted truth failed validation.", { issues });
 
-  const existing = await readHead(db, scopeId, envelope.planId);
+  const existing = hasActivationGate ? guardedExistingTarget : await readHead(db, scopeId, envelope.planId);
   if (existing) {
     if (hasActivationGate) return errorResponse(409, "PLAN_ACTIVATION_TARGET_CONFLICT", "The target plan already exists without this activation receipt.", { currentRevision: existing.revision, currentProfileHash: existing.profileHash });
     if (existing.profileHash !== envelope.profileHash) return errorResponse(409, "ACCEPTED_PROFILE_CONFLICT", "Plan id is already bound to another profile hash.", { currentRevision: existing.revision, currentProfileHash: existing.profileHash });
@@ -470,6 +515,14 @@ const initialize = async (db: D1Database, scopeId: string, body: JsonRecord): Pr
     await db.batch(statements);
     return response(201, result);
   } catch {
+    if (hasActivationGate && activationReceipt && activationRequestHash) {
+      const replay = await loadActivationReplay(db, scopeId, activationReceipt.idempotencyKey);
+      if (replay?.requestHash === activationRequestHash) {
+        const current = await readHead(db, scopeId, activationReceipt.toPlanId);
+        if (current) return response(200, { ...result, code: "ACCEPTED_TRUTH_CURRENT", envelope: current, receipt: replay.receipt, replay: true });
+      }
+      return errorResponse(409, "ACCEPTED_TRUTH_INITIALIZATION_CONFLICT", "Another operator initialized this plan concurrently.");
+    }
     const concurrent = await readHead(db, scopeId, envelope.planId);
     if (concurrent?.profileHash === envelope.profileHash) return response(200, { ...result, code: "ACCEPTED_TRUTH_CURRENT", envelope: concurrent, replay: true });
     return errorResponse(409, "ACCEPTED_TRUTH_INITIALIZATION_CONFLICT", "Another operator initialized this plan concurrently.");
@@ -651,17 +704,38 @@ const createAuthorityChallenge = async (db: D1Database, scopeId: string, body: J
 };
 
 const createPlanActivationChallenge = async (db: D1Database, scopeId: string, body: JsonRecord): Promise<Response> => {
+  const planId = String(body.planId ?? "");
+  const profileHash = String(body.profileHash ?? "");
+  const revision = Number(body.revision);
+  const targetId = String(body.targetId ?? "");
+  const contentHash = String(body.contentHash ?? "");
+  const authorityId = String(body.authorityId ?? "");
   if (body.targetType !== "plan_activation") return errorResponse(422, "PLAN_ACTIVATION_GATE_INVALID", "Only an exact plan-activation challenge can use this route.");
+  if (!planId || !profileHash || !Number.isInteger(revision) || revision < 1 || !targetId || !contentHash || !authorityId) return errorResponse(422, "AUTHORITY_CHALLENGE_INPUT_INVALID", "Human authority challenge input is invalid.");
   const gate = asRecord(body.gate);
   const gateResult = await validatePlanActivationGate(db, scopeId, gate, {
-    planId: String(body.planId ?? ""),
-    profileHash: String(body.profileHash ?? ""),
-    revision: Number(body.revision),
-    targetId: String(body.targetId ?? ""),
-    contentHash: String(body.contentHash ?? ""),
+    planId,
+    profileHash,
+    revision,
+    targetId,
+    contentHash,
   });
   if (gateResult instanceof Response) return gateResult;
-  return createAuthorityChallenge(db, scopeId, body);
+  const commandHash = await sha256({ targetType: "plan_activation", targetId, planId, profileHash, revision, contentHash, authorityId });
+  const challengeId = `authority_${commandHash.slice(0, 16)}`;
+  const requestedTtlSeconds = Number(body.ttlSeconds ?? 300);
+  if (!Number.isFinite(requestedTtlSeconds)) return errorResponse(422, "AUTHORITY_CHALLENGE_TTL_INVALID", "Human authority challenge TTL is invalid.");
+  const ttlSeconds = Math.min(600, Math.max(30, requestedTtlSeconds));
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  const [inserted] = await db.batch([db.prepare("INSERT OR IGNORE INTO authority_challenges (scope_id, challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(scopeId, challengeId, planId, profileHash, revision, "plan_activation", targetId, contentHash, authorityId, commandHash, createdAt, expiresAt)]);
+  if ((inserted?.meta?.changes ?? 0) === 1) return response(201, { ok: true, code: "AUTHORITY_CHALLENGE_CREATED", challenge: { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, planId, profileHash, revision, targetType: "plan_activation", targetId, contentHash, authorityId, commandHash, createdAt, expiresAt } });
+  const existing = await db.prepare("SELECT challenge_id, plan_id, profile_hash, revision, target_type, target_id, content_hash, authority_id, command_hash, created_at, expires_at FROM authority_challenges WHERE scope_id = ? AND challenge_id = ?")
+    .bind(scopeId, challengeId).first<ChallengeRow>();
+  if (!existing) return errorResponse(409, "AUTHORITY_CHALLENGE_CONFLICT", "The exact human challenge could not be persisted.");
+  if (Date.parse(existing.expires_at) <= Date.now()) return errorResponse(410, "AUTHORITY_CHALLENGE_EXPIRED", "The prior exact human challenge expired; create fresh human authority.");
+  return response(200, { ok: true, code: "AUTHORITY_CHALLENGE_CURRENT", challenge: { challengeVersion: "finite-plan-authority-challenge.v1", challengeId, planId, profileHash, revision, targetType: "plan_activation", targetId, contentHash, authorityId, commandHash, createdAt: existing.created_at, expiresAt: existing.expires_at } });
 };
 
 const loadAuthorityChallenge = async (db: D1Database, scopeId: string, challengeId: string): Promise<Response> => {

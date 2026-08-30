@@ -20,6 +20,8 @@ class ActivationGateDb {
   activation = null;
   consumption = null;
   targetEnvelope = null;
+  batchCalls = 0;
+  firstCalls = 0;
   constructor({ baseEnvelope, arrival, construction }) {
     this.baseEnvelope = baseEnvelope;
     this.arrival = arrival;
@@ -27,6 +29,7 @@ class ActivationGateDb {
   }
   prepare(query) { return new ActivationStatement(this, query); }
   async first(query, values) {
+    this.firstCalls += 1;
     if (query.includes("FROM tenant_accounts")) return { scope_id: "scope_test" };
     if (query.includes("FROM plan_heads h") && query.includes("JOIN plan_revisions")) {
       const planId = values[1];
@@ -41,28 +44,54 @@ class ActivationGateDb {
     throw new Error(`Unhandled activation-gate first query: ${query}`);
   }
   async batch(statements) {
+    this.batchCalls += 1;
+    const results = [];
     for (const statement of statements) {
-      if (statement.query.includes("INSERT INTO authority_challenges")) {
+      if (statement.query.includes("SELECT profile_hash, revision FROM plan_heads")) {
+        const envelope = statement.values[1] === this.baseEnvelope.planId ? this.baseEnvelope : this.targetEnvelope;
+        results.push({ success: true, results: envelope ? [{ profile_hash: envelope.profileHash, revision: envelope.revision }] : [] });
+      } else if (statement.query.includes("SELECT order_id, version, status, packet_checksum FROM arrival_orders")) {
+        results.push({ success: true, results: this.arrival ? [this.arrival] : [] });
+      } else if (statement.query.includes("SELECT packet_id, packet_json, base_plan_id")) {
+        results.push({ success: true, results: this.construction ? [this.construction] : [] });
+      } else if (statement.query.includes("SELECT request_hash, receipt_json FROM activation_receipts")) {
+        results.push({ success: true, results: this.activation ? [this.activation] : [] });
+      } else if (statement.query.includes("FROM authority_challenges")) {
+        results.push({ success: true, results: this.challenge ? [this.challenge] : [] });
+      } else if (statement.query.includes("FROM challenge_consumptions")) {
+        results.push({ success: true, results: this.consumption ? [this.consumption] : [] });
+      } else if (statement.query.includes("FROM plan_heads h") && statement.query.includes("JOIN plan_revisions")) {
+        const planId = statement.values[1];
+        const envelope = planId === this.baseEnvelope.planId ? this.baseEnvelope : this.targetEnvelope?.planId === planId ? this.targetEnvelope : null;
+        results.push({ success: true, results: envelope ? [{ profile_id: envelope.profileId, profile_hash: envelope.profileHash, revision: envelope.revision, snapshot_hash: envelope.snapshotHash, snapshot_json: JSON.stringify(envelope.snapshot), previous_snapshot_hash: envelope.previousSnapshotHash }] : [] });
+      } else if (statement.query.includes("INTO authority_challenges")) {
         const v = statement.values;
         this.challenge = { challenge_id: v[1], plan_id: v[2], profile_hash: v[3], revision: v[4], target_type: v[5], target_id: v[6], content_hash: v[7], authority_id: v[8], command_hash: v[9], created_at: v[10], expires_at: v[11] };
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_heads")) {
         const v = statement.values;
         this.targetEnvelope = { envelopeVersion: "finite-plan-accepted-truth.v1", scopeId: "authenticated-user-v1", planId: v[1], profileId: v[2], profileHash: v[3], revision: v[4], snapshotHash: v[5], previousSnapshotHash: null, snapshot: null };
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_revisions")) {
         this.targetEnvelope.snapshot = JSON.parse(statement.values[5]);
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO activation_receipts")) {
         const v = statement.values;
         this.activation = { request_hash: v[5], receipt_json: v[6] };
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO challenge_consumptions")) {
         this.consumption = { challenge_id: statement.values[1] };
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("UPDATE construction_packets SET cleared_at")) {
         this.construction.cleared_at = statement.values[0];
         this.construction.disposition = "discarded";
+        results.push({ success: true, meta: { changes: 1 } });
       } else if (statement.query.includes("INSERT INTO plan_catalog") || statement.query.includes("INSERT OR IGNORE INTO evidence_records")) {
         // Catalog and evidence rows are covered by integrity validation; the fake stores only activation state.
+        results.push({ success: true, meta: { changes: 1 } });
       } else throw new Error(`Unhandled activation-gate batch query: ${statement.query}`);
     }
-    return statements.map(() => ({ success: true, meta: { changes: 1 } }));
+    return results;
   }
 }
 
@@ -113,6 +142,8 @@ test("the hosted activation challenge validates current arrival and exact draft 
   assert.equal(accepted.status, 201);
   assert.equal((await accepted.json()).code, "AUTHORITY_CHALLENGE_CREATED");
   assert.equal(db.challenge.target_id, draftId);
+  assert.equal(db.batchCalls, 2, "guard validation and challenge persistence should use two D1 batches");
+  assert.equal(db.firstCalls, 1, "a fresh guarded challenge should only read tenant identity outside the batches");
 
   db.arrival.version = 8;
   const stale = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(body) }), db);
@@ -145,6 +176,8 @@ test("accepted initialization consumes the prior guarded challenge and retires t
   const headers = { origin: "https://finite.example", "content-type": "application/json", "oai-authenticated-user-id": "site-user-123" };
   const challengeResponse = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(challengeBody) }), db);
   const challenge = (await challengeResponse.json()).challenge;
+  const batchesBeforeActivation = db.batchCalls;
+  const readsBeforeActivation = db.firstCalls;
   const receiptBase = { idempotencyKey: "batched-activation-0001", fromPlanId: baseSnapshot.planId, toPlanId: targetSnapshot.planId, profileId: targetSnapshot.profileId, profileHash: targetSnapshot.profileHash, draftId, confirmationId: "plan_confirmation_batched", contentHash, baseRevision: 1, activationKind: "new_plan", sourceArrival };
   const replayChecksum = await sha256(receiptBase);
   const activationReceipt = { receiptId: `plan_activation_${replayChecksum.slice(0, 16)}`, ...receiptBase, replayChecksum };
@@ -162,6 +195,8 @@ test("accepted initialization consumes the prior guarded challenge and retires t
   assert.equal(db.consumption.challenge_id, challenge.challengeId);
   assert.equal(db.construction.disposition, "discarded");
   assert.equal(db.targetEnvelope.planId, targetSnapshot.planId);
+  assert.equal(db.batchCalls - batchesBeforeActivation, 3, "guarded activation should use one authority read batch, one gate read batch and one atomic write batch");
+  assert.equal(db.firstCalls - readsBeforeActivation, 1, "guarded activation should only read tenant identity outside the batches");
 
   const replayed = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/initialize", { method: "POST", headers, body: JSON.stringify(activationBody) }), db);
   const replayedBody = await replayed.json();
