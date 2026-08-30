@@ -3970,6 +3970,10 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
 
 type PreparedArrivalPlan = { draftId: string; progression: ArrivalProgression; opened: ArrivalResult };
 let arrivalDraftPreparation: Promise<PreparedArrivalPlan> | null = null;
+const beginClickActivationTiming = (): ClickActivationTimer => {
+  delete document.documentElement.dataset.finiteClickActivationTiming;
+  return new ClickActivationTimer();
+};
 const publishClickActivationTiming = (timer: ClickActivationTimer, outcome: "ready" | "failed", guarded: GuardedActivationTiming | null = null): void => {
   document.documentElement.dataset.finiteClickActivationTiming = JSON.stringify(timer.finish(outcome, guarded));
 };
@@ -4011,7 +4015,7 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
 
 const progressArrivalPlan = async (): Promise<void> => {
   if (busy) return;
-  const activationTimer = new ClickActivationTimer();
+  const activationTimer = beginClickActivationTiming();
   busy = true;
   planActivationTransition = true;
   announce("Starting this plan…");
@@ -4039,7 +4043,7 @@ const progressArrivalPlan = async (): Promise<void> => {
 
 const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null, validatedArrival?: ArrivalResult, existingTimer?: ClickActivationTimer): Promise<void> => {
   if (busy) return;
-  const activationTimer = existingTimer ?? new ClickActivationTimer();
+  const activationTimer = existingTimer ?? beginClickActivationTiming();
   const draft = runtime.pendingPlanDraft;
   if (!draft || draft.draftId !== draftId) return;
   busy = true;

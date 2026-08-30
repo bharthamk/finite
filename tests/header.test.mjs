@@ -542,6 +542,9 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(source, /prepareArrivalPlanDraft\(latest\)/);
   assert.match(source, /confirmPlanDraft\(prepared\.draftId, prepared\.progression, prepared\.opened, activationTimer\)/);
   assert.match(source, /finiteClickActivationTiming/);
+  assert.match(source, /delete document\.documentElement\.dataset\.finiteClickActivationTiming/);
+  assert.match(source, /const activationTimer = beginClickActivationTiming\(\)/);
+  assert.match(source, /const activationTimer = existingTimer \?\? beginClickActivationTiming\(\)/);
   for (const phase of ["transitionRender", "arrivalFreshness", "draftPreparation", "confirmationRender", "localConfirmation", "guardedActivation", "localActivation", "finalRender"]) assert.match(source, new RegExp(`"${phase}"`));
   assert.match(source, /seedArrivalContinuity\(continuity\)/);
   assert.match(source, /const postActivationSync = Promise\.resolve\(\)\.then/);
