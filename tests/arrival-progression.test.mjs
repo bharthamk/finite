@@ -177,7 +177,18 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.equal(interviewStarter.overview.categories.length, 0);
   assert.equal(interviewStarter.sections.find((entry) => entry.sectionId === "money")?.items.some((entry) => entry.label === "Venue"), false);
   assert(interviewStarter.sections.some((entry) => entry.sectionId === "custom_interview_evidence"));
+  assert.equal(interviewStarter.sections.find((entry) => entry.sectionId === "custom_interview_evidence")?.items.length, 4);
   assert.equal(interviewStarter.sections.some((entry) => /guest|venue|supplier/i.test(entry.label)), false);
+  assert.deepEqual(
+    interviewStarter.sections.find((entry) => entry.sectionId === "schedule")?.items.map((entry) => entry.fields.start),
+    ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-18"],
+  );
+  const interviewTasks = interviewStarter.sections.find((entry) => entry.sectionId === "tasks")?.items.map((entry) => entry.label) ?? [];
+  assert.equal(interviewTasks.length, 7);
+  assert(interviewTasks.some((entry) => /Research Northstar AI, the COO/i.test(entry)));
+  assert(interviewTasks.some((entry) => /evidence stories/i.test(entry)));
+  assert(interviewTasks.some((entry) => /video setup/i.test(entry)));
+  assert(interviewTasks.some((entry) => /follow-up note/i.test(entry)));
 
   const progression = arrivalProgressionFromStarter(interviewOrder, interviewStarter);
   assert.equal(progression.intake.profileId, "general");
@@ -187,6 +198,8 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.equal(progression.intake.stages.length <= 12, true);
   assert.equal(progression.intake.locks.some((entry) => /venue|supplier/.test(entry)), false);
   assert.equal(progression.intake.stages.some((entry) => /known costs/.test(entry.label)), false);
+  assert.match(progression.intake.stages[0].label, /^Research Northstar AI/);
+  assert.equal(progression.tasks.length, 7);
   assert(progression.inputs.some((entry) => entry.message.includes("Interview evidence bank")));
 
   const profiles = await compileBuiltInProfiles();

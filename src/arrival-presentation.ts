@@ -235,6 +235,19 @@ const dinnerMenuFields = [
   field("notes", "Notes", "textarea"),
 ];
 
+const interviewEvidenceFields = [
+  field("title", "Competency"),
+  field("situation", "Situation", "textarea", "What was happening, and why did it matter?"),
+  field("action", "Action", "textarea", "What did you personally do?"),
+  field("result", "Result", "textarea", "What changed, preferably with a measure?"),
+  field("proof", "Proof", "textarea", "What detail makes this credible?"),
+  field("confidence", "Readiness", "select", "", [
+    { value: "needs_evidence", label: "Needs evidence" },
+    { value: "draft", label: "Draft" },
+    { value: "rehearsed", label: "Rehearsed" },
+  ]),
+];
+
 const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
   const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
   if (family === "event" && dinner) return {
@@ -262,6 +275,15 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     money: ["How much contingency should remain untouched?"],
     requirements: ["Which approvals, access limits, or household constraints still need checking?"],
     tasks: ["Which work will you do yourself?"],
+  };
+  if (family === "general" && /\binterview\b/i.test(order.rawOutcome)) return {
+    schedule: ["What time and time zone is the interview, and which three preparation evenings are actually available?"],
+    scope: ["Do you have the role description or any guidance about what the COO wants to assess?"],
+    custom_interview_evidence: ["Which two or three achievements are strongest enough to anchor your interview stories?"],
+    resources: ["Which company, interviewer, product, or market sources should the preparation rely on?"],
+    money: [],
+    requirements: ["Which video platform, format, or interview instructions are already confirmed?"],
+    tasks: ["Which preparation work do you want to do yourself, and where should Codex help?"],
   };
   const noPaidBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`);
   return {
@@ -522,6 +544,60 @@ const seedRoughPlan = (
     return;
   }
   const sourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""}`;
+  if (family === "general" && /\binterview\b/i.test(sourceText)) {
+    const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const interviewDate = dateIso(sourceText, year);
+    const role = sourceText.match(/\b(?:for|as)\s+(?:a|an|the|fictional)\s+(.+?)\s+(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:it|on|with|for)\b|[,.;]|$)/i);
+    const employer = role?.[2]?.trim() || sourceText.match(/\b(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:it|on|with|for)\b|[,.;]|$)/i)?.[1]?.trim() || "the organisation";
+    const roleName = role?.[1]?.trim() || "Target role";
+    const interviewer = sourceText.match(/\bwith\s+(?:the\s+)?([^,.;]+?)(?=\s+(?:on|for|about)\b|[,.;]|$)/i)?.[1]?.trim() || "Interviewer to confirm";
+    const durationMinutes = Number(sourceText.match(/\b(\d{1,3})\s*[- ]minute\b/i)?.[1] ?? 0);
+    const prepWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+    const prepMatch = sourceText.match(/\b(\d+|one|two|three|four|five)\s+evenings?\b/i);
+    const prepEvenings = Math.max(1, Math.min(5, Number(prepMatch?.[1]) || prepWords[String(prepMatch?.[1] ?? "").toLowerCase()] || 3));
+
+    const retainedSchedule = (sectionItems.get("schedule") ?? []).filter((item) => item.source === "human" || item.source === "request");
+    sectionItems.set("schedule", retainedSchedule);
+    Array.from({ length: prepEvenings }, (_, index) => {
+      const date = interviewDate ? addDays(interviewDate, index - prepEvenings) : "";
+      const prep = [
+        ["Company and role research", `Research ${employer}, the role, the market and the COO; record the strongest role-relevant signals.`],
+        ["Evidence stories and likely questions", "Map the role to concise examples, draft likely answers and identify evidence gaps."],
+        ["Rehearsal and technology check", "Rehearse aloud, tighten the questions to ask and test the full video setup."],
+      ][Math.min(index, 2)]!;
+      seed("schedule", `interview_prep_${index + 1}`, `Preparation evening ${index + 1} · ${prep[0]}`, { title: `Preparation evening ${index + 1} · ${prep[0]}`, kind: "activity", start: date, notes: `${prep[1]} Rough allocation across the available evenings; move or combine it freely.` });
+    });
+    addItem("schedule", {
+      itemId: "request_interview",
+      label: `Interview with ${interviewer}`,
+      fields: { title: `Interview with ${interviewer}`, kind: "event", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}video interview for ${roleName} at ${employer}. Time and platform remain open unless added.` },
+      source: "request",
+    });
+    seed("schedule", "interview_follow_up", "Send follow-up note", { title: "Send follow-up note", kind: "milestone", start: interviewDate, notes: "Draft and send a concise thank-you while the conversation is fresh." });
+
+    addItem("scope", { itemId: "request_target_role", label: `${roleName} at ${employer}`, fields: { title: `${roleName} at ${employer}`, status: "in_progress", notes: "Target role and organisation from the starting brief." }, source: "request" });
+    addItem("scope", { itemId: "request_interview_format", label: "Interview format", fields: { title: "Interview format", status: "in_progress", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}video interview with ${interviewer}.` }, source: "request" });
+    seed("resources", "company_sources", `${employer} research sources`, { title: `${employer} research sources`, provider: employer, status: "open", start: interviewDate ? addDays(interviewDate, -prepEvenings) : "", notes: "Company site, product material, leadership profile, credible market context and the supplied role description." });
+    seed("resources", "video_setup", "Video interview setup", { title: "Video interview setup", provider: "Platform to confirm", status: "open", start: interviewDate ? addDays(interviewDate, -1) : "", notes: "Computer, camera, microphone, connection, lighting, quiet room, joining link and backup contact." });
+    addItem("requirements", { itemId: "request_interview_commitment", label: "Interview date and format", fields: { title: "Interview date and format", status: "ready", due: interviewDate, notes: `${interviewDate || "Date supplied"}${durationMinutes ? ` · ${durationMinutes} minutes` : ""} · video · ${interviewer}. Confirm the exact time, time zone and platform.` }, source: "request" });
+
+    [
+      ["research", `Research ${employer}, the COO, product and market context`, interviewDate ? addDays(interviewDate, -prepEvenings) : "", "Capture only the signals most likely to affect this role and conversation."],
+      ["role_map", "Map the role requirements to your evidence", interviewDate ? addDays(interviewDate, -Math.max(2, prepEvenings - 1)) : "", "Turn the role description into a short competency and proof checklist."],
+      ["stories", "Draft and tighten four to five evidence stories", interviewDate ? addDays(interviewDate, -2) : "", "Use situation, action, result and proof; keep each story adaptable to several questions."],
+      ["likely_questions", "Rehearse likely questions and concise answers", interviewDate ? addDays(interviewDate, -1) : "", "Practise aloud and improve weak or overlong answers."],
+      ["questions_to_ask", `Prepare useful questions for ${interviewer}`, interviewDate ? addDays(interviewDate, -1) : "", "Prioritise questions about outcomes, operating constraints, team interfaces and success measures."],
+      ["technology", "Test the video setup and backup path", interviewDate ? addDays(interviewDate, -1) : "", "Run the real device, browser, audio, camera, link, room and fallback contact."],
+      ["follow_up", "Send a tailored follow-up note", interviewDate, "Thank the interviewer, reference one useful discussion point and confirm continued interest."],
+    ].forEach(([id, title, due, notes]) => seed("tasks", String(id), String(title), { title: String(title), due: String(due), done: false, notes: String(notes) }));
+
+    const evidenceAlreadySupplied = order.inputs.some((input) => {
+      const operation = safePayloadText(input.payload, "workspaceOperation");
+      return safePayloadText(input.payload, "moduleId") === "custom_interview_evidence" && ["add", "record_add"].includes(operation);
+    });
+    if (!evidenceAlreadySupplied) ["Strategic judgement", "Cross-functional delivery", "Operating through ambiguity", "Executive communication"].forEach((competency, index) => seed("custom_interview_evidence", `evidence_${index + 1}`, competency, { title: competency, situation: "", action: "", result: "", proof: "", confidence: "needs_evidence" }));
+    return;
+  }
   if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
     const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dinnerDate = dateIso(sourceText, year);
@@ -642,6 +718,19 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       variant: "cards",
       fields: dinnerMenuFields.map((entry) => ({ ...entry })),
       keywords: ["menu", "dish", "course", "vegetarian", "allergy", "nut", "food", "prep"],
+      custom: true,
+      customSource: "working",
+    });
+  }
+  if (family === "general" && /\binterview\b/i.test(order.rawOutcome)) {
+    definitions.splice(2, 0, {
+      sectionId: "custom_interview_evidence",
+      label: "Interview evidence bank",
+      description: "Connect the role’s likely competencies to concise examples, actions, results and proof.",
+      emptyLabel: "No interview stories added yet.",
+      variant: "cards",
+      fields: interviewEvidenceFields.map((entry) => ({ ...entry })),
+      keywords: ["interview", "competency", "story", "stories", "achievement", "evidence", "result", "proof"],
       custom: true,
       customSource: "working",
     });

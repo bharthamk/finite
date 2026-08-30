@@ -4035,19 +4035,6 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     return;
   }
 
-  let arrivalClosed = true;
-  if (sourceArrival) {
-    const completion = await arrivalRepository.acceptPlan({
-      orderId: sourceArrival.orderId,
-      expectedVersion: sourceArrival.orderVersion,
-      expectedChecksum: sourceArrival.orderChecksum,
-      planId: runtime.kernel.profile.planId,
-      profileHash: runtime.kernel.profile.profileHash,
-      planRevision: runtime.kernel.revision,
-    });
-    arrivalClosed = completion.ok;
-  }
-  arrivalResult = await arrivalRepository.open();
   persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   planInputs = [];
@@ -4055,8 +4042,27 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   planAttachments = [];
   planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
   const activatedPlanId = runtime.kernel.profile.planId;
+  const activatedProfileHash = runtime.kernel.profile.profileHash;
+  const activatedRevision = runtime.kernel.revision;
   const continuityWork = continuity ? seedArrivalContinuity(continuity).catch(() => false) : Promise.resolve(true);
-  await adapter?.refreshContextualTools();
+  const postActivationSync = Promise.resolve().then(async () => {
+    let arrivalClosed = true;
+    if (sourceArrival) {
+      const completion = await arrivalRepository.acceptPlan({
+        orderId: sourceArrival.orderId,
+        expectedVersion: sourceArrival.orderVersion,
+        expectedChecksum: sourceArrival.orderChecksum,
+        planId: activatedPlanId,
+        profileHash: activatedProfileHash,
+        planRevision: activatedRevision,
+      });
+      arrivalClosed = completion.ok;
+    }
+    const latestArrival = await arrivalRepository.open();
+    if (runtime.kernel.profile.planId === activatedPlanId && latestArrival.ok) arrivalResult = latestArrival;
+    await adapter?.refreshContextualTools();
+    return arrivalClosed;
+  }).catch(() => false);
   forceArrivalSurface = false;
   newPlanDraftMode = false;
   const target = new URL(location.href);
@@ -4067,16 +4073,15 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
   planActivationError = "";
-  if (arrivalClosed) {
-    message = "";
-    messageScope = currentMessageScope();
-    announcer.textContent = "Plan approved. Managing is ready.";
-  } else if (!arrivalClosed) announce("Your plan is active. Finite is still syncing the completed starting request.");
+  message = "";
+  messageScope = currentMessageScope();
+  announcer.textContent = "Plan approved. Managing is ready.";
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
-  void continuityWork.then(async (continuitySaved) => {
+  void Promise.all([continuityWork, postActivationSync]).then(async ([continuitySaved, arrivalClosed]) => {
     if (runtime.kernel.profile.planId !== activatedPlanId) return;
     if (!continuitySaved) announce("Your plan is active. Some editable planning notes need to be retried from the saved arrival history.");
+    else if (!arrivalClosed) announce("Your plan is active. Finite is still syncing the completed starting request.");
     await render();
   });
 };

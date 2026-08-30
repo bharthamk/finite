@@ -535,7 +535,8 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(source, /runtime\.compileIntakeToDraft\(/);
   assert.match(source, /confirmPlanDraft\(draftId, progression\)/);
   assert.match(source, /seedArrivalContinuity\(continuity\)/);
-  assert.match(source, /void continuityWork\.then/);
+  assert.match(source, /const postActivationSync = Promise\.resolve\(\)\.then/);
+  assert.match(source, /void Promise\.all\(\[continuityWork, postActivationSync\]\)\.then/);
   assert.doesNotMatch(source, /continuitySaved = await seedArrivalContinuity/);
 });
 
