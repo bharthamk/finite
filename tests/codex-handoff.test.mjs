@@ -149,6 +149,9 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /ask Codex a question or tell it to keep going/i);
   assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
+  assert.match(handoff.prompt, /updates target with pauseForNext true/i);
+  assert.match(handoff.prompt, /Plans change in real life\. Add a new fact here and Finite can adapt the working plan without making you start again\./i);
+  assert.match(handoff.prompt, /Do not add anything yet/i);
   assert.match(handoff.prompt, /finite_save_workspace_records/i);
   assert.match(handoff.prompt, /operator-editable provisional record/i);
   assert.match(handoff.prompt, /Do not call finite_append_arrival_input/i);
