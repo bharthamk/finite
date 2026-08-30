@@ -111,7 +111,10 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /pauseForNext true/);
   assert.match(handoff.prompt, /fully specified synthetic template/i);
   assert.match(handoff.prompt, /Run four prepared chapters/i);
-  assert.match(handoff.prompt, /real blank starting screen/i);
+  assert.match(handoff.prompt, /actual first page headed 'How do you want to begin\?'/i);
+  assert.match(handoff.prompt, /four ordinary routes/i);
+  assert.match(handoff.prompt, /route labelled 'Start fresh'/i);
+  assert.match(handoff.prompt, /experience both the true first page and the ordinary first form/i);
   assert.match(handoff.prompt, /What do you want to plan\?/i);
   assert.match(handoff.prompt, /visibly type/i);
   assert.match(handoff.prompt, /character by character/i);

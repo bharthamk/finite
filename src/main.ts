@@ -584,11 +584,13 @@ const guideView = async (request: FiniteGuideViewRequest) => {
   }
   if (request.surface !== "current") {
     const openingFreshCodexRun = codexLaunchMode !== null;
+    const openingDemoAtFirstPage = openingFreshCodexRun && demoPlaybackMode && request.surface === "arrival";
     if (codexLaunchMode) {
       codexLaunchMode = null;
       guidedWalkthroughAutoOpened = true;
     }
-    forceArrivalSurface = request.surface === "arrival";
+    entryGatewayOpen = openingDemoAtFirstPage;
+    forceArrivalSurface = request.surface === "arrival" && !openingDemoAtFirstPage;
     newPlanDraftMode = openingFreshCodexRun;
     const target = new URL(location.href);
     target.searchParams.delete("kitchen");
@@ -745,7 +747,7 @@ const renderHeaderControls = (): string => {
 };
 
 const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors: string[] }> = {
-  top: { label: "the top of this page", selectors: [".codex-launch", ".arrival-compose", ".arrival-order-head", ".hero"] },
+  top: { label: "the top of this page", selectors: [".entry-card--product", ".codex-launch", ".arrival-compose", ".arrival-order-head", ".hero"] },
   starting_point: { label: "your starting point", selectors: [".codex-launch", ".arrival-order", ".arrival-order-source"] },
   status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
@@ -824,7 +826,7 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
     ? root.querySelector<HTMLElement>(`[data-workspace-module='${CSS.escape(request.sectionId)}']`)
     : null;
   const element = exactPriority ?? descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
-  const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
+  const surface = root.querySelector(".entry-card--product") ? "entry" : forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
   const guideMessage = request.message?.trim() || `Here is ${descriptor.label}. I’ll keep us on the real plan and move one step at a time.`;
   if (demoPlaybackMode) lastDemoGuide = { surface, target: request.target, targetLabel: descriptor.label, message: guideMessage };
   if (!element) {
@@ -2006,12 +2008,13 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
   </details>`;
 };
 
-const openEntryRoute = async ({ prefill = "", codexMode = null }: { prefill?: string; codexMode?: CodexLaunchMode | null } = {}): Promise<void> => {
+const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = false }: { prefill?: string; codexMode?: CodexLaunchMode | null; continueDemo?: boolean } = {}): Promise<void> => {
+  const preservingDemo = continueDemo && demoPlaybackMode;
   entryGatewayOpen = false;
   entryPrefill = prefill;
   codexLaunchMode = codexMode;
-  guidedWalkthroughMode = codexMode !== null;
-  demoPlaybackMode = codexMode === "demo";
+  guidedWalkthroughMode = preservingDemo || codexMode !== null;
+  demoPlaybackMode = preservingDemo || codexMode === "demo";
   demoNextRequired = false;
   demoNextAdvanced = false;
   demoPaused = false;
@@ -2019,7 +2022,7 @@ const openEntryRoute = async ({ prefill = "", codexMode = null }: { prefill?: st
   codexLaunchCopied = false;
   newPlanDraftMode = true;
   forceArrivalSurface = codexMode === null;
-  if (codexMode) {
+  if (codexMode || preservingDemo) {
     followCodexEnabled = true;
     scopedStorage.setItem("finite-plan.follow-codex", "true");
   }
@@ -2027,7 +2030,7 @@ const openEntryRoute = async ({ prefill = "", codexMode = null }: { prefill?: st
   target.searchParams.delete("plan");
   target.searchParams.delete("kitchen");
   target.searchParams.delete("lab");
-  target.searchParams.set("start", codexMode === "demo" ? "live-demo" : codexMode === "live" ? "codex-live" : prefill ? "example" : "fresh");
+  target.searchParams.set("start", preservingDemo ? "demo-active" : codexMode === "demo" ? "live-demo" : codexMode === "live" ? "codex-live" : prefill ? "example" : "fresh");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
   if (codexMode) { root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']")?.focus(); return; }
@@ -2111,7 +2114,7 @@ const renderEntryGateway = (): void => {
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
     </section>
   </main>`;
-  root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute(); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute({ continueDemo: demoPlaybackMode }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='codex-live']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "live" }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "demo" }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void openPlan(runtime.kernel.profile.planId); });
