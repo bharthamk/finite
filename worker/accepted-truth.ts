@@ -24,6 +24,64 @@ export interface D1Database {
   batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
+type ActivationTimingOperation = "challenge" | "initialize";
+
+interface ActivationTimingRecorder {
+  operation: ActivationTimingOperation;
+  startedAt: number;
+  d1AwaitMs: number;
+  d1Calls: number;
+}
+
+const monotonicNow = (): number => typeof performance === "undefined" ? Date.now() : performance.now();
+
+class TimedD1PreparedStatement implements D1PreparedStatement {
+  constructor(
+    private statement: D1PreparedStatement,
+    private readonly recorder: ActivationTimingRecorder,
+  ) {}
+
+  bind(...values: unknown[]): D1PreparedStatement {
+    this.statement = this.statement.bind(...values);
+    return this;
+  }
+
+  async first<T = Record<string, unknown>>(): Promise<T | null> {
+    const startedAt = monotonicNow();
+    this.recorder.d1Calls += 1;
+    try { return await this.statement.first<T>(); }
+    finally { this.recorder.d1AwaitMs += monotonicNow() - startedAt; }
+  }
+
+  async all<T = Record<string, unknown>>(): Promise<{ results: T[] }> {
+    const startedAt = monotonicNow();
+    this.recorder.d1Calls += 1;
+    try { return await this.statement.all<T>(); }
+    finally { this.recorder.d1AwaitMs += monotonicNow() - startedAt; }
+  }
+
+  unwrap(): D1PreparedStatement { return this.statement; }
+}
+
+class TimedD1Database implements D1Database {
+  constructor(
+    private readonly database: D1Database,
+    private readonly recorder: ActivationTimingRecorder,
+  ) {}
+
+  prepare(query: string): D1PreparedStatement {
+    return new TimedD1PreparedStatement(this.database.prepare(query), this.recorder);
+  }
+
+  async batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+    const startedAt = monotonicNow();
+    this.recorder.d1Calls += 1;
+    const prepared = statements.map((statement) => statement instanceof TimedD1PreparedStatement ? statement.unwrap() : statement);
+    try { return await this.database.batch<T>(prepared); }
+    finally { this.recorder.d1AwaitMs += monotonicNow() - startedAt; }
+  }
+}
+
 type JsonRecord = Record<string, unknown>;
 
 interface Snapshot extends JsonRecord {
@@ -748,7 +806,7 @@ const loadAuthorityChallenge = async (db: D1Database, scopeId: string, challenge
   return response(200, { ok: true, code: "AUTHORITY_CHALLENGE", challenge: { challengeVersion: "finite-plan-authority-challenge.v1", challengeId: row.challenge_id, planId: row.plan_id, profileHash: row.profile_hash, revision: row.revision, targetType: row.target_type, targetId: row.target_id, contentHash: row.content_hash, authorityId: row.authority_id, commandHash: row.command_hash, createdAt: row.created_at, expiresAt: row.expires_at } });
 };
 
-export const handleAcceptedTruthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
+const routeAcceptedTruthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/accepted-truth") && !url.pathname.startsWith("/api/operator-sessions") && !url.pathname.startsWith("/api/authority-challenges") && url.pathname !== "/api/plan-catalog") return null;
   if (request.method !== "GET" && !sameOriginWrite(request)) return errorResponse(403, "CROSS_ORIGIN_WRITE_REFUSED", "Finite writes must be same-origin.");
@@ -786,4 +844,31 @@ export const handleAcceptedTruthRequest = async (request: Request, db: D1Databas
     if (["JSON_CONTENT_TYPE_REQUIRED", "JSON_BODY_TOO_LARGE", "JSON_OBJECT_REQUIRED"].includes(code)) return errorResponse(400, code, "Accepted-truth request body is invalid.");
     return errorResponse(500, "ACCEPTED_TRUTH_SERVICE_FAILED", "Accepted-truth service failed safely.");
   }
+};
+
+const activationTimingOperation = (request: Request): ActivationTimingOperation | null => {
+  if (request.method !== "POST") return null;
+  const pathname = new URL(request.url).pathname;
+  if (pathname === "/api/authority-challenges/plan-activation") return "challenge";
+  if (pathname === "/api/accepted-truth/initialize") return "initialize";
+  return null;
+};
+
+const withActivationTiming = (result: Response, recorder: ActivationTimingRecorder): Response => {
+  const workerMs = Math.max(0, monotonicNow() - recorder.startedAt);
+  const d1Ms = Math.min(workerMs, Math.max(0, recorder.d1AwaitMs));
+  const runtimeMs = Math.max(0, workerMs - d1Ms);
+  const number = (value: number): string => value.toFixed(1);
+  const headers = new Headers(result.headers);
+  headers.set("server-timing", `finite_worker;dur=${number(workerMs)}, finite_d1;dur=${number(d1Ms)}, finite_runtime;dur=${number(runtimeMs)}`);
+  headers.set("x-finite-activation-timing", `finite-activation-timing.v1; operation=${recorder.operation}; d1_calls=${recorder.d1Calls}`);
+  return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
+};
+
+export const handleAcceptedTruthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
+  const operation = activationTimingOperation(request);
+  if (!operation) return routeAcceptedTruthRequest(request, db);
+  const recorder: ActivationTimingRecorder = { operation, startedAt: monotonicNow(), d1AwaitMs: 0, d1Calls: 0 };
+  const result = await routeAcceptedTruthRequest(request, new TimedD1Database(db, recorder));
+  return result ? withActivationTiming(result, recorder) : null;
 };
