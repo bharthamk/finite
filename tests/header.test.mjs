@@ -618,6 +618,9 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
   assert.match(source, /open_questions: \{ label: "the open questions", selectors: \["\.starter-module\[open\] \.starter-module__questions"\] \}/);
+  assert.match(source, /overlay\.setAttribute\("popover", "manual"\)/);
+  assert.match(source, /typeof overlay\.showPopover === "function"/);
+  assert.match(styles, /\.codex-guide-overlay \{ position:fixed; top:auto;/);
   assert.match(source, /plan_ideas: \{ label: "the ready-made plan ideas", selectors: \["\.arrival-examples"\] \}/);
   assert.match(source, /planning_window: \{ label: "the planning window", selectors: \["\.arrival-order__outcome"\] \}/);
   assert.match(source, /build_method: \{ label: "the two ways to begin", selectors: \["\.arrival-start-tabs"\] \}/);

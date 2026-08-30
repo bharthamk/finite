@@ -31,7 +31,7 @@ button { font: inherit; cursor: pointer; }
   50% { outline-color:var(--accent); box-shadow:0 0 0 15px color-mix(in srgb,var(--signal) 42%,transparent),0 0 58px 18px color-mix(in srgb,var(--accent) 45%,transparent); }
 }
 @media (prefers-reduced-motion:reduce) { [data-codex-spotlight="true"],[data-codex-priority="true"] { animation:none; } }
-.codex-guide-overlay { position:fixed; right:clamp(16px,3vw,42px); bottom:clamp(16px,3vw,42px); z-index:80; width:min(410px,calc(100vw - 32px)); border:1px solid var(--deep); padding:18px 20px; color:var(--deep); background:var(--signal); box-shadow:10px 10px 0 var(--deep); }
+.codex-guide-overlay { position:fixed; top:auto; right:clamp(16px,3vw,42px); bottom:clamp(16px,3vw,42px); left:auto; z-index:80; width:min(410px,calc(100vw - 32px)); margin:0; border:1px solid var(--deep); padding:18px 20px; color:var(--deep); background:var(--signal); box-shadow:10px 10px 0 var(--deep); }
 .codex-guide-overlay header { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; }
 .codex-guide-overlay header>span { width:10px; height:10px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 22%,transparent); }
 .codex-guide-overlay header strong { font:700 .72rem/1.2 "DM Mono",monospace; letter-spacing:.04em; text-transform:uppercase; }

@@ -799,6 +799,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   const overlay = document.createElement("aside");
   overlay.className = "codex-guide-overlay";
   overlay.dataset.codexGuideOverlay = "true";
+  overlay.setAttribute("popover", "manual");
   overlay.setAttribute("aria-live", "polite");
   const runningDemo = demoPlaybackMode;
   overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${runningDemo ? "data-demo-guide-state" : ""}>${runningDemo ? pauseForNext ? "Paused at a natural stopping point" : "Live demo · Codex is operating the real page" : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${runningDemo ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause demo</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && runningDemo ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
@@ -845,6 +846,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     announce(`Ready for ${agenticName()} to continue the live demo.`);
   });
   root.append(overlay);
+  if (typeof overlay.showPopover === "function") overlay.showPopover();
 };
 const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
   clearCodexSpotlight();
