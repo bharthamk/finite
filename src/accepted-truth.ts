@@ -41,6 +41,18 @@ export interface AuthorityChallenge {
   commandHash: string;
   createdAt: string;
   expiresAt: string;
+  activationTiming?: ActivationTiming;
+}
+
+export interface ActivationTiming {
+  measurementVersion: "finite-plan-activation-timing.v1";
+  operation: "challenge" | "initialize";
+  workerMs: number;
+  d1AwaitMs: number;
+  runtimeMs: number;
+  d1Calls: number;
+  clientRoundTripMs?: number;
+  transportEstimateMs?: number;
 }
 
 export type AuthorityTargetType = Receipt["receiptType"] | "plan_activation";
@@ -104,6 +116,7 @@ export interface AcceptedTruthCommitResult {
   receipt: Receipt | PlanActivationReceipt | null;
   requestHash: string | null;
   replay: boolean;
+  activationTiming?: ActivationTiming;
 }
 
 export class AcceptedTruthRepositoryError extends Error {
@@ -282,6 +295,18 @@ const decodeJson = async <T>(response: Response): Promise<T> => {
   return payload as T;
 };
 
+const clientMonotonicNow = (): number => typeof performance === "undefined" ? Date.now() : performance.now();
+const roundedActivationTiming = (value: number): number => Math.round(Math.max(0, value) * 10) / 10;
+const withClientActivationTiming = (timing: ActivationTiming | undefined, startedAt: number): ActivationTiming | undefined => {
+  if (!timing || timing.measurementVersion !== "finite-plan-activation-timing.v1") return undefined;
+  const clientRoundTripMs = roundedActivationTiming(clientMonotonicNow() - startedAt);
+  return {
+    ...timing,
+    clientRoundTripMs,
+    transportEstimateMs: roundedActivationTiming(clientRoundTripMs - timing.workerMs),
+  };
+};
+
 export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
   constructor(private readonly baseUrl = "/api/accepted-truth") {}
 
@@ -300,13 +325,16 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
   async initializePlanActivation(snapshot: PlanSnapshot, activationReceipt: PlanActivationReceipt, catalogEntry: PlanCatalogEntry, authorityChallengeId: string, activationGate: AtomicPlanActivationGate, context: RepositoryRequestContext = {}): Promise<AcceptedTruthCommitResult> {
     const envelope = await createAcceptedTruthEnvelope(snapshot, null);
     const activationRequestHash = await sha256({ envelope, activationReceipt, catalogEntry, authorityChallengeId, activationGate });
+    const startedAt = clientMonotonicNow();
     const response = await fetch(`${this.baseUrl}/initialize`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ envelope, activationReceipt: clone(activationReceipt), catalogEntry: clone(catalogEntry), authorityChallengeId, activationGate: clone(activationGate), activationRequestHash }),
       ...(context.signal ? { signal: context.signal } : {}),
     });
-    return decodeJson<AcceptedTruthCommitResult>(response);
+    const payload = await decodeJson<AcceptedTruthCommitResult>(response);
+    const activationTiming = withClientActivationTiming(payload.activationTiming, startedAt);
+    return { ...payload, ...(activationTiming ? { activationTiming } : {}) };
   }
 
   async listCatalog(context: RepositoryRequestContext = {}): Promise<DurablePlanCatalog> {
@@ -344,13 +372,16 @@ export class HttpAcceptedTruthRepository implements AcceptedTruthRepository {
   }
 
   async createPlanActivationChallenge(input: { planId: string; profileHash: string; revision: number; targetId: string; contentHash: string; authorityId: string; gate: AtomicPlanActivationGate }, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {
+    const startedAt = clientMonotonicNow();
     const response = await fetch(`${this.baseUrl.replace(/\/accepted-truth$/, "")}/authority-challenges/plan-activation`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ targetType: "plan_activation", ...clone(input), ttlSeconds: 300 }),
       ...(context.signal ? { signal: context.signal } : {}),
     });
-    return (await decodeJson<{ ok: true; challenge: AuthorityChallenge }>(response)).challenge;
+    const payload = await decodeJson<{ ok: true; challenge: AuthorityChallenge; activationTiming?: ActivationTiming }>(response);
+    const activationTiming = withClientActivationTiming(payload.activationTiming, startedAt);
+    return { ...payload.challenge, ...(activationTiming ? { activationTiming } : {}) };
   }
 
   async loadAuthorityChallenge(challengeId: string, context: RepositoryRequestContext = {}): Promise<AuthorityChallenge> {

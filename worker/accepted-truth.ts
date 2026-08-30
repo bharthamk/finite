@@ -854,15 +854,24 @@ const activationTimingOperation = (request: Request): ActivationTimingOperation 
   return null;
 };
 
-const withActivationTiming = (result: Response, recorder: ActivationTimingRecorder): Response => {
+const withActivationTiming = async (result: Response, recorder: ActivationTimingRecorder): Promise<Response> => {
   const workerMs = Math.max(0, monotonicNow() - recorder.startedAt);
   const d1Ms = Math.min(workerMs, Math.max(0, recorder.d1AwaitMs));
   const runtimeMs = Math.max(0, workerMs - d1Ms);
   const number = (value: number): string => value.toFixed(1);
+  const activationTiming = {
+    measurementVersion: "finite-plan-activation-timing.v1",
+    operation: recorder.operation,
+    workerMs: Number(number(workerMs)),
+    d1AwaitMs: Number(number(d1Ms)),
+    runtimeMs: Number(number(runtimeMs)),
+    d1Calls: recorder.d1Calls,
+  };
   const headers = new Headers(result.headers);
   headers.set("server-timing", `finite_worker;dur=${number(workerMs)}, finite_d1;dur=${number(d1Ms)}, finite_runtime;dur=${number(runtimeMs)}`);
   headers.set("x-finite-activation-timing", `finite-activation-timing.v1; operation=${recorder.operation}; d1_calls=${recorder.d1Calls}`);
-  return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
+  const body = JSON.parse(await result.text()) as JsonRecord;
+  return new Response(JSON.stringify({ ...body, activationTiming }), { status: result.status, statusText: result.statusText, headers });
 };
 
 export const handleAcceptedTruthRequest = async (request: Request, db: D1Database): Promise<Response | null> => {
@@ -870,5 +879,5 @@ export const handleAcceptedTruthRequest = async (request: Request, db: D1Databas
   if (!operation) return routeAcceptedTruthRequest(request, db);
   const recorder: ActivationTimingRecorder = { operation, startedAt: monotonicNow(), d1AwaitMs: 0, d1Calls: 0 };
   const result = await routeAcceptedTruthRequest(request, new TimedD1Database(db, recorder));
-  return result ? withActivationTiming(result, recorder) : null;
+  return result ? await withActivationTiming(result, recorder) : null;
 };

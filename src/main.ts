@@ -4088,6 +4088,12 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     return;
   }
 
+  if (activation.activationTiming && typeof activation.activationTiming === "object") {
+    document.documentElement.dataset.finiteActivationTiming = JSON.stringify(activation.activationTiming);
+  } else {
+    delete document.documentElement.dataset.finiteActivationTiming;
+  }
+
   persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
   planInputs = [];

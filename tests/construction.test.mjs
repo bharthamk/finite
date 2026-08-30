@@ -151,13 +151,14 @@ test("hosted arrival activation uses one guarded challenge and one accepted-trut
     createAuthorityChallenge: (...args) => { calls.genericChallenge += 1; return durable.createAuthorityChallenge(...args); },
     async createPlanActivationChallenge(input) {
       calls.guardedChallenge += 1;
-      return durable.createAuthorityChallenge({ targetType: "plan_activation", planId: input.planId, profileHash: input.profileHash, revision: input.revision, targetId: input.targetId, contentHash: input.contentHash, authorityId: input.authorityId });
+      const challenge = await durable.createAuthorityChallenge({ targetType: "plan_activation", planId: input.planId, profileHash: input.profileHash, revision: input.revision, targetId: input.targetId, contentHash: input.contentHash, authorityId: input.authorityId });
+      return { ...challenge, activationTiming: { measurementVersion: "finite-plan-activation-timing.v1", operation: "challenge", workerMs: 8.1, d1AwaitMs: 6.4, runtimeMs: 1.7, d1Calls: 3, clientRoundTripMs: 22.5, transportEstimateMs: 14.4 } };
     },
     async initializePlanActivation(snapshot, receipt, catalogEntry, challengeId, gate) {
       calls.atomicInitialize += 1;
       const result = await durable.initialize(snapshot, receipt, catalogEntry, challengeId);
       await construction.clear(gate.constructionPacketId);
-      return result;
+      return { ...result, activationTiming: { measurementVersion: "finite-plan-activation-timing.v1", operation: "initialize", workerMs: 15.2, d1AwaitMs: 12.8, runtimeMs: 2.4, d1Calls: 4, clientRoundTripMs: 31.9, transportEstimateMs: 16.7 } };
     },
   };
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage), [], () => new Date("2026-08-26T01:00:00.000Z"), accepted, construction);
@@ -188,6 +189,11 @@ test("hosted arrival activation uses one guarded challenge and one accepted-trut
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal(activated.constructionPacketCleared, true);
   assert.deepEqual(calls, { guardedChallenge: 1, atomicInitialize: 1, genericChallenge: 0 });
+  assert.deepEqual(activated.activationTiming, {
+    measurementVersion: "finite-plan-activation-sequence-timing.v1",
+    challenge: { measurementVersion: "finite-plan-activation-timing.v1", operation: "challenge", workerMs: 8.1, d1AwaitMs: 6.4, runtimeMs: 1.7, d1Calls: 3, clientRoundTripMs: 22.5, transportEstimateMs: 14.4 },
+    initialize: { measurementVersion: "finite-plan-activation-timing.v1", operation: "initialize", workerMs: 15.2, d1AwaitMs: 12.8, runtimeMs: 2.4, d1Calls: 4, clientRoundTripMs: 31.9, transportEstimateMs: 16.7 },
+  });
   assert.equal(construction.loads, loadsBeforeActivation);
   assert.equal(runtime.kernel.profile.planId, "plan_atomic_activation");
   await assert.rejects(construction.load(), (error) => error.code === "CONSTRUCTION_PACKET_CLEARED");

@@ -267,6 +267,47 @@ test("a recurring learning request becomes a useful zero-cost general plan", asy
   assert(progression.inputs.some((entry) => entry.message.includes("Practice log")));
 });
 
+test("an explicit home-office renovation overrides a generic interpretation and keeps dates, budget, scope and licensed work", () => {
+  const renovationOrder = {
+    ...structuredClone(order),
+    orderId: "arrival_home_office_canary_01",
+    version: 1,
+    status: "interpretation_confirmed",
+    rawOutcome: "I want to renovate my small home office from Monday 5 October to Friday 16 October 2026. Budget AUD 4,000. I need painting, better lighting, storage, and a standing desk. I will do painting myself on weekends, but electrical work must be done by a licensed electrician. Nothing is booked or purchased.",
+    structured: { planningMode: "codex" },
+    inputs: [],
+    interpretation: {
+      basedOnVersion: 1,
+      inferredFamily: "general",
+      summary: "A home office makeover with painting, lighting, storage and furniture work.",
+      known: {}, inferred: {}, missing: [], contradictions: [], dependencies: [], savedOperatorWork: {}, complete: true,
+      stagedAt: "2026-08-30T00:00:00.000Z",
+    },
+    checksum: "e".repeat(64),
+  };
+
+  const renovation = starterPlanForArrival(renovationOrder);
+  assert.equal(renovation.family, "renovation");
+  assert.equal(renovation.title, "Home office makeover · 5 Oct 2026");
+  assert.deepEqual([renovation.overview.start, renovation.overview.end], ["2026-10-05", "2026-10-16"]);
+  assert.equal(renovation.overview.totalBudget, "4000");
+  assert.equal(renovation.overview.moneyState, "positive");
+  assert.equal(renovation.overview.categoryPercent, 100);
+  assert.equal(renovation.sections.find((entry) => entry.sectionId === "schedule")?.items.length, 6);
+  assert.deepEqual(renovation.sections.find((entry) => entry.sectionId === "scope")?.items.map((entry) => entry.label), [
+    "Prepare and paint the room", "Improve lighting and electrical fit", "Add useful storage", "Add a standing desk",
+  ]);
+  assert(renovation.sections.find((entry) => entry.sectionId === "resources")?.items.some((entry) => entry.label === "Licensed electrician" && entry.fields.bookingStatus === "idea"));
+  assert(renovation.sections.find((entry) => entry.sectionId === "requirements")?.items.some((entry) => /licensed electrician/i.test(entry.label)));
+  assert.equal(renovation.sections.find((entry) => entry.sectionId === "tasks")?.items.length, 7);
+
+  const progression = arrivalProgressionFromStarter(renovationOrder, renovation);
+  assert.equal(progression.intake.profileId, "renovation");
+  assert.equal(progression.intake.allocation.totalBudgetMinor, 400_000);
+  assert.equal(progression.intake.stages.length, 6);
+  assert.match(progression.intake.stages[0].label, /^Measure/);
+});
+
 test("manual learning intake does not turn build or minutes into renovation money", async () => {
   const manualLearningOrder = {
     ...structuredClone(order),

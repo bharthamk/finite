@@ -1,5 +1,5 @@
 import { clone, makeId, sha256 } from "./crypto.js";
-import { AcceptedTruthRepositoryError, type AcceptedTruthRepository, type OperatorSession } from "./accepted-truth.js";
+import { AcceptedTruthRepositoryError, type AcceptedTruthRepository, type ActivationTiming, type OperatorSession } from "./accepted-truth.js";
 import { ConstructionPacketRepositoryError, type ConstructionPacketRepository } from "./construction-packet.js";
 import { buildChefMenu, type KitchenRoute } from "./chef-menu.js";
 import { FinitePlanKernel } from "./kernel.js";
@@ -1199,10 +1199,12 @@ export class FinitePlanRuntime {
       }
       : null;
     let authorityChallengeId: string | null = null;
+    let activationChallengeTiming: ActivationTiming | undefined;
     if (activationGate && this.acceptedRepository?.createPlanActivationChallenge) {
       try {
         const challenge = await this.acceptedRepository.createPlanActivationChallenge({ planId: fromPlanId, profileHash: priorKernel.profile.profileHash, revision: expectedRevision, targetId: draftId, contentHash: draft.contentHash, authorityId: confirmationId, gate: activationGate }, context);
         authorityChallengeId = challenge.challengeId;
+        activationChallengeTiming = challenge.activationTiming;
       } catch (error) {
         return { ok: false, code: error instanceof AcceptedTruthRepositoryError ? error.code : "PLAN_ACTIVATION_AUTHORITY_FAILED", message: error instanceof Error ? error.message : String(error), acceptedStateChanged: false };
       }
@@ -1249,7 +1251,23 @@ export class FinitePlanRuntime {
     } else {
       try { constructionPacketCleared = await this.clearMatchingConstructionDraft(draftId, context); } catch { constructionPacketCleared = false; }
     }
-    return { ok: true, code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED", receipt: clone(receipt), plan: this.listPlans(), constructionPacketCleared, acceptedStateChanged: true, next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another." };
+    const activationInitializeTiming = remoteInitialization.activationTiming as ActivationTiming | undefined;
+    return {
+      ok: true,
+      code: draft.amendment ? "PLAN_AMENDMENT_ACTIVATED" : "PLAN_ACTIVATED",
+      receipt: clone(receipt),
+      plan: this.listPlans(),
+      constructionPacketCleared,
+      acceptedStateChanged: true,
+      ...((activationChallengeTiming || activationInitializeTiming) ? {
+        activationTiming: {
+          measurementVersion: "finite-plan-activation-sequence-timing.v1",
+          challenge: activationChallengeTiming ?? null,
+          initialize: activationInitializeTiming ?? null,
+        },
+      } : {}),
+      next: constructionPacketCleared ? "Rediscover contextual tools and operate the newly active immutable plan version." : "The plan is active. Explicitly discard the now-stale construction packet before starting another.",
+    };
   }
 
   switchPlan(planId: string): ToolResult {

@@ -170,7 +170,7 @@ export interface StarterPlanPresentation {
 const starterFamily = (value: string | null | undefined): StarterPlanPresentation["family"] => {
   const normalized = String(value ?? "").toLowerCase();
   if (normalized.includes("travel") || normalized.includes("trip") || normalized.includes("calendar")) return "travel";
-  if (normalized.includes("renovation") || normalized.includes("makeover") || normalized.includes("remodel") || normalized.includes("refurbish") || normalized.includes("phase")) return "renovation";
+  if (normalized.includes("renovat") || normalized.includes("makeover") || normalized.includes("remodel") || normalized.includes("refurbish") || normalized.includes("phase")) return "renovation";
   if (normalized.includes("event") || normalized.includes("run_of_show") || normalized.includes("dinner")) return "event";
   return "general";
 };
@@ -477,7 +477,8 @@ const dateIso = (value: string, fallbackYear: number): string => {
 
 const dateRangeIso = (value: string, fallbackYear: number): { start: string; end: string } => {
   const month = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
-  const dateToken = `(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${month})(?:\\s+20\\d{2})?|(?:${month})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?)`;
+  const weekday = "(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)";
+  const dateToken = `(?:(?:${weekday})\\s+)?(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${month})(?:\\s+20\\d{2})?|(?:${month})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?)`;
   const range = value.match(new RegExp(`\\b(${dateToken})\\s+(?:to|until|through|thru|–|—|-)\\s+(${dateToken})\\b`, "i"));
   if (!range) return { start: "", end: "" };
   const explicitYear = Number(`${range[1]} ${range[2]}`.match(/\b(20\d{2})\b/)?.[1] ?? fallbackYear);
@@ -703,6 +704,67 @@ const seedRoughPlan = (
     ].forEach(([id, title, due, notes]) => { if (!tasks.some((item) => item.label === title)) seed("tasks", `practice_${id}`, String(title), { title: String(title), due: String(due), done: false, notes: String(notes) }); });
     return;
   }
+  if (family === "renovation") {
+    const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
+    const range = dateRangeIso(sourceText, year);
+    const startDate = range.start || dateIso(sourceText, year);
+    const endDate = range.end || requestedDurationEnd(order, startDate).end || startDate;
+    const homeOffice = /\bhome office\b/i.test(sourceText);
+    const area = homeOffice ? "Home office" : "Project area";
+    const budget = Number(moneyAmount(sourceText)) || 0;
+    const scope = sectionItems.get("scope") ?? [];
+    const resources = sectionItems.get("resources") ?? [];
+
+    const scopeSeeds: Array<[string, string, string]> = [];
+    if (/\bpaint(?:ing|ed)?\b/i.test(sourceText)) scopeSeeds.push(["painting", "Prepare and paint the room", "Wall preparation, primer and finish coats; colour and exact paint system remain editable."]);
+    if (/\b(?:light|lighting|electrical|electrician)\b/i.test(sourceText)) scopeSeeds.push(["lighting", "Improve lighting and electrical fit", "Confirm task, ambient and natural-light needs before a licensed electrician changes fixed wiring."]);
+    if (/\bstorage\b/i.test(sourceText)) scopeSeeds.push(["storage", "Add useful storage", "Measure files, equipment and clearances before choosing shelves, cabinets or wall storage."]);
+    if (/\b(?:standing\s+desk|sit[- ]stand\s+desk|desk)\b/i.test(sourceText)) scopeSeeds.push(["desk", /\bstanding\s+desk\b/i.test(sourceText) ? "Add a standing desk" : "Confirm the desk setup", "Check width, depth, height range, cable routing and chair clearance before purchase."]);
+    if (!scopeSeeds.length) scopeSeeds.push(["scope", "Confirm the renovation scope", "List each room, finish, fixture and item that belongs inside this project."]);
+    scopeSeeds.forEach(([id, title, notes]) => { if (!scope.some((item) => item.label === title)) seed("scope", id, title, { title, location: area, cost: "", notes }); });
+
+    const schedule = sectionItems.get("schedule") ?? [];
+    if (!schedule.length) {
+      const paintStart = startDate ? addDays(startDate, 5) : "";
+      [
+        ["measure", "Measure, photograph and confirm the room scope", startDate, startDate, "Record dimensions, outlets, natural light, storage needs and the desk working zone."],
+        ["electrical_plan", "Get the lighting plan and electrician quote", startDate, startDate ? addDays(startDate, 2) : "", "Confirm the licensed electrical scope before paint and installation decisions are locked."],
+        ["source", "Choose and source paint, storage and desk", startDate ? addDays(startDate, 3) : "", startDate ? addDays(startDate, 4) : "", "Compare fit, lead time, returns and the current budget before buying."],
+        ["paint", "Prepare and paint over the weekend", paintStart, paintStart ? addDays(paintStart, 1) : "", "DIY work from the brief; protect the room, repair surfaces and allow drying time."],
+        ["install", "Install lighting, storage and desk", startDate ? addDays(startDate, 7) : "", endDate ? addDays(endDate, -1) : "", "Sequence the licensed electrical work before final furniture, storage and cable setup."],
+        ["handover", "Set up, test and close the room", endDate, endDate, "Test lighting and desk ergonomics, put equipment away and retain receipts and warranties."],
+      ].forEach(([id, title, start, end, notes]) => seed("schedule", String(id), String(title), { title: String(title), kind: "milestone", location: area, start: String(start), end: String(end), notes: String(notes) }));
+    }
+
+    if (!resources.length) {
+      if (/\b(?:light|lighting|electrical|electrician)\b/i.test(sourceText)) seed("resources", "electrician", "Licensed electrician", { title: "Licensed electrician", provider: "Quote and availability to confirm", quantity: "1", bookingStatus: "idea", start: startDate ? addDays(startDate, 1) : "", cost: budget ? String(Math.round(budget * 0.2)) : "", notes: "Required for fixed electrical work; no booking has been made." });
+      if (/\bpaint(?:ing|ed)?\b/i.test(sourceText)) seed("resources", "paint", "Paint and preparation supplies", { title: "Paint and preparation supplies", provider: "Supplier to compare", quantity: "1", bookingStatus: "idea", start: startDate ? addDays(startDate, 4) : "", cost: budget ? String(Math.round(budget * 0.1)) : "", notes: "Include cleaner, filler, sanding, protection, primer and finish paint as needed." });
+      if (/\bstorage\b/i.test(sourceText)) seed("resources", "storage", "Storage system", { title: "Storage system", provider: "Option to shortlist", quantity: "1", bookingStatus: "idea", start: startDate ? addDays(startDate, 4) : "", cost: budget ? String(Math.round(budget * 0.2)) : "", notes: "Measure first; compare freestanding and wall-mounted options." });
+      if (/\b(?:standing\s+desk|sit[- ]stand\s+desk)\b/i.test(sourceText)) seed("resources", "desk", "Standing desk", { title: "Standing desk", provider: "Option to shortlist", quantity: "1", bookingStatus: "idea", start: startDate ? addDays(startDate, 4) : "", cost: budget ? String(Math.round(budget * 0.25)) : "", notes: "Check fit, stability, load, height range, warranty and delivery timing before purchase." });
+    }
+
+    if (!requirements.length) {
+      if (/\blicensed electrician\b/i.test(sourceText)) addItem("requirements", { itemId: "request_licensed_electrician", label: "Use a licensed electrician for electrical work", fields: { title: "Use a licensed electrician for electrical work", status: "open", due: startDate ? addDays(startDate, 2) : "", notes: "Human-supplied hard requirement; do not convert fixed electrical work into DIY scope." }, source: "request" });
+      if (/\bpaint(?:ing)?\b.*\bmyself\b|\bi will do painting myself\b/i.test(sourceText)) addItem("requirements", { itemId: "request_diy_paint", label: "Keep painting as weekend DIY work", fields: { title: "Keep painting as weekend DIY work", status: "in_progress", due: startDate ? addDays(startDate, 5) : "", notes: "Human-supplied working commitment; timing may move but the current responsibility split is visible." }, source: "request" });
+    }
+
+    if (!tasks.length) {
+      [
+        ["measure", "Measure the room, desk zone, storage needs and outlet positions", startDate],
+        ["lighting", "Define the lighting outcome and get a licensed electrician quote", startDate ? addDays(startDate, 2) : ""],
+        ["shortlist", "Shortlist paint, storage and standing desk options against fit and budget", startDate ? addDays(startDate, 3) : ""],
+        ["protect", "Clear and protect the room before painting", startDate ? addDays(startDate, 4) : ""],
+        ["paint", "Complete surface preparation and weekend painting", startDate ? addDays(startDate, 6) : ""],
+        ["install", "Coordinate electrical, storage and desk installation", endDate ? addDays(endDate, -1) : ""],
+        ["setup", "Test the finished workspace and store receipts and warranties", endDate],
+      ].forEach(([id, title, due]) => seed("tasks", String(id), String(title), { title: String(title), due: String(due), done: false, notes: "Open until completed." }));
+    }
+
+    const moneyItems = sectionItems.get("money") ?? [];
+    if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
+      [["trades", "Licensed trades & lighting", 25], ["furniture", "Desk & storage", 45], ["paint", "Paint & preparation", 15], ["contingency", "Contingency", 15]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: "AUD", moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+    }
+  }
   if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
     const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dinnerDate = dateIso(sourceText, year);
@@ -807,7 +869,9 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   if (!interpretation?.complete && !editableWorkspace) return null;
   const requestSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${interpretation?.summary ?? ""}`;
   const explicitlyComposableOutcome = isInterviewPlan(requestSource) || isRecurringPracticePlan(requestSource);
-  const family = explicitlyComposableOutcome ? "general" : starterFamily(interpretation?.inferredFamily ?? order.rawOutcome);
+  const inferredFamily = starterFamily(interpretation?.inferredFamily);
+  const briefFamily = starterFamily(order.rawOutcome);
+  const family = explicitlyComposableOutcome ? "general" : inferredFamily === "general" && briefFamily !== "general" ? briefFamily : inferredFamily;
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
   const openItems = [...new Set([
@@ -941,6 +1005,10 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   } else {
     addFacts(flattenPlanFacts(interpretation?.known ?? {}), "known", "known");
     addFacts(flattenPlanFacts(interpretation?.inferred ?? {}), "working", "working");
+  }
+  const requestBudget = moneyAmount(requestSource);
+  if (Number(requestBudget) > 0 && !(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "limit")) {
+    addItem("money", { itemId: "request_overall_budget", label: "Total budget", fields: { title: "Total budget", amount: requestBudget, currency: moneyCurrency(requestSource, {}) || "AUD", moneyRole: "limit", notes: "Budget supplied in the starting brief." }, source: "request" });
   }
   openItems.forEach((item, index) => addItem("tasks", { itemId: `open_${index}`, label: item, fields: { title: item, done: false }, source: "open" }));
   if (!hasReviewedWorkspaceSnapshot && (interpretation?.complete || editableWorkspace)) seedRoughPlan(family, order, sectionItems, addItem);

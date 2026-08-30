@@ -312,7 +312,15 @@ export class FinitePlanKernel {
       this.acceptedSnapshotHash = result.envelope.snapshotHash;
       this.acceptedTruthStatus = "ready";
       try { this.store?.save(this.snapshot()); } catch { /* D1 remains authoritative; browser cache is best effort. */ }
-      return { ok: true, code: result.code, revision: this.revision, replay: result.replay, acceptedTruth: this.acceptedTruth, acceptedStateChanged: false };
+      return {
+        ok: true,
+        code: result.code,
+        revision: this.revision,
+        replay: result.replay,
+        acceptedTruth: this.acceptedTruth,
+        acceptedStateChanged: false,
+        ...(result.activationTiming ? { activationTiming: result.activationTiming } : {}),
+      };
     } catch (error) {
       this.acceptedTruthStatus = "unavailable";
       return {

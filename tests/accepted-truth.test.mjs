@@ -104,6 +104,14 @@ const assertPrivacySafeActivationTiming = (response, operation, d1Calls) => {
   assert.doesNotMatch(response.headers.get("server-timing") ?? "", /plan|arrival|user|scope|hash/i);
 };
 
+const assertPrivacySafeActivationTimingBody = (body, operation, d1Calls) => {
+  assert.equal(body.activationTiming.measurementVersion, "finite-plan-activation-timing.v1");
+  assert.equal(body.activationTiming.operation, operation);
+  assert.equal(body.activationTiming.d1Calls, d1Calls);
+  for (const key of ["workerMs", "d1AwaitMs", "runtimeMs"]) assert.equal(typeof body.activationTiming[key], "number");
+  assert.doesNotMatch(JSON.stringify(body.activationTiming), /planId|arrival|user|scope|hash|content/i);
+};
+
 const prepareApprovedOption = async (runtime, title) => {
   const kernel = runtime.kernel;
   const recorded = kernel.recordChangeEvent({
@@ -147,7 +155,9 @@ test("the hosted activation challenge validates current arrival and exact draft 
   const accepted = await handleAcceptedTruthRequest(new Request("https://finite.example/api/authority-challenges/plan-activation", { method: "POST", headers, body: JSON.stringify(body) }), db);
   assert.equal(accepted.status, 201);
   assertPrivacySafeActivationTiming(accepted, "challenge", 3);
-  assert.equal((await accepted.json()).code, "AUTHORITY_CHALLENGE_CREATED");
+  const acceptedBody = await accepted.json();
+  assert.equal(acceptedBody.code, "AUTHORITY_CHALLENGE_CREATED");
+  assertPrivacySafeActivationTimingBody(acceptedBody, "challenge", 3);
   assert.equal(db.challenge.target_id, draftId);
   assert.equal(db.batchCalls, 2, "guard validation and challenge persistence should use two D1 batches");
   assert.equal(db.firstCalls, 1, "a fresh guarded challenge should only read tenant identity outside the batches");
@@ -198,6 +208,7 @@ test("accepted initialization consumes the prior guarded challenge and retires t
   const activatedBody = await activated.json();
   assert.equal(activated.status, 201, JSON.stringify(activatedBody));
   assertPrivacySafeActivationTiming(activated, "initialize", 4);
+  assertPrivacySafeActivationTimingBody(activatedBody, "initialize", 4);
   assert.equal(activatedBody.code, "ACCEPTED_TRUTH_INITIALIZED");
   assert.equal(activatedBody.constructionPacketCleared, true);
   assert.equal(db.consumption.challenge_id, challenge.challengeId);
