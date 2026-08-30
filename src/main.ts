@@ -3926,6 +3926,7 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
   });
   const writes = await Promise.allSettled([...inputWrites, ...taskWrites]);
   const durable = writes.every((result) => result.status === "fulfilled" && (typeof result.value === "boolean" ? result.value : result.value.ok));
+  if (runtime.kernel.profile.planId !== planId) return durable;
   await Promise.all([refreshPlanInputs(), refreshPlanWork()]);
   await syncAdaptiveChecklist();
   await refreshPlanWork();
@@ -4049,11 +4050,12 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   arrivalResult = await arrivalRepository.open();
   persistedPlanIds.add(runtime.kernel.profile.planId);
   scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
-  let continuitySaved = true;
-  if (continuity) {
-    try { continuitySaved = await seedArrivalContinuity(continuity); }
-    catch { continuitySaved = false; }
-  }
+  planInputs = [];
+  checklistItems = [];
+  planAttachments = [];
+  planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
+  const activatedPlanId = runtime.kernel.profile.planId;
+  const continuityWork = continuity ? seedArrivalContinuity(continuity).catch(() => false) : Promise.resolve(true);
   await adapter?.refreshContextualTools();
   forceArrivalSurface = false;
   newPlanDraftMode = false;
@@ -4065,14 +4067,18 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   busy = false;
   planActivationError = "";
-  if (arrivalClosed && continuitySaved) {
+  if (arrivalClosed) {
     message = "";
     messageScope = currentMessageScope();
     announcer.textContent = "Plan approved. Managing is ready.";
   } else if (!arrivalClosed) announce("Your plan is active. Finite is still syncing the completed starting request.");
-  else announce("Your plan is active. Some editable planning notes need to be retried from the saved arrival history.");
   await render();
   window.scrollTo({ top: 0, behavior: "smooth" });
+  void continuityWork.then(async (continuitySaved) => {
+    if (runtime.kernel.profile.planId !== activatedPlanId) return;
+    if (!continuitySaved) announce("Your plan is active. Some editable planning notes need to be retried from the saved arrival history.");
+    await render();
+  });
 };
 
 const returnPlanDraft = async (form: HTMLFormElement): Promise<void> => {

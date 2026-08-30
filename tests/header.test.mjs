@@ -535,6 +535,8 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(source, /runtime\.compileIntakeToDraft\(/);
   assert.match(source, /confirmPlanDraft\(draftId, progression\)/);
   assert.match(source, /seedArrivalContinuity\(continuity\)/);
+  assert.match(source, /void continuityWork\.then/);
+  assert.doesNotMatch(source, /continuitySaved = await seedArrivalContinuity/);
 });
 
 test("Managing starts with one brief and prioritises the next step", () => {

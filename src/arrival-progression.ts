@@ -97,7 +97,8 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     .reduce((total, item) => total + amountMinor(item.fields.amount), 0);
   const forecastMinor = Math.min(totalBudgetMinor, categoryForecastMinor);
   const schedule = starter.sections.find((section) => section.variant === "calendar")?.items ?? [];
-  const stageSource = schedule.length ? schedule : starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
+  const taskItems = starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
+  const stageSource = profileId === "general" && taskItems.length ? taskItems : schedule.length ? schedule : taskItems;
   const stages = stageSource.slice(0, 12).map((item, index) => ({
     stageId: item.itemId || `stage_${index + 1}`,
     label: itemTitle(item) || `Stage ${index + 1}`,

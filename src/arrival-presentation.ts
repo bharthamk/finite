@@ -306,8 +306,10 @@ const normalizedPath = (path: string[]): string => path.join(" ").replace(/[^a-z
 const sectionForFact = (definitions: StarterSectionDefinition[], path: string[]): string => {
   const searchable = normalizedPath(path);
   const qualifier = /^(?:open|optional|preference|idea|possible|flexible|missing|decision|dependency|fixed|confirmed|must|hard)$/;
-  return definitions.map((definition) => ({ definition, score: Math.max(0, ...definition.keywords.filter((keyword) => searchable.includes(keyword.replace(/[^a-z0-9]+/gi, "").toLowerCase())).map((keyword) => qualifier.test(keyword) ? 1 : keyword.length)) }))
-    .sort((a, b) => b.score - a.score)[0]?.definition.sectionId ?? definitions[0]!.sectionId;
+  const ranked = definitions.map((definition) => ({ definition, score: Math.max(0, ...definition.keywords.filter((keyword) => searchable.includes(keyword.replace(/[^a-z0-9]+/gi, "").toLowerCase())).map((keyword) => qualifier.test(keyword) ? 1 : keyword.length)) }))
+    .sort((a, b) => b.score - a.score);
+  if ((ranked[0]?.score ?? 0) > 0) return ranked[0]!.definition.sectionId;
+  return definitions.find((definition) => definition.sectionId === "scope")?.sectionId ?? definitions[0]!.sectionId;
 };
 
 const safePayloadText = (payload: Record<string, unknown>, key: string): string => typeof payload[key] === "string" ? payload[key].trim() : "";
@@ -584,7 +586,13 @@ const seedRoughPlan = (
     labels.forEach((label, index) => seed("schedule", `phase_${index}`, label, { title: label, notes: "Rough first-pass stage — change or reorder it." }));
   }
   if (!requirements.length) seed("requirements", "key_requirement", family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", { title: family === "renovation" ? "Permits and approvals check" : family === "event" ? "Venue and supplier commitments" : "Hard limits and approvals", status: "open", notes: "First-pass requirement; verify before committing." });
-  ["Confirm the rough sequence", "Add known costs and dates", "Check the next external dependency"].forEach((title, index) => { if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", `general_${index}`, title, { title, done: false, notes: "Useful next step." }); });
+  if (!tasks.length) {
+    const noPaidBudget = /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s+(?:is|of|:)\s*(?:aud|a\$|\$)?\s*0\b/i.test(sourceText);
+    const starterTasks = noPaidBudget
+      ? ["Confirm the rough sequence", "Confirm key dates and timing", "Check the next external dependency"]
+      : ["Confirm the rough sequence", "Add known costs and dates", "Check the next external dependency"];
+    starterTasks.forEach((title, index) => seed("tasks", `general_${index}`, title, { title, done: false, notes: "Useful next step." }));
+  }
   const moneyItems = sectionItems.get("money") ?? [];
   if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
     const limitItem = moneyItems.filter((item) => item.fields.moneyRole === "limit").at(-1);
@@ -830,6 +838,10 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       : sectionForFact(definitions, [label, detail, input.kind]);
     addItem(sectionId, { itemId: `human_${index}`, label, fields: { title: label, ...(detail ? { notes: detail } : {}) }, source: "human" });
   });
+  if (family === "general" && explicitlyComposableOutcome) {
+    const requirements = sectionItems.get("requirements") ?? [];
+    sectionItems.set("requirements", requirements.filter((item) => item.source === "human" || !/^(?:venue and supplier commitments)$/i.test(item.label.trim())));
+  }
   if (family === "travel") {
     (sectionItems.get("stays") ?? []).forEach((item) => { if (!item.fields.priceState) item.fields.priceState = "allowance"; });
     (sectionItems.get("transport") ?? []).forEach((item) => { if (!item.fields.priceState) item.fields.priceState = "allowance"; });

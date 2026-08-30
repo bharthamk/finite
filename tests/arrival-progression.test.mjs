@@ -145,6 +145,19 @@ test("a zero-budget job interview becomes an isolated general plan and activates
         label: "Venue",
         fields: { title: "Venue", amount: "0", currency: "AUD", moneyRole: "cost", notes: "25% first-pass event allocation." },
       },
+    }, {
+      inputId: "arrival_input_stale_event_requirement_3",
+      kind: "detail",
+      sourceSurface: "codex",
+      createdAt: "2026-08-30T00:00:02.000Z",
+      payload: {
+        workspaceOperation: "record_add",
+        moduleId: "requirements",
+        recordId: "stale_event_requirement",
+        recordSource: "codex",
+        label: "Venue and supplier commitments",
+        fields: { title: "Venue and supplier commitments", status: "open", notes: "Event placeholder." },
+      },
     }],
     interpretation: {
       ...order.interpretation,
@@ -172,6 +185,8 @@ test("a zero-budget job interview becomes an isolated general plan and activates
   assert.deepEqual(progression.intake.allocation, { totalBudgetMinor: 0, spentMinor: 0, committedMinor: 0, forecastMinor: 0, bufferMinor: 0 });
   assert.deepEqual(Object.keys(progression.intake.entityValues).sort(), ["open_dependencies", "plan_items"]);
   assert.equal(progression.intake.stages.length <= 12, true);
+  assert.equal(progression.intake.locks.some((entry) => /venue|supplier/.test(entry)), false);
+  assert.equal(progression.intake.stages.some((entry) => /known costs/.test(entry.label)), false);
   assert(progression.inputs.some((entry) => entry.message.includes("Interview evidence bank")));
 
   const profiles = await compileBuiltInProfiles();
