@@ -684,6 +684,7 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.doesNotMatch(source, /Start managing when this draft is useful enough/);
   assert.doesNotMatch(source, />Talk to \$\{escapeHtml\(agenticName\(\)\)\}</);
   assert.match(styles, /\.starter-plan__completion \{/);
+  assert.match(styles, /\.starter-plan__notice \{[^}]*padding:11px[^}]*font-size:\.82rem/);
   assert.match(source, /arrivalProgressionFromStarter\(opened\.order, starter\)/);
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);
   assert.match(source, /runtime\.compileIntakeToDraft\(\{ preparedIntake: progression\.intake \}\)/);
