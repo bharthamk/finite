@@ -2036,7 +2036,7 @@ const renderPlanActivationTransition = (): void => {
     </div>
     <main id="main" class="arrival-main">
       <section class="hero" aria-labelledby="activation_transition_title">
-        <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Opening Managing</p><h1 id="activation_transition_title">Your plan is moving with you.</h1><p class="hero__brief">You can keep reviewing it below while Finite secures the exact version you approved.</p></div></div>
+        <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Opening Managing</p><h1 id="activation_transition_title">Your plan is moving with you.</h1><p class="hero__brief">You can keep reviewing it below while Finite prepares and secures the exact version you chose to start.</p></div></div>
       </section>
       <div class="service-message" role="status">Saving the plan, its approval, and its starting details together…</div>
       <div class="activation-transition-plan" inert>${order ? renderStarterPlan(order) : ""}</div>
@@ -4010,6 +4010,7 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
 const progressArrivalPlan = async (): Promise<void> => {
   if (busy) return;
   busy = true;
+  planActivationTransition = true;
   announce("Starting this plan…");
   await render();
   try {
@@ -4021,6 +4022,7 @@ const progressArrivalPlan = async (): Promise<void> => {
     await confirmPlanDraft(prepared.draftId, prepared.progression, prepared.opened);
   } catch (error) {
     busy = false;
+    planActivationTransition = false;
     const code = error instanceof Error ? error.message : String(error);
     announce(code === "ARRIVAL_NOT_READY" || code === "ARRIVAL_WORKSPACE_NOT_READY"
       ? "This rough plan still needs its current interpretation completed before it can start."
@@ -4044,6 +4046,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   if (latestArrival.ok) arrivalResult = latestArrival;
   if ((draft.sourceArrival && !latestArrival.ok) || !pendingDraftMatchesArrival()) {
     busy = false;
+    planActivationTransition = false;
     planActivationError = latestArrival.ok
       ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
       : "Finite could not check your latest information. Nothing changed—please try again.";
@@ -4059,14 +4062,12 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   const confirmation = runtime.planActivationConfirmation;
   if ((confirmationResult && !confirmationResult.ok) || !confirmation) {
     busy = false;
+    planActivationTransition = false;
     planActivationError = "Finite could not record your approval. Nothing changed—please try again.";
     announce(planActivationError);
     await render();
     return;
   }
-
-  planActivationTransition = true;
-  await render();
 
   const sourceArrival = draft.sourceArrival;
   const activation = await runtime.activateConfirmedPlanDraft({

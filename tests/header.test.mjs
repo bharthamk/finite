@@ -524,7 +524,7 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /Starting your plan…/);
   assert.match(source, /planActivationTransition = true/);
   assert.match(source, /renderLifecycleRail\("managing"\)/);
-  assert.match(source, /You can keep reviewing it below while Finite secures the exact version you approved\./);
+  assert.match(source, /You can keep reviewing it below while Finite prepares and secures the exact version you chose to start\./);
   assert.match(source, /class="activation-transition-plan" inert/);
   assert.match(source, /Continue to Managing/);
   assert.doesNotMatch(source, /Plan approved and ready\. You are now in Managing\./);
