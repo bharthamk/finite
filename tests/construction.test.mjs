@@ -27,6 +27,14 @@ class FailingStorage extends MemoryStorage {
   }
 }
 
+class CountingConstructionPacketRepository extends MemoryConstructionPacketRepository {
+  loads = 0;
+  async load() {
+    this.loads += 1;
+    return super.load();
+  }
+}
+
 const newTravel = (planId = "plan_travel_resumable") => {
   const profile = getProfileDefinition("travel");
   profile.planId = planId;
@@ -96,6 +104,37 @@ test("accepted activation retires the remote build packet so the next project ca
   assert.equal(next.code, "INTAKE_FACTS_MISSING");
   assert(next.constructionPacket.packetId);
   assert.equal(next.durability, undefined);
+});
+
+test("accepted activation retires its identity-bound remote draft without re-reading it", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const construction = new CountingConstructionPacketRepository(() => new Date("2026-08-26T01:00:00.000Z"));
+  const runtime = new FinitePlanRuntime(
+    profiles,
+    new PlanSnapshotStore(storage),
+    "travel",
+    new PlanCatalogStore(storage),
+    [],
+    () => new Date("2026-08-26T01:00:00.000Z"),
+    undefined,
+    construction,
+  );
+  const staged = await runtime.stagePlanDraft(newTravel("plan_travel_direct_cleanup"));
+  const confirmed = runtime.humanConfirmPlanDraft({ draftId: staged.draft.draftId });
+  const loadsBeforeActivation = construction.loads;
+
+  const activated = await runtime.activateConfirmedPlanDraft({
+    draftId: staged.draft.draftId,
+    confirmationId: confirmed.confirmation.confirmationId,
+    expectedPlanId: "plan_travel_europe",
+    expectedRevision: 1,
+    idempotencyKey: "direct-cleanup-activation-0001",
+  });
+
+  assert.equal(activated.code, "PLAN_ACTIVATED");
+  assert.equal(activated.constructionPacketCleared, true);
+  assert.equal(construction.loads, loadsBeforeActivation);
 });
 
 test("a human-confirmed amendment draft resumes without authority and activates only after fresh confirmation", async () => {
