@@ -122,6 +122,7 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /target planning_window/i);
   assert.match(handoff.prompt, /visibly change the suggested sentence/i);
   assert.match(handoff.prompt, /target build_method/i);
+  assert.match(handoff.prompt, /Of course, you can still build your plan manually\. I’ll switch over and add the same trip step by step\./i);
   assert.match(handoff.prompt, /click the visible tab labelled 'Build it myself'/i);
   assert.match(handoff.prompt, /target manual_details/i);
   assert.match(handoff.prompt, /visibly fill every structured field/i);
