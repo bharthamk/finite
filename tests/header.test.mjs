@@ -238,6 +238,8 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /Codex has not processed it\./);
   assert.match(source, /workspaceOperation: "manual_takeover"/);
   assert.match(source, /workspaceOperation: "codex_handoff_workspace"/);
+  assert.match(source, /void prepareArrivalPlanDraft\(arrivalResult\)\.catch/);
+  assert.match(source, /await confirmPlanDraft\(prepared\.draftId, prepared\.progression, prepared\.opened\)/);
   assert.match(source, /arrivalUsesManualWorkspace\(order\)/);
   assert.match(source, /arrivalUsesCodexWaitingWorkspace\(order\)/);
   assert.match(source, /arrivalInputIsWorkflowOnly\(input\)/);
@@ -513,7 +515,7 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /const confirmPlanDraft = async/);
   assert.match(source, /runtime\.humanConfirmPlanDraft\(\{ draftId \}\)/);
   assert.match(source, /runtime\.activateConfirmedPlanDraft\(\{/);
-  assert.match(source, /const latestArrival = await arrivalRepository\.open\(\);/);
+  assert.match(source, /const latestArrival = validatedArrival\?\.ok && validatedArrival\.order \? validatedArrival : await arrivalRepository\.open\(\);/);
   assert.match(source, /draft\.sourceArrival && !latestArrival\.ok/);
   assert.match(source, /idempotencyKey: `human-plan-activation:\$\{draftId\}:\$\{confirmation\.confirmationId\}`/);
   assert.match(source, /arrivalRepository\.acceptPlan\(\{/);
@@ -533,7 +535,8 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);
   assert.match(source, /runtime\.assessPlanIntake\(progression\.intake\)/);
   assert.match(source, /runtime\.compileIntakeToDraft\(/);
-  assert.match(source, /confirmPlanDraft\(draftId, progression\)/);
+  assert.match(source, /prepareArrivalPlanDraft\(latest\)/);
+  assert.match(source, /confirmPlanDraft\(prepared\.draftId, prepared\.progression, prepared\.opened\)/);
   assert.match(source, /seedArrivalContinuity\(continuity\)/);
   assert.match(source, /const postActivationSync = Promise\.resolve\(\)\.then/);
   assert.match(source, /void Promise\.all\(\[continuityWork, postActivationSync\]\)\.then/);

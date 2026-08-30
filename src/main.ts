@@ -2082,6 +2082,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     return;
   }
   await render();
+  void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
   if (planningMode === "codex") root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
@@ -3934,13 +3935,12 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
   return durable;
 };
 
-const progressArrivalPlan = async (): Promise<void> => {
-  if (busy) return;
-  busy = true;
-  announce("Starting this plan…");
-  await render();
-  try {
-    let opened = await arrivalRepository.open();
+type PreparedArrivalPlan = { draftId: string; progression: ArrivalProgression; opened: ArrivalResult };
+let arrivalDraftPreparation: Promise<PreparedArrivalPlan> | null = null;
+const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArrivalPlan> => {
+  if (arrivalDraftPreparation) return arrivalDraftPreparation;
+  const preparation = (async (): Promise<PreparedArrivalPlan> => {
+    let opened = candidate?.ok && candidate.order ? candidate : await arrivalRepository.open();
     if (!opened.ok || !opened.order) throw new Error("ARRIVAL_NOT_FOUND");
     if (opened.order.status !== "interpretation_confirmed") {
       opened = await arrivalRepository.reviewWorkspace({
@@ -3970,8 +3970,23 @@ const progressArrivalPlan = async (): Promise<void> => {
       if (!compiled.ok || !runtime.pendingPlanDraft) throw new Error(String(compiled.code || "PLAN_DRAFT_NOT_STAGED"));
       draftId = runtime.pendingPlanDraft.draftId;
     }
+    return { draftId, progression, opened };
+  })();
+  arrivalDraftPreparation = preparation;
+  void preparation.finally(() => { if (arrivalDraftPreparation === preparation) arrivalDraftPreparation = null; }).catch(() => undefined);
+  return preparation;
+};
+
+const progressArrivalPlan = async (): Promise<void> => {
+  if (busy) return;
+  busy = true;
+  announce("Starting this plan…");
+  await render();
+  try {
+    const latest = await arrivalRepository.open();
+    const prepared = await prepareArrivalPlanDraft(latest);
     busy = false;
-    await confirmPlanDraft(draftId, progression);
+    await confirmPlanDraft(prepared.draftId, prepared.progression, prepared.opened);
   } catch (error) {
     busy = false;
     const code = error instanceof Error ? error.message : String(error);
@@ -3984,7 +3999,7 @@ const progressArrivalPlan = async (): Promise<void> => {
   }
 };
 
-const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null): Promise<void> => {
+const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null, validatedArrival?: ArrivalResult): Promise<void> => {
   if (busy) return;
   const draft = runtime.pendingPlanDraft;
   if (!draft || draft.draftId !== draftId) return;
@@ -3993,7 +4008,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   announce("Starting your plan…");
   await render();
 
-  const latestArrival = await arrivalRepository.open();
+  const latestArrival = validatedArrival?.ok && validatedArrival.order ? validatedArrival : await arrivalRepository.open();
   if (latestArrival.ok) arrivalResult = latestArrival;
   if ((draft.sourceArrival && !latestArrival.ok) || !pendingDraftMatchesArrival()) {
     busy = false;
