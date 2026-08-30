@@ -608,9 +608,11 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_SWITCHED", "PROFILE_SWITCHED"].includes(result.code)) { await refreshPlanInputs(); await refreshPlanWork(); await refreshPlanLearning(); await syncAdaptiveChecklist(); }
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
+  const guideRequest = result.code === "VIEW_GUIDED" ? result.guide as FiniteGuideViewRequest : null;
   const preservePausedDemoView = demoPlaybackMode && demoPaused;
-  const manifest = preservePausedDemoView || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
-  const guidedView = result.code === "VIEW_GUIDED" ? applyCodexSpotlight(result.guide as FiniteGuideViewRequest) : null;
+  const preserveUnsavedCurrentSurface = guideRequest?.surface === "current" && guideRequest.refresh !== true;
+  const manifest = preservePausedDemoView || preserveUnsavedCurrentSurface || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
+  const guidedView = guideRequest ? applyCodexSpotlight(guideRequest) : null;
   return {
     toolName,
     resultCode: result.code,

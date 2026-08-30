@@ -473,6 +473,12 @@ test("the live demo starts from the real blank first form and keeps its controls
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-next \{[^}]*min-height:42px;[^}]*color:var\(--on-deep\);[^}]*background:var\(--deep\);/);
 });
 
+test("guiding the current surface preserves unsaved browser input", () => {
+  assert.match(source, /const preserveUnsavedCurrentSurface = guideRequest\?\.surface === "current" && guideRequest\.refresh !== true;/);
+  assert.match(source, /preservePausedDemoView \|\| preserveUnsavedCurrentSurface \|\| \["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"\]/);
+  assert.match(source, /const guidedView = guideRequest \? applyCodexSpotlight\(guideRequest\) : null;/);
+});
+
 test("settings provides a durable Agentic name preference with Codex as the honest default", () => {
   assert.match(source, /params\.get\("settings"\) === "1"/);
   assert.match(source, /<p class="eyebrow">Agentic name<\/p>/);
