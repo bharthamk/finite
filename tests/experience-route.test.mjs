@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isWaitingArrivalStatus, selectExperienceSurface } from "../dist-test/src/experience-route.js";
+import { isWaitingArrivalStatus, selectExperienceSurface, shouldOpenEntryGateway } from "../dist-test/src/experience-route.js";
+
+test("the bare root is always the durable front door", () => {
+  assert.equal(shouldOpenEntryGateway({ entryGatewayOpen: false, hasExplicitWorkingSurface: false }), true);
+  assert.equal(shouldOpenEntryGateway({ entryGatewayOpen: true, hasExplicitWorkingSurface: true }), true);
+});
+
+test("an explicit resume or plan route bypasses the front door", () => {
+  assert.equal(shouldOpenEntryGateway({ entryGatewayOpen: false, hasExplicitWorkingSurface: true }), false);
+});
 
 test("a first-time tenant with no arrival stays on the order surface", () => {
   assert.equal(selectExperienceSurface({ labMode: false, kitchenMode: false, hasArrival: false, hasActivatedPlan: false }), "arrival");

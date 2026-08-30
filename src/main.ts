@@ -11,7 +11,7 @@ import { HttpArrivalRepository, MemoryArrivalRepository, type ArrivalOrder, type
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
 import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
-import { isWaitingArrivalStatus, selectExperienceSurface } from "./experience-route.js";
+import { isWaitingArrivalStatus, selectExperienceSurface, shouldOpenEntryGateway } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
@@ -554,12 +554,12 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
     if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; }
   }
 };
-let forceArrivalSurface = false;
-let newPlanDraftMode = false;
+const startupEntryMode = startupParams.get("start");
+let forceArrivalSurface = startupEntryMode === "fresh";
+let newPlanDraftMode = startupEntryMode === "fresh";
 let entryGatewayOpen = false;
 let entryPrefill = finiteEntryExample(startupParams.get("example"))?.outcome ?? "";
 type CodexLaunchMode = "live" | "demo";
-const startupEntryMode = startupParams.get("start");
 let codexLaunchMode: CodexLaunchMode | null = startupEntryMode === "live-demo" ? "demo" : startupEntryMode === "codex-live" || startupEntryMode === "guided" ? "live" : null;
 let guidedWalkthroughMode = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active";
 let demoPlaybackMode = codexLaunchMode === "demo" || startupEntryMode === "demo-active";
@@ -1442,6 +1442,23 @@ const startNewPlan = async (): Promise<void> => {
   root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.focus();
 };
 
+const resumeCurrentWork = async (): Promise<void> => {
+  if (isWaitingArrivalStatus(arrivalResult.order?.status)) {
+    entryGatewayOpen = false;
+    newPlanDraftMode = false;
+    forceArrivalSurface = true;
+    const target = new URL(location.href);
+    target.searchParams.delete("plan");
+    target.searchParams.delete("kitchen");
+    target.searchParams.delete("lab");
+    target.searchParams.set("start", "resume");
+    history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+    await render();
+    return;
+  }
+  await openPlan(runtime.kernel.profile.planId);
+};
+
 const bindPlanSwitcherInteractions = (): void => {
   root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => {
     const planId = (event.currentTarget as HTMLSelectElement).value;
@@ -2263,11 +2280,12 @@ const renderCodexLaunch = (): void => {
 };
 
 const renderEntryGateway = (): void => {
+  const hasCurrentWork = isWaitingArrivalStatus(arrivalResult.order?.status) || runtime.hasActivationReceipt();
   surfaceRoot.dataset.profile = "entry";
   surfaceRoot.setAttribute("aria-busy", "false");
   surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
     <section class="entry-card entry-card--product" aria-labelledby="entry_title">
-      <header class="entry-card__top">${renderBrand()}${runtime.hasActivationReceipt() ? `<button type="button" class="entry-return" data-entry-action="current">Return to current plan</button>` : ""}</header>
+      <header class="entry-card__top">${renderBrand()}${hasCurrentWork ? `<button type="button" class="entry-return" data-entry-action="current">Return to current plan</button>` : ""}</header>
       <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with ${escapeHtml(agenticName())}, or watch the product run itself.</p></div>
       <div class="entry-route-grid">
         <button type="button" class="entry-route entry-route--fresh" data-entry-action="fresh">
@@ -2290,7 +2308,7 @@ const renderEntryGateway = (): void => {
   root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute({ continueDemo: demoPlaybackMode }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='codex-live']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "live" }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "demo" }); });
-  root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void openPlan(runtime.kernel.profile.planId); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void resumeCurrentWork(); });
   root.querySelectorAll<HTMLButtonElement>("[data-entry-example]").forEach((button) => button.addEventListener("click", () => {
     const example = finiteEntryExample(button.dataset.entryExample);
     if (example) void openEntryRoute({ prefill: example.outcome });
@@ -4245,7 +4263,7 @@ async function render(): Promise<SurfaceManifest> {
     renderCodexLaunch();
     return manifest;
   }
-  if (entryGatewayOpen || (!hasWaitingArrival && !runtime.hasActivationReceipt() && !explicitWorkingSurface)) {
+  if (shouldOpenEntryGateway({ entryGatewayOpen, hasExplicitWorkingSurface: explicitWorkingSurface })) {
     renderEntryGateway();
     return manifest;
   }
