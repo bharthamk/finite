@@ -128,6 +128,11 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/i);
   assert.match(handoff.prompt, /synthetic rainy-day change/i);
   assert.match(handoff.prompt, /Pause demo at any time/i);
+  assert.match(handoff.prompt, /already-open Finite Site tab/i);
+  assert.match(handoff.prompt, /Claim that exact user-owned built-in-browser tab/i);
+  assert.match(handoff.prompt, /do not create another tab, open a background duplicate, or switch to Chrome/i);
+  assert.match(handoff.prompt, /Keep the built-in browser visibly presented throughout/i);
+  assert.match(handoff.prompt, /stop without making any Finite call or page change/i);
   assert.match(handoff.prompt, /GUIDE_PAUSED_FOR_QUESTION/);
   assert.match(handoff.prompt, /pausedAt surface, target, targetLabel, and message/i);
   assert.match(handoff.prompt, /continue from the exact next chapter without restarting/i);

@@ -74,7 +74,8 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
       "This is a live guided walkthrough of the real product, not an autoplay or a simulated demo. After entering Finite, use finite_guide_view to move through one meaningful area at a time. Supply a short, plain-language message with each guide call so the person can follow the glow and typed guidance overlay. Pause after each step. Never type into a human field, choose an option, or approve on the person's behalf. Start by showing the starting point, then help them create or adapt a rough plan, inspect its structure, make one useful change, and reach an actual human decision boundary.",
     ] : []),
     "",
-    "Open the Finite Site in Codex's built-in browser. Discover its page tools. If finite_enter_kitchen is not visible but finite_webmcp_status is, call the status tool, wait for WEBMCP_READY, refresh discovery, then make this your first Finite call:",
+    "Use the already-open Finite Site tab in this Codex task. Claim that exact user-owned built-in-browser tab; do not create another tab, open a background duplicate, or switch to Chrome. Keep the built-in browser visibly presented throughout so the person shares the same page and can watch every action. Before discovering or calling any page tool, verify that the claimed tab is the visible Finite tab at the Site origin. If the exact tab cannot be claimed and presented, stop without making any Finite call or page change and tell the person that the shared browser is not visible.",
+    "Discover the claimed tab's page tools. If finite_enter_kitchen is not visible but finite_webmcp_status is, call the status tool, wait for WEBMCP_READY, refresh discovery, then make this your first Finite call:",
     `finite_enter_kitchen(${JSON.stringify(toolInput)})`,
     "",
     demoPlayback

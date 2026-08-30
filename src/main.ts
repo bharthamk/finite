@@ -2049,9 +2049,9 @@ const renderCodexLaunch = (): void => {
       <div class="codex-launch__copy">
         <p class="eyebrow">One quick handoff</p>
         <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? "Loading your live demo…" : `Loading ${escapeHtml(agenticName())} beside you…`}</h1>
-        <p>${isDemo ? `${escapeHtml(agenticName())} will run the real Hobart template in Finite. Press Next at key moments, or pause anywhere to ask about the exact screen you are seeing.` : `${escapeHtml(agenticName())} will take over the interface, build with you and pause whenever your input matters.`}</p>
+        <p>${isDemo ? `${escapeHtml(agenticName())} will run the real Hobart template in this exact Finite tab. Keep it open: you will watch each step here, press Next at key moments, or pause anywhere to ask about the exact screen you are seeing.` : `${escapeHtml(agenticName())} will take over this exact Finite tab, build with you and pause whenever your input matters.`}</p>
         <button type="button" class="button codex-launch__copy-button" data-action="copy-codex-launch">${codexLaunchCopied ? "Copy again" : "Copy setup for Codex"}</button>
-        <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex." : "Copy this once, open Codex and paste it. Finite supplies the live product state from here."}</small>
+        <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex. Keep this Finite tab open." : "Copy this once, open Codex and paste it. Keep this Finite tab open so Codex takes over the page you can see."}</small>
       </div>
       <details class="codex-launch__details"><summary>See what will be copied</summary><label><span>Codex setup</span><textarea readonly spellcheck="false" data-codex-launch-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
       <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? "Click Next when you are ready to keep watching, or ask Codex about anything you see." : "You can stop the guided view at any time."}</p></footer>

@@ -158,6 +158,12 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(styles, /\.codex-launch/);
 });
 
+test("Codex handoff keeps the person and operator on one visible Finite tab", () => {
+  assert.match(source, /run the real Hobart template in this exact Finite tab/);
+  assert.match(source, /Keep it open: you will watch each step here/);
+  assert.match(source, /Keep this Finite tab open so Codex takes over the page you can see/);
+});
+
 test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /aria-label="Open account menu for/);
   assert.match(source, /<span>Signed in as<\/span>/);
