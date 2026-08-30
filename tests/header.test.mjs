@@ -343,7 +343,8 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /This is a first-pass plan, not a researched recommendation\./);
   assert.match(source, /Build this plan your way\./);
   assert.doesNotMatch(source, /This is useful now\.|is deliberately lightweight|is only needed/);
-  assert.match(source, /Talk to \$\{escapeHtml\(agenticName\(\)\)\}/);
+  assert.match(source, /const renderCodexHandoffButton = \(\): string =>/);
+  assert.match(source, /\$\{order \? renderCodexHandoffButton\(\) : ""\}/);
   assert.doesNotMatch(source, /The chef handoff carries this saved draft/);
   assert.doesNotMatch(source, /Brief confirmed\. Use \$\{escapeHtml\(agenticName\(\)\)\} to continue\./);
   assert.doesNotMatch(source, /Brief confirmed\. Codex may construct a plan/);
@@ -678,6 +679,11 @@ test("approving a pending plan activates it and enters Managing in the same huma
 test("the editable rough plan exposes one top-level human progression action", () => {
   assert.match(source, /data-action="progress-arrival-plan"/);
   assert.match(source, /busy \? "Starting…" : "Start managing"/);
+  assert.match(source, /class="starter-plan__completion"/);
+  assert.doesNotMatch(source, /class="starter-plan__header-actions"/);
+  assert.doesNotMatch(source, /Start managing when this draft is useful enough/);
+  assert.doesNotMatch(source, />Talk to \$\{escapeHtml\(agenticName\(\)\)\}</);
+  assert.match(styles, /\.starter-plan__completion \{/);
   assert.match(source, /arrivalProgressionFromStarter\(opened\.order, starter\)/);
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);
   assert.match(source, /runtime\.compileIntakeToDraft\(\{ preparedIntake: progression\.intake \}\)/);
