@@ -5,6 +5,7 @@ import { handleConstructionPacketRequest } from "./construction-packet.js";
 import { handleThemeRequest } from "./themes.js";
 import { handleSkinRequest } from "./skins.js";
 import { handlePlanShareRequest } from "./plan-shares.js";
+import { handlePlanCollaborationRequest } from "./plan-collaboration.js";
 import { handleSettingsRequest } from "./settings.js";
 import { handlePlanInputRequest } from "./plan-inputs.js";
 import { handlePlanWorkRequest } from "./plan-work.js";
@@ -40,8 +41,9 @@ export const withSecurityHeaders = (source: Response): Response => {
 export const serveFiniteReleaseShell = async (request: Request, assets: AssetsBinding): Promise<Response | null> => {
   const url = new URL(request.url);
   const isSharePage = url.pathname.startsWith("/share/");
-  if (request.method !== "GET" || (url.pathname !== "/" && url.pathname !== "/index.html" && !isSharePage)) return null;
-  const current = await assets.fetch(isSharePage ? new Request(new URL("/", request.url), request) : request);
+  const isCollaborationPage = url.pathname.startsWith("/collaborate/");
+  if (request.method !== "GET" || (url.pathname !== "/" && url.pathname !== "/index.html" && !isSharePage && !isCollaborationPage)) return null;
+  const current = await assets.fetch(isSharePage || isCollaborationPage ? new Request(new URL("/", request.url), request) : request);
   if (!current.ok || !current.headers.get("content-type")?.includes("text/html")) return current;
   let html = await current.text();
   html = html.replace(/<meta name="finite-build" content="[^"]*"\s*\/>/, `<meta name="finite-build" content="${finiteRelease.build}" />`);
@@ -58,6 +60,11 @@ export const serveFiniteReleaseShell = async (request: Request, assets: AssetsBi
       .replace(/<meta name="twitter:title" content="[^"]*"\s*\/?>/, '<meta name="twitter:title" content="Shared plan — Finite" />')
       .replace(/<meta name="twitter:description" content="[^"]*"\s*\/?>/, '<meta name="twitter:description" content="A deliberately selected, read-only view of a Finite plan." />')
       .replace(/\s*<meta name="twitter:image" content="[^"]*"\s*\/?>/g, "");
+  }
+  if (isCollaborationPage) {
+    html = html
+      .replace(/<title>[^<]*<\/title>/, "<title>Plan invitation — Finite</title>")
+      .replace(/<meta name="description" content="[^"]*"\s*\/?>/, '<meta name="description" content="An authenticated invitation to collaborate on a Finite plan." />');
   }
   const headers = new Headers(current.headers);
   headers.set("cache-control", "no-store");
@@ -85,6 +92,8 @@ export default {
     if (skinResponse) return withSecurityHeaders(skinResponse);
     const shareResponse = await handlePlanShareRequest(request, environment.DB);
     if (shareResponse) return withSecurityHeaders(shareResponse);
+    const collaborationResponse = await handlePlanCollaborationRequest(request, environment.DB);
+    if (collaborationResponse) return withSecurityHeaders(collaborationResponse);
     const arrivalResponse = await handleArrivalRequest(request, environment.DB);
     if (arrivalResponse) return withSecurityHeaders(arrivalResponse);
     const constructionResponse = await handleConstructionPacketRequest(request, environment.DB);

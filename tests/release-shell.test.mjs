@@ -36,6 +36,15 @@ test("a standalone share route receives the release shell without entering an AP
   assert.doesNotMatch(html, /og:image|twitter:image|og\.png/);
 });
 
+test("an authenticated collaboration route receives the product shell", async () => {
+  const response = await serveFiniteReleaseShell(new Request("https://finite.example/collaborate/opaque-token"), new ReleaseAssets());
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-finite-build"), finiteRelease.build);
+  assert.match(html, /<title>Plan invitation — Finite<\/title>/);
+  assert.match(html, /authenticated invitation to collaborate/);
+});
+
 test("every Worker response receives the production isolation and content-security contract", async () => {
   const response = withSecurityHeaders(new Response("ok", { headers: { "content-type": "text/plain" } }));
   assert.equal(response.headers.get("x-finite-build"), finiteRelease.build);

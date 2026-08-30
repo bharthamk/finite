@@ -82,3 +82,31 @@ export class HttpPlanInputRepository implements PlanInputRepository {
     return readJson(response);
   }
 }
+
+export class BrowserPlanInputRepository implements PlanInputRepository {
+  constructor(private readonly storage: StoragePort, private readonly key = "finite-plan.local-inputs.v1", private readonly now: () => Date = () => new Date()) {}
+  private read(): PlanInputRecord[] { try { const value = JSON.parse(this.storage.getItem(this.key) ?? "[]"); return Array.isArray(value) ? value : []; } catch { return []; } }
+  private write(inputs: PlanInputRecord[]): void { this.storage.setItem(this.key, JSON.stringify(inputs)); }
+  private result(code: string, inputs: PlanInputRecord[], input?: PlanInputRecord, issues?: string[]): PlanInputResult { return { ok: !issues?.length, code, inputs, ...(input ? { input } : {}), ...(issues?.length ? { issues } : {}), acceptedStateChanged: false }; }
+  async list({ planId }: { planId: string }): Promise<PlanInputResult> { return this.result("PLAN_INPUTS_LISTED_LOCAL", this.read().filter((item) => item.planId === planId)); }
+  async add(input: Parameters<PlanInputRepository["add"]>[0]): Promise<PlanInputResult> {
+    const validation = validatePlanInput(input);
+    if (!validation.ok) return this.result("PLAN_INPUT_INVALID", this.read().filter((item) => item.planId === input.planId), undefined, validation.issues);
+    const inputs = this.read(); const createdAt = this.now().toISOString();
+    const record: PlanInputRecord = { inputId: `plan_input_${crypto.randomUUID().replaceAll("-", "")}`, planId: input.planId, planRevision: input.expectedRevision, ...validation.value, status: "open", sourceSurface: input.sourceSurface, createdAt, handledAt: null, baseCurrent: true };
+    inputs.push(record); this.write(inputs); return this.result("PLAN_INPUT_ADDED_LOCAL", inputs.filter((item) => item.planId === input.planId), record);
+  }
+  async update(input: Parameters<PlanInputRepository["update"]>[0]): Promise<PlanInputResult> {
+    const validation = validatePlanInput(input); const inputs = this.read(); const index = inputs.findIndex((item) => item.inputId === input.inputId && item.planId === input.planId && item.status === "open");
+    if (!validation.ok || index < 0) return this.result(index < 0 ? "PLAN_INPUT_NOT_FOUND" : "PLAN_INPUT_INVALID", inputs.filter((item) => item.planId === input.planId), undefined, validation.ok ? undefined : validation.issues);
+    const record: PlanInputRecord = { ...inputs[index]!, ...validation.value, planRevision: input.expectedRevision, sourceSurface: input.sourceSurface, baseCurrent: true }; inputs[index] = record;
+    this.write(inputs); return this.result("PLAN_INPUT_UPDATED_LOCAL", inputs.filter((item) => item.planId === input.planId), record);
+  }
+  async resolve(input: Parameters<PlanInputRepository["resolve"]>[0]): Promise<PlanInputResult> {
+    const inputs = this.read(); const index = inputs.findIndex((item) => item.inputId === input.inputId && item.planId === input.planId);
+    if (index < 0) return this.result("PLAN_INPUT_NOT_FOUND", inputs.filter((item) => item.planId === input.planId));
+    const current = inputs[index]!; const record: PlanInputRecord = { ...current, status: "handled", handledAt: current.handledAt ?? this.now().toISOString(), planRevision: input.expectedRevision, baseCurrent: true }; inputs[index] = record;
+    this.write(inputs); return this.result("PLAN_INPUT_HANDLED_LOCAL", inputs.filter((item) => item.planId === input.planId), record);
+  }
+}
+import type { StoragePort } from "./persistence.js";

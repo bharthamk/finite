@@ -114,3 +114,30 @@ export class HttpPlanLearningRepository implements PlanLearningRepository {
     return fetch(`${this.baseUrl}/profile/memories/${encodeURIComponent(String(input.memoryId ?? ""))}`, { method: "PATCH", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(input), ...(context.signal ? { signal: context.signal } : {}) }).then(readResult);
   }
 }
+
+export class BrowserPlanLearningRepository implements PlanLearningRepository {
+  constructor(private readonly storage: StoragePort, private readonly key = "finite-plan.local-learning.v1", private readonly now: () => Date = () => new Date()) {}
+  private read(): { retrospectives: PlanRetrospective[]; memories: ProfileMemory[] } { try { const value = JSON.parse(this.storage.getItem(this.key) ?? "null"); return { retrospectives: Array.isArray(value?.retrospectives) ? value.retrospectives : [], memories: Array.isArray(value?.memories) ? value.memories : [] }; } catch { return { retrospectives: [], memories: [] }; } }
+  private write(value: { retrospectives: PlanRetrospective[]; memories: ProfileMemory[] }): void { this.storage.setItem(this.key, JSON.stringify(value)); }
+  private result(code: string, state = this.read(), retrospective: PlanRetrospective | null = null, memory?: ProfileMemory): PlanLearningResult { return { ok: true, code, retrospective, memories: state.memories, ...(memory ? { memory } : {}), acceptedStateChanged: false }; }
+  async list(planId: string): Promise<PlanLearningResult> { const state = this.read(); return this.result("PLAN_LEARNING_LISTED_LOCAL", state, state.retrospectives.find((item) => item.planId === planId) ?? null); }
+  async listProfile(): Promise<PlanLearningResult> { return this.result("PROFILE_MEMORIES_LISTED_LOCAL"); }
+  async saveRetrospective(input: Record<string, unknown>): Promise<PlanLearningResult> {
+    const state = this.read(); const validation = validateRetrospective(input); const planId = String(input.planId ?? ""); if (!validation.ok) return { ...this.result("PLAN_RETROSPECTIVE_INVALID", state), ok: false, issues: validation.issues };
+    const retrospective: PlanRetrospective = { planId, planRevision: Number(input.expectedRevision ?? input.planRevision ?? 1), ...validation.value, updatedAt: this.now().toISOString(), baseCurrent: true }; state.retrospectives = [...state.retrospectives.filter((item) => item.planId !== planId), retrospective]; this.write(state); return this.result("PLAN_RETROSPECTIVE_SAVED_LOCAL", state, retrospective);
+  }
+  private async add(input: Record<string, unknown>, immediate: boolean): Promise<PlanLearningResult> {
+    const state = this.read(); const validation = validateProfileMemory(input); if (!validation.ok) return { ...this.result("PROFILE_MEMORY_INVALID", state), ok: false, issues: validation.issues };
+    const now = this.now().toISOString(); const memory: ProfileMemory = { memoryId: `memory_${crypto.randomUUID().replaceAll("-", "")}`, family: String(input.family ?? "general"), ...validation.value, sourcePlanId: String(input.sourcePlanId ?? input.planId ?? "local_demo"), sourceSurface: input.sourceSurface === "codex" ? "codex" : "site", status: immediate ? "accepted" : "proposed", createdAt: now, updatedAt: now, decidedAt: immediate ? now : null }; state.memories.push(memory); this.write(state); return this.result("PROFILE_MEMORY_ADDED_LOCAL", state, null, memory);
+  }
+  addMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.add(input, false); }
+  addProfileMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.add({ ...input, evidence: String(input.evidence ?? "Added directly in local Demo mode.") }, true); }
+  async decideMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.changeProfileMemory(input); }
+  async changeProfileMemory(input: Record<string, unknown>): Promise<PlanLearningResult> {
+    const state = this.read(); const index = state.memories.findIndex((item) => item.memoryId === input.memoryId); if (index < 0) return { ...this.result("PROFILE_MEMORY_NOT_FOUND", state), ok: false };
+    const action = String(input.action ?? "update"); if (action === "delete") { const [memory] = state.memories.splice(index, 1); this.write(state); return this.result("PROFILE_MEMORY_DELETED_LOCAL", state, null, memory); }
+    const current = state.memories[index]!; const now = this.now().toISOString(); const status: ProfileMemoryStatus = action === "accept" || action === "restore" ? "accepted" : action === "reject" ? "rejected" : action === "retire" ? "retired" : current.status;
+    const memory: ProfileMemory = { ...current, ...(typeof input.kind === "string" ? { kind: input.kind as ProfileMemoryKind } : {}), ...(typeof input.statement === "string" ? { statement: input.statement.trim() } : {}), status, updatedAt: now, decidedAt: action === "update" ? current.decidedAt : now }; state.memories[index] = memory; this.write(state); return this.result("PROFILE_MEMORY_SAVED_LOCAL", state, null, memory);
+  }
+}
+import type { StoragePort } from "./persistence.js";

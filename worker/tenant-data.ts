@@ -6,6 +6,8 @@ import type { D1Database, D1PreparedStatement } from "./accepted-truth.js";
  * are deliberately handled by the reset coordinator instead.
  */
 export const tenantDataTables = [
+  "plan_collaboration_updates",
+  "plan_invitations",
   "plan_learning_receipts",
   "profile_memories",
   "plan_retrospectives",
@@ -42,4 +44,8 @@ export const tenantDataTables = [
 ] as const;
 
 export const tenantDeleteStatements = (db: D1Database, scopeId: string): D1PreparedStatement[] =>
-  tenantDataTables.map((table) => db.prepare(`DELETE FROM ${table} WHERE scope_id = ?`).bind(scopeId));
+  [
+    ...tenantDataTables.map((table) => db.prepare(`DELETE FROM ${table} WHERE scope_id = ?`).bind(scopeId)),
+    db.prepare("DELETE FROM plan_collaboration_updates WHERE actor_scope_id = ?").bind(scopeId),
+    db.prepare("UPDATE plan_invitations SET accepted_scope_id = NULL, accepted_at = NULL WHERE accepted_scope_id = ?").bind(scopeId),
+  ];

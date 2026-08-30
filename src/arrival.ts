@@ -1,5 +1,6 @@
 import { clone, sha256 } from "./crypto.js";
 import { inspectArrivalWorkspaceRecord, workspaceInterpretationForConstruction } from "./arrival-presentation.js";
+import type { StoragePort } from "./persistence.js";
 import type { ToolResult } from "./types.js";
 
 export type ArrivalSourceSurface = "site" | "codex" | "inline";
@@ -276,7 +277,19 @@ export class MemoryArrivalRepository implements ArrivalRepository {
   private readonly events = new Map<string, ArrivalEvent[]>();
   private readonly idempotency = new Map<string, { requestHash: string; orderId: string }>();
 
-  constructor(private readonly now: () => Date = () => new Date()) {}
+  constructor(private readonly now: () => Date = () => new Date(), private readonly storage?: StoragePort, private readonly storageKey = "finite-plan.local-arrivals.v1") {
+    if (!storage) return;
+    try {
+      const parsed = JSON.parse(storage.getItem(storageKey) ?? "null") as { orders?: ArrivalOrder[]; events?: Array<[string, ArrivalEvent[]]>; idempotency?: Array<[string, { requestHash: string; orderId: string }]> } | null;
+      for (const order of parsed?.orders ?? []) if (order?.orderVersion === "finite-arrival-order.v1") this.orders.set(order.orderId, clone(order));
+      for (const [orderId, events] of parsed?.events ?? []) if (this.orders.has(orderId) && Array.isArray(events)) this.events.set(orderId, clone(events));
+      for (const [key, value] of parsed?.idempotency ?? []) if (value?.orderId && this.orders.has(value.orderId)) this.idempotency.set(key, clone(value));
+    } catch { storage.removeItem(storageKey); }
+  }
+
+  private persist(): void {
+    this.storage?.setItem(this.storageKey, JSON.stringify({ orders: [...this.orders.values()], events: [...this.events.entries()], idempotency: [...this.idempotency.entries()] }));
+  }
 
   private result(code: string, order: ArrivalOrder, sinceVersion?: number, extra: Record<string, unknown> = {}): ArrivalResult {
     return { ok: true, code, order: clone(order), orientation: orientation(order, this.events.get(order.orderId) ?? [], sinceVersion), acceptedStateChanged: false, ...extra };
@@ -290,6 +303,7 @@ export class MemoryArrivalRepository implements ArrivalRepository {
     const base = { eventVersion: "finite-arrival-event.v1" as const, eventId: `arrival_event_${order.orderId}_${event.version}`, ...event };
     const complete = { ...base, eventHash: await sha256(base) };
     this.events.set(order.orderId, [...(this.events.get(order.orderId) ?? []), complete]);
+    this.persist();
   }
 
   private async replace(order: ArrivalOrder, expectedVersion: number, patch: Partial<Omit<ArrivalOrder, "orderVersion" | "orderId" | "version" | "createdAt" | "checksum">>, event: Omit<ArrivalEvent, "eventVersion" | "eventId" | "eventHash" | "orderId" | "version" | "createdAt">): Promise<ArrivalResult> {

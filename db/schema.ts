@@ -350,6 +350,44 @@ export const planShares = sqliteTable("plan_shares", {
   index("idx_plan_shares_scope_plan_created").on(table.scopeId, table.planId, table.createdAt),
 ]);
 
+export const planInvitations = sqliteTable("plan_invitations", {
+  scopeId: text("scope_id").notNull(),
+  inviteId: text("invite_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  planId: text("plan_id").notNull(),
+  role: text("role").notNull(),
+  sectionsJson: text("sections_json").default('["overview"]').notNull(),
+  label: text("label").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  revokedAt: text("revoked_at"),
+  acceptedScopeId: text("accepted_scope_id"),
+  acceptedAt: text("accepted_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.inviteId] }),
+  uniqueIndex("idx_plan_invitations_token_hash").on(table.tokenHash),
+  index("idx_plan_invitations_owner_plan_created").on(table.scopeId, table.planId, table.createdAt),
+  index("idx_plan_invitations_accepted_plan").on(table.acceptedScopeId, table.planId),
+]);
+
+export const planCollaborationUpdates = sqliteTable("plan_collaboration_updates", {
+  scopeId: text("scope_id").notNull(),
+  updateId: text("update_id").notNull(),
+  inviteId: text("invite_id").notNull(),
+  planId: text("plan_id").notNull(),
+  actorScopeId: text("actor_scope_id").notNull(),
+  kind: text("kind").notNull(),
+  section: text("section").notNull(),
+  message: text("message").notNull(),
+  status: text("status").default("open").notNull(),
+  createdAt: text("created_at").notNull(),
+  resolvedAt: text("resolved_at"),
+}, (table) => [
+  primaryKey({ columns: [table.scopeId, table.updateId] }),
+  index("idx_plan_collaboration_owner_plan_created").on(table.scopeId, table.planId, table.createdAt),
+  index("idx_plan_collaboration_actor_plan_created").on(table.actorScopeId, table.planId, table.createdAt),
+]);
+
 export const tenantSettings = sqliteTable("tenant_settings", {
   scopeId: text("scope_id").primaryKey(),
   agenticName: text("agentic_name").notNull(),

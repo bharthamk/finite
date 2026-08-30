@@ -14,6 +14,7 @@ interface AuthStatus {
 export {};
 
 const shareId = location.pathname.startsWith("/share/") ? decodeURIComponent(location.pathname.slice(7)) : null;
+const collaborationToken = location.pathname.startsWith("/collaborate/") ? decodeURIComponent(location.pathname.slice(13)) : null;
 if (shareId && !shareId.includes("/")) {
   const { renderShare } = await import("./share-entry.js");
   await renderShare(shareId);
@@ -21,7 +22,10 @@ if (shareId && !shareId.includes("/")) {
   const response = await fetch("/api/auth/session", { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`Finite identity returned HTTP ${response.status}.`);
   const auth = await response.json() as AuthStatus;
-  if (auth.session) {
+  if (collaborationToken && !collaborationToken.includes("/")) {
+    const { renderCollaboration } = await import("./collaboration-entry.js");
+    await renderCollaboration(collaborationToken, auth.session, auth.signInPath);
+  } else if (auth.session) {
     const { startKitchen } = await import("./main.js");
     try { await startKitchen(auth.session); }
     catch (error) {

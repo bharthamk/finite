@@ -38,11 +38,12 @@ export class MemoryStorage implements StoragePort {
 
 const validScope = (scope: string): boolean => /^[a-zA-Z0-9_-]{8,100}$/.test(scope);
 
-export const clearForeignFiniteScopes = (storage: EnumerableStoragePort, currentScope: string): number => {
+export const clearForeignFiniteScopes = (storage: EnumerableStoragePort, currentScope: string, preserveScopes: string[] = []): number => {
   if (!validScope(currentScope)) throw new Error("A bounded opaque storage scope is required.");
-  const ownPrefix = `finite-scope:${currentScope}:`;
+  if (preserveScopes.some((scope) => !validScope(scope))) throw new Error("Every preserved storage scope must be bounded and opaque.");
+  const allowedPrefixes = [currentScope, ...preserveScopes].map((scope) => `finite-scope:${scope}:`);
   const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter((key): key is string => Boolean(key));
-  const foreign = keys.filter((key) => key.startsWith("finite-scope:") && !key.startsWith(ownPrefix));
+  const foreign = keys.filter((key) => key.startsWith("finite-scope:") && !allowedPrefixes.some((prefix) => key.startsWith(prefix)));
   for (const key of foreign) storage.removeItem(key);
   return foreign.length;
 };

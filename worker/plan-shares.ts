@@ -52,7 +52,7 @@ const parseJson = async (request: Request): Promise<JsonRecord> => {
 const validPlanId = (value: unknown): value is string => typeof value === "string" && /^[a-zA-Z0-9._:-]{1,200}$/.test(value);
 const validShareId = (value: string): boolean => /^share_[a-f0-9]{16}$/.test(value);
 
-const selectedSections = (value: unknown): ShareSection[] | null => {
+export const selectedSections = (value: unknown): ShareSection[] | null => {
   if (!Array.isArray(value) || value.length < 1 || value.length > allowedSections.size) return null;
   const sections = [...new Set(value.filter((item): item is ShareSection => typeof item === "string" && allowedSections.has(item as ShareSection)))];
   return sections.length === value.length && sections.includes("overview") ? sections : null;
@@ -72,7 +72,7 @@ const readValue = (snapshot: JsonRecord, binding: JsonRecord): string | number |
   return typeof value === "number" || typeof value === "string" ? value : null;
 };
 
-const sanitizeProjection = async (db: D1Database, scopeId: string, row: PlanProjectionRow, sections: ShareSection[], mode: "live" | "frozen"): Promise<JsonRecord> => {
+export const sanitizeProjection = async (db: D1Database, scopeId: string, row: PlanProjectionRow, sections: ShareSection[], mode: "live" | "frozen"): Promise<JsonRecord> => {
   const snapshot = asRecord(JSON.parse(row.snapshot_json));
   const definition = asRecord(JSON.parse(row.definition_json));
   const surface = asRecord(definition.surface);
@@ -144,7 +144,7 @@ const sanitizeProjection = async (db: D1Database, scopeId: string, row: PlanProj
   return { publicationVersion: "finite-plan-publication.v1", mode, sections, plan };
 };
 
-const loadPlanRow = async (db: D1Database, scopeId: string, planId: string): Promise<PlanProjectionRow | null> => db.prepare(`
+export const loadPlanRow = async (db: D1Database, scopeId: string, planId: string): Promise<PlanProjectionRow | null> => db.prepare(`
   SELECT h.scope_id, '' AS share_id, h.plan_id, '' AS mode, '[]' AS sections_json, NULL AS frozen_projection_json,
          '' AS label, '' AS created_at, NULL AS revoked_at, h.revision, h.updated_at,
          r.snapshot_json, c.definition_json

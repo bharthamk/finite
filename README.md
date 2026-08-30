@@ -51,6 +51,8 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Account-scoped browser persistence: snapshots, custom-plan catalog, construction work, activation receipts, and active selection are namespaced by a server-derived opaque scope, so two identities sharing one browser origin cannot see or initialize from one another's cache.
 - Durable custom-plan catalog truth: D1 persists the complete validated compiler definition, evidence bundle, activation lineage, and receipt needed to reconstruct a custom adaptive plan on a browser-empty device.
 - Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, complete D1 tenant data, uploaded R2 objects, and authority traces are purged on end or expiry through a retry-safe cleanup record.
+- Browser-local Demo mode: a visible settings switch moves Finite into an isolated local namespace, replaces remote repositories with browser-backed equivalents, disables sharing/invitations/uploads, and installs a same-origin API mutation guard so judging and product exploration cannot write into the signed-in account. Turning it off never uploads local work.
+- Authenticated plan invitations: an owner can separately publish a bounded read-only page or issue one-account, expiring, revocable access with server-enforced `view`, `suggest`, or `edit draft` capability. Collaborator contributions remain provisional; accepted truth, activation, access administration, and real-world action stay owner-only.
 - Recoverable D1/R2 plan work: uploads and file removals record a deterministic pending operation before object storage changes, then commit metadata and the idempotent user receipt in one D1 transaction. Retrying the same action finishes an interrupted cross-store operation without duplicate records or untracked objects.
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human challenges now bind every accepted mutation—options, corrections, preference changes, lifecycle, group decisions, external-action truth, and plan activation—and are consumed in the same D1 transaction as the accepted commit.
@@ -145,6 +147,7 @@ testing, not basic Site Tools availability.
 - `ARRIVAL_AND_SURFACE_CONTINUITY.md` — zero-plan arrival, asynchronous Site/Codex continuity, wrong-surface recovery, lifecycle truth, and version-conflict law.
 - `PUBLIC_SURFACE_HANDOFF_2026-08-26.md` — bounded workstream brief for the public product surface; explicitly excludes submission preparation.
 - `worker/auth.ts` and `AUTHENTICATION.md` — provider-owned identity, automatic tenant provisioning, isolated demo lifecycle, and the portable self-hosting boundary.
+- `src/local-demo.ts`, `src/plan-collaboration.ts`, and `worker/plan-collaboration.ts` — zero-remote-write local Demo mode plus authenticated, role-enforced plan invitations and provisional collaboration work.
 - `src/styles.css` — profile-aware responsive presentation.
 - `worker/index.ts` — deployment-only static asset pass-through.
 - `tests/` — profile, surface, kernel, persistence, authority, and adapter contracts.

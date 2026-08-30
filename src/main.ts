@@ -5,9 +5,9 @@ import { compileSurfaceManifest, projectAcceptedPlanCopy, projectAcceptedPlanCop
 import { resolvePlanTitle } from "./plan-title.js";
 import type { Candidate, PlanLifecycleStatus, ProfileDefinition, ProfileId, SurfaceManifest, SurfaceZone } from "./types.js";
 import { FinitePlanWebMCPAdapter, type FiniteGuideTarget, type FiniteGuideViewRequest, type FiniteWebMCPReadiness } from "./webmcp.js";
-import { HttpAcceptedTruthRepository } from "./accepted-truth.js";
-import { HttpConstructionPacketRepository } from "./construction-packet.js";
-import { HttpArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
+import { HttpAcceptedTruthRepository, MemoryAcceptedTruthRepository } from "./accepted-truth.js";
+import { HttpConstructionPacketRepository, MemoryConstructionPacketRepository } from "./construction-packet.js";
+import { HttpArrivalRepository, MemoryArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
 import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
@@ -17,15 +17,17 @@ import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenReset
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
 import { applySkinDefinition, builtInSkins, defaultSkin, HttpSkinRepository, skinTraitKeys, type SkinCatalogResult, type SkinDefinition, type SkinRecipe, type SkinResult } from "./skin.js";
 import { HttpPlanShareRepository, type PlanPublicationRecord, type PlanShareMode, type PlanShareSection, type PublicPlanProjection } from "./plan-share.js";
+import { HttpPlanCollaborationRepository, type PlanCollaborationRole, type PlanContributionRecord, type PlanInvitationRecord } from "./plan-collaboration.js";
 import { defaultAgentSettings, defaultAgenticName, HttpSettingsRepository, validateAgenticName, type AgentSettings } from "./settings.js";
-import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
-import { HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
-import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryAction, type ProfileMemoryKind } from "./plan-learning.js";
+import { BrowserPlanInputRepository, HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputSection } from "./plan-input.js";
+import { BrowserPlanWorkRepository, HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
+import { BrowserPlanLearningRepository, emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryAction, type ProfileMemoryKind } from "./plan-learning.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
+import { installLocalDemoWriteGuard, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -70,6 +72,7 @@ const loadAuthStatus = async (): Promise<FiniteAuthStatus> => {
 
 const renderBrand = (): string => `<a class="brand" href="#main" aria-label="Finite home"><img src="/finite-wordmark.png" width="98" height="30" alt=""></a>`;
 const shareRepository = new HttpPlanShareRepository();
+const collaborationRepository = new HttpPlanCollaborationRepository();
 const escapePublicHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -396,8 +399,12 @@ export const startKitchen = async (authSession: FiniteAuthSession): Promise<void
 
 updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
-clearForeignFiniteScopes(localStorage, authSession.storageScope);
-const scopedStorage = new ScopedStorage(localStorage, authSession.storageScope);
+const localDemoMode = localDemoModeEnabled(localStorage);
+const localDemoScope = localDemoStorageScope(localStorage);
+const activeStorageScope = localDemoMode ? localDemoScope : authSession.storageScope;
+installLocalDemoWriteGuard(window, localDemoMode);
+clearForeignFiniteScopes(localStorage, activeStorageScope, [localDemoScope, authSession.storageScope]);
+const scopedStorage = new ScopedStorage(localStorage, activeStorageScope);
 const legacyCacheOwnerKey = "finite-plan.browser-cache-owner.v1";
 if (authSession.legacyBrowserCacheEligible) {
   const claimedBy = localStorage.getItem(legacyCacheOwnerKey);
@@ -419,21 +426,25 @@ if (authSession.legacyBrowserCacheEligible) {
 }
 const store = new PlanSnapshotStore(scopedStorage);
 const catalogStore = new PlanCatalogStore(scopedStorage);
-const acceptedRepository = new HttpAcceptedTruthRepository();
-const constructionRepository = new HttpConstructionPacketRepository();
-const arrivalRepository = new HttpArrivalRepository();
-const resetRepository = new HttpKitchenResetRepository();
+const acceptedRepository = localDemoMode ? new MemoryAcceptedTruthRepository() : new HttpAcceptedTruthRepository();
+const constructionRepository = localDemoMode ? new MemoryConstructionPacketRepository(() => new Date(), scopedStorage) : new HttpConstructionPacketRepository();
+const arrivalRepository = localDemoMode ? new MemoryArrivalRepository(() => new Date(), scopedStorage) : new HttpArrivalRepository();
+const resetRepository = localDemoMode ? {
+  async preview(): Promise<KitchenResetResult> { const totalRecords = localDemoRecordCount(localStorage, localDemoScope); return { ok: true, code: "KITCHEN_RESET_PREVIEW", confirmation: kitchenResetConfirmation, counts: { browser_records: totalRecords }, totalRecords, acceptedStateChanged: false }; },
+  async reset(): Promise<KitchenResetResult> { const totalRecords = localDemoRecordCount(localStorage, localDemoScope); clearFiniteScope(localStorage, localDemoScope); return { ok: true, code: "KITCHEN_RESET", counts: { browser_records: totalRecords }, totalRecords, acceptedStateChanged: false }; },
+} : new HttpKitchenResetRepository();
 const themeRepository = new HttpThemeRepository();
 const skinRepository = new HttpSkinRepository();
 const settingsRepository = new HttpSettingsRepository();
-const planInputRepository = new HttpPlanInputRepository();
-const planWorkRepository = new HttpPlanWorkRepository();
-const planLearningRepository = new HttpPlanLearningRepository();
+const planInputRepository = localDemoMode ? new BrowserPlanInputRepository(scopedStorage) : new HttpPlanInputRepository();
+const planWorkRepository = localDemoMode ? new BrowserPlanWorkRepository(scopedStorage) : new HttpPlanWorkRepository();
+const planLearningRepository = localDemoMode ? new BrowserPlanLearningRepository(scopedStorage) : new HttpPlanLearningRepository();
+const localSettings = (() => { try { return JSON.parse(scopedStorage.getItem("finite-plan.local-settings.v1") ?? "null") as AgentSettings | null; } catch { return null; } })();
 const [remoteCatalog, loadedSettings, loadedThemes, loadedSkins, openedArrival] = await Promise.all([
-  acceptedRepository.listCatalog().catch(() => null),
-  settingsRepository.load().catch(() => null),
-  themeRepository.list().catch(() => null),
-  skinRepository.list().catch(() => null),
+  localDemoMode ? Promise.resolve(null) : acceptedRepository.listCatalog().catch(() => null),
+  localDemoMode ? Promise.resolve(localSettings ? { ok: true, code: "SETTINGS_LOADED_LOCAL", settings: localSettings, acceptedStateChanged: false } : null) : settingsRepository.load().catch(() => null),
+  localDemoMode ? Promise.resolve(null) : themeRepository.list().catch(() => null),
+  localDemoMode ? Promise.resolve(null) : skinRepository.list().catch(() => null),
   arrivalRepository.open(),
 ]);
 if (remoteCatalog) {
@@ -624,7 +635,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
     ...(guidedView ? { guidedView } : {}),
   };
 }, arrivalRepository, true, resetRepository, async () => {
-  clearFiniteScope(localStorage, authSession.storageScope);
+  clearFiniteScope(localStorage, activeStorageScope);
   if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
   window.setTimeout(() => location.assign("/"), 1_500);
 }, themeRepository, async (result: ThemeResult) => {
@@ -703,12 +714,19 @@ let skinEditingId: string | null = null;
 let skinDeleteId: string | null = null;
 type ShareDialogMode = "closed" | "choose" | "compose" | "signin";
 let shareDialogMode: ShareDialogMode = "closed";
+let sharePanel: "publish" | "invite" = "publish";
 let shareBusy = false;
 let shareDraft: { label: string; mode: PlanShareMode; sections: PlanShareSection[] } = { label: "Plan update", mode: "live", sections: ["overview"] };
 let sharePreview: PublicPlanProjection | null = null;
 let sharePreviewKey = "";
 let planPublications: PlanPublicationRecord[] = [];
+let planInvitations: PlanInvitationRecord[] = [];
+let planContributions: PlanContributionRecord[] = [];
+let inviteDraft: { label: string; role: PlanCollaborationRole; sections: PlanShareSection[]; expiresInDays: 7 | 30 | 90 } = { label: "Plan collaborator", role: "suggest", sections: ["overview"], expiresInDays: 30 };
+let invitePreview: PublicPlanProjection | null = null;
+let invitePreviewKey = "";
 let newPublicationUrl = "";
+let newInvitationUrl = "";
 let shareError = "";
 let labAcceptanceResult: unknown = null;
 
@@ -728,7 +746,7 @@ const renderHeaderControls = (): string => {
   aboutTarget.searchParams.set("about", "1");
   const aboutPath = `${aboutTarget.pathname}${aboutTarget.search}${aboutTarget.hash}`;
   const proposedCount = profileMemories.filter((memory) => memory.status === "proposed").length;
-  return `${authSession.kind === "account" ? `<a class="header-action header-action--about" href="${escapeHtml(aboutPath)}">About you${proposedCount ? `<span>${proposedCount}</span>` : ""}</a><button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
+  return `${localDemoMode ? `<span class="local-demo-badge" title="Everything in this workspace stays in this browser">Demo mode · Local only</span>` : ""}${authSession.kind === "account" ? `<a class="header-action header-action--about" href="${escapeHtml(aboutPath)}">About you${proposedCount ? `<span>${proposedCount}</span>` : ""}</a><button type="button" class="header-action" data-action="open-theme-settings">Appearance</button>` : ""}
     <details class="account-menu">
       <summary aria-label="Open account menu for ${escapeHtml(accountName)}"><span class="account-menu__avatar" aria-hidden="true">${escapeHtml(initial)}</span></summary>
       <div class="account-menu__popover">
@@ -896,7 +914,7 @@ const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): 
   </select></label>`;
 };
 
-const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}">${context === "plan" && runtime.kernel.lifecycleStatus === "completed" ? "Share this summary" : "Share this plan"}</button>`;
+const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}" ${localDemoMode ? "disabled title=\"Sharing is unavailable while Demo mode is local only\"" : ""}>${context === "plan" && runtime.kernel.lifecycleStatus === "completed" ? "Share this summary" : "Share or invite"}</button>`;
 
 type FiniteLifecycleStage = "starting" | "planning" | "managing" | "wrapping";
 const finiteLifecycleStages: Array<{ id: FiniteLifecycleStage; label: string; detail: string }> = [
@@ -924,6 +942,12 @@ const renderLifecycleRail = (current: FiniteLifecycleStage): string => {
 };
 
 const shareSelectionKey = (draft = shareDraft): string => JSON.stringify({ label: draft.label.trim(), mode: draft.mode, sections: [...draft.sections].sort() });
+const inviteSelectionKey = (draft = inviteDraft): string => JSON.stringify({ label: draft.label.trim(), role: draft.role, expiresInDays: draft.expiresInDays, sections: [...draft.sections].sort() });
+const collaborationRoleCopy: Record<PlanCollaborationRole, { name: string; description: string }> = {
+  view: { name: "Can view", description: "See the selected live plan. No contribution controls." },
+  suggest: { name: "Can suggest", description: "See the plan and send suggestions for the owner to consider." },
+  edit: { name: "Can edit the draft", description: "Add working-draft edits. Accepted truth and real-world actions stay owner-only." },
+};
 const shareSectionOptions: Array<{ id: PlanShareSection; name: string; description: string }> = [
   { id: "overview", name: "Summary", description: "Plan name, headline, brief, revision and status." },
   { id: "allocation", name: "Finances", description: "Total, spent, committed, forecast and remaining room." },
@@ -960,10 +984,13 @@ const renderPlanShareDialog = (): string => {
     <section class="plan-share-new"><div><p class="eyebrow">${plans.length ? "Not here?" : "First step"}</p><h3>${plans.length ? "The plan you want doesn’t exist yet." : "Create the plan first."}</h3><p>Describe what you are trying to make happen. Finite will keep that new plan separate from anything already here.</p></div><button type="button" class="button button--secondary" data-action="start-plan-from-share">Start a new plan</button></section>
   </dialog>`;
   const active = planPublications.filter((publication) => !publication.revokedAt);
+  const activeInvitations = planInvitations.filter((invitation) => !invitation.revokedAt && Date.parse(invitation.expiresAt) > Date.now());
+  const openContributions = planContributions.filter((contribution) => contribution.status === "open");
   return `<dialog class="plan-share-dialog" data-plan-share-dialog aria-labelledby="plan_share_title">
     <button type="button" class="plan-share-dialog__close" data-action="close-plan-share" aria-label="Close share dialog">×</button>
-    <header class="plan-share-dialog__head"><p class="eyebrow">Share a read-only page</p><h2 id="plan_share_title">Choose what they can see.</h2><p>Pick the parts of this plan that belong on the page. Make it live so accepted changes keep appearing, or freeze it exactly as it is now.</p></header>
-    ${newPublicationUrl ? `<section class="plan-share-created" aria-labelledby="plan_share_created"><p class="eyebrow">Page published</p><h3 id="plan_share_created">Your private link is ready.</h3><div><input value="${escapeHtml(newPublicationUrl)}" readonly data-publication-url aria-label="Published plan URL"><button type="button" class="button" data-action="copy-publication-url">Copy link</button></div><p>Anyone with this unguessable link can see only the page preview you approved. Keep or revoke it whenever you like.</p></section>` : ""}
+    <header class="plan-share-dialog__head"><p class="eyebrow">Share or invite</p><h2 id="plan_share_title">Decide how they belong here.</h2><p>Publish a bounded read-only page, or invite one signed-in person with a clear role. You can revoke either at any time.</p></header>
+    <nav class="plan-share-tabs" aria-label="Sharing type"><button type="button" data-share-panel="publish" aria-pressed="${sharePanel === "publish"}">Publish a view</button><button type="button" data-share-panel="invite" aria-pressed="${sharePanel === "invite"}">Invite to collaborate</button></nav>
+    ${sharePanel === "publish" ? `${newPublicationUrl ? `<section class="plan-share-created" aria-labelledby="plan_share_created"><p class="eyebrow">Page published</p><h3 id="plan_share_created">Your private link is ready.</h3><div><input value="${escapeHtml(newPublicationUrl)}" readonly data-publication-url aria-label="Published plan URL"><button type="button" class="button" data-action="copy-publication-url">Copy link</button></div><p>Anyone with this unguessable link can see only the page preview you approved. Keep or revoke it whenever you like.</p></section>` : ""}
     <div class="plan-share-workspace">
       <form class="plan-share-form" data-plan-share-form>
         <label class="plan-share-label"><span>Name this shared page</span><input name="label" maxlength="80" required value="${escapeHtml(shareDraft.label)}" placeholder="Family update, contractor view…"><small>This name helps you recognise the link later.</small></label>
@@ -978,7 +1005,21 @@ const renderPlanShareDialog = (): string => {
       <section class="plan-share-preview" aria-labelledby="plan_share_preview"><header><div><p class="eyebrow">Their view</p><h3 id="plan_share_preview">This is all they can see.</h3></div><span>${sharePreview ? (sharePreview.mode === "live" ? "Live" : "Frozen") : "Not ready"}</span></header>${sharePreview ? `<div class="plan-share-preview__label"><span>Shared as</span><strong>${escapeHtml(shareDraft.label)}</strong></div>${renderPublicProjection(sharePreview, true)}` : `<p>Choose the page contents, then preview them before publishing.</p>`}</section>
     </div>
     <section class="plan-share-existing" aria-labelledby="plan_share_existing"><header><p class="eyebrow">Links you’ve shared</p><h3 id="plan_share_existing">Active pages</h3></header>${active.length ? `<p class="plan-share-existing__note">For privacy, a link can be copied only when it is first published. You can revoke any active page here.</p><ul>${active.map((publication) => `<li><div><strong>${escapeHtml(publication.label)}</strong><span>${publication.mode === "live" ? "Live view" : "Frozen snapshot"} · ${publication.sections.map((section) => shareSectionOptions.find((option) => option.id === section)?.name ?? section).join(", ")}</span><small>Published ${escapeHtml(new Date(publication.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-publication="${escapeHtml(publication.shareId)}">Revoke</button></li>`).join("")}</ul>` : `<p>You haven’t published a page for this plan yet.</p>`}</section>
-    <footer class="plan-share-boundary"><strong>Stays private</strong><p>Your original request, notes, working details, editing and approval controls.</p></footer>
+    <footer class="plan-share-boundary"><strong>Stays private</strong><p>Your original request, notes, working details, editing and approval controls.</p></footer>` : `${newInvitationUrl ? `<section class="plan-share-created" aria-labelledby="plan_invite_created"><p class="eyebrow">Invitation created</p><h3 id="plan_invite_created">Send this link to one person.</h3><div><input value="${escapeHtml(newInvitationUrl)}" readonly data-invitation-url aria-label="Plan invitation URL"><button type="button" class="button" data-action="copy-invitation-url">Copy invite</button></div><p>The first signed-in account to join owns this invitation. The link cannot be reused by another account.</p></section>` : ""}
+    <div class="plan-share-workspace">
+      <form class="plan-share-form" data-plan-invite-form>
+        <label class="plan-share-label"><span>Name this invitation</span><input name="label" maxlength="80" required value="${escapeHtml(inviteDraft.label)}" placeholder="Alex · trip planning"><small>This is a private label for the invitation and its recipient.</small></label>
+        <fieldset class="plan-share-role"><legend>What can they do?</legend>${(["view", "suggest", "edit"] as PlanCollaborationRole[]).map((role) => `<label><input type="radio" name="role" value="${role}" ${inviteDraft.role === role ? "checked" : ""}><span><strong>${collaborationRoleCopy[role].name}</strong><small>${collaborationRoleCopy[role].description}</small></span></label>`).join("")}</fieldset>
+        <label class="plan-share-label"><span>Invitation expires</span><select name="expiresInDays"><option value="7" ${inviteDraft.expiresInDays === 7 ? "selected" : ""}>In 7 days</option><option value="30" ${inviteDraft.expiresInDays === 30 ? "selected" : ""}>In 30 days</option><option value="90" ${inviteDraft.expiresInDays === 90 ? "selected" : ""}>In 90 days</option></select></label>
+        <fieldset class="plan-share-sections"><legend>What can they see?</legend>${shareSectionOptions.map((option) => `<label><input type="checkbox" name="sections" value="${option.id}" ${inviteDraft.sections.includes(option.id) ? "checked" : ""} ${option.id === "overview" ? "disabled" : ""}><span><strong>${option.name}${option.id === "overview" ? " · always" : ""}</strong><small>${option.description}</small></span></label>`).join("")}</fieldset>
+        ${shareError ? `<p class="plan-share-error" role="alert">${escapeHtml(shareError)}</p>` : ""}
+        <div class="plan-share-actions"><button type="submit" class="button button--secondary" data-invite-intent="preview" ${shareBusy ? "disabled" : ""}>Update preview</button><button type="submit" class="button" data-invite-intent="create" ${shareBusy || !invitePreview || invitePreviewKey !== inviteSelectionKey() ? "disabled" : ""}>Create invitation</button><small data-invite-preview-state>${invitePreview && invitePreviewKey === inviteSelectionKey() ? "Preview and access match your choices." : "Preview the exact access before creating it."}</small></div>
+      </form>
+      <section class="plan-share-preview" aria-labelledby="plan_invite_preview"><header><div><p class="eyebrow">Their live view</p><h3 id="plan_invite_preview">This is all they can see.</h3></div><span>${invitePreview ? collaborationRoleCopy[inviteDraft.role].name : "Not ready"}</span></header>${invitePreview ? `<div class="plan-share-preview__label"><span>Invited as</span><strong>${escapeHtml(inviteDraft.label)}</strong></div>${renderPublicProjection(invitePreview, true)}` : `<p>Choose access and contents, then preview before inviting.</p>`}</section>
+    </div>
+    <section class="plan-share-existing" aria-labelledby="plan_invite_existing"><header><p class="eyebrow">People with access</p><h3 id="plan_invite_existing">Active invitations</h3></header>${activeInvitations.length ? `<ul>${activeInvitations.map((invitation) => `<li><div><strong>${escapeHtml(invitation.label)}</strong><span>${escapeHtml(collaborationRoleCopy[invitation.role].name)} · ${invitation.claimed ? "Joined" : "Waiting to join"}</span><small>Expires ${escapeHtml(new Date(invitation.expiresAt).toLocaleDateString(undefined, { dateStyle: "medium" }))}</small></div><button type="button" class="text-button" data-revoke-invitation="${escapeHtml(invitation.inviteId)}">Revoke</button></li>`).join("")}</ul>` : `<p>No one has active collaboration access to this plan.</p>`}</section>
+    <section class="plan-share-existing plan-collaboration-inbox" aria-labelledby="plan_collaboration_inbox"><header><p class="eyebrow">Collaboration inbox</p><h3 id="plan_collaboration_inbox">Open contributions</h3></header>${openContributions.length ? `<ul>${openContributions.map((contribution) => `<li><div><strong>${contribution.kind === "draft_edit" ? "Working-draft edit" : "Suggestion"} · ${escapeHtml(contribution.section)}</strong><span>${escapeHtml(contribution.message)}</span><small>${escapeHtml(new Date(contribution.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}</small></div><div class="plan-collaboration-actions"><button type="button" class="text-button" data-resolve-contribution="${escapeHtml(contribution.updateId)}" data-resolution="incorporated">Mark incorporated</button><button type="button" class="text-button" data-resolve-contribution="${escapeHtml(contribution.updateId)}" data-resolution="dismissed">Dismiss</button></div></li>`).join("")}</ul>` : `<p>New suggestions and draft edits will appear here.</p>`}</section>
+    <footer class="plan-share-boundary"><strong>Owner-only authority</strong><p>Invited people cannot approve accepted plan changes, activate a plan, change access, or carry out real-world actions.</p></footer>`}
   </dialog>`;
 };
 
@@ -989,10 +1030,10 @@ const renderKitchenResetDialog = (): string => {
   const ready = kitchenResetPreview?.ok === true;
   return `<dialog class="kitchen-reset-dialog" data-kitchen-reset-dialog aria-labelledby="kitchen_reset_title">
     <form method="dialog" class="kitchen-reset-dialog__close"><button aria-label="Close start-over dialog">×</button></form>
-    <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / this account only</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>This deletes every plan and all saved work in this Finite account. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system.</p></div>
-    ${ready ? `<dl class="kitchen-reset-dialog__counts">
+    <div class="kitchen-reset-dialog__intro"><p class="eyebrow">Permanent reset / ${localDemoMode ? "this browser only" : "this account only"}</p><h2 id="kitchen_reset_title">Start Finite over?</h2><p>${localDemoMode ? "This deletes every local Demo mode plan and saved change in this browser. Nothing outside this browser is touched." : "This deletes every plan and all saved work in this Finite account. It does not sign you out or change a booking, purchase, supplier, calendar, or any other external system."}</p></div>
+    ${ready ? localDemoMode ? `<dl class="kitchen-reset-dialog__counts"><div><dt>Plans and saved Demo mode work in this browser</dt><dd>${resetCategoryCount(["browser_records"])}</dd></div></dl><p class="kitchen-reset-dialog__total"><strong>${total}</strong> local record${total === 1 ? "" : "s"} will be cleared from this browser only.</p>` : `<dl class="kitchen-reset-dialog__counts">
       <div><dt>Arrival history</dt><dd>${resetCategoryCount(["arrival_orders", "arrival_events"])}</dd></div>
-      <div><dt>Plans, revisions and shared pages</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts", "plan_shares"])}</dd></div>
+      <div><dt>Plans, revisions, sharing and invitations</dt><dd>${resetCategoryCount(["plan_catalog", "plan_heads", "plan_revisions", "activation_receipts", "plan_shares", "plan_invitations", "plan_collaboration_updates"])}</dd></div>
       <div><dt>Construction work</dt><dd>${resetCategoryCount(["construction_packets", "construction_return_reviews"])}</dd></div>
       <div><dt>Evidence, decisions and receipts</dt><dd>${resetCategoryCount(["evidence_records", "domain_events", "receipts", "operation_log"])}</dd></div>
       <div><dt>Authority and operator sessions</dt><dd>${resetCategoryCount(["authority_challenges", "challenge_consumptions", "operator_sessions"])}</dd></div>
@@ -1298,11 +1339,22 @@ const readShareDraft = (form: HTMLFormElement): typeof shareDraft => {
   return { label, mode, sections: sections.includes("overview") ? sections : ["overview", ...sections] };
 };
 
+const readInviteDraft = (form: HTMLFormElement): typeof inviteDraft => {
+  const label = form.querySelector<HTMLInputElement>("input[name='label']")?.value.trim() ?? "";
+  const roleValue = form.querySelector<HTMLInputElement>("input[name='role']:checked")?.value;
+  const role: PlanCollaborationRole = roleValue === "view" || roleValue === "edit" ? roleValue : "suggest";
+  const expiryValue = Number(form.querySelector<HTMLSelectElement>("select[name='expiresInDays']")?.value ?? 30);
+  const expiresInDays: 7 | 30 | 90 = expiryValue === 7 || expiryValue === 90 ? expiryValue : 30;
+  const sections = [...form.querySelectorAll<HTMLInputElement>("input[name='sections']:checked")].map((input) => input.value as PlanShareSection);
+  return { label, role, expiresInDays, sections: sections.includes("overview") ? sections : ["overview", ...sections] };
+};
+
 const openPlanShareDialog = async (): Promise<void> => {
   shareDialogMode = "compose";
   shareBusy = true;
   shareError = "";
   newPublicationUrl = "";
+  newInvitationUrl = "";
   const completed = runtime.kernel.lifecycleStatus === "completed";
   const currentPlanName = resolvePlanTitle({
     proposed: projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel),
@@ -1311,15 +1363,24 @@ const openPlanShareDialog = async (): Promise<void> => {
   shareDraft = { label: `${currentPlanName} ${completed ? "summary" : "update"}`, mode: completed ? "frozen" : "live", sections: completed ? ["overview", "allocation", "measures", "stages", "changes"] : ["overview"] };
   sharePreview = null;
   sharePreviewKey = "";
+  inviteDraft = { label: `${currentPlanName} collaborator`, role: "suggest", expiresInDays: 30, sections: ["overview"] };
+  invitePreview = null;
+  invitePreviewKey = "";
   await render();
   try {
-    const [publications, preview] = await Promise.all([
+    const [publications, preview, collaborations, collaborationPreview] = await Promise.all([
       shareRepository.list(runtime.kernel.profile.planId),
       shareRepository.preview({ planId: runtime.kernel.profile.planId, mode: shareDraft.mode, sections: shareDraft.sections }),
+      collaborationRepository.list(runtime.kernel.profile.planId),
+      shareRepository.preview({ planId: runtime.kernel.profile.planId, mode: "live", sections: inviteDraft.sections }),
     ]);
     planPublications = publications;
     sharePreview = preview;
     sharePreviewKey = shareSelectionKey();
+    planInvitations = collaborations.invitations;
+    planContributions = collaborations.contributions;
+    invitePreview = collaborationPreview;
+    invitePreviewKey = inviteSelectionKey();
   } catch (error) {
     shareError = error instanceof Error ? error.message : "The publication preview could not be prepared.";
   }
@@ -1329,6 +1390,7 @@ const openPlanShareDialog = async (): Promise<void> => {
 
 const openPlanShareFlow = async (context: "arrival" | "plan"): Promise<void> => {
   shareError = "";
+  if (localDemoMode) { announce("Sharing and invitations are unavailable because Demo mode keeps this plan only in this browser."); return; }
   if (authSession.kind !== "account") {
     shareDialogMode = "signin";
     await render();
@@ -1423,6 +1485,41 @@ const submitPlanShare = async (form: HTMLFormElement, intent: "preview" | "publi
   await render();
 };
 
+const submitPlanInvitation = async (form: HTMLFormElement, intent: "preview" | "create"): Promise<void> => {
+  if (shareBusy) return;
+  inviteDraft = readInviteDraft(form);
+  shareError = "";
+  newInvitationUrl = "";
+  if (!inviteDraft.label) {
+    shareError = "Add a short name for this invitation.";
+    await render();
+    return;
+  }
+  if (intent === "create" && (!invitePreview || invitePreviewKey !== inviteSelectionKey())) {
+    shareError = "Preview this exact access before creating the invitation.";
+    await render();
+    return;
+  }
+  shareBusy = true;
+  await render();
+  try {
+    if (intent === "preview") {
+      invitePreview = await shareRepository.preview({ planId: runtime.kernel.profile.planId, mode: "live", sections: inviteDraft.sections });
+      invitePreviewKey = inviteSelectionKey();
+    } else {
+      const invitation = await collaborationRepository.create({ planId: runtime.kernel.profile.planId, ...inviteDraft });
+      if (!invitation.path) throw new Error("The invitation was created without a usable link.");
+      newInvitationUrl = new URL(invitation.path, location.origin).toString();
+      planInvitations = [invitation, ...planInvitations];
+      announce("The invitation is ready. Its link can be claimed by one signed-in account.");
+    }
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The plan invitation could not be created.";
+  }
+  shareBusy = false;
+  await render();
+};
+
 const revokePlanShare = async (shareId: string): Promise<void> => {
   if (shareBusy) return;
   shareBusy = true;
@@ -1439,6 +1536,42 @@ const revokePlanShare = async (shareId: string): Promise<void> => {
   await render();
 };
 
+const revokePlanInvitation = async (inviteId: string): Promise<void> => {
+  if (shareBusy) return;
+  shareBusy = true;
+  shareError = "";
+  await render();
+  try {
+    await collaborationRepository.revoke(inviteId);
+    const catalog = await collaborationRepository.list(runtime.kernel.profile.planId);
+    planInvitations = catalog.invitations;
+    planContributions = catalog.contributions;
+    announce("Collaboration access was revoked immediately.");
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The invitation could not be revoked.";
+  }
+  shareBusy = false;
+  await render();
+};
+
+const resolvePlanContribution = async (updateId: string, status: "incorporated" | "dismissed"): Promise<void> => {
+  if (shareBusy) return;
+  shareBusy = true;
+  shareError = "";
+  await render();
+  try {
+    await collaborationRepository.resolve(updateId, status);
+    const catalog = await collaborationRepository.list(runtime.kernel.profile.planId);
+    planInvitations = catalog.invitations;
+    planContributions = catalog.contributions;
+    announce(status === "incorporated" ? "Contribution marked incorporated." : "Contribution dismissed.");
+  } catch (error) {
+    shareError = error instanceof Error ? error.message : "The contribution could not be updated.";
+  }
+  shareBusy = false;
+  await render();
+};
+
 const bindPlanShareInteractions = (): void => {
   root.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-share']").forEach((button) => button.addEventListener("click", () => { void openPlanShareFlow(button.dataset.shareContext === "plan" ? "plan" : "arrival"); }));
   const dialog = root.querySelector<HTMLDialogElement>("[data-plan-share-dialog]");
@@ -1447,6 +1580,11 @@ const bindPlanShareInteractions = (): void => {
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) { shareDialogMode = "closed"; dialog.close(); } });
   root.querySelector<HTMLFormElement>("[data-share-plan-choice]")?.addEventListener("submit", (event) => { event.preventDefault(); void choosePlanToShare(event.currentTarget as HTMLFormElement); });
   root.querySelector<HTMLButtonElement>("[data-action='start-plan-from-share']")?.addEventListener("click", () => { void startNewPlan(); });
+  root.querySelectorAll<HTMLButtonElement>("[data-share-panel]").forEach((button) => button.addEventListener("click", async () => {
+    sharePanel = button.dataset.sharePanel === "invite" ? "invite" : "publish";
+    shareError = "";
+    await render();
+  }));
   const shareForm = root.querySelector<HTMLFormElement>("[data-plan-share-form]");
   const refreshShareDraftState = (): void => {
     if (!shareForm) return;
@@ -1465,7 +1603,27 @@ const bindPlanShareInteractions = (): void => {
     const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.shareIntent === "publish" ? "publish" : "preview";
     void submitPlanShare(event.currentTarget as HTMLFormElement, intent);
   });
+  const inviteForm = root.querySelector<HTMLFormElement>("[data-plan-invite-form]");
+  const refreshInviteDraftState = (): void => {
+    if (!inviteForm) return;
+    inviteDraft = readInviteDraft(inviteForm);
+    newInvitationUrl = "";
+    const matchesPreview = Boolean(invitePreview) && invitePreviewKey === inviteSelectionKey();
+    const createButton = inviteForm.querySelector<HTMLButtonElement>("[data-invite-intent='create']");
+    if (createButton) createButton.disabled = shareBusy || !matchesPreview;
+    const previewState = inviteForm.querySelector<HTMLElement>("[data-invite-preview-state]");
+    if (previewState) previewState.textContent = matchesPreview ? "Preview and access match your choices." : "Choices changed — update the preview.";
+  };
+  inviteForm?.addEventListener("input", refreshInviteDraftState);
+  inviteForm?.addEventListener("change", refreshInviteDraftState);
+  inviteForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const intent = ((event as SubmitEvent).submitter as HTMLButtonElement | null)?.dataset.inviteIntent === "create" ? "create" : "preview";
+    void submitPlanInvitation(event.currentTarget as HTMLFormElement, intent);
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-revoke-publication]").forEach((button) => button.addEventListener("click", () => { void revokePlanShare(button.dataset.revokePublication ?? ""); }));
+  root.querySelectorAll<HTMLButtonElement>("[data-revoke-invitation]").forEach((button) => button.addEventListener("click", () => { void revokePlanInvitation(button.dataset.revokeInvitation ?? ""); }));
+  root.querySelectorAll<HTMLButtonElement>("[data-resolve-contribution]").forEach((button) => button.addEventListener("click", () => { void resolvePlanContribution(button.dataset.resolveContribution ?? "", button.dataset.resolution === "incorporated" ? "incorporated" : "dismissed"); }));
   root.querySelector<HTMLButtonElement>("[data-action='copy-publication-url']")?.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     try {
@@ -1476,6 +1634,18 @@ const bindPlanShareInteractions = (): void => {
       const input = root.querySelector<HTMLInputElement>("[data-publication-url]");
       input?.focus(); input?.select();
       announce("The shared-page link is selected and ready to copy.");
+    }
+  });
+  root.querySelector<HTMLButtonElement>("[data-action='copy-invitation-url']")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    try {
+      await navigator.clipboard.writeText(newInvitationUrl);
+      button.textContent = "Copied";
+      announce("Invitation link copied.");
+    } catch {
+      const input = root.querySelector<HTMLInputElement>("[data-invitation-url]");
+      input?.focus(); input?.select();
+      announce("The invitation link is selected and ready to copy.");
     }
   });
   if (shareDialogMode !== "closed" && dialog && !dialog.open) dialog.showModal();
@@ -2773,7 +2943,7 @@ const submitKitchenReset = async (form: HTMLFormElement): Promise<void> => {
   if (submit) { submit.disabled = true; submit.textContent = "Clearing your Finite data…"; }
   const result = await resetRepository.reset({ confirmation, idempotencyKey: `site-reset-${crypto.randomUUID()}`, sourceSurface: "site" });
   if (result.ok && result.code === "KITCHEN_RESET") {
-    clearFiniteScope(localStorage, authSession.storageScope);
+    clearFiniteScope(localStorage, activeStorageScope);
     if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
     location.assign("/");
     return;
@@ -3898,7 +4068,7 @@ const settingsReturnPath = (): string => {
 };
 
 function renderSettings(): void {
-  const canPersist = authSession.kind === "account";
+  const canPersist = authSession.kind === "account" || localDemoMode;
   surfaceRoot.dataset.profile = "settings";
   surfaceRoot.setAttribute("aria-busy", String(settingsBusy));
   surfaceRoot.innerHTML = `
@@ -3910,7 +4080,15 @@ function renderSettings(): void {
       </header>
     </div>
     <main id="main" class="settings-main">
-      <header class="settings-hero"><p class="eyebrow">Your Finite account</p><h1>Settings</h1><p>Choose how Finite feels and speaks while the underlying safeguards stay the same.</p></header>
+      <header class="settings-hero"><p class="eyebrow">Your Finite account</p><h1>Settings</h1><p>Choose how Finite feels, speaks and stores work while the underlying safeguards stay the same.</p></header>
+      <section class="settings-section settings-section--demo" aria-labelledby="demo_mode_title">
+        <div class="settings-section__intro"><p class="eyebrow">Storage</p><h2 id="demo_mode_title">Demo mode</h2><p>Use the full product without adding anything to the signed-in account. Plans and changes stay only in this browser.</p></div>
+        <div class="demo-mode-setting">
+          <label><input type="checkbox" data-action="toggle-local-demo" ${localDemoMode ? "checked" : ""}><span><strong>Keep this browser local</strong><small>${localDemoMode ? "On · remote writes are blocked" : "Off · signed-in account storage is active"}</small></span></label>
+          <p>${localDemoMode ? "Account plans are not loaded. Sharing, invitations and file uploads are unavailable. Turning this off never uploads the local workspace." : "Turning this on reloads Finite into a separate local workspace. Existing account plans remain untouched."}</p>
+          ${localDemoMode ? `<button type="button" class="text-button" data-action="reset-local-demo">Reset local demo</button>` : ""}
+        </div>
+      </section>
       <section class="settings-section" aria-labelledby="agentic_name_title">
         <div class="settings-section__intro"><p class="eyebrow">Agentic name</p><h2 id="agentic_name_title">What should Finite call your agent?</h2><p>This name appears throughout your private plan workspace. The default is Codex.</p></div>
         <form class="agentic-name-form" data-agentic-name-form>
@@ -3937,10 +4115,13 @@ const saveAgenticName = async (name: string): Promise<void> => {
   settingsBusy = true;
   await render();
   try {
-    const result = await settingsRepository.save({ agenticName: validation.name, idempotencyKey: `site-settings-${crypto.randomUUID()}`, sourceSurface: "site" });
+    const result = localDemoMode
+      ? { ok: true, code: "AGENTIC_NAME_SAVED_LOCAL", settings: { agenticName: validation.name, updatedAt: new Date().toISOString() }, acceptedStateChanged: false }
+      : await settingsRepository.save({ agenticName: validation.name, idempotencyKey: `site-settings-${crypto.randomUUID()}`, sourceSurface: "site" });
     if (!result.ok) settingsError = result.issues?.join(" ") || result.message || "That name could not be saved.";
     else {
       accountSettings = result.settings;
+      if (localDemoMode) scopedStorage.setItem("finite-plan.local-settings.v1", JSON.stringify(accountSettings));
       settingsMessage = `Saved. Finite will now call your agent ${accountSettings.agenticName}.`;
       announce(settingsMessage);
     }
@@ -3958,6 +4139,14 @@ function bindSettingsInteractions(): void {
     void saveAgenticName(String(new FormData(form).get("agenticName") ?? ""));
   });
   root?.querySelector<HTMLButtonElement>("[data-action='reset-agentic-name']")?.addEventListener("click", () => { void saveAgenticName(defaultAgenticName); });
+  root?.querySelector<HTMLInputElement>("[data-action='toggle-local-demo']")?.addEventListener("change", (event) => {
+    setLocalDemoMode(localStorage, (event.currentTarget as HTMLInputElement).checked);
+    location.reload();
+  });
+  root?.querySelector<HTMLButtonElement>("[data-action='reset-local-demo']")?.addEventListener("click", () => {
+    clearFiniteScope(localStorage, localDemoScope);
+    location.reload();
+  });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     if (response.ok) location.reload();

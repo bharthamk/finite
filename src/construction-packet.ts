@@ -1,4 +1,5 @@
 import { clone } from "./crypto.js";
+import type { StoragePort } from "./persistence.js";
 import type { ConstructionReturnReason, PlanConstructionPacket, ReturnedConstructionReview } from "./types.js";
 
 export class ConstructionPacketRepositoryError extends Error {
@@ -85,7 +86,17 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
   private tombstone: { packetId: string; clearedAt: string } | null = null;
   private returned: ReturnedConstructionReview | null = null;
 
-  constructor(private readonly now: () => Date = () => new Date()) {}
+  constructor(private readonly now: () => Date = () => new Date(), private readonly storage?: StoragePort, private readonly storageKey = "finite-plan.local-construction.v1") {
+    if (!storage) return;
+    try {
+      const parsed = JSON.parse(storage.getItem(storageKey) ?? "null") as { packet?: PlanConstructionPacket | null; tombstone?: { packetId: string; clearedAt: string } | null; returned?: ReturnedConstructionReview | null } | null;
+      this.packet = clone(parsed?.packet ?? null);
+      this.tombstone = clone(parsed?.tombstone ?? null);
+      this.returned = clone(parsed?.returned ?? null);
+    } catch { storage.removeItem(storageKey); }
+  }
+
+  private persist(): void { this.storage?.setItem(this.storageKey, JSON.stringify({ packet: this.packet, tombstone: this.tombstone, returned: this.returned })); }
 
   async load(): Promise<PlanConstructionPacket | null> {
     if (this.tombstone) throw new ConstructionPacketRepositoryError("CONSTRUCTION_PACKET_CLEARED", "The last construction packet was discarded.", this.tombstone);
@@ -105,6 +116,7 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
     }
     this.packet = clone(packet);
     this.tombstone = null;
+    this.persist();
     return clone(packet);
   }
 
@@ -125,14 +137,16 @@ export class MemoryConstructionPacketRepository implements ConstructionPacketRep
     };
     this.tombstone = { packetId, clearedAt: returnedAt };
     this.packet = null;
+    this.persist();
     return clone(this.returned);
   }
 
   async clear(packetId: string): Promise<void> {
-    if (this.tombstone?.packetId === packetId) { this.returned = null; return; }
+    if (this.tombstone?.packetId === packetId) { this.returned = null; this.persist(); return; }
     if (!this.packet || this.packet.packetId !== packetId) throw new ConstructionPacketRepositoryError("CONSTRUCTION_PACKET_NOT_FOUND", "Construction packet was not found.");
     this.tombstone = { packetId, clearedAt: this.now().toISOString() };
     this.packet = null;
     this.returned = null;
+    this.persist();
   }
 }

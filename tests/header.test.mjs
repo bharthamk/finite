@@ -532,6 +532,27 @@ test("settings provides a durable Agentic name preference with Codex as the hone
   assert.match(styles, /\.agentic-name-form/);
 });
 
+test("settings exposes a local-only Demo mode and sharing fails closed inside it", () => {
+  assert.match(source, /Demo mode · Local only/);
+  assert.match(source, /Keep this browser local/);
+  assert.match(source, /installLocalDemoWriteGuard\(window, localDemoMode\)/);
+  assert.match(source, /localDemoMode \? new MemoryArrivalRepository/);
+  assert.match(source, /Sharing and invitations are unavailable because Demo mode keeps this plan only in this browser/);
+  assert.match(source, /Turning this off never uploads the local workspace/);
+});
+
+test("sharing and authenticated collaboration stay distinct with enforced owner authority", () => {
+  assert.match(source, /Publish a view/);
+  assert.match(source, /Invite to collaborate/);
+  assert.match(source, /Can view/);
+  assert.match(source, /Can suggest/);
+  assert.match(source, /Can edit the draft/);
+  assert.match(source, /Owner-only authority/);
+  assert.match(source, /collaborationRepository\.create/);
+  assert.match(source, /collaborationRepository\.revoke/);
+  assert.match(source, /collaborationRepository\.resolve/);
+});
+
 test("human writing fields use the browser language for native spellcheck while control text opts out", () => {
   assert.match(shell, /<html lang="en">/);
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true">/);
