@@ -862,6 +862,14 @@ export const arrivalUsesCodexWaitingWorkspace = (order: ArrivalOrder): boolean =
 
 export const arrivalInputIsWorkflowOnly = (input: ArrivalInput): boolean => ["manual_takeover", "codex_handoff_workspace"].includes(String(input.payload.workspaceOperation ?? ""));
 
+export const starterFamilyForArrival = (order: ArrivalOrder): StarterPlanPresentation["family"] => {
+  const requestSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
+  if (isInterviewPlan(requestSource) || isRecurringPracticePlan(requestSource)) return "general";
+  const inferredFamily = starterFamily(order.interpretation?.inferredFamily);
+  const briefFamily = starterFamily(order.rawOutcome);
+  return inferredFamily === "general" && briefFamily !== "general" ? briefFamily : inferredFamily;
+};
+
 export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentation | null => {
   const interpretation = order.interpretation;
   const manual = arrivalUsesManualWorkspace(order);
@@ -869,9 +877,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   if (!interpretation?.complete && !editableWorkspace) return null;
   const requestSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${interpretation?.summary ?? ""}`;
   const explicitlyComposableOutcome = isInterviewPlan(requestSource) || isRecurringPracticePlan(requestSource);
-  const inferredFamily = starterFamily(interpretation?.inferredFamily);
-  const briefFamily = starterFamily(order.rawOutcome);
-  const family = explicitlyComposableOutcome ? "general" : inferredFamily === "general" && briefFamily !== "general" ? briefFamily : inferredFamily;
+  const family = starterFamilyForArrival(order);
   const basedOnVersion = interpretation?.basedOnVersion ?? 1;
   const laterHumanInputs = order.inputs.filter((input) => inputVersion(input) > basedOnVersion && !arrivalInputIsWorkflowOnly(input));
   const openItems = [...new Set([

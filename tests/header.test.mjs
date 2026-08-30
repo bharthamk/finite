@@ -588,6 +588,20 @@ test("ordinary plan views never invent demo disruptions", () => {
   assert.doesNotMatch(source, /if \(result\.code === "PLAN_SWITCHED"\) \{\s*await adapter\?\.refreshContextualTools\(\);\s*await seedDecision\(\);/);
 });
 
+test("a reality change reads as one human decision and leaves a visible outcome", () => {
+  assert.match(source, /What changed/);
+  assert.match(source, /What stays true/);
+  assert.match(source, /What you’re choosing/);
+  assert.match(source, />Use this option<\/button>/);
+  assert.match(source, />Confirm and update plan<\/button>/);
+  assert.match(source, /The change is now part of your plan\./);
+  assert.match(source, /This updates your plan only—it does not book, buy, cancel, or contact anyone\./);
+  assert.match(source, /item\.receiptType === "plan_option" && item\.toRevision === kernel\.revision/);
+  assert.match(styles, /\.change-context \{/);
+  assert.match(styles, /\.latest-plan-update \{/);
+  assert.doesNotMatch(source, /outside this demonstration/);
+});
+
 test("Managing accepts general and section-specific decisions from both the page and Codex", () => {
   assert.match(source, />\+ Add or change<\/button>/);
   assert.match(source, /data-plan-input-section="timeline"/);

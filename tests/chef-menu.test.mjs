@@ -83,7 +83,7 @@ for (const [profileId, expectedFirst, expectedTool] of [
 }
 
 test("a waiting human order wins route arbitration over an accepted plan", async () => {
-  const { runtime, arrivals, host } = await setup("event");
+  const { runtime, arrivals, host, adapter } = await setup("travel");
   const created = await arrivals.create({ idempotencyKey: "chef-arrival-0001", rawOutcome: "Plan a small wedding dinner.", sourceSurface: "site" });
   const entered = await host.execute("finite_enter_kitchen", {
     entryIntent: "continue_current",
@@ -92,22 +92,36 @@ test("a waiting human order wins route arbitration over an accepted plan", async
   });
   assert.equal(entered.arrival.orientation.order.orderId, created.order.orderId);
   assert.equal(entered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
-  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, {});
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_open_toolset");
+  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { group: "construction" });
   assert.deepEqual(entered.operatorPacket.nextAction.requiredArgs, []);
   assert.equal(entered.operatorPacket.nextAction.knownArgsComplete, true);
   assert.equal(entered.operatorPacket.nextAction.callReady, true);
   assert.deepEqual(entered.operatorPacket.nextAction.derivedArgs, []);
+  assert.equal(entered.operatorPacket.nextAction.afterOpen.action, "finite_get_plan_blueprint");
+  assert.equal(entered.operatorPacket.nextAction.afterOpen.arguments.profileId, "event");
   assert.equal(entered.operatorPacket.nextAction.preMutationGate.presentChefMenuInHumanLanguage, true);
   assert.equal(entered.operatorPacket.nextAction.preMutationGate.sensitiveWebMcpTransmissionRequiresActionTimeConfirmation, true);
   assert.equal(entered.operatorPacket.nextAction.preMutationGate.readOnlyPlanPreparationRequiresConfirmation, false);
   assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "arrival_develop_before_save");
+  assert.equal(entered.operatorPacket.chefMenu.items[0].nextTool, "finite_open_toolset");
+  assert.deepEqual(entered.operatorPacket.chefMenu.items[0].knownArgs, { group: "construction" });
   assert.equal(entered.operatorPacket.chefMenu.items[0].knownArgsComplete, true);
-  assert.deepEqual(entered.operatorPacket.chefMenu.items[0].derivedArgs, []);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].afterOpen.derivedArgs[0].source, "current_rough_plan");
   assert.equal(entered.operatingContract.preMutationGate.copiedHandoffIsNotPlanAuthority, true);
   assert.match(entered.operatorPacket.law, /knownArgs are executable only when knownArgsComplete is not false/);
   assert.match(entered.operatorPacket.law, /Bundle that confirmation at the concrete save boundary/);
   assert.equal(entered.next.includes("finite_create_arrival_order"), false);
+
+  const opened = await host.execute(entered.operatorPacket.nextAction.nextTool, entered.operatorPacket.nextAction.knownArgs);
+  assert.equal(opened.code, "TOOLSET_READY");
+  await adapter.waitForRouteSettlement();
+  const blueprint = await host.execute(entered.operatorPacket.nextAction.afterOpen.action, entered.operatorPacket.nextAction.afterOpen.arguments);
+  assert.equal(blueprint.code, "PLAN_BLUEPRINT");
+  assert.equal(blueprint.profileId, "event");
+  assert.equal(blueprint.profile.profileId, "event");
+  assert.notEqual(blueprint.profile.planId, runtime.kernel.profile.planId);
+  assert.equal(JSON.stringify(blueprint.profile).includes(runtime.kernel.profile.planId), false);
 });
 
 test("a saved incomplete interpretation advances to one operator-ready clarification instead of looping", async () => {
@@ -169,7 +183,8 @@ test("a saved incomplete interpretation advances to one operator-ready clarifica
   const refreshed = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(processed.orientation.latestHumanInputVersion, 5);
   assert.equal(refreshed.operatorPacket.nextAction.stage, "arrival_draft_preparation");
-  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
+  assert.equal(refreshed.operatorPacket.nextAction.nextTool, "finite_open_toolset");
+  assert.equal(refreshed.operatorPacket.nextAction.afterOpen.arguments.profileId, "travel");
   assert.match(refreshed.operatorPacket.nextAction.reason, /Human input advanced/);
 });
 
@@ -338,7 +353,8 @@ test("new human input invalidates an older kitchen draft and restores the arriva
   await new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals).register();
   const entered = await host.execute("finite_enter_kitchen", { orderId: created.order.orderId });
   assert.equal(entered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
-  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_open_toolset");
+  assert.equal(entered.operatorPacket.nextAction.afterOpen.arguments.profileId, "travel");
   assert.equal(entered.operatorPacket.nextAction.authorityPresent, false);
   assert.equal(entered.plan.construction.status, "stale_arrival");
   assert.equal(entered.plan.pendingDraft, null);

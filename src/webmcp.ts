@@ -10,7 +10,7 @@ import { HttpSkinRepository, skinSchema, type SkinRecipe, type SkinRepository, t
 import { HttpPlanInputRepository, type PlanInputKind, type PlanInputMode, type PlanInputRecord, type PlanInputRepository, type PlanInputResult, type PlanInputSection } from "./plan-input.js";
 import { HttpPlanWorkRepository, type AttachmentProcessingStatus, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { HttpPlanLearningRepository, type PlanLearningRepository, type PlanLearningResult, type ProfileMemoryKind } from "./plan-learning.js";
-import { starterPlanForArrival } from "./arrival-presentation.js";
+import { starterFamilyForArrival, starterPlanForArrival } from "./arrival-presentation.js";
 
 const objectSchema = (properties: Record<string, unknown> = {}, required: string[] = []): Record<string, unknown> => ({ type: "object", properties, required, additionalProperties: false });
 const string = { type: "string", minLength: 1, maxLength: 200 };
@@ -282,7 +282,7 @@ const constructionMatchesArrival = (construction: Record<string, unknown>, orien
 const arrivalAnswerKinds = new Set(["text", "number", "date", "choice", "multi_choice", "confirmation"]);
 const builtInArrivalFamilies = new Set<ProfileId>(["travel", "renovation", "event", "general"]);
 const compilerProfileForArrival = (orientation: ArrivalOrientation): ProfileId => {
-  const family = starterPlanForArrival(orientation.order)?.family ?? "general";
+  const family = starterFamilyForArrival(orientation.order);
   return builtInArrivalFamilies.has(family as ProfileId) ? family as ProfileId : "general";
 };
 const toolsetGroups = {
@@ -540,13 +540,26 @@ const arrivalReconcileCallContract = (orientation: ArrivalOrientation): Record<s
   },
 });
 
-const arrivalDraftPreparationContract = (): Record<string, unknown> => ({
-  knownArgs: {},
+const arrivalDraftPreparationContract = (orientation: ArrivalOrientation): Record<string, unknown> => ({
+  knownArgs: { group: "construction" },
   requiredArgs: [],
   knownArgsComplete: true,
   derivedArgs: [],
   missingInputs: [],
   callReady: true,
+  afterOpen: {
+    action: "finite_get_plan_blueprint",
+    arguments: { profileId: compilerProfileForArrival(orientation) },
+    derivedArgs: [{
+      argument: "profileId",
+      source: "current_rough_plan",
+      provenance: {
+        orderVersion: orientation.exactOrderVersion,
+        orderChecksum: orientation.exactOrderChecksum,
+        interpretationBasedOnVersion: orientation.interpretationBasedOnVersion,
+      },
+    }],
+  },
   preMutationGate: {
     requiredReads: ["nextAction", "chefMenu"],
     presentChefMenuInHumanLanguage: true,
@@ -561,7 +574,7 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
   const firstPriority = record(openQuestions.firstPriority);
   if (orientation.unprocessedHumanInputCount > 0) return {
     actionVersion: "finite-next-action.v1", stage: "arrival_draft_preparation", reason: `${orientation.unprocessedHumanInputCount} human-supplied arrival update(s) are ready for Codex to read and develop locally before any sensitive write back to Finite.`,
-    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
+    nextTool: "finite_open_toolset", ...arrivalDraftPreparationContract(orientation), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
   if (orientation.order.status === "clarification_required" && orientation.order.pendingClarification) return {
@@ -613,7 +626,7 @@ const arrivalNextAction = (orientation: ArrivalOrientation): Record<string, unkn
     actionVersion: "finite-next-action.v1", stage: "arrival_draft_preparation", reason: interpretation
       ? `Human input advanced to version ${orientation.latestHumanInputVersion}. Prepare the updated draft locally from canonical human state before proposing a sensitive write.`
       : "The human order and editable rough plan are ready for read-only Codex development.",
-    nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
+    nextTool: "finite_open_toolset", ...arrivalDraftPreparationContract(orientation), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total,
     requiresHuman: false, exactQuestion: null, targetId: orientation.order.orderId, authorityPresent: false,
   };
 };
@@ -666,7 +679,7 @@ const arrivalChefMenu = (orientation: ArrivalOrientation | null): Record<string,
   menuVersion: "finite-chef-menu.v1",
   basis,
   items: orientation ? [
-    { menuItemId: "arrival_develop_before_save", rank: 1, kind: "operator_action", title: "Develop what I already entered", offer: "I will read the saved plan, load the matching planning structure, prepare a concrete draft, and keep the first priority section visible while I work.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_capabilities", ...arrivalDraftPreparationContract(), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total, tradeoffs: ["The working draft stays non-authoritative until you choose to save it"], evidence: { status: "available", refs: [] } },
+    { menuItemId: "arrival_develop_before_save", rank: 1, kind: "operator_action", title: "Develop what I already entered", offer: "I will read the saved plan, load the matching planning structure, prepare a concrete draft, and keep the first priority section visible while I work.", status: "ready", viability: "not_yet_tested", nextTool: "finite_open_toolset", ...arrivalDraftPreparationContract(orientation), prioritySectionId: firstPriority.sectionId ?? null, openQuestionCount: openQuestions.total, tradeoffs: ["The working draft stays non-authoritative until you choose to save it"], evidence: { status: "available", refs: [] } },
     { menuItemId: "arrival_research_dependencies", rank: 2, kind: "suggested_route", title: "Check useful dependencies", offer: "I will inspect the evidence rules and research queue without turning results into bookings, commitments, or accepted facts.", status: "ready", viability: "not_yet_tested", nextTool: "finite_get_evidence_policy", knownArgs: {}, missingInputs: [], tradeoffs: ["Live research may narrow the draft before saving"], evidence: { status: "not_required", refs: [] } },
     { menuItemId: "arrival_preserve_save_boundary", rank: 3, kind: "operator_action", title: "Keep the save decision meaningful", offer: "I will bring back the concrete draft first, then ask once before sending its specific plan details back to Finite.", status: "blocked", viability: "not_yet_tested", nextTool: null, knownArgs: {}, missingInputs: [{ argument: "prepared_draft", source: "operator", reason: "There is nothing useful to approve before the draft exists." }], tradeoffs: [], evidence: { status: "not_required", refs: [] } },
   ] : [

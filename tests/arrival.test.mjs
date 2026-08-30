@@ -431,12 +431,16 @@ test("WebMCP exposes the arrival kitchen but no human authority creator", async 
   assert.equal(reentered.handoffReceipt.matchedCurrentState, false);
   assert.equal(reentered.arrival.orientation.exactOrderVersion, 2);
   assert.equal(reentered.operatorPacket.nextAction.stage, "arrival_draft_preparation");
-  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_get_capabilities");
+  assert.equal(reentered.operatorPacket.nextAction.nextTool, "finite_open_toolset");
+  assert.deepEqual(reentered.operatorPacket.nextAction.knownArgs, { group: "construction" });
   assert.match(reentered.operatorPacket.nextAction.reason, /2 human-supplied arrival update/);
   assert.deepEqual(reentered.operatorPacket.nextAction.requiredArgs, []);
   assert.equal(reentered.operatorPacket.nextAction.knownArgsComplete, true);
   assert.equal(reentered.operatorPacket.nextAction.callReady, true);
   assert.deepEqual(reentered.operatorPacket.nextAction.derivedArgs, []);
+  assert.equal(reentered.operatorPacket.nextAction.afterOpen.action, "finite_get_plan_blueprint");
+  assert.equal(reentered.operatorPacket.nextAction.afterOpen.arguments.profileId, "general");
+  assert.equal(reentered.operatorPacket.nextAction.afterOpen.derivedArgs[0].provenance.orderChecksum, changed.order.checksum);
   assert.equal(reentered.operatorPacket.nextAction.preMutationGate.readOnlyPlanPreparationRequiresConfirmation, false);
   assert.match(reentered.operatorPacket.law, /Read and analyse canonical plan state without asking again/);
   assert.equal(reentered.operatorPacket.humanChanges.unprocessedCount, 2);

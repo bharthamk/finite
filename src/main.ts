@@ -3179,20 +3179,54 @@ const renderOptions = (): string => {
   if (!candidates.length) return runtime.kernel.activeEventId
     ? `<p class="quiet">A change is recorded. Codex has not prepared the decision routes yet.</p>`
     : `<p class="quiet">No decision is waiting. The accepted plan is currently settled.</p>`;
-  return `<div class="option-grid">
+  const event = runtime.kernel.events.find((item) => item.eventId === runtime.kernel.activeEventId);
+  const protections = runtime.kernel.profile.locks.map(humanPlanLabel).filter(Boolean);
+  const pressure = event ? [
+    event.costDeltaMinor === 0 ? null : `${event.costDeltaMinor > 0 ? "Adds" : "Removes"} ${money(Math.abs(event.costDeltaMinor))}`,
+    event.daysDelta === 0 ? null : `${Math.abs(event.daysDelta)} ${Math.abs(event.daysDelta) === 1 ? "day" : "days"} ${event.daysDelta > 0 ? "later" : "earlier"}`,
+  ].filter((item): item is string => Boolean(item)).join(" · ") : "";
+  return `${event ? `<div class="change-context" aria-label="What this decision is about">
+    <div><span>What changed</span><strong>${escapeHtml(event.title)}</strong>${pressure ? `<small>${escapeHtml(pressure)}</small>` : ""}</div>
+    <div><span>What stays true</span><strong>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</strong></div>
+    <div><span>What you’re choosing</span><strong>Which compromise fits best</strong><small>Nothing changes until you confirm one.</small></div>
+  </div>` : ""}<div class="option-grid">
     ${candidates.map((candidate, index) => `
       <article class="option-card ${candidate.candidateId === runtime.kernel.stagedCandidate?.candidateId ? "is-staged" : ""}">
-        <div class="option-card__top"><span>Route ${index + 1}</span><span>${candidate.valid ? "Viable" : "Blocked"}</span></div>
+        <div class="option-card__top"><span>Option ${index + 1}</span><span>${candidate.valid ? "Works" : "Doesn’t fit"}</span></div>
         <h3>${escapeHtml(objectiveLabel(candidate.objective))}</h3>
         <div class="option-card__number">${money(candidate.resultingBufferMinor)}</div>
-        <p>left as ${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)}</p>
+        <p>${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)} left after this change</p>
         <ul>${candidateTradeoffLines(candidate).map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
-        <div class="option-card__delta"><span>Plan impact</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
+        <div class="option-card__delta"><span>Forecast change</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
-          ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Choose this ${escapeHtml(runtime.kernel.profile.surface.nouns.option)}</button>`
+          ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Use this option</button>`
           : `<p class="refusal">${escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</p>`}
       </article>`).join("")}
   </div>`;
+};
+
+const renderLatestPlanUpdate = (): string => {
+  const kernel = runtime.kernel;
+  const receipt = [...kernel.receipts].reverse().find((item) => item.receiptType === "plan_option" && item.toRevision === kernel.revision);
+  if (!receipt) return "";
+  const before = receipt.payload.before as Record<string, unknown> | undefined;
+  const after = receipt.payload.after as Record<string, unknown> | undefined;
+  const bufferBefore = Number(before?.bufferMinor);
+  const bufferAfter = Number(after?.bufferMinor);
+  const forecastBefore = Number(before?.forecastMinor);
+  const forecastAfter = Number(after?.forecastMinor);
+  if (![bufferBefore, bufferAfter, forecastBefore, forecastAfter].every(Number.isFinite)) return "";
+  const moveIds = Array.isArray(receipt.payload.moveIds) ? receipt.payload.moveIds.map(String) : [];
+  const changes = moveIds.map((moveId) => kernel.profile.moves[moveId]?.tradeoff).filter((item): item is string => Boolean(item));
+  const protections = kernel.profile.locks.map(humanPlanLabel).filter(Boolean);
+  return `<section class="latest-plan-update" aria-labelledby="latest_plan_update_title">
+    <div class="latest-plan-update__heading"><p class="eyebrow">Plan updated</p><h2 id="latest_plan_update_title">The change is now part of your plan.</h2><p>${changes.length ? escapeHtml(changes.join(" · ")) : "No additional compromise was needed."}</p></div>
+    <dl>
+      <div><dt>Forecast</dt><dd>${money(forecastBefore)} → ${money(forecastAfter)}</dd></div>
+      <div><dt>${escapeHtml(humanPlanLabel(kernel.profile.surface.nouns.buffer ?? "buffer"))} left</dt><dd>${money(bufferAfter)}</dd></div>
+      <div><dt>Still protected</dt><dd>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</dd></div>
+    </dl>
+  </section>`;
 };
 
 const renderLifecycleControl = (): string => {
@@ -3395,7 +3429,8 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   else if (zone.component === "approval_panel") {
     const staged = kernel.stagedCandidate;
     const approved = staged && kernel.approval?.candidateId === staged.candidateId;
-    body = staged ? `<div class="approval-copy"><p>This commits exactly <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong> against revision ${kernel.revision}. It changes no booking, purchase, or payment outside this demonstration.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} after</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Human approval recorded. Codex may now apply this exact option and return its receipt.</p>` : `<button class="button button--approve" data-action="approve">Approve this exact plan</button><button class="text-button" data-action="return">Not this one</button>`}</div>` : `<p class="quiet">Choose an outcome before approval.</p>`;
+    const changes = staged ? candidateTradeoffLines(staged) : [];
+    body = staged ? `<div class="approval-copy"><p>You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates your plan only—it does not book, buy, cancel, or contact anyone.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to see its exact effect before anything changes.</p>`;
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
   const timelineSection = stageComponents.has(zone.component);
@@ -3812,6 +3847,7 @@ async function render(): Promise<SurfaceManifest> {
         <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan ${pendingBadge("general")}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add or change</button></div>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+      ${renderLatestPlanUpdate()}
       ${renderPendingPlanPriority()}
       ${renderNextStep(manifest)}
       ${renderPlanWork()}
