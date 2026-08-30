@@ -487,12 +487,12 @@ test("workspace saves keep the edited form visible until the durable write retur
   assert.doesNotMatch(save, /root\?\.setAttribute\("aria-busy"/);
 });
 
-test("the guided workspace keeps a truthful Codex phase after questions are answered", () => {
-  assert.match(source, /Finite marks the handoff point; work continues when Codex is connected\./);
-  assert.match(source, /Current section ·/);
+test("the guided workspace keeps Codex state in section headers without a duplicate phase strip", () => {
   assert.match(source, /data-codex-phase-current="true"/);
   assert.match(source, /working section/);
-  assert.match(styles, /\.starter-operator-phase/);
+  assert.match(source, /open \$\{section\.openQuestions\.length === 1 \? "question" : "questions"\}/);
+  assert.doesNotMatch(source, /class="starter-operator-phase"|data-codex-phase-section/);
+  assert.doesNotMatch(styles, /\.starter-operator-phase/);
 });
 
 test("the live demo starts on the ordinary blank first form even when saved work exists", () => {

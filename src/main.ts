@@ -780,6 +780,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
   plan_summary: { label: "the plan summary", selectors: [".starter-plan__overview", ".arrival-starter-plan", ".draft-review__summary", ".hero", ".plan-orbit"] },
+  section_headers: { label: "the editable plan sections", selectors: [".starter-workspace"] },
   budget_editor: { label: "the budget editor", selectors: ["[data-overview-dialog='budget'][open]", "[data-overview-dialog='budget']"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
@@ -1821,8 +1822,6 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const unresolvedSafetySectionId = /allerg/i.test(order.rawOutcome) && starter.sections.find((section) => section.sectionId === "requirements" && section.openQuestions.length)?.sectionId;
   const prioritySectionId = unresolvedSafetySectionId
     || (starter.sections.some((section) => section.sectionId === activeCodexPrioritySectionId && section.openQuestions.length) ? activeCodexPrioritySectionId : defaultPrioritySectionId || developmentSectionId);
-  const prioritySectionLabel = starter.sections.find((section) => section.sectionId === prioritySectionId)?.label ?? "rough plan";
-  const operatorPhaseMarkup = followCodexEnabled ? `<aside class="starter-operator-phase" data-codex-phase-section="${escapeHtml(prioritySectionId)}"><span>${openQuestionCount ? `${escapeHtml(agenticName())} questions` : `${escapeHtml(agenticName())} development`}</span><strong>${openQuestionCount ? `${openQuestionCount} open · ${escapeHtml(prioritySectionLabel)}` : `Current section · ${escapeHtml(prioritySectionLabel)}`}</strong><small>${openQuestionCount ? "Answer on the page or in Codex." : "Finite marks the handoff point; work continues when Codex is connected."}</small></aside>` : "";
   const normalizePlace = (value: unknown): string[] => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z]{3,}/g)?.filter((token) => !["city", "area", "station", "airport", "hostel", "hotel"].includes(token)) ?? [];
   const samePlace = (left: unknown, right: unknown): boolean => {
     const leftTokens = normalizePlace(left);
@@ -2167,7 +2166,6 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     ${overviewMarkup}
-    ${operatorPhaseMarkup}
     <div class="starter-workspace">${modules}</div>
     <div class="starter-plan__completion"><button class="text-button" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button><button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button></div>
     ${customWorkspaceMarkup}
