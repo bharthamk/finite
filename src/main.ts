@@ -661,6 +661,7 @@ let planStatusDialogOpen = false;
 const openManagingZones = new Set<string>();
 let draftReturnFormOpen = false;
 let planActivationError = "";
+let planActivationTransition = false;
 let kitchenResetPreview: KitchenResetResult | null = null;
 let themeSettingsOpen = false;
 let themeEditingId: string | null = null;
@@ -2017,6 +2018,31 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   enableNativeWritingAssistance();
   bindArrivalInteractions();
   restoreWorkspaceUiState();
+};
+
+const renderPlanActivationTransition = (): void => {
+  const order = currentArrival();
+  surfaceRoot.dataset.profile = "arrival";
+  surfaceRoot.setAttribute("aria-busy", "true");
+  surfaceRoot.innerHTML = `
+    <div class="private-top-shell">
+      <header class="site-header arrival-header">
+        ${renderBrand()}
+        ${renderPlanSwitcher("arrival")}
+        ${renderShareHeaderAction("arrival")}
+        <div class="header-actions">${renderHeaderControls()}</div>
+      </header>
+      ${renderLifecycleRail("managing")}
+    </div>
+    <main id="main" class="arrival-main">
+      <section class="hero" aria-labelledby="activation_transition_title">
+        <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Opening Managing</p><h1 id="activation_transition_title">Your plan is moving with you.</h1><p class="hero__brief">You can keep reviewing it below while Finite secures the exact version you approved.</p></div></div>
+      </section>
+      <div class="service-message" role="status">Saving the plan, its approval, and its starting details together…</div>
+      <div class="activation-transition-plan" inert>${order ? renderStarterPlan(order) : ""}</div>
+    </main>`;
+  enableNativeWritingAssistance();
+  bindInteractions();
 };
 
 const refreshArrival = async (): Promise<void> => {
@@ -3738,6 +3764,10 @@ async function render(): Promise<SurfaceManifest> {
     return manifestPromise;
   }
   const manifest = await manifestPromise;
+  if (planActivationTransition) {
+    renderPlanActivationTransition();
+    return manifest;
+  }
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode,
     kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
@@ -4035,6 +4065,9 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     return;
   }
 
+  planActivationTransition = true;
+  await render();
+
   const sourceArrival = draft.sourceArrival;
   const activation = await runtime.activateConfirmedPlanDraft({
     draftId,
@@ -4045,6 +4078,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   });
   if (!activation.ok) {
     busy = false;
+    planActivationTransition = false;
     planActivationError = activation.code === "PLAN_DRAFT_STALE" || activation.code === "PLAN_DRAFT_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_DRAFT_STALE" || activation.code === "PLAN_ACTIVATION_BASE_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_DRAFT_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_BASE_STALE"
       ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
       : "Finite could not start the plan. Your approval is still here—please try again.";
@@ -4082,6 +4116,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     return arrivalClosed;
   }).catch(() => false);
   forceArrivalSurface = false;
+  planActivationTransition = false;
   newPlanDraftMode = false;
   const target = new URL(location.href);
   target.searchParams.delete("arrival");

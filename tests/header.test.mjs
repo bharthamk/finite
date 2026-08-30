@@ -48,7 +48,7 @@ test("the product header contains actions instead of unexplained internal state"
   for (const obsoleteLabel of ["Arrival / a new finite plan", "Codex browser present", "Saved kitchen", "Local kitchen"]) {
     assert.doesNotMatch(source, new RegExp(obsoleteLabel));
   }
-  assert.equal(source.match(/class="header-actions"/g)?.length, 5);
+  assert.equal(source.match(/class="header-actions"/g)?.length, 6);
   assert.match(source, /class="header-action" data-action="open-theme-settings">Appearance<\/button>/);
   assert.match(source, /<details class="account-menu">/);
   assert.doesNotMatch(source, /class="account-menu__name"/);
@@ -85,7 +85,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
   for (const label of ["Starting", "Planning", "Managing", "Finished"]) assert.match(source, new RegExp(`label: "${label}"`));
   assert.match(source, /aria-label="Plan lifecycle"/);
   assert.match(source, /aria-current="step"/);
-  assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 3);
+  assert.equal(source.match(/\$\{renderLifecycleRail\(/g)?.length, 4);
   assert.match(source, /renderLifecycleRail\(order \? "planning" : "starting"\)/);
   assert.match(source, /status === "completed" \|\| status === "abandoned" \? "wrapping" : "managing"/);
   assert.match(source, /detail: "Day-to-day use"/);
@@ -102,7 +102,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 8);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 9);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -125,7 +125,7 @@ test("account and destructive actions live in a labelled account menu", () => {
 });
 
 test("the header plan dropdown creates and opens plans from every private product surface", () => {
-  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 3);
+  assert.equal(source.match(/renderPlanSwitcher\("(?:arrival|plan)"(?:, manifest\.title)?\)/g)?.length, 4);
   assert.match(source, /runtime\.listPlans\(\)\.plans/);
   assert.match(runtimeSource, /title: resolvePlanTitle\(\{ proposed: profile\.surface\.hero\.title, brief: profile\.surface\.hero\.brief \}\)/);
   assert.match(source, /projectAcceptedPlanCopyFromReceipts\(plan\.title, receipts\)/);
@@ -437,7 +437,7 @@ test("human writing fields use the browser language for native spellcheck while 
   assert.match(shell, /<div id="app" aria-busy="true" spellcheck="true">/);
   assert.match(source, /navigator\.languages\.find\(\(language\) => language\.trim\(\)\) \?\? navigator\.language \?\? "en"/);
   assert.match(source, /field\.spellcheck = true; field\.lang = browserWritingLanguage;/);
-  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 5);
+  assert.equal(source.match(/enableNativeWritingAssistance\(\);/g)?.length, 6);
   assert.match(source, /<textarea readonly spellcheck="false" data-codex-handoff-prompt>/);
   assert.match(source, /name="confirmation" required autocomplete="off" spellcheck="false"/);
 });
@@ -522,6 +522,10 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /announcer\.textContent = "Plan approved\. Managing is ready\."/);
   assert.match(source, /Starting your plan…/);
+  assert.match(source, /planActivationTransition = true/);
+  assert.match(source, /renderLifecycleRail\("managing"\)/);
+  assert.match(source, /You can keep reviewing it below while Finite secures the exact version you approved\./);
+  assert.match(source, /class="activation-transition-plan" inert/);
   assert.match(source, /Continue to Managing/);
   assert.doesNotMatch(source, /Plan approved and ready\. You are now in Managing\./);
   assert.doesNotMatch(source, /Plan approved\. \$\{escapeHtml\(agenticName\(\)\)\} can now put it into action\./);
