@@ -24,6 +24,7 @@ import { emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
 import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
 import { candidateTradeoffLines } from "./option-presentation.js";
+import { ClickActivationTimer, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -3969,6 +3970,9 @@ const seedArrivalContinuity = async (progression: ArrivalProgression): Promise<b
 
 type PreparedArrivalPlan = { draftId: string; progression: ArrivalProgression; opened: ArrivalResult };
 let arrivalDraftPreparation: Promise<PreparedArrivalPlan> | null = null;
+const publishClickActivationTiming = (timer: ClickActivationTimer, outcome: "ready" | "failed", guarded: GuardedActivationTiming | null = null): void => {
+  document.documentElement.dataset.finiteClickActivationTiming = JSON.stringify(timer.finish(outcome, guarded));
+};
 const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArrivalPlan> => {
   if (arrivalDraftPreparation) return arrivalDraftPreparation;
   const preparation = (async (): Promise<PreparedArrivalPlan> => {
@@ -3994,11 +3998,7 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
       ? currentDraft.draftId
       : "";
     if (!draftId) {
-      const assessed = await runtime.assessPlanIntake(progression.intake);
-      if (!assessed.ok || !String(assessed.code).startsWith("INTAKE_FACTS_COMPLETE")) throw new Error(String(assessed.code || "INTAKE_NOT_READY"));
-      const packet = assessed.constructionPacket as { packetId?: string; checksum?: string } | undefined;
-      if (!packet?.packetId || !packet.checksum) throw new Error("CONSTRUCTION_PACKET_NOT_SAVED");
-      const compiled = await runtime.compileIntakeToDraft({ packetId: packet.packetId, expectedChecksum: packet.checksum });
+      const compiled = await runtime.compileIntakeToDraft({ preparedIntake: progression.intake });
       if (!compiled.ok || !runtime.pendingPlanDraft) throw new Error(String(compiled.code || "PLAN_DRAFT_NOT_STAGED"));
       draftId = runtime.pendingPlanDraft.draftId;
     }
@@ -4011,17 +4011,18 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
 
 const progressArrivalPlan = async (): Promise<void> => {
   if (busy) return;
+  const activationTimer = new ClickActivationTimer();
   busy = true;
   planActivationTransition = true;
   announce("Starting this plan…");
-  await render();
+  await activationTimer.measure("transitionRender", () => render());
   try {
-    const latest = runtime.supportsAtomicArrivalPlanActivation() && arrivalResult?.ok && arrivalResult.order
+    const latest = await activationTimer.measure("arrivalFreshness", async () => runtime.supportsAtomicArrivalPlanActivation() && arrivalResult?.ok && arrivalResult.order
       ? arrivalResult
-      : await arrivalRepository.open();
-    const prepared = await prepareArrivalPlanDraft(latest);
+      : arrivalRepository.open());
+    const prepared = await activationTimer.measure("draftPreparation", () => prepareArrivalPlanDraft(latest));
     busy = false;
-    await confirmPlanDraft(prepared.draftId, prepared.progression, prepared.opened);
+    await confirmPlanDraft(prepared.draftId, prepared.progression, prepared.opened, activationTimer);
   } catch (error) {
     busy = false;
     planActivationTransition = false;
@@ -4032,19 +4033,21 @@ const progressArrivalPlan = async (): Promise<void> => {
         ? "One saved detail does not yet fit the managed plan. Your draft is safe; review the highlighted section or ask Codex to repair it, then try again."
         : "Finite could not start this plan. Your draft is safe—please try again.");
     await render();
+    publishClickActivationTiming(activationTimer, "failed");
   }
 };
 
-const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null, validatedArrival?: ArrivalResult): Promise<void> => {
+const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression | null = null, validatedArrival?: ArrivalResult, existingTimer?: ClickActivationTimer): Promise<void> => {
   if (busy) return;
+  const activationTimer = existingTimer ?? new ClickActivationTimer();
   const draft = runtime.pendingPlanDraft;
   if (!draft || draft.draftId !== draftId) return;
   busy = true;
   planActivationError = "";
   announce("Starting your plan…");
-  await render();
+  await activationTimer.measure("confirmationRender", () => render());
 
-  const latestArrival = validatedArrival?.ok && validatedArrival.order ? validatedArrival : await arrivalRepository.open();
+  const latestArrival = await activationTimer.measure("arrivalFreshness", async () => validatedArrival?.ok && validatedArrival.order ? validatedArrival : arrivalRepository.open());
   if (latestArrival.ok) arrivalResult = latestArrival;
   if ((draft.sourceArrival && !latestArrival.ok) || !pendingDraftMatchesArrival()) {
     busy = false;
@@ -4054,13 +4057,14 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
       : "Finite could not check your latest information. Nothing changed—please try again.";
     announce(planActivationError);
     await render();
+    publishClickActivationTiming(activationTimer, "failed");
     return;
   }
 
   const existingConfirmation = runtime.planActivationConfirmation?.draftId === draftId
     ? runtime.planActivationConfirmation
     : null;
-  const confirmationResult = existingConfirmation ? null : runtime.humanConfirmPlanDraft({ draftId });
+  const confirmationResult = activationTimer.measureSync("localConfirmation", () => existingConfirmation ? null : runtime.humanConfirmPlanDraft({ draftId }));
   const confirmation = runtime.planActivationConfirmation;
   if ((confirmationResult && !confirmationResult.ok) || !confirmation) {
     busy = false;
@@ -4068,17 +4072,18 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     planActivationError = "Finite could not record your approval. Nothing changed—please try again.";
     announce(planActivationError);
     await render();
+    publishClickActivationTiming(activationTimer, "failed");
     return;
   }
 
   const sourceArrival = draft.sourceArrival;
-  const activation = await runtime.activateConfirmedPlanDraft({
+  const activation = await activationTimer.measure("guardedActivation", () => runtime.activateConfirmedPlanDraft({
     draftId,
     confirmationId: confirmation.confirmationId,
     expectedPlanId: draft.basePlanId,
     expectedRevision: draft.baseRevision,
     idempotencyKey: `human-plan-activation:${draftId}:${confirmation.confirmationId}`,
-  });
+  }));
   if (!activation.ok) {
     busy = false;
     planActivationTransition = false;
@@ -4087,6 +4092,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
       : "Finite could not start the plan. Your approval is still here—please try again.";
     announce(planActivationError);
     await render();
+    publishClickActivationTiming(activationTimer, "failed");
     return;
   }
 
@@ -4096,50 +4102,58 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     delete document.documentElement.dataset.finiteActivationTiming;
   }
 
-  persistedPlanIds.add(runtime.kernel.profile.planId);
-  scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
-  planWorkLoading = true;
-  planInputs = [];
-  checklistItems = [];
-  planAttachments = [];
-  planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
-  const activatedPlanId = runtime.kernel.profile.planId;
-  const activatedProfileHash = runtime.kernel.profile.profileHash;
-  const activatedRevision = runtime.kernel.revision;
-  const continuityWork = continuity ? seedArrivalContinuity(continuity).catch(() => false) : Promise.resolve(true);
-  const postActivationSync = Promise.resolve().then(async () => {
-    let arrivalClosed = true;
-    if (sourceArrival) {
-      const completion = await arrivalRepository.acceptPlan({
-        orderId: sourceArrival.orderId,
-        expectedVersion: sourceArrival.orderVersion,
-        expectedChecksum: sourceArrival.orderChecksum,
-        planId: activatedPlanId,
-        profileHash: activatedProfileHash,
-        planRevision: activatedRevision,
-      });
-      arrivalClosed = completion.ok;
-    }
-    const latestArrival = await arrivalRepository.open();
-    if (runtime.kernel.profile.planId === activatedPlanId && latestArrival.ok) arrivalResult = latestArrival;
-    await adapter?.refreshContextualTools();
-    return arrivalClosed;
-  }).catch(() => false);
-  forceArrivalSurface = false;
-  planActivationTransition = false;
-  newPlanDraftMode = false;
-  const target = new URL(location.href);
-  target.searchParams.delete("arrival");
-  target.searchParams.delete("kitchen");
-  target.searchParams.delete("lab");
-  target.searchParams.set("plan", "1");
-  history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
-  busy = false;
-  planActivationError = "";
-  message = "";
-  messageScope = currentMessageScope();
-  announcer.textContent = "Plan approved. Managing is ready.";
-  await render();
+  const { activatedPlanId, continuityWork, postActivationSync } = activationTimer.measureSync("localActivation", () => {
+    persistedPlanIds.add(runtime.kernel.profile.planId);
+    scopedStorage.setItem("finite-plan.surface.active-profile", runtime.kernel.profile.planId);
+    planWorkLoading = true;
+    planInputs = [];
+    checklistItems = [];
+    planAttachments = [];
+    planRetrospective = emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
+    const activatedPlanId = runtime.kernel.profile.planId;
+    const activatedProfileHash = runtime.kernel.profile.profileHash;
+    const activatedRevision = runtime.kernel.revision;
+    const continuityWork = continuity ? seedArrivalContinuity(continuity).catch(() => false) : Promise.resolve(true);
+    const postActivationSync = Promise.resolve().then(async () => {
+      let arrivalClosed = true;
+      if (sourceArrival) {
+        const completion = await arrivalRepository.acceptPlan({
+          orderId: sourceArrival.orderId,
+          expectedVersion: sourceArrival.orderVersion,
+          expectedChecksum: sourceArrival.orderChecksum,
+          planId: activatedPlanId,
+          profileHash: activatedProfileHash,
+          planRevision: activatedRevision,
+        });
+        arrivalClosed = completion.ok;
+      }
+      const latestArrival = await arrivalRepository.open();
+      if (runtime.kernel.profile.planId === activatedPlanId && latestArrival.ok) arrivalResult = latestArrival;
+      await adapter?.refreshContextualTools();
+      return arrivalClosed;
+    }).catch(() => false);
+    forceArrivalSurface = false;
+    planActivationTransition = false;
+    newPlanDraftMode = false;
+    const target = new URL(location.href);
+    target.searchParams.delete("arrival");
+    target.searchParams.delete("kitchen");
+    target.searchParams.delete("lab");
+    target.searchParams.set("plan", "1");
+    history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+    busy = false;
+    planActivationError = "";
+    message = "";
+    messageScope = currentMessageScope();
+    announcer.textContent = "Plan approved. Managing is ready.";
+    return { activatedPlanId, continuityWork, postActivationSync };
+  });
+  await activationTimer.measure("finalRender", () => render());
+  const activationTimingValue = activation.activationTiming as { measurementVersion?: unknown } | undefined;
+  const guardedTiming = activationTimingValue?.measurementVersion === "finite-plan-activation-sequence-timing.v1"
+    ? activationTimingValue as GuardedActivationTiming
+    : null;
+  publishClickActivationTiming(activationTimer, "ready", guardedTiming);
   window.scrollTo({ top: 0, behavior: "smooth" });
   void Promise.all([continuityWork, postActivationSync]).then(async ([continuitySaved, arrivalClosed]) => {
     planWorkLoading = false;

@@ -824,14 +824,28 @@ export class FinitePlanRuntime {
     }
   }
 
-  async compileIntakeToDraft({ packetId, expectedChecksum }: { packetId: string; expectedChecksum: string }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
-    const verified = await this.readVerifiedConstructionPacket(context);
-    if ("ok" in verified) return verified;
-    if (verified.packetId !== packetId || verified.checksum !== expectedChecksum) return { ok: false, code: "CONSTRUCTION_PACKET_GUARD_MISMATCH", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false, next: "Re-open the exact construction packet; do not compile stale or guessed intake." };
-    if (verified.kind !== "intake") return { ok: false, code: "CONSTRUCTION_INTAKE_REQUIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
-    if (Date.parse(verified.expiresAt) <= this.now().getTime()) return { ok: false, code: "CONSTRUCTION_PACKET_EXPIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
-    if (verified.basePlanId !== this.kernel.profile.planId || verified.baseProfileHash !== this.kernel.profile.profileHash || verified.baseRevision !== this.kernel.revision) return { ok: false, code: "CONSTRUCTION_PACKET_BASE_STALE", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
-    const assessment = this.assessPlanIntakeFacts(verified.payload.facts);
+  async compileIntakeToDraft(input: { packetId: string; expectedChecksum: string } | { preparedIntake: unknown }, context: RuntimeRequestContext = {}): Promise<ToolResult> {
+    let assessment: ToolResult;
+    let compiledFrom: Record<string, unknown>;
+    if ("preparedIntake" in input) {
+      assessment = this.assessPlanIntakeFacts(input.preparedIntake);
+      this.latestIntakeAssessment = clone(assessment);
+      compiledFrom = {
+        sameTurnPreparation: true,
+        assessmentCode: assessment.code,
+        constructionMode: (assessment.normalizedFacts as PlanIntakeInput | undefined)?.constructionMode ?? "exact",
+      };
+    } else {
+      const { packetId, expectedChecksum } = input;
+      const verified = await this.readVerifiedConstructionPacket(context);
+      if ("ok" in verified) return verified;
+      if (verified.packetId !== packetId || verified.checksum !== expectedChecksum) return { ok: false, code: "CONSTRUCTION_PACKET_GUARD_MISMATCH", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false, next: "Re-open the exact construction packet; do not compile stale or guessed intake." };
+      if (verified.kind !== "intake") return { ok: false, code: "CONSTRUCTION_INTAKE_REQUIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+      if (Date.parse(verified.expiresAt) <= this.now().getTime()) return { ok: false, code: "CONSTRUCTION_PACKET_EXPIRED", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+      if (verified.basePlanId !== this.kernel.profile.planId || verified.baseProfileHash !== this.kernel.profile.profileHash || verified.baseRevision !== this.kernel.revision) return { ok: false, code: "CONSTRUCTION_PACKET_BASE_STALE", packet: this.constructionPacketSummary(verified), acceptedStateChanged: false };
+      assessment = this.assessPlanIntakeFacts(verified.payload.facts);
+      compiledFrom = { packetId, checksum: expectedChecksum, assessmentCode: assessment.code, constructionMode: (assessment.normalizedFacts as PlanIntakeInput | undefined)?.constructionMode ?? "exact" };
+    }
     if (!String(assessment.code).startsWith("INTAKE_FACTS_COMPLETE")) return { ok: false, code: "CONSTRUCTION_INTAKE_INCOMPLETE", assessment, acceptedStateChanged: false, next: "Resolve only the typed missing paths or conflicts, then save a replacement intake packet." };
     const facts = assessment.normalizedFacts as PlanIntakeInput;
     const profileId = facts.profileId as ProfileId;
@@ -891,7 +905,7 @@ export class FinitePlanRuntime {
     return staged.ok ? {
       ...staged,
       code: "PLAN_DRAFT_STAGED_FROM_INTAKE",
-      compiledFrom: { packetId, checksum: expectedChecksum, assessmentCode: assessment.code, constructionMode: facts.constructionMode ?? "exact" },
+      compiledFrom,
       next: "The clean profile contains only intake-supplied plan-specific moves, never example moves. Show its working assumptions, recovery menu, open dependencies, profile hash, and draft hash to the human on the Site; WebMCP cannot confirm or activate it.",
     } : staged;
   }

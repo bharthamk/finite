@@ -30,9 +30,19 @@ class FailingStorage extends MemoryStorage {
 
 class CountingConstructionPacketRepository extends MemoryConstructionPacketRepository {
   loads = 0;
+  saves = 0;
+  returnedLoads = 0;
   async load() {
     this.loads += 1;
     return super.load();
+  }
+  async save(packet) {
+    this.saves += 1;
+    return super.save(packet);
+  }
+  async loadReturned() {
+    this.returnedLoads += 1;
+    return super.loadReturned();
   }
 }
 
@@ -136,6 +146,48 @@ test("accepted activation retires its identity-bound remote draft without re-rea
   assert.equal(activated.code, "PLAN_ACTIVATED");
   assert.equal(activated.constructionPacketCleared, true);
   assert.equal(construction.loads, loadsBeforeActivation);
+});
+
+test("same-turn Site preparation persists only the final draft packet", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const construction = new CountingConstructionPacketRepository(() => new Date("2026-08-30T03:00:00.000Z"));
+  const runtime = new FinitePlanRuntime(
+    profiles,
+    new PlanSnapshotStore(storage),
+    "travel",
+    new PlanCatalogStore(storage),
+    [],
+    () => new Date("2026-08-30T03:00:00.000Z"),
+    undefined,
+    construction,
+  );
+  const prepared = await runtime.compileIntakeToDraft({ preparedIntake: {
+    sourceArrival: { orderId: "arrival_same_turn", orderVersion: 3, orderChecksum: "c".repeat(64) },
+    constructionMode: "adaptive_shell",
+    profileId: "travel",
+    planId: "plan_same_turn",
+    name: "Same-turn trip",
+    brief: "A directly prepared arrival-bound plan.",
+    allocation: { totalBudgetMinor: 1_000_000 },
+    actuals: [],
+    locks: ["total_budget"],
+    preferenceLabels: ["preserve_flexibility"],
+    entityEstimates: {
+      trip_days: { days: { value: 30, basis: "One-month working estimate.", sourcePaths: ["reviewed_interpretation"] } },
+      booked_segment_days: { days: { value: 0, basis: "Nothing is booked.", sourcePaths: ["reviewed_interpretation"] } },
+    },
+    stages: [{ stageId: "journey", label: "Journey", status: "planned" }],
+  } });
+
+  assert.equal(prepared.code, "PLAN_DRAFT_STAGED_FROM_INTAKE");
+  assert.equal(prepared.compiledFrom.sameTurnPreparation, true);
+  assert.equal(construction.saves, 1, "only the human-reviewable draft should cross the construction write boundary");
+  assert.equal(construction.loads, 0, "same-turn preparation should not re-read its own intermediate work");
+  assert.equal(construction.returnedLoads, 1, "the final draft save should still reconcile prior returned-review state");
+  const durable = await construction.load();
+  assert.equal(durable.kind, "draft");
+  assert.equal(durable.payload.draftId, runtime.pendingPlanDraft.draftId);
 });
 
 test("hosted arrival activation uses one guarded challenge and one accepted-truth initialization", async () => {
