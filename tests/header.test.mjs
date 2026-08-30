@@ -102,7 +102,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
 test("every product surface uses the accepted ImageGen identity source", () => {
   assert.match(source, /const renderBrand = \(\): string =>/);
   assert.match(source, /src="\/finite-wordmark\.png"/);
-  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 9);
+  assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 10);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
@@ -111,6 +111,19 @@ test("every product surface uses the accepted ImageGen identity source", () => {
   assert.ok(wordmark.byteLength > 4_000);
   assert.ok(mark.byteLength > 4_000);
   assert.match(shell, /href="\/finite-mark\.png" type="image\/png"/);
+});
+
+test("first-use entry offers fresh, example, and live guided routes before the planning surface", () => {
+  assert.match(source, /const renderEntryGateway = \(\): void =>/);
+  assert.match(source, /How do you want to begin\?/);
+  assert.match(source, /data-entry-action="fresh"/);
+  assert.match(source, /data-entry-example=/);
+  assert.match(source, /data-entry-action="guided"/);
+  assert.match(source, /Same real product in every route\./);
+  assert.match(source, /guidedWalkthroughMode = guided/);
+  assert.match(source, /scopedStorage\.setItem\("finite-plan\.follow-codex", "true"\)/);
+  assert.match(styles, /\.entry-route-grid/);
+  assert.match(styles, /\.entry-route--guided/);
 });
 
 test("account and destructive actions live in a labelled account menu", () => {

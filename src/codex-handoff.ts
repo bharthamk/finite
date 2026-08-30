@@ -4,6 +4,7 @@ export interface CodexHandoffContext {
   siteOrigin: string;
   inline: boolean;
   agenticName?: string;
+  guidedWalkthrough?: boolean;
   entryIntent?: "start_new" | "continue_current" | "resume_handoff";
   order: Pick<ArrivalOrder, "orderId" | "version" | "status" | "lastOperatorCheckpoint" | "checksum"> | null;
   plan: { planId: string; profileId: string; profileHash: string; revision: number; snapshotHash: string | null };
@@ -38,6 +39,7 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
   const siteOrigin = cleanOrigin(context.siteOrigin);
   const agenticName = context.agenticName?.trim() || "Codex";
   const order = context.order;
+  const guidedWalkthrough = context.guidedWalkthrough === true;
   const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
   const toolInput = {
     entryIntent,
@@ -56,9 +58,13 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
   const prompt = [
     entryIntent === "start_new" ? "Start a new Finite plan as the Codex operator." : "Take over this Finite plan as the Codex operator.",
     "",
-    `You are the chef. Finite at ${siteOrigin} is your kitchen. The human is the consumer: bring them in for preferences, decisions, and approval, not application operation.`,
+    `Finite at ${siteOrigin} is the live plan surface. Operate the application for the person while keeping their preferences, decisions, and approval with them.`,
+    ...(guidedWalkthrough ? [
+      "",
+      "This is a live guided walkthrough of the real product, not an autoplay or a simulated demo. After entering Finite, use finite_guide_view to move through one meaningful area at a time. Supply a short, plain-language message with each guide call so the person can follow the glow and typed guidance overlay. Pause after each step. Never type into a human field, choose an option, or approve on the person's behalf. Start by showing the starting point, then help them create or adapt a rough plan, inspect its structure, make one useful change, and reach an actual human decision boundary.",
+    ] : []),
     "",
-    "Open the Finite Site in Codex's built-in browser. Discover its page tools. If finite_enter_kitchen is not visible but finite_webmcp_status is, call the status tool, wait for WEBMCP_READY, refresh discovery, then make this your first kitchen call:",
+    "Open the Finite Site in Codex's built-in browser. Discover its page tools. If finite_enter_kitchen is not visible but finite_webmcp_status is, call the status tool, wait for WEBMCP_READY, refresh discovery, then make this your first Finite call:",
     `finite_enter_kitchen(${JSON.stringify(toolInput)})`,
     "",
     "Treat the response as the canonical recipe book, current order rail, and work queue. Read its one authoritative nextAction and chefMenu before acting. Offer the menu in human language; never describe a suggested route as constraint-validated. If the handoff receipt is older than the live state, continue from the newer canonical state returned by Finite.",
@@ -74,9 +80,11 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     handoffVersion: "finite-codex-handoff.v1",
     buttonLabel: `Hand off to ${agenticName}`,
     title: order ? `Bring ${agenticName} into this plan.` : `Start this with ${agenticName}.`,
-    detail: context.inline
-      ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
-      : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",
+    detail: guidedWalkthrough
+      ? "Copy one introduction into Codex. It will use Finite’s consented guide controls on the real page and pause for you at every human decision."
+      : context.inline
+        ? "Copy the operator instruction into this Codex task. Finite will supply the live plan through its page tools."
+        : "Copy one introduction into Codex. It points to Finite and the correct first tool; it does not copy your plan or sign anybody in.",
     prompt,
     copiedPayload: {
       siteOrigin,

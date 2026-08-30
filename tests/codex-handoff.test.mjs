@@ -79,3 +79,19 @@ test("a custom agentic name changes presentation without rewriting the Codex ope
   assert.match(handoff.prompt, /Codex operator/);
   assert.doesNotMatch(handoff.prompt, /Ari/);
 });
+
+test("guided handoff walks the real product without taking human input or authority", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.detail, /real page/i);
+  assert.match(handoff.prompt, /live guided walkthrough of the real product/i);
+  assert.match(handoff.prompt, /finite_guide_view/);
+  assert.match(handoff.prompt, /short, plain-language message/);
+  assert.match(handoff.prompt, /Never type into a human field/);
+  assert.match(handoff.prompt, /Pause after each step/);
+});

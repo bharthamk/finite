@@ -544,6 +544,9 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
 };
 let forceArrivalSurface = false;
 let newPlanDraftMode = false;
+let entryGatewayOpen = false;
+let entryPrefill = "";
+let guidedWalkthroughMode = startupParams.get("start") === "guided";
 let followCodexEnabled = scopedStorage.getItem("finite-plan.follow-codex") === "true";
 let activeCodexPrioritySectionId = scopedStorage.getItem("finite-plan.codex-priority-section") ?? "";
 const guideView = async (request: FiniteGuideViewRequest) => {
@@ -735,6 +738,26 @@ const clearCodexSpotlight = (): void => {
   spotlightTimer = null;
   root.querySelectorAll<HTMLElement>("[data-codex-spotlight]").forEach((element) => element.removeAttribute("data-codex-spotlight"));
 };
+const showCodexGuideOverlay = (messageText: string, targetLabel: string): void => {
+  root.querySelector<HTMLElement>("[data-codex-guide-overlay]")?.remove();
+  const overlay = document.createElement("aside");
+  overlay.className = "codex-guide-overlay";
+  overlay.dataset.codexGuideOverlay = "true";
+  overlay.setAttribute("aria-live", "polite");
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is guiding</strong><button type="button" aria-label="Dismiss this guidance">×</button></header><p>${escapeHtml(messageText)}</p><small>Showing ${escapeHtml(targetLabel)} · you remain in control</small><footer><button type="button" data-action="stop-codex-guidance">Stop guided view</button></footer>`;
+  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => overlay.remove());
+  overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", () => {
+    followCodexEnabled = false;
+    guidedWalkthroughMode = false;
+    scopedStorage.removeItem("finite-plan.follow-codex");
+    scopedStorage.removeItem("finite-plan.codex-priority-section");
+    activeCodexPrioritySectionId = "";
+    clearCodexSpotlight();
+    overlay.remove();
+    announce(`${agenticName()} can keep working, but can no longer move or highlight this view.`);
+  });
+  root.append(overlay);
+};
 const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
   clearCodexSpotlight();
   const descriptor = guideTargetSelectors[request.target];
@@ -743,7 +766,9 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
     : null;
   const element = exactPriority ?? descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
   const surface = forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
+  const guideMessage = request.message?.trim() || `Here is ${descriptor.label}. I’ll keep us on the real plan and move one step at a time.`;
   if (!element) {
+    showCodexGuideOverlay(guideMessage, descriptor.label);
     announce(`${agenticName()} refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
     return { target: request.target, found: false, surface };
   }
@@ -751,6 +776,7 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   if (disclosure) disclosure.open = true;
   element.setAttribute("data-codex-spotlight", "true");
   element.scrollIntoView({ behavior: "smooth", block: "center" });
+  showCodexGuideOverlay(guideMessage, descriptor.label);
   announce(`${agenticName()} is showing ${descriptor.label}.`);
   spotlightTimer = window.setTimeout(() => { element.removeAttribute("data-codex-spotlight"); spotlightTimer = null; }, 7_000);
   return { target: request.target, found: true, surface };
@@ -1063,6 +1089,7 @@ const currentCodexHandoff = () => createCodexHandoff({
   siteOrigin: location.origin,
   inline: Boolean(modelContext),
   agenticName: agenticName(),
+  guidedWalkthrough: guidedWalkthroughMode,
   order: currentArrival(),
   entryIntent: currentArrival()
     ? "resume_handoff"
@@ -1090,14 +1117,14 @@ const renderCodexHandoffDialog = (): string => {
   return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
     <form method="dialog" class="codex-handoff-sheet">
       <header>
-        <div><p class="eyebrow">${order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">How do you want to continue?</h2></div>
+        <div><p class="eyebrow">${guidedWalkthroughMode ? "Live product walkthrough" : order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">${guidedWalkthroughMode ? `Walk through Finite with ${escapeHtml(agenticName())}.` : "How do you want to continue?"}</h2></div>
         <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
-      <p class="codex-handoff-lede">Bring ${escapeHtml(agenticName())} in to research and develop the rough plan, or keep editing it yourself. You can bring ${escapeHtml(agenticName())} in later.</p>
+      <p class="codex-handoff-lede">${guidedWalkthroughMode ? `${escapeHtml(agenticName())} will explain the real product one step at a time, move and highlight only with your permission, and pause whenever your judgment is needed.` : `Bring ${escapeHtml(agenticName())} in to research and develop the rough plan, or keep editing it yourself. You can bring ${escapeHtml(agenticName())} in later.`}</p>
       <div class="codex-handoff-choices" aria-label="Ways to continue">
         <section class="codex-handoff-choice codex-handoff-choice--codex">
-          <span>With ${escapeHtml(agenticName())}</span><strong>Research and develop the plan</strong><p>${escapeHtml(handoff.detail)}</p>
-          <button type="button" class="button" data-action="copy-codex-handoff">Continue in ${escapeHtml(agenticName())}</button>
+          <span>With ${escapeHtml(agenticName())}</span><strong>${guidedWalkthroughMode ? "Guide me through the real product" : "Research and develop the plan"}</strong><p>${escapeHtml(handoff.detail)}</p>
+          <button type="button" class="button" data-action="copy-codex-handoff">${guidedWalkthroughMode ? "Start the live walkthrough" : `Continue in ${escapeHtml(agenticName())}`}</button>
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
           <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
@@ -1105,7 +1132,7 @@ const renderCodexHandoffDialog = (): string => {
         </section>
         <small class="codex-handoff-choice-note codex-handoff-choice-note--codex" data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
         <small class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
-        <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move and highlight Finite while you work together.</small></span></label>
+        <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move, highlight and explain Finite while you work together. It cannot choose or approve for you.</small></span></label>
       </div>
       <section class="codex-handoff-copied" data-codex-handoff-copied tabindex="-1" hidden>
         <span>Prompt copied</span>
@@ -1265,14 +1292,18 @@ const startNewPlan = async (): Promise<void> => {
   shareDialogMode = "closed";
   shareError = "";
   newPlanDraftMode = true;
-  forceArrivalSurface = true;
+  forceArrivalSurface = false;
+  entryGatewayOpen = true;
+  entryPrefill = "";
+  guidedWalkthroughMode = false;
   const target = new URL(location.href);
   target.searchParams.delete("plan");
   target.searchParams.delete("kitchen");
   target.searchParams.delete("lab");
+  target.searchParams.delete("start");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
-  root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='codexOutcome']")?.focus();
+  root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.focus();
 };
 
 const bindPlanSwitcherInteractions = (): void => {
@@ -1906,6 +1937,67 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
   </details>`;
 };
 
+const entryExamples = [
+  { id: "trip", label: "Weekend away", detail: "Places, timing and a sensible budget", outcome: "Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do." },
+  { id: "dinner", label: "Dinner for eight", detail: "Menu, shopping, timing and dietary needs", outcome: "Plan a dinner party at home for eight people, with menu, timing, shopping and dietary needs covered." },
+  { id: "interview", label: "Job interview", detail: "Preparation, evidence and the week before", outcome: "Help me prepare for a job interview for an operations lead role next month." },
+] as const;
+
+const openEntryRoute = async ({ prefill = "", guided = false }: { prefill?: string; guided?: boolean } = {}): Promise<void> => {
+  entryGatewayOpen = false;
+  entryPrefill = prefill;
+  guidedWalkthroughMode = guided;
+  newPlanDraftMode = true;
+  forceArrivalSurface = true;
+  if (guided) {
+    followCodexEnabled = true;
+    scopedStorage.setItem("finite-plan.follow-codex", "true");
+  }
+  const target = new URL(location.href);
+  target.searchParams.delete("plan");
+  target.searchParams.delete("kitchen");
+  target.searchParams.delete("lab");
+  target.searchParams.set("start", guided ? "guided" : prefill ? "example" : "fresh");
+  history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+  await render();
+  if (guided) {
+    root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+    return;
+  }
+  root.querySelector<HTMLTextAreaElement>("[data-arrival-form='create'] textarea[name='codexOutcome']")?.focus();
+};
+
+const renderEntryGateway = (): void => {
+  surfaceRoot.dataset.profile = "entry";
+  surfaceRoot.setAttribute("aria-busy", "false");
+  surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
+    <section class="entry-card entry-card--product" aria-labelledby="entry_title">
+      <header class="entry-card__top">${renderBrand()}${runtime.hasActivationReceipt() ? `<button type="button" class="entry-return" data-entry-action="current">Return to current plan</button>` : ""}</header>
+      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start with your own words, borrow a useful example, or let ${escapeHtml(agenticName())} walk beside you through the real product.</p></div>
+      <div class="entry-route-grid">
+        <button type="button" class="entry-route entry-route--fresh" data-entry-action="fresh">
+          <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. The existing hints and optional prefill fields are waiting on the next screen.</p><em>Start with my plan →</em>
+        </button>
+        <section class="entry-route entry-route--examples" aria-labelledby="entry_examples_title">
+          <span>02 / Start from an example</span><strong id="entry_examples_title">Borrow a useful beginning.</strong><p>Pick one, then change any wording before Finite builds it.</p>
+          <div class="entry-example-list">${entryExamples.map((example) => `<button type="button" data-entry-example="${example.id}"><strong>${escapeHtml(example.label)}</strong><small>${escapeHtml(example.detail)}</small><i aria-hidden="true">→</i></button>`).join("")}</div>
+        </section>
+        <button type="button" class="entry-route entry-route--guided" data-entry-action="guided">
+          <span>03 / Walk through with ${escapeHtml(agenticName())}</span><strong>Let ${escapeHtml(agenticName())} show you around, live.</strong><p>It explains the actual page, glows the relevant area and moves one step at a time. Its guidance appears as typed notes; it cannot choose or approve for you.</p><em>Start the live walkthrough →</em>
+        </button>
+      </div>
+      <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
+    </section>
+  </main>`;
+  root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute(); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='guided']")?.addEventListener("click", () => { void openEntryRoute({ guided: true }); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void openPlan(runtime.kernel.profile.planId); });
+  root.querySelectorAll<HTMLButtonElement>("[data-entry-example]").forEach((button) => button.addEventListener("click", () => {
+    const example = entryExamples.find((candidate) => candidate.id === button.dataset.entryExample);
+    if (example) void openEntryRoute({ prefill: example.outcome });
+  }));
+};
+
 const renderArrival = (manifest: SurfaceManifest): void => {
   const order = currentArrival();
   const status = order ? arrivalStatus(order) : null;
@@ -1947,7 +2039,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             </div>
             <section id="arrival_panel_codex" class="arrival-start-panel arrival-start-panel--codex" role="tabpanel" aria-labelledby="arrival_start_codex" data-arrival-start-panel="codex">
               <div class="arrival-order__head"><div><p class="eyebrow">Describe the plan</p><strong>Write naturally. One sentence is enough.</strong></div><span>Only this is required</span></div>
-              <label class="arrival-order__outcome"><span>What do you want to plan?</span><textarea name="codexOutcome" required maxlength="4000" placeholder="I’m trying to…" data-arrival-mode-control></textarea><small>${escapeHtml(agenticName())} will turn this into a populated, editable rough plan. Any assumptions remain visibly provisional.</small></label>
+              <label class="arrival-order__outcome"><span>What do you want to plan?</span><textarea name="codexOutcome" required maxlength="4000" placeholder="I’m trying to…" data-arrival-mode-control>${escapeHtml(entryPrefill)}</textarea><small>${escapeHtml(agenticName())} will turn this into a populated, editable rough plan. Any assumptions remain visibly provisional.</small></label>
               <div class="arrival-examples" aria-label="Plan ideas">
                 <span>Try an idea</span>
                 <button type="button" data-arrival-example="Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do.">Weekend trip</button>
@@ -3806,10 +3898,16 @@ async function render(): Promise<SurfaceManifest> {
     renderPlanActivationTransition();
     return manifest;
   }
+  const hasWaitingArrival = isWaitingArrivalStatus(currentArrival()?.status);
+  const explicitWorkingSurface = params.has("plan") || params.has("kitchen") || params.has("lab") || params.has("start");
+  if (entryGatewayOpen || (!hasWaitingArrival && !runtime.hasActivationReceipt() && !explicitWorkingSurface)) {
+    renderEntryGateway();
+    return manifest;
+  }
   const experienceSurface = forceArrivalSurface ? "arrival" : selectExperienceSurface({
     labMode,
     kitchenMode: params.get("plan") === "1" || params.get("kitchen") === "1",
-    hasArrival: isWaitingArrivalStatus(currentArrival()?.status),
+    hasArrival: hasWaitingArrival,
     hasActivatedPlan: runtime.hasActivationReceipt(),
   });
   if (experienceSurface === "arrival") {
@@ -3900,6 +3998,9 @@ const openPlan = async (planId: string): Promise<void> => {
   if (!planId || busy) return;
   newPlanDraftMode = false;
   forceArrivalSurface = false;
+  entryGatewayOpen = false;
+  entryPrefill = "";
+  guidedWalkthroughMode = false;
   busy = true;
   announce("");
   await render();

@@ -440,6 +440,7 @@ test("guided view is a bounded read-only action and delegates consent to the hum
   const opened = await host.execute("finite_open_toolset", { group: "planning" });
   const guide = opened.actions.find((action) => action.name === "finite_guide_view");
   assert.equal(guide.readOnly, true);
+  assert.equal(guide.inputSchema.properties.message.maxLength, 240);
   assert.deepEqual(guide.inputSchema.properties.surface.enum, ["current", "arrival", "plan"]);
   assert.deepEqual(guide.inputSchema.properties.target.enum, ["top", "starting_point", "status", "question", "priority", "review", "interpretation", "updates", "plan_summary", "stages", "options", "approval", "receipt"]);
   const invalid = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "https://example.com", target: "#password" } });
@@ -452,4 +453,7 @@ test("guided view is a bounded read-only action and delegates consent to the hum
   const priority = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "arrival", target: "priority", sectionId: "requirements", refresh: true } });
   assert.equal(priority.code, "VIEW_GUIDED");
   assert.deepEqual(requests.at(-1), { surface: "arrival", target: "priority", refresh: true, sectionId: "requirements" });
+  const narrated = await host.execute("finite_invoke", { action: "finite_guide_view", arguments: { surface: "current", target: "starting_point", message: "Start here. This is your own editable request." } });
+  assert.equal(narrated.code, "VIEW_GUIDED");
+  assert.deepEqual(requests.at(-1), { surface: "current", target: "starting_point", refresh: false, message: "Start here. This is your own editable request." });
 });
