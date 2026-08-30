@@ -406,6 +406,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /starter-record-options-dialog__body/);
   assert.match(source, /class="starter-overview__field"><span>How money fits this plan/);
   assert.match(styles, /\.finite-edit-dialog>header \{/);
+  assert.match(styles, /\.finite-edit-dialog \{ position:fixed; inset:0;/);
   assert.match(styles, /\.finite-edit-dialog \.finite-edit-dialog__close \{/);
   assert.match(styles, /\.starter-overview-dialog__actions \.button--secondary \{/);
   assert.match(styles, /\.starter-report-card\.is-provisional \.starter-report-card__value/);
