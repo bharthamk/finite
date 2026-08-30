@@ -776,6 +776,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
   priority: { label: `${agenticName()}'s current priority section`, selectors: ["[data-codex-priority='true']", ".starter-module__questions"] },
+  open_questions: { label: "the open questions", selectors: [".starter-module[open] .starter-module__questions"] },
   review: { label: "the item ready for your review", selectors: [".arrival-review", ".plan-intake", ".zone--approval_panel"] },
   interpretation: { label: `${agenticName()}'s working interpretation`, selectors: [".arrival-interpretation"] },
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
