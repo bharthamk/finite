@@ -536,7 +536,7 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
     const sourceRef = `stage:${stage.stageId}`;
     const existing = checklistItems.find((item) => item.sourceRef === sourceRef);
     if (existing?.baseCurrent && existing.label === stage.detail && existing.contextLabel === stage.label) continue;
-    const result = await planWorkRepository.addChecklist({ planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "timeline", contextId: stage.stageId, contextLabel: stage.label, label: stage.detail, origin: "adaptive", sourceRef, position, idempotencyKey: `checklist-sync-${runtime.kernel.revision}-${stage.stageId}`, sourceSurface: "site" });
+    const result = await planWorkRepository.addChecklist({ planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "timeline", contextId: stage.stageId, contextLabel: stage.label, label: stage.detail, origin: "adaptive", sourceRef, position, idempotencyKey: `checklist-sync-${runtime.kernel.profile.profileHash.slice(0, 16)}-${runtime.kernel.revision}-${stage.stageId}`, sourceSurface: "site" });
     if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; }
   }
 };

@@ -598,6 +598,7 @@ test("Managing accepts general and section-specific decisions from both the page
 });
 
 test("checklist progress updates optimistically and rolls back failed writes", () => {
+  assert.match(source, /idempotencyKey: `checklist-sync-\$\{runtime\.kernel\.profile\.profileHash\.slice\(0, 16\)\}-\$\{runtime\.kernel\.revision\}-\$\{stage\.stageId\}`/);
   assert.match(source, /const priorChecklist = checklistItems;/);
   assert.match(source, /checklistItems = checklistItems\.map\(\(candidate\) => candidate\.itemId === itemId/);
   assert.match(source, /planWorkBusy = true;\s*\[\.\.\.\(root\?\.querySelectorAll<HTMLInputElement>/);
