@@ -123,6 +123,7 @@ interface KernelCheckpoint {
   receipts: Receipt[];
   candidates: Map<string, Candidate>;
   activeEventId: string | null;
+  lastOptionSearch: Record<string, unknown> | null;
   stagedCandidate: Candidate | null;
   approval: HumanApproval | null;
   pendingCorrection: PendingCorrection | null;
@@ -183,6 +184,7 @@ export class FinitePlanKernel {
   readonly receipts: Receipt[] = [];
   readonly candidates = new Map<string, Candidate>();
   activeEventId: string | null = null;
+  lastOptionSearch: Record<string, unknown> | null = null;
   stagedCandidate: Candidate | null = null;
   approval: HumanApproval | null = null;
   pendingCorrection: PendingCorrection | null = null;
@@ -243,6 +245,7 @@ export class FinitePlanKernel {
     this.receipts.push(...clone(snapshot.receipts));
     for (const evidence of snapshot.evidenceRecords ?? []) this.evidence.set(evidence.evidenceId, clone(evidence));
     this.activeEventId = [...this.events].reverse().find((event) => event.baseRevision === this.revision)?.eventId ?? null;
+    this.lastOptionSearch = null;
     for (const receipt of this.receipts) {
       if (!receipt.idempotencyKey) continue;
       if (receipt.receiptType === "plan_option") this.optionIdempotency.set(receipt.idempotencyKey, receipt);
@@ -273,6 +276,7 @@ export class FinitePlanKernel {
     this.externalActionIdempotency.clear();
     this.planFactIdempotency.clear();
     this.activeEventId = null;
+    this.lastOptionSearch = null;
     this.stagedCandidate = null;
     this.approval = null;
     this.pendingCorrection = null;
@@ -386,6 +390,7 @@ export class FinitePlanKernel {
       receipts: this.receipts,
       candidates: this.candidates,
       activeEventId: this.activeEventId,
+      lastOptionSearch: this.lastOptionSearch,
       stagedCandidate: this.stagedCandidate,
       approval: this.approval,
       pendingCorrection: this.pendingCorrection,
@@ -427,6 +432,7 @@ export class FinitePlanKernel {
     this.candidates.clear();
     for (const [candidateId, candidate] of checkpoint.candidates) this.candidates.set(candidateId, clone(candidate));
     this.activeEventId = checkpoint.activeEventId;
+    this.lastOptionSearch = clone(checkpoint.lastOptionSearch);
     this.stagedCandidate = clone(checkpoint.stagedCandidate);
     this.approval = clone(checkpoint.approval);
     this.pendingCorrection = clone(checkpoint.pendingCorrection);
@@ -707,6 +713,7 @@ export class FinitePlanKernel {
       invalidatedApprovalId: this.approval?.approvalId ?? null,
     };
     this.activeEventId = null;
+    this.lastOptionSearch = null;
     this.candidates.clear();
     this.stagedCandidate = null;
     this.approval = null;
@@ -791,6 +798,7 @@ export class FinitePlanKernel {
     const superseded = this.clearDecision();
     this.events.push(event);
     this.activeEventId = event.eventId;
+    this.lastOptionSearch = null;
     return { ok: true, code: "CHANGE_RECORDED", event: clone(event), activeEventId: event.eventId, superseded, acceptedStateChanged: false, next: "Inspect legal moves, then search or simulate this active event." };
   }
 
@@ -1016,8 +1024,10 @@ export class FinitePlanKernel {
         .sort();
       const { moveSets, truncated } = this.enumerateMoveSets(legalMoveIds, this.profile.searchPolicy.maxMovesPerOption, this.profile.searchPolicy.maxCombinations);
       const chosenMoveSets = new Set<string>();
-      for (const objective of this.profile.searchPolicy.objectives) {
+      let legalCombinationCount = 0;
+      for (const [objectiveIndex, objective] of this.profile.searchPolicy.objectives.entries()) {
         const ranked = await Promise.all(moveSets.map((moveIds) => this.createCandidate(event, moveIds, objective, "bounded_search")));
+        if (objectiveIndex === 0) legalCombinationCount = ranked.filter((candidate) => candidate.valid).length;
         ranked.sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore || a.moveIds.join("|").localeCompare(b.moveIds.join("|")));
         const selected = ranked.find((candidate) => candidate.valid && !chosenMoveSets.has(candidate.moveIds.join("|")))
           ?? ranked.find((candidate) => !chosenMoveSets.has(candidate.moveIds.join("|")));
@@ -1034,6 +1044,8 @@ export class FinitePlanKernel {
         maxCombinations: this.profile.searchPolicy.maxCombinations,
         truncated,
         objectives: clone(this.profile.searchPolicy.objectives),
+        legalCombinationCount,
+        rejectedCombinationCount: moveSets.length - legalCombinationCount,
       };
     }
     const candidates = [...this.candidates.values()]
@@ -1043,6 +1055,11 @@ export class FinitePlanKernel {
           - (this.profile.searchPolicy.objectives.indexOf(b.objective) < 0 ? Number.MAX_SAFE_INTEGER : this.profile.searchPolicy.objectives.indexOf(b.objective))
         || b.preferenceScore - a.preferenceScore);
     const options = candidates.map((candidate) => ({ candidateId: candidate.candidateId, objective: candidate.objective, source: candidate.source, valid: candidate.valid, moveIds: candidate.moveIds, tradeoffImpact: candidate.tradeoffImpact, netForecastDeltaMinor: candidate.netForecastDeltaMinor, resultingBufferMinor: candidate.resultingBufferMinor, resultingDaysDelta: candidate.resultingDaysDelta, resultingEntities: candidate.resultingEntities, preferenceScore: candidate.preferenceScore, violations: candidate.violations, warnings: candidate.warnings }));
+    if (search) {
+      search.generatedOptionCount = candidates.length;
+      search.validOptionCount = candidates.filter((candidate) => candidate.valid).length;
+      this.lastOptionSearch = clone(search);
+    }
     return { ok: true, code: candidates.some((candidate) => candidate.valid) ? "OPTIONS_AVAILABLE" : "NO_VALID_OPTION", options, search, comparable: candidates.every((candidate) => candidate.baseRevision === this.revision && candidate.eventId === eventId), acceptedStateChanged: false };
   }
 
@@ -1139,7 +1156,8 @@ export class FinitePlanKernel {
     const beforeEntities = clone(this.entities);
     this.entities = clone(canonical.resultingEntities);
     this.revision += 1;
-    const payload = { candidateId, approvalId, before, after: clone(after), beforeEntities, afterEntities: clone(this.entities), moveIds: clone(canonical.moveIds), contentHash: canonical.contentHash };
+    const changeEvent = this.events.find((event) => event.eventId === canonical.eventId) ?? null;
+    const payload = { candidateId, approvalId, before, after: clone(after), beforeEntities, afterEntities: clone(this.entities), moveIds: clone(canonical.moveIds), objective: canonical.objective, changeEvent: clone(changeEvent), search: clone(this.lastOptionSearch), contentHash: canonical.contentHash };
     const receipt = await this.makeReceipt("plan_option", fromRevision, idempotencyKey, payload);
     this.optionIdempotency.set(idempotencyKey, receipt);
     this.clearPending();

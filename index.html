@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to plan content</a>
     <div id="app" aria-busy="true" spellcheck="true">
       <main class="app-loading" role="status" aria-label="Opening Finite">
         <div class="app-loading__panel">
@@ -37,7 +38,7 @@
         </div>
       </main>
     </div>
-    <div id="announcer" class="sr-only" aria-live="polite"></div>
+    <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <noscript>Finite needs JavaScript to calculate and validate the live plan.</noscript>
     <script type="module" src="/src/webmcp-bootstrap.ts"></script>
     <script type="module" src="/src/entry.ts"></script>

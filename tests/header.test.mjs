@@ -904,3 +904,21 @@ test("appearance opens from cache before refreshing choices", () => {
   assert.match(source, /themeSettingsOpen = true;[\s\S]*?await render\(\);\s*try \{\s*await Promise\.all\(\[refreshThemeCatalog\(\), refreshSkinCatalog\(\)\]\)/);
   assert.match(source, /if \(themeSettingsOpen\) await render\(\)/);
 });
+
+test("Spotlight exposes legible search, outcome, authority, keyboard, and screen-reader proof", () => {
+  const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(source, /Why these options/);
+  assert.match(source, /Finite tested \$\{exploredCombinations\} bounded combinations/);
+  assert.match(source, /Why it works/);
+  assert.match(source, /latest-plan-update__outcome/);
+  assert.match(source, /You confirmed this exact route for revision/);
+  assert.match(source, /role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(source, /approvalSummary\?\.focus/);
+  assert.match(source, /aria-label="Use option \$\{index \+ 1\}/);
+  assert.match(styles, /\.skip-link:focus/);
+  assert.match(styles, /\.button \{ width:100%; min-height:44px/);
+  assert.match(styles, /summary:focus-visible/);
+  assert.match(styles, /animation:none!important/);
+  assert.match(shell, /class="skip-link" href="#main"/);
+  assert.match(shell, /id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"/);
+});

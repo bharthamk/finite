@@ -1,6 +1,6 @@
 # Reproducible release contract
 
-Updated: 2026-08-31
+Updated: 2026-09-01
 
 Finite can be rebuilt from a clean checkout without a Finite-owned backend
 agent, model key, or user database. The runtime boundary is Node 22.13 or newer,
@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The current local gate is 325/325 tests, a successful TypeScript check, a
+The current local gate is 346/346 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is
@@ -55,16 +55,12 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The currently deployed product is release v236 from source
-`3e5fd8e48e45c78549e033550bf733285c3ae76e`, with release marker
-`hosted-release-marker-v236`, at `https://finite.bharthamk.chatgpt.site`.
-Release v235 was superseded during live acceptance after a previously used
-browser exposed stale browser-local demo scope. v236 consumes a one-use fresh
-Spotlight launch parameter, removes it from the stable URL, and then preserves
-the accepted plan across reload. Production acceptance covered signed-out HTTP,
-the returning-browser reset, native WebMCP change recording and legal option
-generation, visible human choice and confirmation, a revision-bound apply from
-revision 1 to 2, the visible receipt, and post-reload continuity.
+The current release candidate is v237 with release marker
+`hosted-release-marker-v237`. It adds visible bounded-search reasoning, a full
+before/after accepted-change receipt, consistent accepted stage projection,
+stronger keyboard and screen-reader state, mobile interaction targets, and a
+20-run hostile Spotlight acceptance matrix. The exact deployment commit and
+accepted live version are recorded here after Sites promotion.
 
 ## Authority still required
 

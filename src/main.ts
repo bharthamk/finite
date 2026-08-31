@@ -1330,7 +1330,7 @@ const renderSpotlightActivity = (): string => {
           : kernel.activeEventId
             ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while legal combinations are compared." }
             : { step: "Live WebMCP", title: "Codex is reading the same active plan you can see.", detail: "Next it will record one synthetic change without altering accepted truth." };
-  return `<section class="spotlight-activity" aria-live="polite" aria-label="Finite and Codex activity">
+  return `<section class="spotlight-activity" role="status" aria-live="polite" aria-atomic="true" aria-label="Finite and Codex activity">
     <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
   </section>`;
 };
@@ -3731,6 +3731,17 @@ const renderAttachmentDialog = (manifest: SurfaceManifest): string => `<dialog c
   </form>
 </dialog>`;
 
+const acceptedStageDetail = (stage: SurfaceManifest["stages"][number]): string => {
+  const receipt = [...runtime.kernel.receipts].reverse().find((item) => item.receiptType === "plan_option" && item.toRevision === runtime.kernel.revision);
+  const changeEvent = receipt?.payload.changeEvent as { title?: unknown; daysDelta?: unknown } | undefined;
+  const daysDelta = Number(changeEvent?.daysDelta);
+  if (typeof changeEvent?.title !== "string" || !changeEvent.title.toLocaleLowerCase().includes(stage.label.toLocaleLowerCase()) || !Number.isFinite(daysDelta)) return stage.detail;
+  const priorNights = Number(stage.detail.match(/^(\d+)\s+nights?/i)?.[1]);
+  return Number.isFinite(priorNights)
+    ? stage.detail.replace(/^\d+\s+nights?/i, `${priorNights + daysDelta} nights`)
+    : stage.detail;
+};
+
 const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["component"]): string => `
   ${renderPlanInputItems("timeline")}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
@@ -3742,7 +3753,7 @@ const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["compone
       return `
       <li class="stage stage--${escapeHtml(completed ? "complete" : stage.status)}">
         <span class="stage__marker">${escapeHtml(completed ? "Completed" : decided ? "Chosen" : direct ? "Updated" : stage.marker)}</span>
-        <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(stage.detail)}</span></div>
+        <div><strong>${escapeHtml(stage.label)}</strong><span>${escapeHtml(acceptedStageDetail(stage))}</span></div>
         <div class="stage__actions">${checklist ? `<label class="stage__check"><input type="checkbox" data-action="toggle-checklist" data-checklist-id="${escapeHtml(checklist.itemId)}" ${completed ? "checked" : ""} ${planWorkBusy ? "disabled" : ""}><span>${completed ? "Completed" : "Mark complete"}</span></label>` : `<small>${escapeHtml(decided ? "chosen" : direct ? "updated" : stage.status)}</small>`}${pendingBadge("timeline", stage.stageId)}<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(stage.stageId)}" data-plan-input-label="${escapeHtml(stage.label)}">Add or change</button><button type="button" data-action="open-attachment" data-attachment-section="timeline" data-attachment-context="${escapeHtml(stage.stageId)}" data-attachment-label="${escapeHtml(stage.label)}">Attach</button></div>
         <div class="stage__inputs">${renderPlanInputItems("timeline", stage.stageId)}${renderAttachmentItems(attachmentsFor("timeline", stage.stageId), true)}</div>
       </li>`;
@@ -3769,7 +3780,7 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
   const chosen = direct?.kind === "decision";
   return `<section class="managing-next" aria-labelledby="managing_next_title">
     <div><p class="eyebrow">Up next ${pendingBadge("timeline", next.stageId)}</p><span class="managing-next__marker">${escapeHtml(chosen ? "Chosen" : direct ? "Updated" : next.marker)}</span></div>
-    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(direct?.message ?? next.detail)}</p></div>
+    <div><h2 id="managing_next_title">${escapeHtml(next.label)}</h2><p>${escapeHtml(direct?.message ?? acceptedStageDetail(next))}</p></div>
     <div class="managing-next__actions">${timeline ? `<button type="button" data-action="open-managing-zone" data-zone-id="${escapeHtml(timeline.zoneId)}">See the full plan ↓</button>` : ""}${direct ? `<button type="button" data-action="edit-plan-input" data-plan-input-id="${escapeHtml(direct.inputId)}">Change</button>` : `<button type="button" data-action="open-plan-input" data-plan-input-section="timeline" data-plan-input-context="${escapeHtml(next.stageId)}" data-plan-input-label="${escapeHtml(next.label)}">Add or change</button>`}</div>
   </section>`;
 };
@@ -3850,6 +3861,14 @@ const renderOptions = (): string => {
     : `<p class="quiet">No decision is waiting. The accepted plan is currently settled.</p>`;
   const event = runtime.kernel.events.find((item) => item.eventId === runtime.kernel.activeEventId);
   const protections = runtime.kernel.profile.locks.map(humanPlanLabel).filter(Boolean);
+  const search = runtime.kernel.lastOptionSearch;
+  const exploredCombinations = Number(search?.exploredCombinationCount);
+  const legalCombinations = Number(search?.legalCombinationCount);
+  const rejectedCombinations = Number(search?.rejectedCombinationCount);
+  const surfacedOptions = Number(search?.validOptionCount);
+  const lockedMoves = Object.values(runtime.kernel.profile.moves)
+    .filter((move) => runtime.kernel.profile.locks.includes(move.dimension))
+    .map((move) => move.tradeoff);
   const pressure = event ? [
     event.costDeltaMinor === 0 ? null : `${event.costDeltaMinor > 0 ? "Adds" : "Removes"} ${money(Math.abs(event.costDeltaMinor))}`,
     event.daysDelta === 0 ? null : `${Math.abs(event.daysDelta)} ${Math.abs(event.daysDelta) === 1 ? "day" : "days"} ${event.daysDelta > 0 ? "later" : "earlier"}`,
@@ -3858,17 +3877,24 @@ const renderOptions = (): string => {
     <div><span>What changed</span><strong>${escapeHtml(event.title)}</strong>${pressure ? `<small>${escapeHtml(pressure)}</small>` : ""}</div>
     <div><span>What stays true</span><strong>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</strong></div>
     <div><span>What you’re choosing</span><strong>Which compromise fits best</strong><small>Nothing changes until you confirm one.</small></div>
-  </div>` : ""}<div class="option-grid">
+  </div>` : ""}${search && Number.isFinite(exploredCombinations) ? `<section class="option-search-proof" aria-label="How Finite found these options">
+    <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} distinct legal routes are surfaced so the trade-offs stay understandable.</p></div>
+    <dl><div><dt>Legal combinations</dt><dd>${legalCombinations}</dd></div><div><dt>Rejected combinations</dt><dd>${rejectedCombinations}</dd></div><div><dt>Refused before choice</dt><dd>${escapeHtml(lockedMoves.length ? lockedMoves.join(" · ") : "No fixed item was offered as a trade")}</dd></div></dl>
+  </section>` : ""}<div class="option-grid">
     ${candidates.map((candidate, index) => `
-      <article class="option-card ${candidate.candidateId === runtime.kernel.stagedCandidate?.candidateId ? "is-staged" : ""}">
+      <article class="option-card ${candidate.candidateId === runtime.kernel.stagedCandidate?.candidateId ? "is-staged" : ""}" aria-labelledby="option_${index + 1}_title">
         <div class="option-card__top"><span>Option ${index + 1}</span><span>${candidate.valid ? "Works" : "Doesn’t fit"}</span></div>
-        <h3>${escapeHtml(objectiveLabel(candidate.objective))}</h3>
+        <h3 id="option_${index + 1}_title">${escapeHtml(objectiveLabel(candidate.objective))}</h3>
         <div class="option-card__number">${money(candidate.resultingBufferMinor)}</div>
         <p>${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)} left after this change</p>
-        <ul>${candidateTradeoffLines(candidate).map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
+        <dl class="option-card__why">
+          <div><dt>Protects</dt><dd>${escapeHtml(objectiveLabel(candidate.objective))}</dd></div>
+          <div><dt>Trades</dt><dd>${escapeHtml(candidateTradeoffLines(candidate).join(" · "))}</dd></div>
+          <div><dt>Why it works</dt><dd>${candidate.valid ? `${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)} stays at ${money(candidate.resultingBufferMinor)}${event ? `, above the ${money(event.minimumBufferMinor)} floor` : ""}; fixed items remain untouched${candidate.evidenceAssessments.length ? "; current evidence is bound" : ""}.` : escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</dd></div>
+        </dl>
         <div class="option-card__delta"><span>Forecast change</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
-          ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}">Use this option</button>`
+          ? `<button class="button button--choose" data-action="choose" data-candidate="${escapeHtml(candidate.candidateId)}" aria-label="Use option ${index + 1}: ${escapeHtml(objectiveLabel(candidate.objective))}">Use this option</button>`
           : `<p class="refusal">${escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</p>`}
       </article>`).join("")}
   </div>`;
@@ -3888,13 +3914,42 @@ const renderLatestPlanUpdate = (): string => {
   const moveIds = Array.isArray(receipt.payload.moveIds) ? receipt.payload.moveIds.map(String) : [];
   const changes = moveIds.map((moveId) => kernel.profile.moves[moveId]?.tradeoff).filter((item): item is string => Boolean(item));
   const protections = kernel.profile.locks.map(humanPlanLabel).filter(Boolean);
-  return `<section class="latest-plan-update" aria-labelledby="latest_plan_update_title">
-    <div class="latest-plan-update__heading"><p class="eyebrow">Plan updated</p><h2 id="latest_plan_update_title">The change is now part of your plan.</h2><p>${changes.length ? escapeHtml(changes.join(" · ")) : "No additional compromise was needed."}</p></div>
-    <dl>
-      <div><dt>Forecast</dt><dd>${money(forecastBefore)} → ${money(forecastAfter)}</dd></div>
-      <div><dt>${escapeHtml(humanPlanLabel(kernel.profile.surface.nouns.buffer ?? "buffer"))} left</dt><dd>${money(bufferAfter)}</dd></div>
+  const beforeEntities = receipt.payload.beforeEntities as Record<string, unknown> | undefined;
+  const afterEntities = receipt.payload.afterEntities as Record<string, unknown> | undefined;
+  const changeEvent = receipt.payload.changeEvent as { title?: unknown; daysDelta?: unknown } | null;
+  const valueAt = (source: Record<string, unknown> | undefined, path: string[]): unknown => path.reduce<unknown>((value, key) => typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined, source);
+  const formatMeasure = (value: unknown, format: string): string => typeof value === "number" && format === "money" ? money(value) : typeof value === "number" && format === "days" ? `${value} days` : String(value ?? "—");
+  const changedMeasures = kernel.profile.surface.primaryMeasures.flatMap((measure) => {
+    if (measure.selector !== "entities") return [];
+    const prior = valueAt(beforeEntities, measure.path);
+    const next = valueAt(afterEntities, measure.path);
+    return prior !== next ? [{ label: measure.label, before: formatMeasure(prior, measure.format), after: formatMeasure(next, measure.format) }] : [];
+  });
+  const daysDelta = Number(changeEvent?.daysDelta);
+  const changedStage = typeof changeEvent?.title === "string"
+    ? kernel.profile.surface.stages.find((stage) => changeEvent.title!.toString().toLocaleLowerCase().includes(stage.label.toLocaleLowerCase()) && /^(\d+)\s+nights?/i.test(stage.detail))
+    : undefined;
+  const priorStageNights = Number(changedStage?.detail.match(/^(\d+)\s+nights?/i)?.[1]);
+  if (changedStage && Number.isFinite(daysDelta) && Number.isFinite(priorStageNights)) {
+    changedMeasures.push({ label: `${changedStage.label} stay`, before: `${priorStageNights} nights`, after: `${priorStageNights + daysDelta} nights` });
+  }
+  const objective = typeof receipt.payload.objective === "string" ? objectiveLabel(receipt.payload.objective) : "Chosen legal route";
+  const search = receipt.payload.search as Record<string, unknown> | null;
+  const explored = Number(search?.exploredCombinationCount);
+  const surfaced = Number(search?.validOptionCount);
+  const beforeMeasures = [{ label: "Forecast", value: money(forecastBefore) }, { label: humanPlanLabel(kernel.profile.surface.nouns.buffer ?? "buffer"), value: money(bufferBefore) }, ...changedMeasures.map((measure) => ({ label: measure.label, value: measure.before }))];
+  const afterMeasures = [{ label: "Forecast", value: money(forecastAfter) }, { label: humanPlanLabel(kernel.profile.surface.nouns.buffer ?? "buffer"), value: money(bufferAfter) }, ...changedMeasures.map((measure) => ({ label: measure.label, value: measure.after }))];
+  const outcomeColumn = (label: string, measures: Array<{ label: string; value: string }>) => `<article><span>${label}</span><dl>${measures.map((measure) => `<div><dt>${escapeHtml(measure.label)}</dt><dd>${escapeHtml(measure.value)}</dd></div>`).join("")}</dl></article>`;
+  return `<section class="latest-plan-update" role="status" aria-live="polite" aria-atomic="true" aria-labelledby="latest_plan_update_title">
+    <div class="latest-plan-update__heading"><p class="eyebrow">Plan updated · revision ${receipt.fromRevision} → ${receipt.toRevision}</p><h2 id="latest_plan_update_title">The change is now part of your plan.</h2><p>${escapeHtml(typeof changeEvent?.title === "string" ? changeEvent.title : changes.length ? changes.join(" · ") : "The chosen change was applied.")}</p></div>
+    <div class="latest-plan-update__outcome" aria-label="Before and after">${outcomeColumn("Before", beforeMeasures)}<span aria-hidden="true">→</span>${outcomeColumn("After", afterMeasures)}</div>
+    <dl class="latest-plan-update__proof">
+      <div><dt>Why this route</dt><dd>${escapeHtml(objective)}${changes.length ? ` · ${escapeHtml(changes.join(" · "))}` : ""}</dd></div>
       <div><dt>Still protected</dt><dd>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</dd></div>
+      <div><dt>Search proof</dt><dd>${Number.isFinite(explored) ? `${explored} combinations checked · ${surfaced} legal routes surfaced` : "Bounded legal search completed"}</dd></div>
+      <div><dt>Authority</dt><dd>You confirmed this exact route for revision ${receipt.fromRevision}. Codex applied only that approval.</dd></div>
     </dl>
+    <p class="latest-plan-update__receipt">Receipt ${escapeHtml(receipt.receiptId)} · replay-safe · accepted once</p>
   </section>`;
 };
 
@@ -4111,7 +4166,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     const staged = kernel.stagedCandidate;
     const approved = staged && kernel.approval?.candidateId === staged.candidateId;
     const changes = staged ? candidateTradeoffLines(staged) : [];
-    body = staged ? `<div class="approval-copy"><p>You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates your plan only—it does not book, buy, cancel, or contact anyone.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet">Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to see its exact effect before anything changes.</p>`;
+    body = staged ? `<div class="approval-copy"><p id="exact_approval_description">You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates your plan only—it does not book, buy, cancel, or contact anyone.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet" tabindex="-1" data-approval-confirmed>Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve" aria-describedby="exact_approval_description">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to see its exact effect before anything changes.</p>`;
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
   const timelineSection = stageComponents.has(zone.component);
@@ -4602,6 +4657,8 @@ const chooseCandidate = async (candidateId: string): Promise<void> => {
   const result = await runtime.kernel.stageOption({ candidateId, expectedRevision: runtime.kernel.revision });
   announce(result.ok ? "Your chosen outcome is ready for exact approval." : `That outcome could not be staged: ${result.code}`);
   await render();
+  const approvalSummary = document.querySelector<HTMLElement>("#approval_panel summary");
+  approvalSummary?.focus({ preventScroll: true });
   document.querySelector("#approval_panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
 };
 
@@ -4616,6 +4673,7 @@ const approveCandidate = async (): Promise<void> => {
   busy = false;
   announce(approval.ok ? "Exact option approved. Codex may now apply it through the guarded WebMCP tool." : `Approval was not recorded: ${approval.code}`);
   await render();
+  document.querySelector<HTMLElement>("[data-approval-confirmed]")?.focus({ preventScroll: true });
 };
 
 const openPlan = async (planId: string): Promise<void> => {
