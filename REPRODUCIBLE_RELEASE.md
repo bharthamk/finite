@@ -55,12 +55,19 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The current release candidate is v237 with release marker
-`hosted-release-marker-v237`. It adds visible bounded-search reasoning, a full
-before/after accepted-change receipt, consistent accepted stage projection,
-stronger keyboard and screen-reader state, mobile interaction targets, and a
-20-run hostile Spotlight acceptance matrix. The exact deployment commit and
-accepted live version are recorded here after Sites promotion.
+The currently deployed product is Sites v237 from source
+`9ad3dc47656ce9578e63c356fecab3a2bbedcf92`, with release marker
+`hosted-release-marker-v237`, at `https://finite.bharthamk.chatgpt.site`.
+Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_bbd0640bc71c8191873fe519740bc498`
+was promoted by deployment `appgdep_6a9592d33f648191bdea2675e6d0fce2`.
+It adds visible bounded-search reasoning, a full before/after accepted-change
+receipt, consistent accepted stage projection, stronger keyboard and
+screen-reader state, mobile interaction targets, and a 20-run hostile Spotlight
+acceptance matrix. Production acceptance covered the public marker and
+signed-out boundary, one complete native WebMCP revision 1→2 transaction,
+visible choice and exact confirmation, the applied receipt, reload continuity,
+and a 390-pixel-wide layout with no horizontal overflow and a 44-pixel minimum
+interactive target height.
 
 ## Authority still required
 

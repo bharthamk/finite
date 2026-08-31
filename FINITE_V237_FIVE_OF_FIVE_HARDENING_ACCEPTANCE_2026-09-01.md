@@ -55,3 +55,19 @@ This release has deterministic and browser-visible product proof, but no fresh
 human-user cohort was available. That is a validation limitation, not an
 unimplemented product path. No submission materials are part of this release.
 
+## Live acceptance
+
+Sites v237 is accepted live at `https://finite.bharthamk.chatgpt.site` from
+source `9ad3dc47656ce9578e63c356fecab3a2bbedcf92`. Deployment
+`appgdep_6a9592d33f648191bdea2675e6d0fce2` succeeded with marker
+`hosted-release-marker-v237`.
+
+The public Site repeated the complete canonical transaction. It generated the
+26-combination explanation and three routes, focused exact approval after the
+route choice, focused confirmation after approval, re-entered canonical state
+with authority for the exact candidate and revision, and applied one accepted
+mutation. The live receipt moved revision 1 to 2 and showed Paris 4 to 7 nights,
+trip and booked days 18 to 21, forecast AUD 1,900 to AUD 2,000, and freedom AUD
+750 to AUD 650. Reload retained revision 2, the receipt, the seven-night next
+step, and the seven-night timeline. The live mobile viewport repeated the
+no-overflow and 44-pixel interaction-target proof.
