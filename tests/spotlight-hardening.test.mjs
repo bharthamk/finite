@@ -22,6 +22,24 @@ const spotlightEvent = {
 
 const allocationTotal = (allocation) => allocation.spentMinor + allocation.committedMinor + allocation.forecastMinor + allocation.bufferMinor;
 
+test("Spotlight refuses an absolute duration replacement that contradicts its relative day change", async () => {
+  const profiles = await profilesPromise;
+  const profile = profiles.get("travel");
+  assert(profile);
+  const kernel = new FinitePlanKernel(profile, new PlanSnapshotStore(new MemoryStorage()));
+  const refused = kernel.recordChangeEvent({
+    ...spotlightEvent,
+    entityChanges: [
+      { entityId: "trip_days", field: "days", value: 3 },
+      { entityId: "booked_segment_days", field: "days", value: 3 },
+    ],
+  });
+  assert.equal(refused.code, "ENTITY_CHANGE_DELTA_MISMATCH");
+  assert.equal(refused.acceptedStateChanged, false);
+  assert.equal(kernel.revision, 1);
+  assert.equal(kernel.events.length, 0);
+});
+
 for (let run = 1; run <= 20; run += 1) {
   test(`Spotlight hostile run ${String(run).padStart(2, "0")} stays bounded, human-authorized, replay-safe, and reloadable`, async () => {
     const profiles = await profilesPromise;

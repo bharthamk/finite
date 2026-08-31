@@ -779,6 +779,20 @@ export class FinitePlanKernel {
     if (malformedEntityChanges.length) return { ok: false, code: "INVALID_ENTITY_CHANGE", malformedEntityChanges, acceptedStateChanged: false, next: "Each entity change must contain exactly one integer delta or value." };
     const invalidEntityChanges = (input.entityChanges ?? []).filter((change) => !this.entities[change.entityId] || !(change.field in (this.entities[change.entityId]?.values ?? {})));
     if (invalidEntityChanges.length) return { ok: false, code: "UNKNOWN_ENTITY_DIMENSION", invalidEntityChanges, acceptedStateChanged: false };
+    const inconsistentDurationChanges = (input.entityChanges ?? []).filter((change) => {
+      const entity = this.entities[change.entityId];
+      const current = entity?.values[change.field];
+      if (entity?.kind !== "duration" || change.field !== "days" || current === undefined) return false;
+      const effectiveDelta = change.value !== undefined ? change.value - current : change.delta;
+      return effectiveDelta !== (input.daysDelta ?? 0);
+    });
+    if (inconsistentDurationChanges.length) return {
+      ok: false,
+      code: "ENTITY_CHANGE_DELTA_MISMATCH",
+      inconsistentDurationChanges,
+      acceptedStateChanged: false,
+      next: "Make each supplied duration entity change match daysDelta. Use delta for a relative change and value only for an absolute replacement.",
+    };
     const evidenceRefs = input.evidenceRefs ?? [];
     if (new Set(evidenceRefs).size !== evidenceRefs.length) return { ok: false, code: "DUPLICATE_EVIDENCE_REFERENCE", acceptedStateChanged: false };
     const unknownEvidenceRefs = evidenceRefs.filter((evidenceId) => typeof evidenceId !== "string" || !this.evidence.has(evidenceId));

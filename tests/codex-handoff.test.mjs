@@ -250,6 +250,8 @@ test("spotlight demo proves the native change-to-authority-to-receipt loop", () 
   assert.match(handoff.prompt, /Add three nights in Paris/i);
   assert.match(handoff.prompt, /costDeltaMinor = 66000/i);
   assert.match(handoff.prompt, /evidenceRefs = \[evidence_current\]/i);
+  assert.match(handoff.prompt, /field: days, delta: 3/i);
+  assert.match(handoff.prompt, /Use delta, never value/i);
   assert.match(handoff.prompt, /finite_compare_options/i);
   assert.match(handoff.prompt, /Use this option/i);
   assert.match(handoff.prompt, /Confirm and update plan/i);

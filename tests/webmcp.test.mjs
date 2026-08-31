@@ -241,6 +241,14 @@ test("production adapter normalizes host input, excludes authority, and replaces
   assert(planning.advertisedTools.includes("finite_save_workspace_option"));
   assert(planning.advertisedTools.includes("travel_extend_stay"));
   assert(planning.advertisedTools.length <= 20);
+  const recordChange = host.tools.get("finite_record_change_event");
+  assert(recordChange);
+  const entityChange = recordChange.inputSchema.properties.entityChanges.items;
+  assert.deepEqual(entityChange.required, ["entityId", "field"]);
+  assert.equal(entityChange.additionalProperties, false);
+  assert.match(entityChange.properties.delta.description, /relative change/i);
+  assert.match(entityChange.properties.value.description, /absolute replacement/i);
+  assert.equal(entityChange.oneOf.length, 2);
   assert.equal((await host.execute("finite_get_plan_state", "{bad-json")).code, "INVALID_TOOL_INPUT");
   const extension = await host.execute("travel_extend_stay", JSON.stringify({ destination: "Paris", nights: 2, nightlyMinor: 18_000, minimumBufferMinor: 50_000 }));
   assert.equal(extension.code, "CHANGE_RECORDED");
