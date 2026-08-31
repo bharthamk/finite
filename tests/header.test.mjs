@@ -620,8 +620,11 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /open_questions: \{ label: "the open questions", selectors: \["\.starter-module\[open\] \.starter-module__questions"\] \}/);
   assert.match(source, /overlay\.setAttribute\("popover", "manual"\)/);
   assert.match(source, /typeof overlay\.showPopover === "function"/);
+  assert.match(source, /const openModal = root\.querySelector<HTMLDialogElement>\("dialog\[open\]"\)/);
+  assert.match(source, /overlay\.removeAttribute\("popover"\);\s+openModal\.append\(overlay\)/);
   assert.match(source, /demoNextRequired = false;\s+demoNextAdvanced = true;/);
   assert.match(source, /root\.querySelectorAll<HTMLElement>\("\.starter-module__codex-location"\)\.forEach\(\(location\) => location\.remove\(\)\)/);
+  assert.equal(source.match(/root\.querySelectorAll<HTMLElement>\("\.starter-module__codex-location"\)/g)?.length, 1);
   assert.match(source, /location\.textContent = Number\(element\.dataset\.openQuestions/);
   assert.match(styles, /\.codex-guide-overlay \{ position:fixed; top:auto;/);
   assert.match(source, /class="starter-overview__field-hint" id="currency_hint"/);

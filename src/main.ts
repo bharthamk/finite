@@ -846,12 +846,19 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     button.textContent = "Ready for the next step…";
     announce(`Ready for ${agenticName()} to continue the live demo.`);
   });
-  root.append(overlay);
-  if (typeof overlay.showPopover === "function") overlay.showPopover();
+  const openModal = root.querySelector<HTMLDialogElement>("dialog[open]");
+  if (openModal) {
+    overlay.removeAttribute("popover");
+    openModal.append(overlay);
+  } else {
+    root.append(overlay);
+    if (typeof overlay.showPopover === "function") overlay.showPopover();
+  }
 };
 const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteGuideTarget; found: boolean; surface: string } => {
   clearCodexSpotlight();
   root.querySelectorAll<HTMLElement>("[data-codex-priority]").forEach((priority) => { priority.removeAttribute("data-codex-priority"); priority.classList.remove("is-codex-priority"); });
+  root.querySelectorAll<HTMLElement>(".starter-module__codex-location").forEach((location) => location.remove());
   const descriptor = guideTargetSelectors[request.target];
   const exactPriority = request.target === "priority" && request.sectionId
     ? root.querySelector<HTMLElement>(`[data-workspace-module='${CSS.escape(request.sectionId)}']`)
@@ -869,7 +876,6 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
   if (disclosure) disclosure.open = true;
   if (request.target === "priority") {
-    root.querySelectorAll<HTMLElement>(".starter-module__codex-location").forEach((location) => location.remove());
     element.dataset.codexPriority = "true";
     element.classList.add("is-codex-priority");
     const counts = element.querySelector<HTMLElement>(":scope > summary > b");
