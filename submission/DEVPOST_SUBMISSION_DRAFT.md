@@ -1,4 +1,8 @@
-# Finite — Devpost copy draft
+# Finite — Devpost submission draft
+
+Status: content-complete draft for accepted public release v240. Only the public
+repository URL, public YouTube URL, entrant/team details, and final media remain
+owner-supplied.
 
 ## Project name
 
@@ -85,6 +89,19 @@ move enumeration, revision-bound candidates, five-minute exact authority
 challenges, optimistic concurrency, atomic receipts, and idempotent replay.
 Human confirmation creators are never registered with WebMCP.
 
+## Challenges we ran into
+
+The hard problem was not generating options. It was keeping five states
+separate under retries, reloads, and shared human-agent control: observed
+reality, proposed change, human choice, exact authority, and accepted truth.
+Early versions also exposed too many route-specific tools and returned too much
+state. We replaced that with seven stable document tools, bounded semantic
+manifests, content-addressed detail recovery, and exact revision-bound
+challenges. A late end-to-end run caught an especially important ambiguity:
+`value: 3` could be mistaken for “add three days.” The final contract names
+relative `delta` and absolute `value` explicitly and refuses contradictory
+duration changes.
+
 ## What we learned
 
 The most useful agent interface is not the largest tool catalogue. Finite began
@@ -106,9 +123,11 @@ separate made Finite both safer and more comprehensible.
 - Complete before/after, authority, search, and replay proof in one receipt.
 - Travel, renovation, event, interview-preparation, and recurring-practice plan
   shapes on one closed adaptive grammar.
-- 346 passing tests, including 20 hostile end-to-end Spotlight runs.
+- 353 passing tests, including 20 hostile end-to-end Spotlight runs.
 - Reload-safe accepted truth, isolated public Demo mode, responsive layout, and
   keyboard/screen-reader hardening.
+- A production route completed in three calls to first useful action with zero
+  failed calls and exactly one accepted mutation.
 
 ## What's next
 
@@ -121,8 +140,8 @@ contract.
 
 - Live app: https://finite.bharthamk.chatgpt.site/
 - Judge Spotlight: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Public source repository: `[pending]`
-- Public YouTube demo: `[pending]`
+- Public source repository: `[OWNER: paste public repository URL]`
+- Public YouTube demo: `[OWNER: paste public YouTube URL]`
 
 ## Built with
 

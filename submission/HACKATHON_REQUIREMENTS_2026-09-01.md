@@ -1,7 +1,7 @@
 # WebMCP Challenge requirements
 
-Verified against the official Devpost rules and OpenAI challenge page on
-2026-09-01.
+Verified against the official Devpost rules and challenge page on 2026-09-01.
+The official rules govern if any helper, FAQ, or draft conflicts with them.
 
 ## Deadline
 
@@ -25,6 +25,9 @@ Submission closes 2026-09-03 at 1:00 p.m. Pacific Time, which is
 - English submission materials.
 - Free, unrestricted judge access through the judging period; private projects
   must provide credentials.
+- Hold the submitted materials, public repository, and live project
+  substantively unchanged after the deadline unless the rules administrator
+  expressly permits a narrow correction.
 
 Judges may evaluate only the description, images, and video, so those materials
 must communicate the product without relying on a live test.

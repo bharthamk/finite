@@ -90,17 +90,17 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 
 ## Current acceptance
 
-Sites v237 is the accepted live release. The public Spotlight completed the
+Sites v240 is the accepted live release. The public Spotlight completed the
 native WebMCP transaction from revision 1 to 2, exposed 26 checked combinations
 and three legal routes, stopped at visible human choice and exact confirmation,
 applied only the returned authority, projected the accepted Paris extension
 consistently, and retained the complete before/after receipt after reload.
 
-The release passes 346/346 tests, including 20 independent hostile Spotlight
+The release passes 353/353 tests, including 20 independent hostile Spotlight
 runs, plus TypeScript, the production Vite client and Worker builds, the client
 chunk budget, and diff integrity. A live 390 by 844 viewport has no horizontal
 overflow and a 44-pixel minimum target height for visible controls. See
-[`FINITE_V237_FIVE_OF_FIVE_HARDENING_ACCEPTANCE_2026-09-01.md`](./FINITE_V237_FIVE_OF_FIVE_HARDENING_ACCEPTANCE_2026-09-01.md)
+[`FINITE_V240_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`](./FINITE_V240_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md)
 and [`REPRODUCIBLE_RELEASE.md`](./REPRODUCIBLE_RELEASE.md).
 
 The WebMCP Challenge working set is in [`submission/`](./submission/). It keeps
@@ -168,7 +168,7 @@ There is no backend model and no application-owned agent. Natural-language inter
 Chrome-native self-invocation proves the browser protocol independently. A
 fresh Codex task has also completed authenticated live page-tool discovery,
 canonical kitchen entry, bounded state reading, delayed human-input
-reconciliation, and correct refusal at the human-preference boundary. The v237
+reconciliation, and correct refusal at the human-preference boundary. The v240
 public Spotlight now closes the same-page change, search, human-authority,
 accepted-apply, receipt, and reload path. Remaining work is submission packaging
 and fresh-user evidence, not basic WebMCP availability or an unfinished product
