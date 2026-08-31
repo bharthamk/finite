@@ -232,6 +232,11 @@ test("complete demo adds safe custom and comparison capabilities", () => {
     plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
   });
   assert.match(handoff.prompt, /Run seven prepared chapters/i);
+  assert.match(handoff.prompt, /click the separate 'Customise workspace' control/i);
+  assert.match(handoff.prompt, /Do not click or focus 'Start managing'/i);
+  assert.match(handoff.prompt, /workspace_customisation target with pauseForNext true/i);
+  assert.match(handoff.prompt, /Every plan starts with the useful standard sections\. Customise workspace lets you add a specialist tracker only when this particular plan needs one\./i);
+  assert.ok(handoff.prompt.indexOf("workspace_customisation target") < handoff.prompt.indexOf("budget_editor target"));
   assert.match(handoff.prompt, /finite_save_workspace_module/i);
   assert.match(handoff.prompt, /custom_weather_watch/i);
   assert.match(handoff.prompt, /finite_save_workspace_option/i);

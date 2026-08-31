@@ -782,6 +782,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   updates: { label: "where to add or correct information", selectors: [".arrival-continuity", ".plan-input-items", ".plan-input-dialog", "[data-action='open-plan-input']"] },
   plan_summary: { label: "the plan summary", selectors: [".starter-plan__overview", ".arrival-starter-plan", ".draft-review__summary", ".hero", ".plan-orbit"] },
   section_headers: { label: "the editable plan sections", selectors: [".starter-workspace"] },
+  workspace_customisation: { label: "workspace customisation", selectors: ["[data-custom-workspace-dialog][open]", "[data-action='open-custom-workspace']"] },
   budget_editor: { label: "the budget editor", selectors: ["[data-overview-dialog='budget'][open]", "[data-overview-dialog='budget']"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
@@ -2188,7 +2189,8 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
     ${overviewMarkup}
     <div class="starter-workspace">${modules}</div>
-    <div class="starter-plan__completion"><button class="text-button" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button><button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button></div>
+    <div class="starter-plan__customise"><button class="button button--secondary" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button></div>
+    <div class="starter-plan__completion"><button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button></div>
     ${customWorkspaceMarkup}
     ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
   </section>`;

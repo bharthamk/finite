@@ -416,6 +416,9 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /return `<details class="starter-module starter-module--\$\{section\.variant\}\$\{section\.custom/);
   assert.doesNotMatch(source, /return `<section class="starter-module/);
   assert.match(source, /Customise workspace/);
+  assert.match(source, /class="starter-plan__customise"/);
+  assert.match(source, /class="starter-plan__completion"/);
+  assert.doesNotMatch(source, /starter-plan__completion"><button[^>]+open-custom-workspace/);
   assert.match(source, /data-custom-workspace-dialog/);
   assert.match(source, /data-arrival-form="workspace-module-add"/);
   assert.match(source, /data-arrival-form="workspace-module-request"/);
@@ -636,6 +639,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /manual_details: \{ label: "the structured plan details", selectors: \["\.arrival-start-panel--manual"\] \}/);
   assert.match(source, /plan_summary: \{ label: "the plan summary", selectors: \["\.starter-plan__overview", "\.arrival-starter-plan", "\.draft-review__summary", "\.hero", "\.plan-orbit"\] \}/);
   assert.match(source, /budget_editor: \{ label: "the budget editor", selectors: \["\[data-overview-dialog='budget'\]\[open\]", "\[data-overview-dialog='budget'\]"\] \}/);
+  assert.match(source, /workspace_customisation: \{ label: "workspace customisation", selectors: \["\[data-custom-workspace-dialog\]\[open\]", "\[data-action='open-custom-workspace'\]"\] \}/);
   assert.match(source, /This relabels base-currency amounts; it does not convert them\./);
   assert.match(source, /demoPlaybackMode && request\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
@@ -709,6 +713,7 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.doesNotMatch(source, /Start managing when this draft is useful enough/);
   assert.doesNotMatch(source, />Talk to \$\{escapeHtml\(agenticName\(\)\)\}</);
   assert.match(styles, /\.starter-plan__completion \{/);
+  assert.match(styles, /\.starter-plan__customise \{/);
   assert.match(styles, /\.starter-plan__notice \{[^}]*padding:11px[^}]*font-size:\.82rem/);
   assert.match(source, /arrivalProgressionFromStarter\(opened\.order, starter\)/);
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);

@@ -898,8 +898,9 @@ button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .starter-plan__empty { margin:22px 0 0; color:var(--muted); line-height:1.5; }
 .starter-plan__preview-footer { padding:18px clamp(24px,4vw,54px); border-top:1px solid var(--line); }
 .starter-plan__preview-footer p { margin:0; color:var(--muted); }
-.starter-plan__completion { display:flex; justify-content:flex-end; align-items:center; gap:18px; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--panel); }
-.starter-plan__completion .text-button { color:var(--muted); }
+.starter-plan__customise { display:flex; justify-content:flex-start; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--paper); }
+.starter-plan__customise .button { min-width:230px; color:var(--deep); background:transparent; border-color:var(--deep); }
+.starter-plan__completion { display:flex; justify-content:flex-end; align-items:center; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--panel); }
 .starter-plan__completion .button { min-width:190px; color:var(--deep); background:var(--signal); border-color:var(--deep); }
 
 .settings-header { grid-template-columns:auto minmax(0,1fr) auto; }
@@ -2044,6 +2045,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .starter-calendar__list-heading { align-items:flex-start; flex-direction:column; }
   .starter-plan__header h2 { font-size:clamp(2.5rem,14vw,4.2rem); }
   .starter-plan__completion { align-items:stretch; flex-direction:column-reverse; }
+  .starter-plan__customise .button,
   .starter-plan__completion .button { width:100%; }
   .starter-plan__notice strong { white-space:normal; }
   .starter-report-card { min-height:118px; padding:15px; }
