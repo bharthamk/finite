@@ -1122,7 +1122,7 @@ const skinDraftSchema = {
 };
 
 export const finiteGuideSurfaces = ["current", "arrival", "plan"] as const;
-export const finiteGuideTargets = ["top", "plan_ideas", "planning_window", "build_method", "manual_details", "starting_point", "status", "question", "priority", "open_questions", "review", "interpretation", "updates", "plan_summary", "section_headers", "workspace_customisation", "budget_editor", "stages", "options", "approval", "receipt"] as const;
+export const finiteGuideTargets = ["top", "plan_ideas", "planning_window", "build_method", "manual_details", "starting_point", "status", "question", "priority", "open_questions", "review", "interpretation", "updates", "plan_summary", "section_headers", "workspace_customisation", "start_managing", "budget_editor", "stages", "options", "approval", "receipt"] as const;
 export type FiniteGuideSurface = typeof finiteGuideSurfaces[number];
 export type FiniteGuideTarget = typeof finiteGuideTargets[number];
 export interface FiniteGuideViewRequest { surface: FiniteGuideSurface; target: FiniteGuideTarget; refresh: boolean; sectionId?: string; message?: string; pauseForNext?: boolean }

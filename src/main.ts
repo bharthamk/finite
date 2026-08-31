@@ -400,7 +400,9 @@ export const startKitchen = async (authSession: FiniteAuthSession): Promise<void
 
 updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
-const localDemoMode = localDemoModeEnabled(localStorage);
+const startupStartMode = new URLSearchParams(location.search).get("start");
+const guidedDemoLocalMode = startupStartMode === "live-demo" || startupStartMode === "demo-active";
+const localDemoMode = guidedDemoLocalMode || localDemoModeEnabled(localStorage);
 const localDemoScope = localDemoStorageScope(localStorage);
 const activeStorageScope = localDemoMode ? localDemoScope : authSession.storageScope;
 installLocalDemoWriteGuard(window, localDemoMode);
@@ -784,6 +786,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   plan_summary: { label: "the plan summary", selectors: [".starter-plan__overview", ".arrival-starter-plan", ".draft-review__summary", ".hero", ".plan-orbit"] },
   section_headers: { label: "the editable plan sections", selectors: [".starter-workspace"] },
   workspace_customisation: { label: "workspace customisation", selectors: ["[data-custom-workspace-dialog][open]", "[data-action='open-custom-workspace']"] },
+  start_managing: { label: "the Start managing boundary", selectors: ["[data-action='progress-arrival-plan']"] },
   budget_editor: { label: "the budget editor", selectors: ["[data-overview-dialog='budget'][open]", "[data-overview-dialog='budget']"] },
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
@@ -2263,6 +2266,10 @@ const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = f
   target.searchParams.set("start", preservingDemo ? "demo-active" : codexMode === "demo" ? "live-demo" : codexMode === "live" ? "codex-live" : prefill ? "example" : "fresh");
   if (codexMode === "demo" || preservingDemo) target.searchParams.set("tour", demoDepth);
   else target.searchParams.delete("tour");
+  if ((codexMode === "demo" || preservingDemo) && !localDemoMode) {
+    location.assign(`${target.pathname}${target.search}${target.hash}`);
+    return;
+  }
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
   await render();
   if (codexMode) { root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']")?.focus(); return; }
@@ -2275,8 +2282,8 @@ const renderCodexLaunch = (): void => {
   const demoChoice = demoDepth === "basics"
     ? { label: "Just the basics", detail: "Two chapters · about 3 minutes" }
     : demoDepth === "complete"
-      ? { label: "All the bells & whistles", detail: "Six chapters · about 10 minutes" }
-      : { label: "Standard tour", detail: "Four chapters · about 6 minutes" };
+      ? { label: "All the bells & whistles", detail: "Eight chapters · about 12 minutes" }
+      : { label: "Standard tour", detail: "Six chapters · about 8 minutes" };
   surfaceRoot.dataset.profile = "codex-launch";
   surfaceRoot.setAttribute("aria-busy", "false");
   surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
@@ -2355,8 +2362,8 @@ const renderEntryGateway = (): void => {
         <header><div><p class="eyebrow">Choose your depth</p><h2 id="entry_demo_picker_title">How much Finite do you want to see?</h2><p>Every option uses the real product and the same editable Hobart plan. The longer tours simply keep going.</p></div><button type="button" data-action="close-demo-picker" aria-label="Close demo choices">×</button></header>
         <div class="entry-demo-picker__options">
           <button type="button" data-demo-depth="basics"><span>2 chapters · about 3 min</span><strong>Just the basics</strong><p>Watch a template become a tailored, editable plan.</p><em>Choose this tour →</em></button>
-          <button type="button" class="is-recommended" data-demo-depth="standard"><span>4 chapters · about 6 min</span><strong>Standard</strong><p>See the plan take shape, then adapt cleanly when rain changes the trip.</p><em>Best place to start →</em></button>
-          <button type="button" data-demo-depth="complete"><span>6 chapters · about 10 min</span><strong>All the bells &amp; whistles</strong><p>Add a custom tracker and compare ideas without pretending they are decided.</p><em>Show me everything →</em></button>
+          <button type="button" class="is-recommended" data-demo-depth="standard"><span>6 chapters · about 8 min</span><strong>Standard</strong><p>Build the plan, start managing it, then adapt cleanly when rain changes the trip.</p><em>Best place to start →</em></button>
+          <button type="button" data-demo-depth="complete"><span>8 chapters · about 12 min</span><strong>All the bells &amp; whistles</strong><p>Add a custom tracker, compare ideas, then see the plan handle real change.</p><em>Show me everything →</em></button>
         </div>
       </section>` : ""}
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
@@ -2454,7 +2461,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
           <summary><span>Your starting point</span><strong>See everything you originally shared</strong></summary>
           ${renderOriginalRequest(order)}
         </details>
-        <div class="arrival-working-grid">
+        <div class="arrival-working-grid${showStarterPlan ? " arrival-working-grid--single" : ""}">
           ${interpretation ? `<details class="arrival-interpretation">
             <summary class="arrival-interpretation__head"><div><p class="eyebrow">${escapeHtml(agenticName())}’s working interpretation</p><h2>See what shaped the rough plan</h2></div><span>${interpretation.complete ? "Used in rough plan" : "Work in progress"}</span></summary>
             <div class="arrival-interpretation__grid">
@@ -2466,7 +2473,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
               ${interpretation.contradictions.length ? `<article class="is-warning"><span>Things that do not agree yet</span>${renderTextList(interpretation.contradictions, "No contradictions")}</article>` : ""}
             </div>
           </details>` : `<div class="arrival-working-grid__placeholder" aria-hidden="true"></div>`}
-          <details class="arrival-continuity">
+          ${showStarterPlan ? "" : `<details class="arrival-continuity">
             <summary><span>Your information</span><strong>Add or correct something</strong><small>Anything you add here becomes part of the plan.</small></summary>
             <div class="arrival-continuity__body"><div><p class="eyebrow">Keep shaping the request</p><h2>Add information to this plan.</h2><p>Use this whenever something changes or you remember another detail.</p></div>
               <form data-arrival-form="append">
@@ -2475,7 +2482,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
                 <button class="button" type="submit" ${busy ? "disabled" : ""}>Add to request</button>
               </form>
             </div>
-          </details>
+          </details>`}
         </div>
         ${inputTrail.length ? `<details class="arrival-history"><summary>Recent details you supplied</summary><ol>${inputTrail.map((input) => `<li><span>${escapeHtml(inputKindLabel(input.kind))} · ${escapeHtml(inputSurfaceLabel(input.sourceSurface))}</span>${renderHumanValue(input.payload)}</li>`).join("")}</ol></details>` : ""}
       `}

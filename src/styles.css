@@ -508,6 +508,7 @@ button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .arrival-order-source__content span { display:block; margin-bottom:7px; color:var(--muted); font:500 .62rem/1.2 "DM Mono",monospace; letter-spacing:.05em; text-transform:uppercase; }
 .arrival-order-source__content p { margin:0; color:#35413e; font-size:.9rem; line-height:1.55; overflow-wrap:anywhere; white-space:pre-wrap; }
 .arrival-working-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:16px; margin-top:16px; }
+.arrival-working-grid--single { grid-template-columns:1fr; }
 .arrival-working-grid>.arrival-interpretation,.arrival-working-grid>.arrival-continuity { min-width:0; margin-top:0; }
 .arrival-working-grid__placeholder+.arrival-continuity { grid-column:1/-1; }
 .arrival-working-grid .arrival-interpretation__grid,.arrival-working-grid .arrival-continuity__body { grid-template-columns:1fr; }

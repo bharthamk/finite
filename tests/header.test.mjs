@@ -39,6 +39,22 @@ test("workspace customisation starts with reusable templates before blank constr
   assert.match(styles, /\.custom-workspace-dialog__template-grid/);
 });
 
+test("structured rough plans collect changes in their natural sections instead of a catch-all form", () => {
+  assert.match(source, /arrival-working-grid\$\{showStarterPlan \? " arrival-working-grid--single" : ""\}/);
+  assert.match(source, /\$\{showStarterPlan \? "" : `<details class="arrival-continuity">/);
+  assert.match(styles, /\.arrival-working-grid--single \{ grid-template-columns:1fr; \}/);
+  assert.match(handoffSource, /The plan is now in Managing/);
+  assert.match(handoffSource, /This is where a real-world change belongs: on the live stage it affects, after the plan has started/);
+  assert.doesNotMatch(handoffSource, /This nature-day fallback belongs in Calendar/);
+});
+
+test("guided demos always use the isolated browser-local workspace", () => {
+  assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active"/);
+  assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
+  assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
+  assert.match(source, /Demo mode · Local only/);
+});
+
 test("public bootstrap routes do not preload the authenticated operator surface", () => {
   assert.match(entry, /if \(auth\.session\) \{[\s\S]*await import\("\.\/main\.js"\)/);
   assert.match(entry, /await import\("\.\/share-entry\.js"\)/);
@@ -365,7 +381,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.doesNotMatch(handoffSource, /display name you chose in Finite/);
   assert.match(source, /!question && order\.status !== "proposed_plan_ready" && order\.status !== "interpretation_confirmed" && !planDraftMarkup && !showStarterPlan/);
   assert.match(source, /<\/section>\s*\$\{message[^]*?<details class="arrival-order-source">/);
-  assert.match(source, /<div class="arrival-working-grid">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);
+  assert.match(source, /<div class="arrival-working-grid\$\{showStarterPlan \? " arrival-working-grid--single" : ""\}">\s*\$\{interpretation \? `<details class="arrival-interpretation">/);
   assert.match(source, /<details class="arrival-continuity">/);
   assert.match(styles, /\.arrival-working-grid \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.starter-workspace \{[^}]*grid-template-columns:1fr/);
@@ -651,6 +667,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /plan_summary: \{ label: "the plan summary", selectors: \["\.starter-plan__overview", "\.arrival-starter-plan", "\.draft-review__summary", "\.hero", "\.plan-orbit"\] \}/);
   assert.match(source, /budget_editor: \{ label: "the budget editor", selectors: \["\[data-overview-dialog='budget'\]\[open\]", "\[data-overview-dialog='budget'\]"\] \}/);
   assert.match(source, /workspace_customisation: \{ label: "workspace customisation", selectors: \["\[data-custom-workspace-dialog\]\[open\]", "\[data-action='open-custom-workspace'\]"\] \}/);
+  assert.match(source, /start_managing: \{ label: "the Start managing boundary", selectors: \["\[data-action='progress-arrival-plan'\]"\] \}/);
   assert.match(source, /This relabels base-currency amounts; it does not convert them\./);
   assert.match(source, /demoPlaybackMode && request\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
