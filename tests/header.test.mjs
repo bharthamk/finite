@@ -238,6 +238,12 @@ test("entry reassurance footers stay legible across dark and light design langua
   }
 });
 
+test("account and timeline actions preserve phone-sized touch targets", () => {
+  assert.match(styles, /\.account-menu__popover a,\.account-menu__popover button \{[^}]*min-height:44px/);
+  assert.match(styles, /\.stage__actions button \{[^}]*min-width:44px; min-height:44px/);
+  assert.match(styles, /\.stage__check \{[^}]*min-height:44px/);
+});
+
 test("Codex handoff asks where the person wants to watch before operating Finite", () => {
   assert.match(source, /first ask where you want to watch: a controlled browser window or the Codex built-in browser/);
   assert.match(source, /Its first question will be where you want to watch/);

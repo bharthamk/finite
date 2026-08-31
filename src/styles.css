@@ -75,7 +75,7 @@ button { font: inherit; cursor: pointer; }
 .account-menu__popover p { display:grid; gap:4px; margin:0; padding:10px 12px 14px; border-bottom:1px solid var(--line); }
 .account-menu__popover p span { color:var(--muted); font-size:.68rem; }
 .account-menu__popover p strong { overflow:hidden; text-overflow:ellipsis; font-size:.82rem; }
-.account-menu__popover a,.account-menu__popover button { width:100%; border:0; padding:11px 12px; color:var(--ink); background:transparent; text-align:left; text-decoration:none; font:600 .72rem/1.2 "DM Mono",monospace; }
+.account-menu__popover a,.account-menu__popover button { display:flex; align-items:center; width:100%; min-height:44px; border:0; padding:11px 12px; color:var(--ink); background:transparent; text-align:left; text-decoration:none; font:600 .72rem/1.2 "DM Mono",monospace; }
 .account-menu__popover a:hover,.account-menu__popover button:hover { color:var(--on-deep); background:var(--deep); }
 .account-menu__how { border-bottom:1px solid var(--line); }
 .account-menu__how>summary { padding:11px 12px; cursor:pointer; list-style:none; font:600 .72rem/1.2 "DM Mono",monospace; }
@@ -1642,7 +1642,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .stage>div:not(.stage__actions):not(.stage__inputs)>span { color:var(--muted); font-size:.82rem; line-height:1.5; }
 .stage small { color:var(--muted); font:500 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 .stage .stage__actions { display:grid; justify-items:end; gap:10px; margin:0; }
-.stage__actions button { border:0; border-bottom:1px solid currentColor; padding:2px 0; color:var(--accent); background:transparent; font:600 .62rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
+.stage__actions button { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; border:0; border-bottom:1px solid currentColor; padding:2px 4px; color:var(--accent); background:transparent; font:600 .62rem/1.2 "DM Mono",monospace; text-transform:uppercase; cursor:pointer; }
 .stage .stage__inputs { grid-column:1/-1; display:block; margin:4px 0 0; }
 .stage__inputs:empty { display:none; }
 .stage .plan-input-item { display:grid; margin:0; }
@@ -2428,7 +2428,7 @@ html .header-action--share:hover { border-color:var(--deep); color:var(--deep); 
 .publication-missing { width:min(760px,calc(100% - 36px)); margin:0 auto; padding:clamp(90px,16vw,180px) 0; }
 .publication-missing h1 { margin:0; font-size:clamp(3rem,8vw,7rem); font-weight:500; line-height:.9; letter-spacing:-.07em; }
 .publication-missing>p:last-child { max-width:620px; color:#56605d; font-size:1.05rem; line-height:1.6; }
-.stage__check { display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:.72rem; font-weight:700; }
+.stage__check { display:inline-flex; align-items:center; min-height:44px; gap:7px; cursor:pointer; font-size:.72rem; font-weight:700; }
 .stage__check input { width:18px; height:18px; accent-color:var(--accent); }
 .arrival-state--action { align-items:center; }
 .arrival-state--action .button { margin-left:auto; white-space:nowrap; }
