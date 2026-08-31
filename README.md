@@ -88,16 +88,30 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Append-only, human-confirmed ledgers for named group decisions and real-world action status, so disagreement is not averaged away and researched/quoted/held/booked/paid/verified/cancelled cannot collapse into one fluent claim.
 - Executable chef-effort and dropped-response benchmarks covering exact retry after a durable commit response is lost.
 
-## Current local acceptance
+## Current acceptance
 
-On 31 August 2026, sixteen complete visible journeys were exercised sequentially through the real local interface: natural-language, template and manual starts; draft editing and open questions; workspace customisation; activation; Managing tasks and references; current-plan guidance; sharing boundaries; browser-local Demo mode; guided-demo depth; finish, reflection and reopen; cross-plan isolation; and a rainy-day Timeline update.
+Sites v237 is the accepted live release. The public Spotlight completed the
+native WebMCP transaction from revision 1 to 2, exposed 26 checked combinations
+and three legal routes, stopped at visible human choice and exact confirmation,
+applied only the returned authority, projected the accepted Paris extension
+consistently, and retained the complete before/after receipt after reload.
 
-Defects found during those journeys were repaired and the affected paths repeated. The final local gate is 324/324 tests, a passing TypeScript and production Vite build, a passing client-chunk budget, and a clean `git diff --check`. The complete dated receipt is [`USER_JOURNEY_ACCEPTANCE_2026-08-31.md`](./USER_JOURNEY_ACCEPTANCE_2026-08-31.md). This is local candidate proof, not a claim that the hosted Site has been updated.
+The release passes 346/346 tests, including 20 independent hostile Spotlight
+runs, plus TypeScript, the production Vite client and Worker builds, the client
+chunk budget, and diff integrity. A live 390 by 844 viewport has no horizontal
+overflow and a 44-pixel minimum target height for visible controls. See
+[`FINITE_V237_FIVE_OF_FIVE_HARDENING_ACCEPTANCE_2026-09-01.md`](./FINITE_V237_FIVE_OF_FIVE_HARDENING_ACCEPTANCE_2026-09-01.md)
+and [`REPRODUCIBLE_RELEASE.md`](./REPRODUCIBLE_RELEASE.md).
+
+The WebMCP Challenge working set is in [`submission/`](./submission/). It keeps
+the product release fixed while the public repository, owner-selected open
+source license, public YouTube demo, screenshots, and final Devpost entry are
+completed.
 
 ## Run
 
 ```bash
-npm install
+npm ci
 npm run db:local:migrate
 npm run typecheck
 npm test
@@ -112,7 +126,10 @@ product. Production continues to use the Sites-managed `DB` binding from
 
 The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows that Codex is connected. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
 
-The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). Continue with ChatGPT or open the isolated 24-hour demo.
+The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). For the
+shortest public judge route, open the
+[Spotlight](https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1)
+in ChatGPT's in-app browser.
 
 ## Product transaction
 
@@ -148,12 +165,14 @@ tombstone so an older browser cache cannot restore it.
 
 There is no backend model and no application-owned agent. Natural-language interpretation, research, and orchestration belong to Codex. The application owns state, arithmetic, validation, transaction laws, persistence, rendering, and receipts. WebMCP exposes those capabilities; it does not supply reasoning or persistence.
 
-Chrome-native self-invocation proves the browser protocol independently. A fresh
-Codex task has now also completed authenticated live page-tool discovery,
+Chrome-native self-invocation proves the browser protocol independently. A
+fresh Codex task has also completed authenticated live page-tool discovery,
 canonical kitchen entry, bounded state reading, delayed human-input
-reconciliation, and correct refusal at the human-preference boundary. The
-remaining acceptance work is product breadth and repeated operator-quality
-testing, not basic Site Tools availability.
+reconciliation, and correct refusal at the human-preference boundary. The v237
+public Spotlight now closes the same-page change, search, human-authority,
+accepted-apply, receipt, and reload path. Remaining work is submission packaging
+and fresh-user evidence, not basic WebMCP availability or an unfinished product
+transaction.
 
 ## Source map
 

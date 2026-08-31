@@ -1,6 +1,6 @@
 # Finite prize-engineering scorecard
 
-Updated: 2026-08-31
+Updated: 2026-09-01
 
 This is an engineering control surface, not submission copy. It translates the current WebMCP challenge judging dimensions—WebMCP leverage, execution, potential impact, and creativity/ambition—into falsifiable Finite gates. The product is not ready because a document says it is ready; every closed gate needs code, an executable check, a live receipt, or a fresh-operator trial.
 
@@ -30,11 +30,13 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation suite; v54 native route transition | Closed live for current route |
 | Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 live receipt; v55 native endurance hash `099938df…` | Closed; per-family comparison is presentation evidence, not a safety gap |
 | Live native proof | Current bounded contract exercised by Codex across the three adaptive families | v55 native travel/renovation/event run plus deployed seven-tool/entry/validator receipt | Closed |
-| Portable judging access | Working live URL plus supplied judge access instructions | Live Site and isolated 24-hour demo exist; final submission must include any required credentials and one exact test route | Open submission task |
-| Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
+| Portable judging access | Working live URL plus supplied judge access instructions | Public v237 Spotlight and `submission/JUDGE_TESTING_INSTRUCTIONS.md` | Closed |
+| Open-source release | Public GitHub, GitLab, or Bitbucket repository with visible owner-selected open-source license | Exact sanitized source is ready; public repository and project license do not yet exist | Owner decision and publication gate |
 | Reproducible source | Clean build contract, data exclusions, dependency/license inventory, exact deployment provenance | `REPRODUCIBLE_RELEASE.md`; `THIRD_PARTY_LICENSES.md`; clean audit | Closed locally |
 
-Current regression baseline: **325/325 tests pass** across the deterministic kernel, adaptive surfaces, WebMCP quality and recovery, accepted truth, arrival and construction continuity, local Demo mode, collaboration, sharing, lifecycle learning, causal change summaries and full operator journeys.
+Current regression baseline: **346/346 tests pass**, including 20 independent
+hostile Spotlight transactions covering bounded search, authority refusal,
+accepted apply, replay conflict, conservation and reload continuity.
 
 ## Measured baseline and correction
 
@@ -63,16 +65,17 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 9.9/10 | 10/10 | The reusable any-plan guide and bounded same-page operation are closed locally; prove them cleanly in the final live build |
-| Execution | 9.5/10 | 10/10 | Close public repository, license, judge access and one rehearsed release identity |
+| WebMCP leverage | 10/10 | 10/10 | v237 publicly proves bounded discovery, same-page operation, human authority and accepted apply |
+| Execution | 9.8/10 | 10/10 | Publish the exact repository and license; make the accepted product undeniable in the film |
 | Potential impact | 9.3/10 | 10/10 | Add observed first-user evidence and make the change-and-recover payoff immediate in the film |
-| Creativity and ambition | 9.8/10 | 10/10 | Make the question-aware same-page guide and causal adaptation visually undeniable in the final video |
+| Creativity and ambition | 9.8/10 | 10/10 | Make bounded search, human authority and causal adaptation visually undeniable in the final video |
 
 ## Highest-impact open queue
 
-1. Select the project license and publish the sanitized repository before submission; the rules require both and the current local repository has neither a remote nor a project license.
-2. Record one under-three-minute product-first video from the accepted guided route, with audio and a clean final release identity.
-3. Supply exact judge access and testing instructions, then freeze the submitted repository and live build after the deadline.
+1. Select the project license and publish the exact sanitized repository on GitHub, GitLab, or Bitbucket; the rules require both.
+2. Record and publicly upload one product-first YouTube video under three minutes, with audio, from the accepted v237 Spotlight.
+3. Capture current v237 screenshots, finish the Devpost draft, perform the IP/eligibility review, and submit before 2026-09-04 06:00 AEST.
+4. Keep the submitted live app, repository, and media unchanged and freely available through the judging period.
 
 ## Sources governing this scorecard
 
