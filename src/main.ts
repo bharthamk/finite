@@ -419,6 +419,17 @@ const activeStorageScope = localDemoMode ? localDemoScope : authSession.storageS
 installLocalDemoWriteGuard(window, localDemoMode);
 clearForeignFiniteScopes(localStorage, activeStorageScope, [localDemoScope, authSession.storageScope]);
 const scopedStorage = new ScopedStorage(localStorage, activeStorageScope);
+const endCurrentDemo = async (): Promise<void> => {
+  if (authSession.storageScope === "local-spotlight-bootstrap") {
+    clearFiniteScope(localStorage, activeStorageScope);
+    localStorage.removeItem(localDemoInstallationKey);
+    location.replace("/");
+    return;
+  }
+  const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  if (response.ok) location.reload();
+  else announce("The demo session could not be ended safely.");
+};
 const legacyCacheOwnerKey = "finite-plan.browser-cache-owner.v1";
 if (authSession.legacyBrowserCacheEligible) {
   const claimedBy = localStorage.getItem(legacyCacheOwnerKey);
@@ -847,14 +858,22 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   const runningDemo = demoPlaybackMode;
   const gatedGuideSession = runningDemo || guideCurrentPlanMode;
   const sessionLabel = runningDemo ? "the demo" : "this plan";
-  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${demoPlaybackMode ? "running the demo" : guideCurrentPlanMode ? "guiding this plan" : "guiding"}</strong><button type="button" aria-label="${gatedGuideSession ? `End ${sessionLabel}` : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${gatedGuideSession ? "data-demo-guide-state" : ""}>${gatedGuideSession ? pauseForNext ? "Paused at a natural stopping point" : `${demoPlaybackMode ? "Live demo" : "Live guide"} · Codex is showing the real page` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && gatedGuideSession ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${gatedGuideSession ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause ${demoPlaybackMode ? "demo" : "guide"}</button>` : ""}<button type="button" data-action="stop-codex-guidance">${demoPlaybackMode ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && gatedGuideSession ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${demoPlaybackMode ? "running the demo" : guideCurrentPlanMode ? "guiding this plan" : "guiding"}</strong><div class="codex-guide-overlay__header-actions"><button type="button" data-action="toggle-codex-guide-minimise" aria-expanded="true" aria-label="Minimise guidance">−</button><button type="button" data-action="stop-codex-guidance-header" aria-label="${gatedGuideSession ? `End ${sessionLabel}` : "Dismiss this guidance"}">×</button></div></header><p>${escapeHtml(messageText)}</p><small ${gatedGuideSession ? "data-demo-guide-state" : ""}>${gatedGuideSession ? pauseForNext ? "Paused at a natural stopping point" : `${demoPlaybackMode ? "Live demo" : "Live guide"} · Codex is showing the real page` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && gatedGuideSession ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${gatedGuideSession ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause ${demoPlaybackMode ? "demo" : "guide"}</button>` : ""}<button type="button" data-action="stop-codex-guidance">${demoPlaybackMode ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && gatedGuideSession ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
   const endGuidance = (): void => {
     stopGuidanceSessionState();
     clearCodexSpotlight();
     overlay.remove();
     announce(runningDemo ? "The live demo has ended." : `${agenticName()} can keep working, but can no longer move or highlight this view.`);
   };
-  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => { if (gatedGuideSession) endGuidance(); else overlay.remove(); });
+  overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance-header']")?.addEventListener("click", () => { if (gatedGuideSession) endGuidance(); else overlay.remove(); });
+  overlay.querySelector<HTMLButtonElement>("[data-action='toggle-codex-guide-minimise']")?.addEventListener("click", (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const minimised = overlay.classList.toggle("is-minimised");
+    button.textContent = minimised ? "+" : "−";
+    button.setAttribute("aria-expanded", String(!minimised));
+    button.setAttribute("aria-label", minimised ? "Restore guidance" : "Minimise guidance");
+    announce(minimised ? `${agenticName()} guidance minimised. The current page controls are clear.` : `${agenticName()} guidance restored.`);
+  });
   overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", endGuidance);
   overlay.querySelector<HTMLButtonElement>("[data-action='toggle-codex-demo-pause']")?.addEventListener("click", (event) => {
     demoPaused = !demoPaused;
@@ -2464,7 +2483,7 @@ const renderEntryGateway = (): void => {
       <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with ${escapeHtml(agenticName())}, or watch the product run itself.</p></div>
       <div class="entry-route-grid">
         <button type="button" class="entry-route entry-route--fresh" data-entry-action="fresh">
-          <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. The existing hints and optional prefill fields are waiting on the next screen.</p><em>Start with my plan →</em>
+          <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>Start with one sentence. Finite will shape it into a rough plan you can edit before anything becomes final.</p><em>Start with my plan →</em>
         </button>
         <section class="entry-route entry-route--examples" aria-labelledby="entry_examples_title">
           <span>02 / Start from a template</span><strong id="entry_examples_title">Choose a template.</strong><p>Pick a ready-made starting point and tailor it to your plan.</p>
@@ -2728,7 +2747,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     if (!guidedWalkthroughMode) {
       const target = new URL(location.href);
       if (target.searchParams.get("start") === "fresh") {
-        target.searchParams.delete("start");
+        target.searchParams.set("start", "arrival-active");
         target.searchParams.delete("reset");
         history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
       }
@@ -2741,6 +2760,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     return;
   }
   await render();
+  window.scrollTo({ top: 0, behavior: "auto" });
   if (!demoPlaybackMode && planningMode === "codex") void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
   if (planningMode === "codex" && !demoPlaybackMode) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
@@ -3477,11 +3497,7 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
   root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
-  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
-    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    if (response.ok) location.reload();
-    else announce("The demo session could not be ended safely.");
-  });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", () => { void endCurrentDemo(); });
 }
 
 const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values()]
@@ -4229,7 +4245,7 @@ const renderPlanLessons = (): string => {
 const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
   const kernel = runtime.kernel;
   const completion = [...kernel.lifecycleEvents].reverse().find((event) => event.after === "completed" && event.before !== "completed") ?? null;
-  const recordedActual = [...kernel.lifecycleEvents].reverse().find((event) => event.actualSpendMinor !== undefined) ?? null;
+  const recordedActual = [...kernel.lifecycleEvents].reverse().find((event) => typeof event.actualSpendMinor === "number" && Number.isFinite(event.actualSpendMinor)) ?? null;
   const facts = currentEditablePlanFacts();
   const done = checklistItems.filter((item) => item.status === "done");
   const customChecklist = checklistItems.filter((item) => item.origin !== "adaptive");
@@ -4474,11 +4490,7 @@ function bindSettingsInteractions(): void {
     localStorage.removeItem(localDemoInstallationKey);
     location.replace("/?start=fresh&reset=complete");
   });
-  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
-    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    if (response.ok) location.reload();
-    else announce("The demo session could not be ended safely.");
-  });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", () => { void endCurrentDemo(); });
 }
 
 const addProfileMemoryFromAbout = async (form: HTMLFormElement): Promise<void> => {
@@ -4720,6 +4732,7 @@ const openPlan = async (planId: string): Promise<void> => {
   }
   const target = new URL(location.href);
   target.searchParams.delete("kitchen");
+  target.searchParams.delete("start");
   target.searchParams.set("plan", "1");
   target.searchParams.delete("lab");
   history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
@@ -4963,6 +4976,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     target.searchParams.delete("arrival");
     target.searchParams.delete("kitchen");
     target.searchParams.delete("lab");
+    target.searchParams.delete("start");
     target.searchParams.set("plan", "1");
     history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
     busy = false;
@@ -5461,11 +5475,7 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan-facts']")?.addEventListener("click", (event) => { void confirmPendingPlanFacts((event.currentTarget as HTMLButtonElement).dataset.planFactChange ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-facts']")?.addEventListener("click", async () => { runtime.kernel.pendingPlanFactChange = null; runtime.kernel.planFactConfirmation = null; announce("Plan detail changes cancelled."); await render(); });
   if (labMode) root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
-  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
-    const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    if (response.ok) location.reload();
-    else announce("The demo session could not be ended safely.");
-  });
+  root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", () => { void endCurrentDemo(); });
 }
 
 if (labMode) await seedDecision();

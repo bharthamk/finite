@@ -23,6 +23,9 @@ const coreTitle = (text: string): string => {
   const weekendDestination = source.match(/weekend (?:trip|away|break)(?:\s+to)?\s+([^.,;]+?)(?:\s+for\s+\w+|[.,;]|$)/i)?.[1]?.trim();
   if (weekendDestination) return `${weekendDestination} weekend`;
   if (/\bhome office\b/i.test(source)) return "Home office makeover";
+  const workshopKind = source.match(/\b(?:team|strategy)\s+(?:workshop|retreat)\b/i)?.[0]?.toLowerCase();
+  const workshopLocation = source.match(/\b(?:in|at)\s+([A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)*)(?=\s+(?:next|this|for|on|with|without)\b|[,.;]|$)/)?.[1]?.trim();
+  if (workshopKind) return `${workshopLocation ? `${workshopLocation} ` : ""}${workshopKind}`;
   const describedTrip = source.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+trip\b/)?.[1]?.trim();
   if (describedTrip) return `${describedTrip} trip`;
   const destination = source.match(/\btrip\s+to\s+([^.,;]+?)(?:\s+for\s+\w+|[.,;]|$)/i)?.[1]?.trim();
@@ -36,6 +39,7 @@ const coreTitle = (text: string): string => {
     .replace(/^(?:an?|the)\s+/i, "")
     .replace(/\s+(?:over|for)\s+(?:the\s+)?(?:next\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|weeks?|months?).*$/i, "")
     .replace(/\s+(?:with|within|without|while|before|after)\s+.+$/i, "")
+    .replace(/[\s,;:–—-]+$/g, "")
     .trim();
   if (!cleaned) return "My plan";
   const bounded = Array.from(cleaned).slice(0, 72).join("").trim();

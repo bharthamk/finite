@@ -62,6 +62,13 @@ test("guided demos always use the isolated browser-local workspace", () => {
   assert.ok(entry.indexOf("} else if (localSpotlight) {") < entry.indexOf('fetch("/api/auth/session"'));
 });
 
+test("the browser-local Spotlight exits without inventing a server demo session", () => {
+  assert.match(source, /authSession\.storageScope === "local-spotlight-bootstrap"/);
+  assert.match(source, /clearFiniteScope\(localStorage, activeStorageScope\);\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*location\.replace\("\/"\);/);
+  assert.equal((source.match(/fetch\("\/api\/auth\/demo\/end"/g) ?? []).length, 1);
+  assert.equal((source.match(/void endCurrentDemo\(\)/g) ?? []).length, 3);
+});
+
 test("the Start managing guide cannot reopen the blank first chapter", () => {
   assert.match(source, /demoPlaybackMode && request\.target === "start_managing"/);
   assert.match(source, /\{ \.\.\.request, surface: "current" \}/);
@@ -161,6 +168,7 @@ test("private product surfaces show the plan lifecycle without pretending it is 
   assert.match(styles, /\.plan-lifecycle ol \{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.plan-lifecycle__step\.is-current/);
   assert.match(styles, /\.plan-lifecycle__step\.is-complete/);
+  assert.match(styles, /@media \(max-width:680px\) \{[^]*?a\.header-action \{ min-height:44px!important; \}/);
   assert.doesNotMatch(styles, /\.plan-lifecycle__step\.is-core/);
 });
 
@@ -170,6 +178,7 @@ test("every product surface uses the accepted ImageGen identity source", () => {
   assert.equal(source.match(/\$\{renderBrand\(\)\}/g)?.length, 12);
   assert.doesNotMatch(source, /<span>finite<\/span><i><\/i>/);
   assert.match(styles, /\.brand img/);
+  assert.match(styles, /\.brand \{[^}]*min-height:44px/s);
   assert.doesNotMatch(styles, /\.brand i\s*\{/);
   assert.match(identityNotes, /exact ImageGen concept accepted by Benji/);
   assert.match(identityNotes, /does not redraw or reinterpret the logo/);
@@ -217,6 +226,16 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(styles, /\.entry-route--live-demo/);
   assert.match(styles, /\.entry-demo-picker__options/);
   assert.match(styles, /\.codex-launch/);
+});
+
+test("entry reassurance footers stay legible across dark and light design languages", () => {
+  assert.match(styles, /footer\.entry-boundary span \{ color:var\(--signal\); \}/);
+  assert.match(styles, /footer\.entry-boundary p \{ color:color-mix\(in srgb,var\(--on-deep\) 78%,transparent\); \}/);
+  assert.match(styles, /footer\.entry-boundary \.text-button \{ color:var\(--on-deep\); \}/);
+  for (const skin of ["quiet", "editorial"]) {
+    assert.match(styles, new RegExp(`html\\[data-skin="${skin}"\\] footer\\.entry-boundary span \\{ color:var\\(--ink\\); \\}`));
+    assert.match(styles, new RegExp(`html\\[data-skin="${skin}"\\] footer\\.entry-boundary :where\\(p,\\.text-button\\) \\{ color:var\\(--muted\\); \\}`));
+  }
 });
 
 test("Codex handoff asks where the person wants to watch before operating Finite", () => {
@@ -375,6 +394,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, />Copy again<\/button>/);
   assert.match(source, /Continue to the plan while you wait/);
   assert.match(styles, /\.codex-handoff-copied\[hidden\] \{ display:none; \}/);
+  assert.match(styles, /\.arrival-profile-context>footer a,\.arrival-profile-context--empty a \{[^}]*min-height:44px/s);
   assert.match(source, /class="arrival-primary-action" aria-label="What happens next"/);
   assert.match(source, /Next step \/ answer one question/);
   assert.doesNotMatch(source, /Next step \/ review your brief/);
@@ -538,6 +558,7 @@ test("arrival creation keeps the typed starting point in place while persistence
   assert.match(submit, /submitButton\.textContent = "Saving your starting point…"/);
   assert.match(submit, /Your starting point is still here so you can try again\./);
   assert.doesNotMatch(submit.slice(0, submit.indexOf("arrivalRepository\.create")), /await render\(\)/);
+  assert.match(submit, /await render\(\);\s*window\.scrollTo\(\{ top: 0, behavior: "auto" \}\);/);
 });
 
 test("workspace saves keep the edited form visible until the durable write returns", () => {
@@ -557,7 +578,7 @@ test("fresh-draft edits keep the current workspace visible and local reset mints
   assert.match(source, /localStorage\.removeItem\(localDemoInstallationKey\)/);
   assert.match(source, /location\.replace\("\/\?start=fresh&reset=complete"\)/);
   assert.match(source, /try \{\s*recordChangeSummary\(workspaceChangeSummary/);
-  assert.match(source, /if \(target\.searchParams\.get\("start"\) === "fresh"\) \{\s*target\.searchParams\.delete\("start"\);\s*target\.searchParams\.delete\("reset"\);/);
+  assert.match(source, /if \(target\.searchParams\.get\("start"\) === "fresh"\) \{\s*target\.searchParams\.set\("start", "arrival-active"\);\s*target\.searchParams\.delete\("reset"\);/);
   assert.match(source, /if \(arrivalResult\.ok\) \{\s*newPlanDraftMode = false;\s*forceArrivalSurface = false;\s*entryGatewayOpen = false;/);
   assert.match(source, /const manual = arrivalUsesManualWorkspace\(order\);/);
 });
@@ -602,6 +623,10 @@ test("each natural demo pause offers Next or a Codex question without another co
   assert.match(source, /GUIDE_WAITING_FOR_PERSON[^]*pausedAt: lastDemoGuide/);
   assert.match(source, /use the normal visible interface to click Next for them/);
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-question/);
+  assert.match(source, /data-action="toggle-codex-guide-minimise" aria-expanded="true" aria-label="Minimise guidance"/);
+  assert.match(source, /overlay\.classList\.toggle\("is-minimised"\)/);
+  assert.match(styles, /\.codex-guide-overlay header button \{ width:44px; min-height:44px;/);
+  assert.match(styles, /\.codex-guide-overlay\.is-minimised>p,\.codex-guide-overlay\.is-minimised>small,\.codex-guide-overlay\.is-minimised>footer \{ display:none; \}/);
 });
 
 test("guided highlights point at one exact surface at a time", () => {
@@ -776,6 +801,7 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /idempotencyKey: `human-plan-activation:\$\{draftId\}:\$\{confirmation\.confirmationId\}`/);
   assert.match(source, /arrivalRepository\.acceptPlan\(\{/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
+  assert.ok((source.match(/target\.searchParams\.delete\("start"\);\s*target\.searchParams\.set\("plan", "1"\);/g) ?? []).length >= 2);
   assert.match(source, /announcer\.textContent = "Plan approved\. Managing is ready\."/);
   assert.match(source, /Starting your plan…/);
   assert.match(source, /planActivationTransition = true/);
@@ -842,6 +868,16 @@ test("Managing starts with one brief and prioritises the next step", () => {
   assert.doesNotMatch(styles, /\.hero-summary \{/);
   assert.match(styles, /\.managing-next \{/);
   assert.doesNotMatch(styles, /\.orbit-ring \{/);
+});
+
+test("a completed plan asks to record actual spend until a real amount exists", () => {
+  assert.match(source, /typeof event\.actualSpendMinor === "number" && Number\.isFinite\(event\.actualSpendMinor\)/);
+  assert.match(source, /recordedActual \? "Change actual spend" : "Record actual spend"/);
+});
+
+test("the desktop Managing status action cannot widen the page", () => {
+  assert.match(styles, /\.plan-status-entry \.button \{ flex:none; width:auto; \}/);
+  assert.match(styles, /@media \(max-width:680px\)[\s\S]*\.plan-status-entry \.button \{ width:100%; \}/);
 });
 
 test("ordinary plan views never invent demo disruptions", () => {

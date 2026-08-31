@@ -8,6 +8,9 @@ test("legacy generic accepted names project as useful plan names", () => {
   assert.equal(resolvePlanTitle({ proposed: "Travel rough plan", brief: "Plan a weekend trip to Hobart for two people.", start: "2026-10-09" }), "Hobart weekend · 9 Oct 2026");
   assert.equal(resolvePlanTitle({ proposed: "Adaptive rough plan", brief: "I want to learn basic conversational Italian over six weeks.", start: "2026-09-21" }), "Conversational Italian practice · 21 Sept 2026");
   assert.equal(resolvePlanTitle({ proposed: "Adaptive rough plan", brief: "Build basic conversational Italian over six weeks.", start: "2026-09-21" }), "Basic conversational Italian · 21 Sept 2026");
+  assert.equal(resolvePlanTitle({ proposed: "General rough plan", brief: "Plan a three-day team workshop in Melbourne next month for eight people, with a AUD 4,000 cap." }), "Melbourne team workshop");
+  assert.equal(resolvePlanTitle({ proposed: "General rough plan", brief: "Plan a two-day strategy retreat for six people in Sydney next month, with no overnight stay." }), "Sydney strategy retreat");
+  assert.equal(resolvePlanTitle({ proposed: "General rough plan", brief: "Plan the quarterly priorities, with the leadership team." }), "Quarterly priorities");
   assert.equal(resolvePlanTitle({ proposed: "Quarterly launch", brief: "Ignored" }), "Quarterly launch");
 });
 
@@ -372,6 +375,19 @@ test("a stated event headcount replaces the dinner template default", () => {
   const drinks = starter.sections.find((section) => section.sectionId === "resources").items.find((item) => item.itemId === "starter_drinks");
   assert.equal(drinks.fields.cost, "");
   assert.doesNotMatch(String(drinks.fields.notes), /AUD 0/);
+});
+
+test("a general workshop keeps stated participants as editable plan data", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_workshop_eight", version: 1, status: "waiting_for_codex", rawOutcome: "Plan a three-day team workshop in Melbourne next month for eight people with an AUD 4,000 budget.", structured: { planningMode: "codex" }, attachments: [], pendingClarification: null,
+    inputs: [], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z", checksum: "7".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.family, "general");
+  const resources = starter.sections.find((section) => section.sectionId === "resources");
+  assert.deepEqual(resources.fields.map((field) => field.fieldId).slice(0, 2), ["title", "headcount"]);
+  assert.deepEqual(resources.items.map((item) => item.fields.headcount), ["8"]);
+  assert.match(resources.items[0].fields.notes, /8 people stated in the starting brief/);
 });
 
 test("a dinner handoff opens as a detailed editable draft with section questions and human answers", () => {
