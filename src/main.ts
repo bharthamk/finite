@@ -28,6 +28,7 @@ import { candidateTradeoffLines } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
 import { installLocalDemoWriteGuard, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
+import { workspaceSectionTemplate, workspaceSectionTemplates } from "./workspace-templates.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -2162,10 +2163,18 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     </details>`;
   }).join("");
   const customSections = starter.sections.filter((section) => section.custom);
+  const availableWorkspaceTemplates = workspaceSectionTemplates.filter((template) => template.coveredByFamily !== starter.family);
   const customWorkspaceMarkup = `<dialog class="custom-workspace-dialog finite-edit-dialog" data-custom-workspace-dialog aria-labelledby="custom_workspace_title">
     <button class="custom-workspace-dialog__close finite-edit-dialog__close" type="button" data-action="close-custom-workspace" aria-label="Close custom workspace">×</button>
     <header><p class="eyebrow">Custom mode</p><h3 id="custom_workspace_title">Extend this workspace</h3><p>The standard workspace already covers dates, money, people, tasks, requirements, options and evidence. Add a specialist section when this plan needs its own fields or tracker.</p></header>
     ${customSections.length ? `<section class="custom-workspace-dialog__current" aria-labelledby="custom_workspace_current"><h4 id="custom_workspace_current">Custom sections</h4>${customSections.map((section) => `<article><div><strong>${escapeHtml(section.label)}</strong><small>${escapeHtml(section.fields.map((entry) => entry.label).join(" · "))}</small></div><button class="text-button" type="button" data-action="open-custom-module" data-module-id="${escapeHtml(section.sectionId)}">Open</button></article>`).join("")}</section>` : ""}
+    <section class="custom-workspace-dialog__templates" aria-labelledby="custom_workspace_templates">
+      <header><span class="custom-workspace-dialog__step">Start from a template</span><h4 id="custom_workspace_templates">Add a ready-made section</h4><p>Use a specialist section from another kind of plan, then change every field and record to suit this one.</p></header>
+      <div class="custom-workspace-dialog__template-grid">${availableWorkspaceTemplates.map((template) => {
+        const alreadyAdded = starter.sections.some((section) => section.sectionId === template.moduleId);
+        return `<article><span>${escapeHtml(template.sourceLabel)}</span><h5>${escapeHtml(template.label)}</h5><p>${escapeHtml(template.description)}</p><small>${escapeHtml(template.fields.slice(0, 5).map((entry) => entry.label).join(" · "))}${template.fields.length > 5 ? " · …" : ""}</small><button class="button button--secondary" type="button" data-action="add-workspace-template" data-template-id="${escapeHtml(template.templateId)}" ${alreadyAdded || busy ? "disabled" : ""}>${alreadyAdded ? "Added" : "Add section"}</button></article>`;
+      }).join("")}</div>
+    </section>
     <div class="custom-workspace-dialog__paths">
       <section><span class="custom-workspace-dialog__step">Build it yourself</span><h4>Add one specialist section</h4><p>Choose a useful shape and name the extra fields. You can add, edit and remove its records like every other part of the plan.</p>
         <form data-arrival-form="workspace-module-add">
@@ -2779,6 +2788,17 @@ const addWorkspaceModule = async (form: HTMLFormElement): Promise<void> => {
   await saveWorkspaceMutation({ workspaceOperation: "module_add", moduleId, label, description, variant, fields: customModuleFields(variant, labels), moduleSource: "human" }, "detail", `${label} was added to your workspace.`);
 };
 
+const addWorkspaceTemplate = async (button: HTMLButtonElement): Promise<void> => {
+  const template = workspaceSectionTemplate(button.dataset.templateId ?? "");
+  if (!template) return;
+  const order = currentArrival();
+  if (!order) return;
+  const current = starterPlanForArrival(order);
+  if (current?.sections.some((section) => section.sectionId === template.moduleId)) return;
+  customWorkspaceOpen = true;
+  await saveWorkspaceMutation({ workspaceOperation: "module_add", moduleId: template.moduleId, label: template.label, description: template.description, variant: template.variant, fields: template.fields, moduleSource: "human", templateId: template.templateId }, "detail", `${template.label} was added to your workspace.`, button);
+};
+
 const deleteWorkspaceModule = async (button: HTMLButtonElement): Promise<void> => {
   const moduleId = button.dataset.moduleId ?? "";
   if (!moduleId.startsWith("custom_")) return;
@@ -3208,6 +3228,7 @@ function bindArrivalInteractions(): void {
     workspaceUiState.openModules.add(moduleId);
     module.scrollIntoView({ behavior: "smooth", block: "start" });
   }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='add-workspace-template']").forEach((button) => button.addEventListener("click", () => { void addWorkspaceTemplate(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-record-options']").forEach((button) => button.addEventListener("click", () => {
     const target = button.dataset.recordOptionsTarget ?? "";
     const dialog = target ? root.querySelector<HTMLDialogElement>(`#${CSS.escape(target)}`) : null;

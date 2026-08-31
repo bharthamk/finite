@@ -7,6 +7,7 @@ const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8
 const webmcp = readFileSync(new URL("../src/webmcp.ts", import.meta.url), "utf8");
 const runtimeSource = readFileSync(new URL("../src/runtime.ts", import.meta.url), "utf8");
 const handoffSource = readFileSync(new URL("../src/codex-handoff.ts", import.meta.url), "utf8");
+const workspaceTemplatesSource = readFileSync(new URL("../src/workspace-templates.ts", import.meta.url), "utf8");
 const consumerServerCopy = ["auth", "skins", "themes"].map((name) => readFileSync(new URL(`../worker/${name}.ts`, import.meta.url), "utf8")).join("\n");
 const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../src/webmcp-bootstrap.ts", import.meta.url), "utf8");
@@ -26,6 +27,16 @@ test("the production client has intentional chunks and a hard regression budget"
   assert.match(packageSource, /node scripts\/check-client-chunks\.mjs/);
   assert.match(chunkBudget, /const maximumBytes = 500_000/);
   assert.match(chunkBudget, /Production client chunk budget exceeded/);
+});
+
+test("workspace customisation starts with reusable templates before blank construction", () => {
+  assert.match(source, /Start from a template/);
+  assert.match(source, /Add a ready-made section/);
+  assert.match(source, /data-action="add-workspace-template"/);
+  assert.match(source, /workspaceSectionTemplates\.filter/);
+  assert.match(source, /alreadyAdded \? "Added" : "Add section"/);
+  for (const label of ["Accommodation shortlist", "Contractors & materials", "Menu & dietary fit", "Interview evidence bank", "Practice log"]) assert.match(workspaceTemplatesSource, new RegExp(label.replace(/[&]/g, "\\&")));
+  assert.match(styles, /\.custom-workspace-dialog__template-grid/);
 });
 
 test("public bootstrap routes do not preload the authenticated operator surface", () => {

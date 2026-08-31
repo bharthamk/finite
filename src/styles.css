@@ -665,6 +665,17 @@ button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .custom-workspace-dialog__current article { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:9px 0; border-top:1px solid color-mix(in srgb,var(--ink) 18%,transparent); }
 .custom-workspace-dialog__current article>div { display:grid; gap:3px; }
 .custom-workspace-dialog__current small { color:var(--muted); font-size:.67rem; }
+.custom-workspace-dialog__templates { padding:clamp(24px,3.5vw,38px) clamp(24px,4vw,48px); border-bottom:1px solid var(--line); background:var(--panel); }
+.custom-workspace-dialog__templates>header { max-width:720px; }
+.custom-workspace-dialog__templates>header h4 { margin:8px 0 0; font-size:1.25rem; }
+.custom-workspace-dialog__templates>header p { margin:9px 0 20px; color:var(--muted); font-size:.8rem; line-height:1.5; }
+.custom-workspace-dialog__template-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.custom-workspace-dialog__template-grid article { min-width:0; display:grid; grid-template-rows:auto auto 1fr auto auto; gap:8px; padding:16px; border:1px solid var(--line); background:var(--paper); }
+.custom-workspace-dialog__template-grid article>span { color:var(--accent); font:800 .56rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
+.custom-workspace-dialog__template-grid h5 { margin:0; font-size:.92rem; }
+.custom-workspace-dialog__template-grid p { margin:0; color:var(--muted); font-size:.72rem; line-height:1.45; }
+.custom-workspace-dialog__template-grid small { color:var(--muted); font-size:.6rem; line-height:1.4; }
+.custom-workspace-dialog__template-grid .button { justify-self:start; min-height:34px; margin-top:3px; padding:8px 11px; font-size:.62rem; }
 .custom-workspace-dialog__paths { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; background:var(--line); }
 .custom-workspace-dialog__paths>section { min-width:0; padding:clamp(24px,3.5vw,38px); background:var(--paper); }
 .custom-workspace-dialog__paths>section.custom-workspace-dialog__codex { background:var(--panel); }
@@ -2064,6 +2075,7 @@ html[data-skin="soft-system"] :where(.arrival-order textarea,.arrival-order inpu
   .starter-module__summary>b { grid-column:2; grid-row:2; }
   .starter-module__body { padding:24px 20px; }
   .starter-module__custom-footer,.custom-workspace-dialog>footer { align-items:flex-start; flex-direction:column; }
+  .custom-workspace-dialog__template-grid { grid-template-columns:1fr; }
   .custom-workspace-dialog__paths { grid-template-columns:1fr; }
   .custom-workspace-dialog__grid { grid-template-columns:1fr; }
   .starter-module__records { grid-template-columns:repeat(2,minmax(0,1fr)); }
