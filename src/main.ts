@@ -779,7 +779,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   build_method: { label: "the two ways to begin", selectors: [".arrival-start-tabs"] },
   manual_details: { label: "the structured plan details", selectors: [".arrival-start-panel--manual"] },
   starting_point: { label: "your starting point", selectors: [".codex-launch", ".arrival-order", ".arrival-order-source"] },
-  status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control"] },
+  status: { label: "the current status", selectors: [".arrival-state", ".plan-status-strip", ".lifecycle-control", ".hero"] },
   question: { label: `${agenticName()}'s question`, selectors: [".arrival-question"] },
   priority: { label: `${agenticName()}'s current priority section`, selectors: ["[data-codex-priority='true']", ".starter-module__questions"] },
   open_questions: { label: "the open questions", selectors: [".starter-module[open] .starter-module__questions"] },

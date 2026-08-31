@@ -163,6 +163,8 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /This is where a real-world change belongs: on the live stage it affects, after the plan has started\./i);
   assert.match(handoff.prompt, /Heavy rain is forecast for Saturday/i);
   assert.match(handoff.prompt, /Save to plan/i);
+  assert.match(handoff.prompt, /open the exact saved plan information for that stage, so the rainy-day text itself is visible/i);
+  assert.ok(handoff.prompt.indexOf("Save to plan") < handoff.prompt.indexOf("open the exact saved plan information"));
   assert.match(handoff.prompt, /Do not approve, start managing, compile away from/i);
   assert.match(handoff.prompt, /plan_summary target/i);
   assert.match(handoff.prompt, /keep every workspace section collapsed/i);

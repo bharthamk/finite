@@ -674,6 +674,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /budget_editor: \{ label: "the budget editor", selectors: \["\[data-overview-dialog='budget'\]\[open\]", "\[data-overview-dialog='budget'\]"\] \}/);
   assert.match(source, /workspace_customisation: \{ label: "workspace customisation", selectors: \["\[data-custom-workspace-dialog\]\[open\]", "\[data-action='open-custom-workspace'\]"\] \}/);
   assert.match(source, /start_managing: \{ label: "the Start managing boundary", selectors: \["\[data-action='progress-arrival-plan'\]"\] \}/);
+  assert.match(source, /status: \{ label: "the current status", selectors: \["\.arrival-state", "\.plan-status-strip", "\.lifecycle-control", "\.hero"\] \}/);
   assert.match(source, /This relabels base-currency amounts; it does not convert them\./);
   assert.match(source, /demoPlaybackMode && guideRequest\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
