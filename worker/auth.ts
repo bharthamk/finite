@@ -136,7 +136,7 @@ export const resolveRequestPrincipal = async (request: Request, db: D1Database, 
     kind: "demo",
     provider: "demo",
     tenantIdentity: { demoSessionHash: session.session_hash },
-    displayName: "Demo diner",
+    displayName: "Finite demo",
     email: null,
     expiresAt: session.expires_at,
   };
@@ -187,7 +187,7 @@ const createDemoSession = async (request: Request, db: D1Database, files?: Finit
   return response(201, {
     ok: true,
     code: "DEMO_SESSION_CREATED",
-    session: { kind: "demo", provider: "demo", displayName: "Demo diner", email: null, expiresAt, storageScope: scopeId, legacyBrowserCacheEligible: false },
+    session: { kind: "demo", provider: "demo", displayName: "Finite demo", email: null, expiresAt, storageScope: scopeId, legacyBrowserCacheEligible: false },
   }, { "set-cookie": demoCookie(token, demoTtlSeconds) });
 };
 

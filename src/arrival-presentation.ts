@@ -33,7 +33,7 @@ const humanScalar = (value: unknown, key = "", parent: Record<string, unknown> =
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number" && key.toLowerCase().endsWith("minor")) {
     const currency = typeof parent.currencyCode === "string" ? parent.currencyCode : "AUD";
-    return new Intl.NumberFormat("en-AU", { style: "currency", currency, maximumFractionDigits: 0 }).format(value / 100);
+    return new Intl.NumberFormat("en-AU", { style: "currency", currency, currencyDisplay: "code", maximumFractionDigits: 0 }).format(value / 100);
   }
   if (typeof value === "number") return new Intl.NumberFormat("en-AU").format(value);
   const text = String(value);
@@ -269,11 +269,22 @@ const practiceLogFields = [
   field("notes", "Notes", "textarea"),
 ];
 
+const statedEventHeadcount = (value: string): number | null => {
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
+  const match = value.match(/\b(?:for|with|hosting)\s+(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:people|friends|guests|attendees)\b/i)
+    ?? value.match(/\b(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:people|friends|guests|attendees)\b/i);
+  if (!match) return null;
+  const count = Number(match[1]) || words[match[1]!.toLowerCase()] || 0;
+  return count > 0 ? count : null;
+};
+
 const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
   const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
+  const eventSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
+  const headcount = statedEventHeadcount(eventSource) ?? 10;
   if (family === "event" && dinner) return {
     schedule: ["What time should guests arrive, and roughly when should the evening finish?"],
-    scope: ["Which guests are confirmed, and does the table and seating comfortably fit all 10 people?"],
+    scope: [`Which guests are confirmed, and does the table and seating comfortably fit all ${headcount} people?`],
     custom_menu_dietary: ["Do the vegetarian guests eat dairy and eggs, and are there any dislikes the menu should avoid?"],
     resources: ["Will you cook everything yourself, buy any prepared dishes, or have someone help?"],
     money: ["Should the AUD 500 budget include alcohol, or only food and non-alcoholic drinks?"],
@@ -547,6 +558,9 @@ const seedRoughPlan = (
   const seed = (sectionId: string, itemId: string, label: string, fields: Record<string, string | boolean>): void => addItem(sectionId, { itemId: `starter_${itemId}`, label, fields, source: "starter" });
   const tasks = sectionItems.get("tasks") ?? [];
   const requirements = sectionItems.get("requirements") ?? [];
+  const currencySourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""} ${JSON.stringify(order.interpretation?.known ?? {})}`;
+  const seededLimit = (sectionItems.get("money") ?? []).filter((item) => item.fields.moneyRole === "limit").at(-1);
+  const seedCurrency = String(seededLimit?.fields.currency || moneyCurrency(currencySourceText, {}) || "AUD").toUpperCase();
   if (family === "travel") {
     const itinerary = sectionItems.get("itinerary") ?? [];
     const yearSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""} ${JSON.stringify(order.interpretation?.known ?? {})}`;
@@ -569,19 +583,19 @@ const seedRoughPlan = (
       if (!item.fields.start && firstDate) item.fields.start = addDays(firstDate, index * 4);
       if (!item.fields.end && item.fields.start) item.fields.end = addDays(String(item.fields.start), 3);
       if (!item.fields.dailyBudget) item.fields.dailyBudget = String(allowance.daily);
-      if (!item.fields.currency) item.fields.currency = "AUD";
+      if (!item.fields.currency) item.fields.currency = seedCurrency;
       item.fields.notes = `${String(item.fields.notes ?? "").trim()}${item.fields.notes ? " · " : ""}Rough timing and daily allowance; not live checked.`;
       if (item.source !== "human") item.source = "starter";
-      seed("stays", `stay_${index}`, `Flexible mid-range stay · ${location}`, { title: "Flexible mid-range stay", location, start: String(item.fields.start ?? ""), end: String(item.fields.end ?? ""), nightlyBudget: String(allowance.nightly), currency: "AUD", notes: "Indicative planning allowance; no availability has been checked." });
+      seed("stays", `stay_${index}`, `Flexible mid-range stay · ${location}`, { title: "Flexible mid-range stay", location, start: String(item.fields.start ?? ""), end: String(item.fields.end ?? ""), nightlyBudget: String(allowance.nightly), currency: seedCurrency, notes: "Indicative planning allowance; no availability has been checked." });
     });
     const routeLocations = locations.map((item) => String(item.fields.location || item.fields.title));
     const origin = itinerary.find((item) => /leaving from|origin/i.test(item.label))?.fields.location;
     if (routeLocations.length && !(sectionItems.get("transport") ?? []).length) {
-      seed("transport", "arrival_flight", `Flight to ${routeLocations[0]}`, { title: "Long-haul flight option", from: String(origin || "Home airport"), to: routeLocations[0]!, start: firstDate, provider: "To compare", cost: String(/australia|gold coast|brisbane|sydney|melbourne/i.test(String(origin)) ? 1500 : 900), currency: "AUD", notes: "Rough one-way allowance; no fare or seat has been checked." });
+      seed("transport", "arrival_flight", `Flight to ${routeLocations[0]}`, { title: "Long-haul flight option", from: String(origin || "Home airport"), to: routeLocations[0]!, start: firstDate, provider: "To compare", cost: String(/australia|gold coast|brisbane|sydney|melbourne/i.test(String(origin)) ? 1500 : 900), currency: seedCurrency, notes: "Rough one-way allowance; no fare or seat has been checked." });
     }
-    routeLocations.slice(0, -1).forEach((location, index) => seed("transport", `leg_${index}`, `${location} → ${routeLocations[index + 1]}`, { title: "Intercity transport", from: location, to: routeLocations[index + 1]!, start: String(locations[index]?.fields.end ?? ""), provider: "Rail / coach / low-cost flight", cost: "80", currency: "AUD", notes: "Rough allowance; mode, timetable and availability are open." }));
+    routeLocations.slice(0, -1).forEach((location, index) => seed("transport", `leg_${index}`, `${location} → ${routeLocations[index + 1]}`, { title: "Intercity transport", from: location, to: routeLocations[index + 1]!, start: String(locations[index]?.fields.end ?? ""), provider: "Rail / coach / low-cost flight", cost: "80", currency: seedCurrency, notes: "Rough allowance; mode, timetable and availability are open." }));
     const allowances = locations.map((item) => travelAllowance(String(item.fields.location || item.fields.title)));
-    if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "daily")) seed("money", "daily_spend", "Daily spending allowance", { title: "Daily spending allowance", amount: String(Math.round(allowances.reduce((sum, item) => sum + item.daily, 0) / Math.max(1, allowances.length))), currency: "AUD", moneyRole: "daily", notes: "Average first-pass allowance across the rough route." });
+    if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "daily")) seed("money", "daily_spend", "Daily spending allowance", { title: "Daily spending allowance", amount: String(Math.round(allowances.reduce((sum, item) => sum + item.daily, 0) / Math.max(1, allowances.length))), currency: seedCurrency, moneyRole: "daily", notes: "Average first-pass allowance across the rough route." });
     const transportAllowance = (sectionItems.get("transport") ?? []).reduce((sum, item) => sum + Number(item.fields.cost || 0), 0);
     const stayAllowance = allowances.reduce((sum, item) => sum + item.nightly * 4, 0);
     const dayAllowance = allowances.reduce((sum, item) => sum + item.daily * 4, 0);
@@ -594,7 +608,7 @@ const seedRoughPlan = (
     const knownLimit = Number((sectionItems.get("money") ?? []).filter((item) => item.fields.moneyRole === "limit").at(-1)?.fields.amount || 0);
     const remaining = knownLimit - categorySeeds.reduce((sum, item) => sum + item[2], 0);
     categorySeeds.push(["flexible_allowance", "Experiences & flexible buffer", Math.max(0, remaining), "Uncommitted space for experiences, price movement, or route changes."]);
-    categorySeeds.forEach(([id, title, amount, notes]) => seed("money", id, title, { title, amount: String(Math.round(amount)), currency: "AUD", moneyRole: "cost", notes }));
+    categorySeeds.forEach(([id, title, amount, notes]) => seed("money", id, title, { title, amount: String(Math.round(amount)), currency: seedCurrency, moneyRole: "cost", notes }));
     (["passport:Passport validity check", "visa:Visa and entry-requirement check", "insurance:Travel insurance"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!requirements.some((item) => String(item.fields.title).toLowerCase().includes(id))) seed("requirements", id, title, { title, status: "open", notes: "Required check; not legal or live entry advice." }); });
     (["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
     return;
@@ -772,7 +786,7 @@ const seedRoughPlan = (
 
     const moneyItems = sectionItems.get("money") ?? [];
     if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
-      [["trades", "Licensed trades & lighting", 25], ["furniture", "Desk & storage", 45], ["paint", "Paint & preparation", 15], ["contingency", "Contingency", 15]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: "AUD", moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+      [["trades", "Licensed trades & lighting", 25], ["furniture", "Desk & storage", 45], ["paint", "Paint & preparation", 15], ["contingency", "Contingency", 15]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
     }
   }
   if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
@@ -783,6 +797,7 @@ const seedRoughPlan = (
       ?? sourceText.match(/\b(?:aud|a\$)\s*(\d[\d,]*(?:\.\d+)?)\b/i)?.[1]
       ?? "";
     const budget = Number(budgetText.replaceAll(",", "")) || 0;
+    const headcount = statedEventHeadcount(sourceText) ?? 10;
     const schedule = sectionItems.get("schedule") ?? [];
     if (!schedule.length) {
       [
@@ -797,8 +812,8 @@ const seedRoughPlan = (
     }
     const scope = sectionItems.get("scope") ?? [];
     if (!scope.length) {
-      seed("scope", "guest_group", "Dinner guests", { title: "Dinner guests", headcount: "10", bookingStatus: "idea", location: "Home", start: dinnerDate, notes: "Ten people total. Two guests are vegetarian and one guest has a nut allergy." });
-      seed("scope", "home_setup", "Dining and seating setup", { title: "Dining and seating setup", headcount: "10", bookingStatus: "idea", location: "Home", start: dinnerDate, notes: "Check table space, chairs, serving flow and a safe place for nut-free preparation." });
+      seed("scope", "guest_group", "Dinner guests", { title: "Dinner guests", headcount: String(headcount), bookingStatus: "idea", location: "Home", start: dinnerDate, notes: `${headcount} people stated in the starting brief. Keep dietary and accessibility details attached to the people they affect.` });
+      seed("scope", "home_setup", "Dining and seating setup", { title: "Dining and seating setup", headcount: String(headcount), bookingStatus: "idea", location: "Home", start: dinnerDate, notes: "Check table space, chairs, serving flow and any food-safety preparation zones." });
     }
     const menu = sectionItems.get("custom_menu_dietary") ?? [];
     if (!menu.length) {
@@ -809,13 +824,13 @@ const seedRoughPlan = (
     const resources = sectionItems.get("resources") ?? [];
     if (!resources.length) {
       seed("resources", "groceries", "Groceries and fresh ingredients", { title: "Groceries and fresh ingredients", provider: "Local supermarket / grocer", bookingStatus: "idea", start: addDays(dinnerDate, -1), cost: String(Math.round(budget * 0.5)), notes: "Planning allowance; check allergy-safe labels during the shop." });
-      seed("resources", "drinks", "Drinks and ice", { title: "Drinks and ice", provider: "Bottle shop / supermarket", bookingStatus: "idea", start: addDays(dinnerDate, -1), cost: String(Math.round(budget * 0.24)), notes: "Allowance assumes drinks are inside the AUD 500 cap until answered otherwise." });
+      seed("resources", "drinks", "Drinks and ice", { title: "Drinks and ice", provider: "Bottle shop / supermarket", bookingStatus: "idea", start: addDays(dinnerDate, -1), cost: budget ? String(Math.round(budget * 0.24)) : "", notes: budget ? `Allowance assumes drinks are inside the ${seedCurrency} ${budget.toLocaleString("en-AU")} cap until answered otherwise.` : "Keep this allowance open until a total budget is set." });
       seed("resources", "table", "Table, serving and storage check", { title: "Table, serving and storage check", provider: "At home", bookingStatus: "idea", start: addDays(dinnerDate, -3), cost: String(Math.round(budget * 0.08)), notes: "Check chairs, platters, fridge space, serving utensils and food-storage containers." });
     }
     const moneyItems = sectionItems.get("money") ?? [];
-    if (budget && !moneyItems.some((item) => item.fields.moneyRole === "limit")) seed("money", "limit", "Total budget", { title: "Total budget", amount: String(budget), currency: "AUD", moneyRole: "limit", notes: "Human-supplied event budget." });
+    if (budget && !moneyItems.some((item) => item.fields.moneyRole === "limit")) seed("money", "limit", "Total budget", { title: "Total budget", amount: String(budget), currency: seedCurrency, moneyRole: "limit", notes: "Human-supplied event budget." });
     if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
-      [["food", "Food and ingredients", 50], ["drinks", "Drinks and ice", 24], ["table", "Table and atmosphere", 8], ["buffer", "Contingency", 18]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: "AUD", moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+      [["food", "Food and ingredients", 50], ["drinks", "Drinks and ice", 24], ["table", "Table and atmosphere", 8], ["buffer", "Contingency", 18]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
     }
     if (!requirements.length) {
       seed("requirements", "nut_safety", "Nut-allergy safety", { title: "Nut-allergy safety", status: "open", due: addDays(dinnerDate, -4), notes: "Confirm severity and cross-contact threshold; check every packaged ingredient and keep preparation surfaces and utensils safe." });

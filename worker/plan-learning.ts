@@ -50,7 +50,10 @@ export const handlePlanLearningRequest = async (request: Request, db: D1Database
   try {
     const principal = await resolveRequestPrincipal(request, db);
     if (!principal) return response(401, { ok: false, code: "AUTHENTICATION_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
-    if (principal.kind === "demo" && request.method !== "GET") return response(403, { ok: false, code: "ACCOUNT_LEARNING_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
+    const demoPlanRetrospectiveWrite = principal.kind === "demo"
+      && request.method === "PUT"
+      && url.pathname === "/api/plan-learning/retrospective";
+    if (principal.kind === "demo" && request.method !== "GET" && !demoPlanRetrospectiveWrite) return response(403, { ok: false, code: "ACCOUNT_LEARNING_REQUIRED", retrospective: null, memories: [], acceptedStateChanged: false });
     const { scopeId } = await principalStorageScope(principal);
     const body = request.method === "GET" ? {} : await parseBody(request);
     if (request.method === "GET" && url.pathname === "/api/plan-learning/profile") return response(200, { ok: true, code: "PROFILE_MEMORIES_LOADED", retrospective: null, memories: await listMemories(db, scopeId), acceptedStateChanged: false });

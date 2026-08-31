@@ -49,10 +49,15 @@ test("structured rough plans collect changes in their natural sections instead o
 });
 
 test("guided demos always use the isolated browser-local workspace", () => {
-  assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active"/);
+  assert.match(source, /const freshSpotlightLaunch = startupStartMode === "live-demo" && startupQuery\.get\("tour"\) === "spotlight"/);
+  assert.match(source, /if \(freshSpotlightLaunch\) localStorage\.removeItem\(localDemoInstallationKey\)/);
+  assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active" \|\| startupStartMode === "spotlight-active"/);
   assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
   assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
   assert.match(source, /Demo mode · Local only/);
+  assert.match(entry, /const localSpotlight = \(startupQuery\.get\("start"\) === "live-demo" \|\| startupQuery\.get\("start"\) === "spotlight-active"\)/);
+  assert.match(entry, /storageScope: "local-spotlight-bootstrap"/);
+  assert.ok(entry.indexOf("} else if (localSpotlight) {") < entry.indexOf('fetch("/api/auth/session"'));
 });
 
 test("the Start managing guide cannot reopen the blank first chapter", () => {
@@ -74,19 +79,25 @@ test("public bootstrap routes do not preload the authenticated operator surface"
 });
 
 test("the signed-out first page is the four-route Finite gateway", () => {
-  assert.match(publicGate, /How do you want to begin\?/);
+  assert.match(publicGate, /Plans that survive contact with reality\./);
   assert.match(publicGate, /data-public-entry="fresh"/);
   assert.match(publicGate, /data-public-example=/);
   assert.match(publicGate, /data-public-entry="codex-live"/);
   assert.match(publicGate, /data-public-entry="live-demo"/);
+  assert.match(publicGate, /data-public-entry="full-demo"/);
+  assert.match(publicGate, /data-public-entry-status/);
   assert.match(publicGate, /return_to/);
   assert.match(publicGate, /\/?start=codex-live/);
-  assert.match(publicGate, /\/?start=live-demo/);
+  assert.match(publicGate, /\/?start=live-demo&tour=spotlight&plan=1/);
+  assert.match(publicGate, /\/?start=live-demo&tour=standard/);
   assert.match(publicGate, /\/?start=example&example=/);
   assert.match(publicGate, /isolated 24-hour workspace/);
   assert.match(publicGate, /Choose a template\./);
   assert.match(publicGate, /Use Codex live/);
-  assert.match(publicGate, /Watch live demo/);
+  assert.match(publicGate, /See Finite adapt\./);
+  assert.match(publicGate, /Spotlight stays in this browser/);
+  assert.match(publicGate, /try \{[\s\S]{0,200}fetch\("\/api\/auth\/demo"/);
+  assert.match(publicGate, /That isolated workspace could not be opened\. Nothing was saved\. Please try again\./);
   assert.doesNotMatch(publicGate, /Borrow a useful beginning/);
   assert.doesNotMatch(publicGate, /Continue with ChatGPT|Try the demo/);
 });
@@ -173,11 +184,18 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /data-entry-action="codex-live"/);
   assert.match(source, /data-entry-action="live-demo"/);
   assert.match(source, /How much Finite do you want to see\?/);
+  assert.match(source, /data-demo-depth="spotlight"/);
   assert.match(source, /data-demo-depth="basics"/);
   assert.match(source, /data-demo-depth="standard"/);
   assert.match(source, /data-demo-depth="complete"/);
   assert.match(source, /Just the basics/);
   assert.match(source, /All the bells &amp; whistles/);
+  assert.match(source, /See Finite adapt/);
+  assert.match(source, /See Finite adapt with Codex\./);
+  assert.match(source, /No legal route yet\./);
+  assert.match(source, /element\.closest<HTMLDetailsElement>\("details"\) \?\? element\.querySelector<HTMLDetailsElement>\("details"\)/);
+  assert.match(source, /zone\.component === "approval_panel" && Boolean\(kernel\.stagedCandidate\)/);
+  assert.match(source, /receipt: \{ label: "the latest plan update", selectors: \["\.latest-plan-update", "\.receipt"\] \}/);
   assert.match(source, /selectedDemoDepth: selected/);
   assert.match(source, /Choose a template\./);
   assert.match(source, /Same real product in every route\./);
@@ -185,7 +203,7 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /scopedStorage\.setItem\("finite-plan\.follow-codex", "true"\)/);
   assert.match(source, /const renderCodexLaunch = \(\): void =>/);
   assert.match(source, /Copy setup for Codex/);
-  assert.match(source, /Loading your live demo…/);
+  assert.match(source, /Your guided tour is ready\./);
   assert.match(source, /pausing for Next and questions/);
   assert.match(source, /Click Next when you are ready to keep watching, or ask Codex about anything you see/);
   assert.match(source, /Live demo · click Next when this chapter makes sense/);
@@ -217,7 +235,7 @@ test("account and destructive actions live in a labelled account menu", () => {
   assert.match(source, /href="\/signout-with-chatgpt\?return_to=\/">Sign out<\/a>/);
   assert.match(source, /<details class="account-menu__how">/);
   assert.match(source, /<summary>How Finite works<\/summary>/);
-  assert.match(source, /Think of Finite as the kitchen behind your plan/);
+  assert.match(source, /Finite keeps the working layer behind your plan coherent/);
   assert.match(source, /<a href="\$\{escapeHtml\(settingsPath\)\}">Settings<\/a>/);
 });
 
@@ -257,6 +275,7 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(source, /function bindArrivalInteractions\(\): void \{\s*bindCodexHandoffInteractions\(\);\s*bindPlanShareInteractions\(\);/);
   assert.match(styles, /html \.header-action--share/);
   assert.match(styles, /\.site-header>\.header-action--share \{ grid-column:3; grid-row:2; \}/);
+  assert.match(styles, /@media \(max-width:460px\)[\s\S]*\.header-actions \{ grid-column:1; grid-row:2;/);
   assert.match(styles, /@media \(max-width:460px\)/);
   assert.match(source, /Which plan do you want to share\?/);
   assert.match(source, /There isn’t a plan to share yet\./);
@@ -281,6 +300,13 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(shareEntry, /Recent accepted changes/);
   assert.match(shareEntry, /Actual spend/);
   assert.match(shareEntry, /item\.contextLabel/);
+});
+
+test("published plans format every money view in their own base currency", () => {
+  assert.match(source, /const currencyCode = plan\.currencyCode \|\| "AUD"/);
+  assert.match(source, /publicMoney\(allocation\.totalBudgetMinor, currencyCode\)/);
+  assert.match(source, /publicMeasure\(measure\.value, measure\.format, currencyCode\)/);
+  assert.match(source, /publicMoney\(outcome\.actualSpendMinor, currencyCode\)/);
 });
 
 test("consumer copy uses plan language outside explicit how-it-works explanations", () => {
@@ -523,6 +549,17 @@ test("workspace saves keep the edited form visible until the durable write retur
   assert.doesNotMatch(save, /root\?\.setAttribute\("aria-busy"/);
 });
 
+test("fresh-draft edits keep the current workspace visible and local reset mints a clean scope", () => {
+  const arrival = source.slice(source.indexOf("const renderArrival"), source.indexOf("const submitArrivalOrder"));
+  assert.match(arrival, /order\?\.status === "awaiting_human_authority" && pendingDraftMatchesArrival\(\) \? renderPlanDraft\(\) : ""/);
+  assert.match(source, /localStorage\.removeItem\(localDemoInstallationKey\)/);
+  assert.match(source, /location\.replace\("\/\?start=fresh&reset=complete"\)/);
+  assert.match(source, /try \{\s*recordChangeSummary\(workspaceChangeSummary/);
+  assert.match(source, /if \(target\.searchParams\.get\("start"\) === "fresh"\) \{\s*target\.searchParams\.delete\("start"\);\s*target\.searchParams\.delete\("reset"\);/);
+  assert.match(source, /if \(arrivalResult\.ok\) \{\s*newPlanDraftMode = false;\s*forceArrivalSurface = false;\s*entryGatewayOpen = false;/);
+  assert.match(source, /const manual = arrivalUsesManualWorkspace\(order\);/);
+});
+
 test("the guided workspace keeps Codex state in section headers without a duplicate phase strip", () => {
   assert.match(source, /data-codex-phase-current="true"/);
   assert.match(source, /working section/);
@@ -537,7 +574,7 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(source, /forceArrivalSurface = guideRequest\.surface === "arrival";/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
-  assert.match(source, /if \(!demoPlaybackMode\) void prepareArrivalPlanDraft\(arrivalResult\)/);
+  assert.match(source, /if \(!demoPlaybackMode && planningMode === "codex"\) void prepareArrivalPlanDraft\(arrivalResult\)/);
   assert.match(source, /draft\.sourceArrival && activeArrival && draft\.sourceArrival\.orderId !== activeArrival\.orderId\) return ""/);
   assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
   assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
@@ -601,6 +638,9 @@ test("settings exposes a local-only Demo mode and sharing fails closed inside it
   assert.match(source, /localDemoMode \? new MemoryArrivalRepository/);
   assert.match(source, /Sharing and invitations are unavailable because Demo mode keeps this plan only in this browser/);
   assert.match(source, /Turning this off never uploads the local workspace/);
+  assert.match(source, /authSession\.kind === "account" \? "signed-in account storage" : "24-hour demo storage"/);
+  assert.match(source, /Your Finite workspace/);
+  assert.match(source, /location\.replace\(enabled \? "\/\?start=fresh" : "\/"\)/);
 });
 
 test("sharing and authenticated collaboration stay distinct with enforced owner authority", () => {
@@ -647,9 +687,15 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable/);
   assert.doesNotMatch(source, /data-action="copy-codex-handoff">[^<]+<\/button>\s*<small data-codex-handoff-status/);
   assert.match(source, /Let \$\{escapeHtml\(agenticName\(\)\)\} guide this view/);
-  assert.match(source, /scopedStorage\.getItem\("finite-plan\.follow-codex"\) === "true"/);
+  assert.match(source, /const storedFollowCodex = scopedStorage\.getItem\("finite-plan\.follow-codex"\)/);
+  assert.match(source, /storedFollowCodex === "true" \|\| \(guidedWalkthroughMode && storedFollowCodex !== "false"\)/);
+  assert.match(source, /scopedStorage\.setItem\("finite-plan\.follow-codex", "false"\)/);
   assert.match(source, /FOLLOW_CODEX_DISABLED/);
   assert.match(source, /enable guided highlighting inside Finite's Codex handoff/);
+  assert.match(source, /data-action="guide-current-plan">Guide me through this plan/);
+  assert.match(source, /target\.searchParams\.set\("start", "plan-guide-active"\)/);
+  assert.match(source, /scopedStorage\.setItem\("finite-plan\.guide-current-plan", "true"\)/);
+  assert.match(source, /const gatedGuideSession = demoPlaybackMode \|\| guideCurrentPlanMode/);
   assert.match(source, /guideRequest\.surface !== "current"/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
@@ -835,6 +881,12 @@ test("Managing accepts general and section-specific decisions from both the page
   assert.match(webmcp, /finite_update_plan_input/);
   assert.match(webmcp, /finite_resolve_plan_input/);
   assert.match(styles, /main \{[^}]*scroll-margin-top:132px/);
+});
+
+test("saved section summaries count plain-language updates alongside structured headings", () => {
+  assert.match(source, /const unheadedItems = items\.filter/);
+  assert.match(source, /headings\.length \+ unheadedItems\.length \|\| items\.length/);
+  assert.match(source, /unheadedItems\.length === 1 \? "update" : "updates"/);
 });
 
 test("checklist progress updates optimistically and rolls back failed writes", () => {

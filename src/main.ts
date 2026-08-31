@@ -27,8 +27,9 @@ import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProg
 import { candidateTradeoffLines } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
-import { installLocalDemoWriteGuard, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
+import { installLocalDemoWriteGuard, localDemoInstallationKey, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
 import { workspaceSectionTemplate, workspaceSectionTemplates } from "./workspace-templates.js";
+import { planFactChangeSummary, planInputChangeSummary, workspaceChangeSummary, type FiniteChangeSummary } from "./change-summary.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 const labMode = import.meta.env.DEV && new URLSearchParams(location.search).get("lab") === "1";
@@ -77,10 +78,10 @@ const collaborationRepository = new HttpPlanCollaborationRepository();
 const escapePublicHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-const publicMoney = (minor: number): string => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(minor / 100);
+const publicMoney = (minor: number, currencyCode = "AUD"): string => new Intl.NumberFormat("en-AU", { style: "currency", currency: /^[A-Z]{3}$/.test(currencyCode) ? currencyCode : "AUD", currencyDisplay: "code", maximumFractionDigits: 0 }).format(minor / 100);
 
-const publicMeasure = (value: string | number, format: string): string => {
-  if (format === "money" && typeof value === "number") return publicMoney(value);
+const publicMeasure = (value: string | number, format: string, currencyCode = "AUD"): string => {
+  if (format === "money" && typeof value === "number") return publicMoney(value, currencyCode);
   if (format === "days" && typeof value === "number") return `${value} day${value === 1 ? "" : "s"}`;
   if (format === "percent" && typeof value === "number") return `${value}%`;
   return String(value);
@@ -90,6 +91,7 @@ const renderPublicProjection = (projection: PublicPlanProjection, compact = fals
   const plan = projection.plan;
   const allocation = plan.allocation;
   const outcome = plan.outcome;
+  const currencyCode = plan.currencyCode || "AUD";
   return `<article class="published-plan${compact ? " published-plan--preview" : ""}" data-publication-mode="${projection.mode}">
     <header class="published-plan__hero">
       <p class="eyebrow">${escapePublicHtml(plan.eyebrow || `${plan.family} plan`)}</p>
@@ -97,11 +99,11 @@ const renderPublicProjection = (projection: PublicPlanProjection, compact = fals
       ${plan.brief ? `<p>${escapePublicHtml(plan.brief)}</p>` : ""}
       <dl class="published-plan__meta"><div><dt>Plan</dt><dd>${escapePublicHtml(plan.name)}</dd></div><div><dt>Revision</dt><dd>${plan.revision}</dd></div><div><dt>Status</dt><dd>${escapePublicHtml(plan.status)}</dd></div><div><dt>${projection.mode === "live" ? "Updated" : "Frozen"}</dt><dd>${escapePublicHtml(new Date(plan.updatedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }))}</dd></div></dl>
     </header>
-    ${allocation ? `<section class="published-plan__allocation" aria-labelledby="published_allocation"><h2 id="published_allocation">The finite total</h2><dl><div><dt>Total</dt><dd>${publicMoney(allocation.totalBudgetMinor)}</dd></div><div><dt>Spent</dt><dd>${publicMoney(allocation.spentMinor)}</dd></div><div><dt>Committed</dt><dd>${publicMoney(allocation.committedMinor)}</dd></div><div><dt>Forecast</dt><dd>${publicMoney(allocation.forecastMinor)}</dd></div><div class="is-buffer"><dt>Remaining</dt><dd>${publicMoney(allocation.bufferMinor)}</dd></div></dl></section>` : ""}
-    ${plan.measures?.length ? `<section class="published-plan__measures" aria-labelledby="published_measures"><h2 id="published_measures">Key measures</h2><dl>${plan.measures.map((measure) => `<div><dt>${escapePublicHtml(measure.label)}</dt><dd>${escapePublicHtml(publicMeasure(measure.value, measure.format))}</dd></div>`).join("")}</dl></section>` : ""}
+    ${allocation ? `<section class="published-plan__allocation" aria-labelledby="published_allocation"><h2 id="published_allocation">The finite total</h2><dl><div><dt>Total</dt><dd>${publicMoney(allocation.totalBudgetMinor, currencyCode)}</dd></div><div><dt>Spent</dt><dd>${publicMoney(allocation.spentMinor, currencyCode)}</dd></div><div><dt>Committed</dt><dd>${publicMoney(allocation.committedMinor, currencyCode)}</dd></div><div><dt>Forecast</dt><dd>${publicMoney(allocation.forecastMinor, currencyCode)}</dd></div><div class="is-buffer"><dt>Remaining</dt><dd>${publicMoney(allocation.bufferMinor, currencyCode)}</dd></div></dl></section>` : ""}
+    ${plan.measures?.length ? `<section class="published-plan__measures" aria-labelledby="published_measures"><h2 id="published_measures">Key measures</h2><dl>${plan.measures.map((measure) => `<div><dt>${escapePublicHtml(measure.label)}</dt><dd>${escapePublicHtml(publicMeasure(measure.value, measure.format, currencyCode))}</dd></div>`).join("")}</dl></section>` : ""}
     ${plan.stages?.length ? `<section class="published-plan__stages" aria-labelledby="published_stages"><h2 id="published_stages">Plan stages</h2><ol>${plan.stages.map((stage) => `<li data-stage-status="${escapePublicHtml(stage.status)}"><span>${escapePublicHtml(stage.marker)}</span><div><strong>${escapePublicHtml(stage.label)}</strong><p>${escapePublicHtml(stage.detail)}</p></div><small>${escapePublicHtml(stage.status)}</small></li>`).join("")}</ol></section>` : ""}
     ${plan.changes?.length ? `<section class="published-plan__changes" aria-labelledby="published_changes"><h2 id="published_changes">Recent accepted changes</h2><ol>${plan.changes.map((change) => `<li><span>Revision ${change.revision}</span><strong>${escapePublicHtml(change.title)}</strong></li>`).join("")}</ol></section>` : ""}
-    ${outcome ? `<section class="published-plan__outcome"><h2>What happened</h2><blockquote>${escapePublicHtml(outcome.note)}</blockquote><dl><div><dt>Completed</dt><dd>${outcome.completedAt ? escapePublicHtml(new Date(outcome.completedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })) : "Not recorded"}</dd></div><div><dt>Actual spend</dt><dd>${outcome.actualSpendMinor === null ? "Not recorded" : publicMoney(outcome.actualSpendMinor)}</dd></div></dl></section>` : ""}
+    ${outcome ? `<section class="published-plan__outcome"><h2>What happened</h2><blockquote>${escapePublicHtml(outcome.note)}</blockquote><dl><div><dt>Completed</dt><dd>${outcome.completedAt ? escapePublicHtml(new Date(outcome.completedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })) : "Not recorded"}</dd></div><div><dt>Actual spend</dt><dd>${outcome.actualSpendMinor === null ? "Not recorded" : publicMoney(outcome.actualSpendMinor, currencyCode)}</dd></div></dl></section>` : ""}
     ${plan.progress ? `<section class="published-plan__progress"><h2>Progress · ${plan.progress.done} of ${plan.progress.total}</h2>${plan.progress.items.length ? `<ul>${plan.progress.items.map((item) => `<li><span aria-hidden="true">${item.status === "done" ? "✓" : "○"}</span><div><strong>${escapePublicHtml(item.label)}</strong>${item.contextLabel ? `<small>${escapePublicHtml(item.contextLabel)}</small>` : ""}</div></li>`).join("")}</ul>` : ""}</section>` : ""}
     ${plan.decisions?.length ? `<section class="published-plan__record"><h2>Decisions and updates</h2>${plan.decisions.map((item) => `<article><span>${escapePublicHtml(item.kind)}${item.contextLabel ? ` · ${escapePublicHtml(item.contextLabel)}` : ""}</span><p>${escapePublicHtml(item.message)}</p></article>`).join("")}</section>` : ""}
     ${plan.references?.length ? `<section class="published-plan__references"><h2>References</h2><ul>${plan.references.map((item) => `<li><strong>${escapePublicHtml(item.label)}</strong><span>${escapePublicHtml(item.kind)}${item.contextLabel ? ` · ${escapePublicHtml(item.contextLabel)}` : ""}</span>${item.value ? `<p>${escapePublicHtml(item.value)}</p>` : ""}</li>`).join("")}</ul></section>` : ""}
@@ -132,8 +134,8 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
         <nav class="public-nav" aria-label="Product">
           <a href="#surfaces">Product</a>
           <a href="#how-it-works">How it works</a>
-          <a href="#build">Build log</a>
-          <a href="#roadmap">Roadmap</a>
+          <a href="#capabilities">What you can do</a>
+          <a href="#webmcp">Why WebMCP</a>
         </nav>
         <div class="public-header__actions">
           <a class="public-header__cta" href="${signInPath}">Continue with ChatGPT</a>
@@ -231,11 +233,11 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           <div class="public-section-head public-section-head--light">
             <p class="eyebrow">The operating inversion</p>
             <h2 id="operating_title">Codex operates. You consume, choose and approve.</h2>
-            <p>Finite gives the agent a deterministic kitchen rather than giving you another appliance to operate.</p>
+            <p>Finite lets Codex work directly with the plan you can see, while the product keeps accepted facts, constraints and authority exact.</p>
           </div>
           <ol class="service-line" aria-label="Finite operating sequence">
             <li><span>01 / Order</span><h3>You state the outcome.</h3><p>Bring the change, preferences and hard constraints. Finite does not make you translate them into a dashboard.</p></li>
-            <li><span>02 / Operate</span><h3>Codex opens the whole kitchen.</h3><p>It sees accepted truth, legal moves, current evidence and the exact next safe action.</p></li>
+            <li><span>02 / Operate</span><h3>Codex works across the whole plan.</h3><p>It sees accepted truth, legal moves, current evidence and the exact next safe action.</p></li>
             <li><span>03 / Connect</span><h3>WebMCP uses the same live page.</h3><p>The operator works through page-scoped tools against the plan you can see, not a hidden parallel state.</p></li>
             <li><span>04 / Authority</span><h3>You approve one exact result.</h3><p>No consequential change lands until you choose the bound option and authorize that revision.</p></li>
           </ol>
@@ -271,93 +273,92 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </div>
         </section>
 
-        <section class="build-story" id="build" aria-labelledby="build_title">
+        <section class="build-story" id="capabilities" aria-labelledby="build_title">
           <div class="build-story__head">
             <div class="public-section-head">
-              <p class="eyebrow">Build log / selected engineering milestones</p>
-              <h2 id="build_title">The product is live in the details.</h2>
-              <p>Finite is an active owner-private build, not a rendered concept. These are working contracts in the current product; the acceptance suite checks the boundaries again on every build.</p>
+              <p class="eyebrow">A complete planning lifecycle</p>
+              <h2 id="build_title">Start simply. Keep adapting. Finish with what you learned.</h2>
+              <p>Finite stays useful from the first rough idea through real-world changes, collaboration, completion and the next version of the plan.</p>
             </div>
-            <aside class="build-state" aria-label="Current build state">
-              <span>Current build</span>
-              <strong>Active engineering</strong>
+            <aside class="build-state" aria-label="Available product capabilities">
+              <span>Available now</span>
+              <strong>One real product</strong>
               <dl>
-                <div><dt>Contract gate</dt><dd>Full suite passing</dd></div>
-                <div><dt>Plan families</dt><dd>3 compiled</dd></div>
-                <div><dt>Live tools</dt><dd>7 native + adaptive menus</dd></div>
-                <div><dt>Audience</dt><dd>Owner-private</dd></div>
+                <div><dt>Ways to begin</dt><dd>Fresh, template or guided</dd></div>
+                <div><dt>Plan shapes</dt><dd>Travel, projects and events</dd></div>
+                <div><dt>Sharing</dt><dd>View, suggest or edit</dd></div>
+                <div><dt>Demo mode</dt><dd>Browser-local only</dd></div>
               </dl>
-              <small>Verified 27 August 2026</small>
+              <small>Your plan remains editable throughout.</small>
             </aside>
           </div>
 
-          <ol class="build-log" aria-label="Finite build milestones">
+          <ol class="build-log" aria-label="Finite product capabilities">
             <li>
-              <div class="build-log__index"><span>Build 05</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>The product gets a public front door.</h3><p>The Paris change now demonstrates whole-plan replanning across flights, accommodation, transport, dates, comfort and remaining resources. Travel, renovation and event each expose a different adaptive surface rather than one relabelled dashboard.</p></div>
-              <span class="build-status">Working</span>
+              <div class="build-log__index"><span>01</span><time>Start</time></div>
+              <div class="build-log__copy"><h3>Describe the outcome in ordinary language.</h3><p>Start fresh, adapt a template, build manually or let Codex guide the whole first run. Finite turns the same brief into a visible, editable starting point.</p></div>
+              <span class="build-status">Flexible</span>
             </li>
             <li>
-              <div class="build-log__index"><span>Build 04</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>Identity becomes a boundary, not a credential store.</h3><p>ChatGPT owns sign-in. Finite creates an isolated private workspace on first use, plus a separate 24-hour demo whose saved data expires with it.</p></div>
-              <span class="build-status">Proven</span>
+              <div class="build-log__index"><span>02</span><time>Shape</time></div>
+              <div class="build-log__copy"><h3>Edit the plan, not a generated answer.</h3><p>Change dates, money, people, sections, questions and tasks directly. Calendar, totals and dependent views update from the same plan state.</p></div>
+              <span class="build-status">Editable</span>
             </li>
             <li>
-              <div class="build-log__index"><span>Build 03</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>One plan crosses devices without carrying authority with it.</h3><p>Travel, renovation and event each complete the same two-device journey. Codex can resume exact decision work; the receiving runtime rebuilds the candidate independently; only a fresh, short-lived human handoff can authorize the commit.</p></div>
-              <span class="build-status">Proven</span>
+              <div class="build-log__index"><span>03</span><time>Adapt</time></div>
+              <div class="build-log__copy"><h3>Bring the change back to the plan.</h3><p>When weather, timing, availability or cost moves, Finite keeps the affected stage and the whole outcome connected rather than starting a new chat from scratch.</p></div>
+              <span class="build-status">Live</span>
             </li>
             <li>
-              <div class="build-log__index"><span>Build 02</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-              <div class="build-log__copy"><h3>Accepted truth leaves the browser.</h3><p>A D1 transaction now commits the head, immutable revision, receipt, domain event and referenced evidence together. Competing writers, stale revisions, tampered envelopes and lost-response retries fail closed or resolve through the stored receipt.</p></div>
-              <span class="build-status">Proven</span>
+              <div class="build-log__index"><span>04</span><time>Share</time></div>
+              <div class="build-log__copy"><h3>Share only the access the plan needs.</h3><p>Publish a live or frozen view, or invite someone to view, suggest or edit draft work. The owner keeps accepted truth and consequential authority.</p></div>
+              <span class="build-status">Controlled</span>
             </li>
             <li>
-              <div class="build-log__index"><span>Build 01</span><time datetime="2026-08-26">26 Aug 2026</time></div>
-            <div class="build-log__copy"><h3>Codex reaches the same live plan through WebMCP.</h3><p>The Site exposes only the tools needed for the page the human sees, with bounded results instead of the full catalog or plan dumped into context. Deterministic code owns state, constraints, commits and receipts; Codex interprets, researches and prepares legal moves.</p></div>
-              <span class="build-status">Working</span>
+              <div class="build-log__index"><span>05</span><time>Learn</time></div>
+              <div class="build-log__copy"><h3>Complete, pause or reopen without losing the story.</h3><p>Capture what happened, actual spend and reusable lessons. Finite keeps those lessons separate from assumptions and brings them forward only when useful.</p></div>
+              <span class="build-status">Durable</span>
             </li>
           </ol>
 
           <p class="build-boundary"><span>Deliberate boundary</span>Finite models, compares and revises the plan. It does not currently change a booking, make a purchase, pay a supplier or imply that an external system has acted.</p>
         </section>
 
-        <section class="roadmap-story" id="roadmap" aria-labelledby="roadmap_title">
+        <section class="roadmap-story" id="webmcp" aria-labelledby="roadmap_title">
           <div class="public-section-head public-section-head--light">
-            <p class="eyebrow">Known roadmap / ordered by product risk</p>
-            <h2 id="roadmap_title">Make the loop harder to break before making it wider.</h2>
-            <p>The roadmap follows the control plane: deepen the real loop, make it portable, then earn external action one bounded capability at a time.</p>
+            <p class="eyebrow">Why WebMCP changes the experience</p>
+            <h2 id="roadmap_title">You and Codex work on the same visible plan.</h2>
+            <p>No hidden replica and no separate agent dashboard. The page explains the plan to people and exposes bounded, page-scoped capabilities to Codex at the same time.</p>
           </div>
           <div class="roadmap-lanes">
             <article class="roadmap-lane roadmap-lane--now">
-              <span>Now / hardening</span>
-              <h3>Production resilience for accepted plans.</h3>
+              <span>For the person</span>
+              <h3>A calm surface you can understand and change.</h3>
               <ul>
-                <li>Recovery and export drills against the durable plan lineage</li>
-                <li>Property and invariant fuzzing across replanning operations</li>
-                <li>Rate, latency and redacted telemetry budgets</li>
-                <li>Deeper end-to-end pressure on the Paris loop and all three surfaces</li>
+                <li>See exactly what Codex is working with</li>
+                <li>Edit any draft detail yourself</li>
+                <li>Pause a guided run and ask about the current screen</li>
+                <li>Keep consequential choices yours</li>
               </ul>
             </article>
             <article class="roadmap-lane">
-              <span>Next / portability</span>
-              <h3>A plan another person can own.</h3>
+              <span>For Codex</span>
+              <h3>Structured capabilities instead of brittle page guessing.</h3>
               <ul>
-                <li>Standard OIDC for a portable, self-hosted identity route</li>
-                <li>Supported recovery, migration and first-run ownership paths</li>
-                <li>Recurring-period and milestone plan experiments</li>
-                <li>Public beta only after tenancy and recovery survive independent use</li>
+                <li>Discover the exact actions available on this surface</li>
+                <li>Read only the canonical state required for the task</li>
+                <li>Prepare viable changes against the current revision</li>
+                <li>Resume the same work after a pause or reload</li>
               </ul>
             </article>
             <article class="roadmap-lane">
-              <span>Later / earned expansion</span>
-              <h3>Shared ownership and external action, with explicit authority.</h3>
+              <span>For the plan</span>
+              <h3>Reasoning stays creative; accepted truth stays exact.</h3>
               <ul>
-                <li>Multiple named people collaborating on one plan with clear roles, attribution and decision authority</li>
-                <li>Booking, supplier and calendar connectors with explicit approval per action</li>
-                <li>Proof of what an external system actually accepted or refused</li>
-                <li>More plan families only where the work demands a genuinely different grammar</li>
-                <li>No generic automation permission and no invisible parallel state</li>
+                <li>Constraints and totals are recalculated in code</li>
+                <li>Evidence remains labelled and traceable</li>
+                <li>Every accepted change is revision-bound and receipted</li>
+                <li>External action is never implied when it did not happen</li>
               </ul>
             </article>
           </div>
@@ -380,7 +381,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </dl>
         </section>
       </main>
-      <footer class="public-footer"><p>Plans that survive contact with reality.</p><span><a href="#build">Build log</a> · <a href="#roadmap">Roadmap</a> / Finite through WebMCP</span></footer>
+      <footer class="public-footer"><p>Plans that survive contact with reality.</p><span><a href="#capabilities">What you can do</a> · <a href="#webmcp">Why WebMCP</a></span></footer>
     </div>`;
   root.querySelectorAll<HTMLButtonElement>("[data-action='start-demo']").forEach((demoButton) => demoButton.addEventListener("click", async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
@@ -400,8 +401,11 @@ export const startKitchen = async (authSession: FiniteAuthSession): Promise<void
 
 updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
-const startupStartMode = new URLSearchParams(location.search).get("start");
-const guidedDemoLocalMode = startupStartMode === "live-demo" || startupStartMode === "demo-active";
+const startupQuery = new URLSearchParams(location.search);
+const startupStartMode = startupQuery.get("start");
+const freshSpotlightLaunch = startupStartMode === "live-demo" && startupQuery.get("tour") === "spotlight";
+if (freshSpotlightLaunch) localStorage.removeItem(localDemoInstallationKey);
+const guidedDemoLocalMode = startupStartMode === "live-demo" || startupStartMode === "demo-active" || startupStartMode === "spotlight-active";
 const localDemoMode = guidedDemoLocalMode || localDemoModeEnabled(localStorage);
 const localDemoScope = localDemoStorageScope(localStorage);
 const activeStorageScope = localDemoMode ? localDemoScope : authSession.storageScope;
@@ -434,7 +438,7 @@ const constructionRepository = localDemoMode ? new MemoryConstructionPacketRepos
 const arrivalRepository = localDemoMode ? new MemoryArrivalRepository(() => new Date(), scopedStorage) : new HttpArrivalRepository();
 const resetRepository = localDemoMode ? {
   async preview(): Promise<KitchenResetResult> { const totalRecords = localDemoRecordCount(localStorage, localDemoScope); return { ok: true, code: "KITCHEN_RESET_PREVIEW", confirmation: kitchenResetConfirmation, counts: { browser_records: totalRecords }, totalRecords, acceptedStateChanged: false }; },
-  async reset(): Promise<KitchenResetResult> { const totalRecords = localDemoRecordCount(localStorage, localDemoScope); clearFiniteScope(localStorage, localDemoScope); return { ok: true, code: "KITCHEN_RESET", counts: { browser_records: totalRecords }, totalRecords, acceptedStateChanged: false }; },
+  async reset(): Promise<KitchenResetResult> { const totalRecords = localDemoRecordCount(localStorage, localDemoScope); clearFiniteScope(localStorage, localDemoScope); localStorage.removeItem(localDemoInstallationKey); return { ok: true, code: "KITCHEN_RESET", counts: { browser_records: totalRecords }, totalRecords, acceptedStateChanged: false }; },
 } : new HttpKitchenResetRepository();
 const themeRepository = new HttpThemeRepository();
 const skinRepository = new HttpSkinRepository();
@@ -481,7 +485,7 @@ const refreshSkinCatalog = async (): Promise<void> => {
 let arrivalResult: ArrivalResult = openedArrival;
 updateOpeningStatus("Preparing your workspace…");
 const runtime = new FinitePlanRuntime(profiles, store, initialProfile, catalogStore, catalogEntries, () => new Date(), acceptedRepository, constructionRepository);
-const startupParams = new URLSearchParams(location.search);
+const startupParams = startupQuery;
 const opensProfileSurface = startupParams.get("about") === "1";
 const opensFreshArrival = !arrivalResult.order && !labMode && startupParams.get("plan") !== "1" && startupParams.get("kitchen") !== "1";
 const hydrateCanonicalRuntime = async (): Promise<void> => {
@@ -564,24 +568,45 @@ let entryGatewayOpen = false;
 let entryPrefill = finiteEntryExample(startupParams.get("example"))?.outcome ?? "";
 type CodexLaunchMode = "live" | "demo";
 let codexLaunchMode: CodexLaunchMode | null = startupEntryMode === "live-demo" ? "demo" : startupEntryMode === "codex-live" || startupEntryMode === "guided" ? "live" : null;
-let guidedWalkthroughMode = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active";
-let demoPlaybackMode = codexLaunchMode === "demo" || startupEntryMode === "demo-active";
+let guideCurrentPlanMode = startupEntryMode === "plan-guide-active" || scopedStorage.getItem("finite-plan.guide-current-plan") === "true";
+let guidedWalkthroughMode = guideCurrentPlanMode || codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active" || startupEntryMode === "spotlight-active";
+let demoPlaybackMode = codexLaunchMode === "demo" || startupEntryMode === "demo-active" || startupEntryMode === "spotlight-active";
 const startupDemoDepth = startupParams.get("tour");
-let demoDepth: DemoDepth = startupDemoDepth === "basics" || startupDemoDepth === "complete" ? startupDemoDepth : "standard";
+let demoDepth: DemoDepth = startupDemoDepth === "spotlight" || startupDemoDepth === "basics" || startupDemoDepth === "complete" ? startupDemoDepth : "standard";
 let demoDepthPickerOpen = false;
-let guidedWalkthroughAutoOpened = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active";
-let followCodexEnabled = guidedWalkthroughMode || scopedStorage.getItem("finite-plan.follow-codex") === "true";
-if (guidedWalkthroughMode) scopedStorage.setItem("finite-plan.follow-codex", "true");
+let guidedWalkthroughAutoOpened = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active" || startupEntryMode === "spotlight-active";
+const storedFollowCodex = scopedStorage.getItem("finite-plan.follow-codex");
+let followCodexEnabled = storedFollowCodex === "true" || (guidedWalkthroughMode && storedFollowCodex !== "false");
+if (guidedWalkthroughMode && storedFollowCodex === null) scopedStorage.setItem("finite-plan.follow-codex", "true");
 let activeCodexPrioritySectionId = scopedStorage.getItem("finite-plan.codex-priority-section") ?? "";
 let demoNextRequired = false;
 let demoNextAdvanced = false;
 let demoPaused = false;
 let lastDemoGuide: { surface: string; target: FiniteGuideTarget; targetLabel: string; message: string } | null = null;
 let codexLaunchCopied = false;
+const stopGuidanceSessionState = (): void => {
+  followCodexEnabled = false;
+  guidedWalkthroughMode = false;
+  guideCurrentPlanMode = false;
+  demoPlaybackMode = false;
+  codexLaunchMode = null;
+  demoNextRequired = false;
+  demoNextAdvanced = false;
+  demoPaused = false;
+  lastDemoGuide = null;
+  activeCodexPrioritySectionId = "";
+  scopedStorage.setItem("finite-plan.follow-codex", "false");
+  scopedStorage.removeItem("finite-plan.guide-current-plan");
+  scopedStorage.removeItem("finite-plan.codex-priority-section");
+  const target = new URL(location.href);
+  target.searchParams.delete("start");
+  history.replaceState({}, "", `${target.pathname}${target.search}${target.hash}`);
+};
 const guideView = async (request: FiniteGuideViewRequest) => {
+  const gatedGuideSession = demoPlaybackMode || guideCurrentPlanMode;
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
-  if (demoPlaybackMode && demoPaused) return { ok: true, code: "GUIDE_PAUSED_FOR_QUESTION", acceptedStateChanged: false, pausedAt: lastDemoGuide, next: "The person paused the live demo. Make no product changes. Answer their Codex questions using pausedAt and canonical Finite state, then retry the intended guide call at a modest interval until they resume." };
-  if (demoPlaybackMode && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, pausedAt: lastDemoGuide, next: "The live demo is paused at a visible Next button. If the person asks a question in Codex, answer it from pausedAt and canonical Finite state without changing the product. If they explicitly say next, proceed, keep going, continue, or equivalent in Codex, use the normal visible interface to click Next for them, then retry the intended finite_guide_view call. Otherwise keep waiting." };
+  if (gatedGuideSession && demoPaused) return { ok: true, code: "GUIDE_PAUSED_FOR_QUESTION", acceptedStateChanged: false, pausedAt: lastDemoGuide, next: "The person paused the guided session. Make no product changes. Answer their Codex questions using pausedAt and canonical Finite state, then retry the intended guide call at a modest interval until they resume." };
+  if (gatedGuideSession && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, pausedAt: lastDemoGuide, next: "The guided session is paused at a visible Next button. If the person asks a question in Codex, answer it from pausedAt and canonical Finite state without changing the product. If they explicitly say next, proceed, keep going, continue, or equivalent in Codex, use the normal visible interface to click Next for them, then retry the intended finite_guide_view call. Otherwise keep waiting." };
   const guideRequest: FiniteGuideViewRequest = demoPlaybackMode && request.target === "start_managing"
     ? { ...request, surface: "current" }
     : request;
@@ -616,7 +641,7 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     target.searchParams.delete("lab");
     if (guideRequest.surface === "plan") target.searchParams.set("plan", "1");
     else target.searchParams.delete("plan");
-    if (guidedWalkthroughMode) target.searchParams.set("start", demoPlaybackMode ? "demo-active" : "guided-active");
+    if (guidedWalkthroughMode) target.searchParams.set("start", demoPlaybackMode ? "demo-active" : guideCurrentPlanMode ? "plan-guide-active" : "guided-active");
     history.replaceState({}, "", target);
   }
   return { ok: true, code: "VIEW_GUIDED", guide: guideRequest, acceptedStateChanged: false, next: "Keep working from canonical Finite state. Move the person's view again only when it materially helps them follow along." };
@@ -630,7 +655,7 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   if (["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "PLAN_FACT_CHANGES_APPLIED"].includes(result.code)) await refreshPlanDisplayNames();
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const guideRequest = result.code === "VIEW_GUIDED" ? result.guide as FiniteGuideViewRequest : null;
-  const preservePausedDemoView = demoPlaybackMode && demoPaused;
+  const preservePausedDemoView = (demoPlaybackMode || guideCurrentPlanMode) && demoPaused;
   const preserveUnsavedCurrentSurface = guideRequest?.surface === "current" && guideRequest.refresh !== true;
   const manifest = preservePausedDemoView || preserveUnsavedCurrentSurface || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
   const guidedView = guideRequest ? applyCodexSpotlight(guideRequest) : null;
@@ -645,8 +670,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   };
 }, arrivalRepository, true, resetRepository, async () => {
   clearFiniteScope(localStorage, activeStorageScope);
+  if (localDemoMode) localStorage.removeItem(localDemoInstallationKey);
   if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
-  window.setTimeout(() => location.assign("/"), 1_500);
+  window.setTimeout(() => location.replace(localDemoMode ? "/?start=fresh&reset=complete" : "/"), 1_500);
 }, themeRepository, async (result: ThemeResult) => {
   if (result.theme) applyThemeDefinition(result.theme);
   await refreshThemeCatalog();
@@ -689,6 +715,8 @@ const workspaceUiState: WorkspaceUiState = {
 let customWorkspaceOpen = false;
 let message = "";
 let messageScope = "";
+let latestChangeSummary: FiniteChangeSummary | null = null;
+let latestChangeSummaryScope = "";
 let settingsBusy = false;
 let settingsMessage = "";
 let settingsError = "";
@@ -762,7 +790,7 @@ const renderHeaderControls = (): string => {
         <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
         <details class="account-menu__how">
           <summary>How Finite works</summary>
-          <div><p>Think of Finite as the kitchen behind your plan: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
+          <div><p>Finite keeps the working layer behind your plan coherent: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
         </details>
         ${authSession.kind === "account" ? `<a href="${escapeHtml(aboutPath)}">About you</a>` : ""}
         <a href="${escapeHtml(settingsPath)}">Settings</a>
@@ -794,7 +822,7 @@ const guideTargetSelectors: Record<FiniteGuideTarget, { label: string; selectors
   stages: { label: "the plan stages", selectors: [".zone--timeline_lane", ".zone--phase_lane", ".zone--run_of_show", ".stage-list"] },
   options: { label: "the available options", selectors: [".zone--option_compare", ".option-grid"] },
   approval: { label: "the approval area", selectors: [".zone--approval_panel", ".plan-intake", ".lifecycle-control--pending"] },
-  receipt: { label: "the latest receipt", selectors: [".receipt"] },
+  receipt: { label: "the latest plan update", selectors: [".latest-plan-update", ".receipt"] },
 };
 let spotlightTimer: number | null = null;
 const clearCodexSpotlight = (): void => {
@@ -810,27 +838,16 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
   overlay.setAttribute("popover", "manual");
   overlay.setAttribute("aria-live", "polite");
   const runningDemo = demoPlaybackMode;
-  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${runningDemo ? "running the demo" : "guiding"}</strong><button type="button" aria-label="${runningDemo ? "End this demo" : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${runningDemo ? "data-demo-guide-state" : ""}>${runningDemo ? pauseForNext ? "Paused at a natural stopping point" : "Live demo · Codex is operating the real page" : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && runningDemo ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${runningDemo ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause demo</button>` : ""}<button type="button" data-action="stop-codex-guidance">${runningDemo ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && runningDemo ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
+  const gatedGuideSession = runningDemo || guideCurrentPlanMode;
+  const sessionLabel = runningDemo ? "the demo" : "this plan";
+  overlay.innerHTML = `<header><span aria-hidden="true"></span><strong>${escapeHtml(agenticName())} is ${demoPlaybackMode ? "running the demo" : guideCurrentPlanMode ? "guiding this plan" : "guiding"}</strong><button type="button" aria-label="${gatedGuideSession ? `End ${sessionLabel}` : "Dismiss this guidance"}">×</button></header><p>${escapeHtml(messageText)}</p><small ${gatedGuideSession ? "data-demo-guide-state" : ""}>${gatedGuideSession ? pauseForNext ? "Paused at a natural stopping point" : `${demoPlaybackMode ? "Live demo" : "Live guide"} · Codex is showing the real page` : `Showing ${escapeHtml(targetLabel)} · you remain in control`}</small><footer><div class="codex-guide-actions">${pauseForNext && gatedGuideSession ? `<button class="codex-guide-next" type="button" data-action="advance-codex-demo">Next →</button>` : ""}${gatedGuideSession ? `<button class="codex-guide-pause" type="button" data-action="toggle-codex-demo-pause" aria-pressed="false">Pause ${demoPlaybackMode ? "demo" : "guide"}</button>` : ""}<button type="button" data-action="stop-codex-guidance">${demoPlaybackMode ? "End demo" : "Stop guided view"}</button></div>${pauseForNext && gatedGuideSession ? `<p class="codex-guide-question">Or ask ${escapeHtml(agenticName())} a question, or tell it to keep going.</p>` : ""}</footer>`;
   const endGuidance = (): void => {
-    followCodexEnabled = false;
-    guidedWalkthroughMode = false;
-    demoPlaybackMode = false;
-    codexLaunchMode = null;
-    demoNextRequired = false;
-    demoNextAdvanced = false;
-    demoPaused = false;
-    lastDemoGuide = null;
-    scopedStorage.removeItem("finite-plan.follow-codex");
-    scopedStorage.removeItem("finite-plan.codex-priority-section");
-    activeCodexPrioritySectionId = "";
-    const target = new URL(location.href);
-    target.searchParams.delete("start");
-    history.replaceState({}, "", target);
+    stopGuidanceSessionState();
     clearCodexSpotlight();
     overlay.remove();
     announce(runningDemo ? "The live demo has ended." : `${agenticName()} can keep working, but can no longer move or highlight this view.`);
   };
-  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => { if (runningDemo) endGuidance(); else overlay.remove(); });
+  overlay.querySelector<HTMLButtonElement>("header button")?.addEventListener("click", () => { if (gatedGuideSession) endGuidance(); else overlay.remove(); });
   overlay.querySelector<HTMLButtonElement>("[data-action='stop-codex-guidance']")?.addEventListener("click", endGuidance);
   overlay.querySelector<HTMLButtonElement>("[data-action='toggle-codex-demo-pause']")?.addEventListener("click", (event) => {
     demoPaused = !demoPaused;
@@ -838,13 +855,13 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     const nextButton = overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']");
     const state = overlay.querySelector<HTMLElement>("[data-demo-guide-state]");
     const heading = overlay.querySelector<HTMLElement>("header strong");
-    button.textContent = demoPaused ? "Resume demo" : "Pause demo";
+    button.textContent = demoPaused ? `Resume ${demoPlaybackMode ? "demo" : "guide"}` : `Pause ${demoPlaybackMode ? "demo" : "guide"}`;
     button.setAttribute("aria-pressed", String(demoPaused));
     if (nextButton) nextButton.disabled = demoPaused || demoNextAdvanced;
-    if (state) state.textContent = demoPaused ? "Paused here · ask Codex anything about this screen" : "Live demo · click Next when this chapter makes sense";
-    if (heading) heading.textContent = demoPaused ? `${agenticName()} is holding this exact place` : `${agenticName()} is running the demo`;
+    if (state) state.textContent = demoPaused ? "Paused here · ask Codex anything about this screen" : demoPlaybackMode ? "Live demo · click Next when this chapter makes sense" : "Live guide · click Next when this step makes sense";
+    if (heading) heading.textContent = demoPaused ? `${agenticName()} is holding this exact place` : `${agenticName()} is ${demoPlaybackMode ? "running the demo" : "guiding this plan"}`;
     overlay.classList.toggle("is-paused", demoPaused);
-    announce(demoPaused ? `Demo paused. Ask ${agenticName()} about this exact screen.` : `Demo resumed. ${agenticName()} can continue from this exact place.`);
+    announce(demoPaused ? `Guide paused. Ask ${agenticName()} about this exact screen.` : `Guide resumed. ${agenticName()} can continue from this exact place.`);
   });
   overlay.querySelector<HTMLButtonElement>("[data-action='advance-codex-demo']")?.addEventListener("click", (event) => {
     demoNextRequired = false;
@@ -852,7 +869,7 @@ const showCodexGuideOverlay = (messageText: string, targetLabel: string, pauseFo
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     button.textContent = "Ready for the next step…";
-    announce(`Ready for ${agenticName()} to continue the live demo.`);
+    announce(`Ready for ${agenticName()} to continue.`);
   });
   const openModal = root.querySelector<HTMLDialogElement>("dialog[open]");
   if (openModal) {
@@ -874,14 +891,17 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   const element = exactPriority ?? descriptor.selectors.map((selector) => root.querySelector<HTMLElement>(selector)).find(Boolean);
   const surface = root.querySelector(".entry-card--product") ? "entry" : forceArrivalSurface || root.querySelector(".arrival-main") ? "arrival" : "plan";
   const guideMessage = request.message?.trim() || `Here is ${descriptor.label}. I’ll keep us on the real plan and move one step at a time.`;
-  if (demoPlaybackMode) lastDemoGuide = { surface, target: request.target, targetLabel: descriptor.label, message: guideMessage };
+  const gatedGuideSession = demoPlaybackMode || guideCurrentPlanMode;
+  if (gatedGuideSession) lastDemoGuide = { surface, target: request.target, targetLabel: descriptor.label, message: guideMessage };
   if (!element) {
-    if (demoPlaybackMode && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
+    if (gatedGuideSession && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
     showCodexGuideOverlay(guideMessage, descriptor.label, request.pauseForNext === true);
     announce(`${agenticName()} refreshed this view. ${descriptor.label.charAt(0).toUpperCase()}${descriptor.label.slice(1)} is not on this screen yet.`);
     return { target: request.target, found: false, surface };
   }
-  const disclosure = element instanceof HTMLDetailsElement ? element : element.closest<HTMLDetailsElement>("details");
+  const disclosure = element instanceof HTMLDetailsElement
+    ? element
+    : element.closest<HTMLDetailsElement>("details") ?? element.querySelector<HTMLDetailsElement>("details");
   if (disclosure) disclosure.open = true;
   if (request.target === "priority") {
     element.dataset.codexPriority = "true";
@@ -896,7 +916,7 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   }
   element.setAttribute("data-codex-spotlight", "true");
   element.scrollIntoView({ behavior: "smooth", block: "center" });
-  if (demoPlaybackMode && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
+  if (gatedGuideSession && request.pauseForNext) { demoNextRequired = true; demoNextAdvanced = false; }
   showCodexGuideOverlay(guideMessage, descriptor.label, request.pauseForNext === true);
   announce(`${agenticName()} is showing ${descriptor.label}.`);
   spotlightTimer = window.setTimeout(() => { element.removeAttribute("data-codex-spotlight"); spotlightTimer = null; }, 7_000);
@@ -923,11 +943,15 @@ const bindFollowCodexInteractions = (): void => {
         priority.open = true;
       }
     } else {
-      scopedStorage.removeItem("finite-plan.follow-codex");
+      scopedStorage.setItem("finite-plan.follow-codex", "false");
       scopedStorage.removeItem("finite-plan.codex-priority-section");
       activeCodexPrioritySectionId = "";
       clearCodexSpotlight();
       root.querySelectorAll<HTMLElement>("[data-codex-priority]").forEach((element) => { element.removeAttribute("data-codex-priority"); element.classList.remove("is-codex-priority"); });
+      if (guideCurrentPlanMode || demoPlaybackMode) {
+        stopGuidanceSessionState();
+        void render();
+      }
     }
     announce(followCodexEnabled ? `${agenticName()} may now refresh, move and highlight this Finite view.` : `${agenticName()} can keep working, but cannot move or highlight this view.`);
   });
@@ -1183,6 +1207,25 @@ const announce = (value: string): void => {
   announcer.textContent = value;
 };
 
+const recordChangeSummary = (summary: FiniteChangeSummary): void => {
+  latestChangeSummary = summary;
+  latestChangeSummaryScope = currentMessageScope();
+};
+
+const clearChangeSummary = (): void => {
+  latestChangeSummary = null;
+  latestChangeSummaryScope = "";
+};
+
+const renderChangeSummary = (): string => latestChangeSummary ? `<aside class="change-summary" aria-live="polite" aria-label="What changed">
+  <div><p class="eyebrow">What changed</p><h2>${escapeHtml(latestChangeSummary.title)}</h2><p>${escapeHtml(latestChangeSummary.detail)}</p></div>
+  <ul>${latestChangeSummary.impacts.map((impact) => `<li>${escapeHtml(impact)}</li>`).join("")}</ul>
+</aside>` : "";
+
+const revealChangeSummary = (): void => {
+  window.requestAnimationFrame(() => root.querySelector<HTMLElement>(".change-summary")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+};
+
 const objectiveLabel = (objective: string): string => ({
   preserve_comfort: "Protect comfort",
   preserve_experience: "Protect the guest experience",
@@ -1235,10 +1278,14 @@ const currentCodexHandoff = () => createCodexHandoff({
   inline: Boolean(modelContext),
   agenticName: agenticName(),
   guidedWalkthrough: guidedWalkthroughMode,
+  guideCurrentPlan: guideCurrentPlanMode,
+  guidePlanSurface: guideCurrentPlanMode && (new URLSearchParams(location.search).get("plan") === "1" || (!forceArrivalSurface && runtime.hasActivationReceipt() && !isWaitingArrivalStatus(currentArrival()?.status))),
   demoPlayback: demoPlaybackMode,
   demoDepth,
   order: currentArrival(),
-  entryIntent: currentArrival()
+  entryIntent: demoPlaybackMode && demoDepth === "spotlight"
+    ? "continue_current"
+    : currentArrival()
     ? "resume_handoff"
     : new URLSearchParams(location.search).has("plan") || new URLSearchParams(location.search).has("kitchen") || new URLSearchParams(location.search).has("lab")
       ? "continue_current"
@@ -1257,27 +1304,53 @@ const renderCodexHandoffButton = (): string => {
   return `<button type="button" class="codex-handoff-trigger${followCodexEnabled ? " is-guided" : ""}" data-action="open-codex-handoff" aria-haspopup="dialog"><span aria-hidden="true"></span>${escapeHtml(handoff.buttonLabel)}${followCodexEnabled ? `<small>${escapeHtml(agenticName())} view on</small>` : ""}</button>`;
 };
 
+const renderSpotlightActivity = (): string => {
+  if (!demoPlaybackMode || demoDepth !== "spotlight") return "";
+  const kernel = runtime.kernel;
+  const candidates = [...kernel.candidates.values()].filter((candidate) => candidate.baseRevision === kernel.revision && candidate.eventId === kernel.activeEventId);
+  const validCandidates = candidates.filter((candidate) => candidate.valid);
+  const receipt = [...kernel.receipts].reverse().find((item) => item.receiptType === "plan_option" && item.toRevision === kernel.revision);
+  const state = receipt
+    ? { step: "Applied", title: "Your chosen route is now the plan.", detail: "The accepted revision preserves its protected boundaries and carries a replay-safe receipt." }
+    : kernel.approval && kernel.stagedCandidate
+      ? { step: "Confirmed", title: "Your exact choice is ready for Codex.", detail: "Finite recorded human authority for this option and revision only. Codex may now apply it." }
+      : kernel.stagedCandidate
+        ? { step: "Review", title: "Check the exact effect before confirming.", detail: "The option is staged, but accepted plan truth has not changed." }
+        : validCandidates.length
+          ? { step: "Choose", title: `${validCandidates.length} legal routes are ready.`, detail: "Finite checked the compiled move space. Choose the trade-off you want; Codex cannot choose for you." }
+          : candidates.length
+            ? { step: "Blocked", title: "No legal route yet.", detail: "Finite kept the plan unchanged because every route broke a protected boundary. Codex can revise the change or explain why." }
+          : kernel.activeEventId
+            ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while legal combinations are compared." }
+            : { step: "Live WebMCP", title: "Codex is reading the same active plan you can see.", detail: "Next it will record one synthetic change without altering accepted truth." };
+  return `<section class="spotlight-activity" aria-live="polite" aria-label="Finite and Codex activity">
+    <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
+  </section>`;
+};
+
 const renderCodexHandoffDialog = (): string => {
   const handoff = currentCodexHandoff();
   const order = currentArrival();
   const manualNeedsTakeover = Boolean(order && !starterPlanForArrival(order));
+  const currentPlanGuide = guideCurrentPlanMode;
   return `<dialog class="codex-handoff-dialog" data-codex-handoff-dialog aria-labelledby="codex_handoff_title">
     <form method="dialog" class="codex-handoff-sheet">
       <header>
-        <div><p class="eyebrow">${guidedWalkthroughMode ? "Live product walkthrough" : order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">${guidedWalkthroughMode ? `Walk through Finite with ${escapeHtml(agenticName())}.` : "How do you want to continue?"}</h2></div>
+        <div><p class="eyebrow">${currentPlanGuide ? "Your plan, explained live" : guidedWalkthroughMode ? "Live product walkthrough" : order ? "Your starting point is saved" : "Your plan stays here"}</p><h2 id="codex_handoff_title">${currentPlanGuide ? `Walk through this plan with ${escapeHtml(agenticName())}.` : guidedWalkthroughMode ? `Walk through Finite with ${escapeHtml(agenticName())}.` : "How do you want to continue?"}</h2></div>
         <button class="codex-handoff-close" value="close" aria-label="Close ${escapeHtml(agenticName())} handoff">×</button>
       </header>
-      <p class="codex-handoff-lede">${guidedWalkthroughMode ? `${escapeHtml(agenticName())} will explain the real product one step at a time, move and highlight only with your permission, and pause whenever your judgment is needed.` : `Bring ${escapeHtml(agenticName())} in to research and develop the rough plan, or keep editing it yourself. You can bring ${escapeHtml(agenticName())} in later.`}</p>
+      <p class="codex-handoff-lede">${currentPlanGuide ? `${escapeHtml(agenticName())} will explain this exact plan on the real page, pause between useful areas, and leave every plan value unchanged.` : guidedWalkthroughMode ? `${escapeHtml(agenticName())} will explain the real product one step at a time, move and highlight only with your permission, and pause whenever your judgment is needed.` : `Bring ${escapeHtml(agenticName())} in to research and develop the rough plan, or keep editing it yourself. You can bring ${escapeHtml(agenticName())} in later.`}</p>
       <div class="codex-handoff-choices" aria-label="Ways to continue">
         <section class="codex-handoff-choice codex-handoff-choice--codex">
-          <span>With ${escapeHtml(agenticName())}</span><strong>${guidedWalkthroughMode ? "Guide me through the real product" : "Research and develop the plan"}</strong><p>${escapeHtml(handoff.detail)}</p>
-          <button type="button" class="button" data-action="copy-codex-handoff">${guidedWalkthroughMode ? "Start the live walkthrough" : `Continue in ${escapeHtml(agenticName())}`}</button>
+          <span>With ${escapeHtml(agenticName())}</span><strong>${currentPlanGuide ? "Guide me through this plan" : guidedWalkthroughMode ? "Guide me through the real product" : "Research and develop the plan"}</strong><p>${escapeHtml(handoff.detail)}</p>
+          <button type="button" class="button" data-action="copy-codex-handoff">${currentPlanGuide ? "Copy the guided walkthrough" : guidedWalkthroughMode ? "Start the live walkthrough" : `Continue in ${escapeHtml(agenticName())}`}</button>
+          ${!guidedWalkthroughMode ? `<button type="button" class="button button--secondary codex-handoff-guide" data-action="guide-current-plan">Guide me through this plan</button>` : ""}
         </section>
         <section class="codex-handoff-choice codex-handoff-choice--manual">
           <span>Without ${escapeHtml(agenticName())}</span><strong>${manualNeedsTakeover ? "Edit the saved plan yourself" : "Keep editing here"}</strong><p>${manualNeedsTakeover ? `Open an editable workspace using what you wrote as the starting point. It has not been researched or developed by ${escapeHtml(agenticName())}.` : `Close this window and continue editing the current plan. ${escapeHtml(agenticName())} will not be involved.`}</p>
           <button type="button" class="button button--secondary" data-action="continue-arrival-manually">${manualNeedsTakeover ? "Edit manually for now" : "Continue without Codex"}</button>
         </section>
-        <small class="codex-handoff-choice-note codex-handoff-choice-note--codex" data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.</small>
+        <small class="codex-handoff-choice-note codex-handoff-choice-note--codex" data-codex-handoff-status>Copies one introduction for your ${escapeHtml(agenticName())} task.${currentPlanGuide ? " The walkthrough is read-only; Next, Pause and questions work on the plan itself." : ""}</small>
         <small class="codex-handoff-choice-note codex-handoff-choice-note--manual">Everything remains editable. Ask ${escapeHtml(agenticName())} for help whenever you want.</small>
         <label class="codex-handoff-guidance"><input type="checkbox" data-action="toggle-follow-codex" ${followCodexEnabled ? "checked" : ""}><span><strong>Let ${escapeHtml(agenticName())} guide this view</strong><small>Allow it to refresh, move, highlight and explain Finite while you work together. It cannot choose or approve for you.</small></span></label>
       </div>
@@ -1299,6 +1372,13 @@ const continueArrivalManually = async (): Promise<void> => {
   const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
   const order = currentArrival();
   dialog?.close();
+  if (guideCurrentPlanMode || demoPlaybackMode) {
+    stopGuidanceSessionState();
+    clearCodexSpotlight();
+    announce("Guided view ended. Keep editing this plan whenever you are ready.");
+    await render();
+    return;
+  }
   if (!order || starterPlanForArrival(order)) {
     announce("Keep editing the plan here. You can bring in Codex whenever you want.");
     return;
@@ -1347,6 +1427,21 @@ const bindCodexHandoffInteractions = (): void => {
   const dialog = root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]");
   root.querySelectorAll<HTMLButtonElement>("[data-action='open-codex-handoff']").forEach((trigger) => trigger.addEventListener("click", () => dialog?.showModal()));
   dialog?.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  root.querySelector<HTMLButtonElement>("[data-action='guide-current-plan']")?.addEventListener("click", async () => {
+    const guidingPlanSurface = !root.querySelector(".arrival-main");
+    guideCurrentPlanMode = true;
+    guidedWalkthroughMode = true;
+    followCodexEnabled = true;
+    scopedStorage.setItem("finite-plan.follow-codex", "true");
+    scopedStorage.setItem("finite-plan.guide-current-plan", "true");
+    const target = new URL(location.href);
+    target.searchParams.set("start", "plan-guide-active");
+    if (guidingPlanSurface) target.searchParams.set("plan", "1");
+    else target.searchParams.delete("plan");
+    history.replaceState({}, "", target);
+    await render();
+    root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-action='copy-codex-handoff']").forEach((copyButton) => copyButton.addEventListener("click", async () => {
     const prompt = currentCodexHandoff().prompt;
     const status = root.querySelector<HTMLElement>("[data-codex-handoff-status]");
@@ -1465,12 +1560,14 @@ const startNewPlan = async (): Promise<void> => {
   entryPrefill = "";
   codexLaunchMode = null;
   guidedWalkthroughMode = false;
+  guideCurrentPlanMode = false;
   demoPlaybackMode = false;
   demoDepthPickerOpen = false;
   demoNextRequired = false;
   demoNextAdvanced = false;
   demoPaused = false;
   lastDemoGuide = null;
+  scopedStorage.removeItem("finite-plan.guide-current-plan");
   const target = new URL(location.href);
   target.searchParams.delete("plan");
   target.searchParams.delete("kitchen");
@@ -1823,12 +1920,12 @@ const renderCalendarMonths = (
 const renderStarterPlan = (order: ArrivalOrder): string => {
   const starter = starterPlanForArrival(order);
   if (!starter) return "";
-  const manual = arrivalUsesManualWorkspace(order) && !order.interpretation?.complete;
+  const manual = arrivalUsesManualWorkspace(order);
   const { overview } = starter;
   const limit = starterAmount(overview.totalBudget);
   const currency = overview.currency;
   const money = (value: number): string => {
-    try { return new Intl.NumberFormat("en-AU", { style: "currency", currency, maximumFractionDigits: 0 }).format(value); }
+    try { return new Intl.NumberFormat("en-AU", { style: "currency", currency, currencyDisplay: "code", maximumFractionDigits: 0 }).format(value); }
     catch { return `${currency} ${new Intl.NumberFormat("en-AU", { maximumFractionDigits: 0 }).format(value)}`; }
   };
   const dateLabel = (value: string): string => {
@@ -2207,6 +2304,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       <div><p class="eyebrow">Your editable rough plan</p><h2 id="starter_plan_title">${escapeHtml(starter.title)}</h2><p>${escapeHtml(starter.brief)}</p></div>
     </header>
     <div class="starter-plan__notice"><strong>${manual ? "Build this plan your way." : "This is a first-pass plan, not a researched recommendation."}</strong><p>${manual ? `Add, edit, delete, tick off, or drag anything here. You can bring in ${escapeHtml(agenticName())} later if you want help.` : `It combines what you supplied with clearly labelled rough assumptions. Change anything yourself, comment on a section, or ask ${escapeHtml(agenticName())} to research it further.`}</p></div>
+    ${renderChangeSummary()}
     ${overviewMarkup}
     <div class="starter-workspace">${modules}</div>
     <div class="starter-plan__customise"><button class="button button--secondary" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button></div>
@@ -2254,6 +2352,8 @@ const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = f
   entryGatewayOpen = false;
   entryPrefill = prefill;
   codexLaunchMode = codexMode;
+  guideCurrentPlanMode = false;
+  scopedStorage.removeItem("finite-plan.guide-current-plan");
   guidedWalkthroughMode = preservingDemo || codexMode !== null;
   demoPlaybackMode = preservingDemo || codexMode === "demo";
   demoNextRequired = false;
@@ -2287,11 +2387,13 @@ const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = f
 const renderCodexLaunch = (): void => {
   const handoff = currentCodexHandoff();
   const isDemo = codexLaunchMode === "demo";
-  const demoChoice = demoDepth === "basics"
-    ? { label: "Just the basics", detail: "Two chapters · about 3 minutes" }
-    : demoDepth === "complete"
-      ? { label: "All the bells & whistles", detail: "Eight chapters · about 12 minutes" }
-      : { label: "Standard tour", detail: "Six chapters · about 8 minutes" };
+  const demoChoice = demoDepth === "spotlight"
+    ? { label: "See Finite adapt", detail: "One live decision · under 3 minutes" }
+    : demoDepth === "basics"
+      ? { label: "Just the basics", detail: "Two chapters · about 3 minutes" }
+      : demoDepth === "complete"
+        ? { label: "All the bells & whistles", detail: "Eight chapters · about 12 minutes" }
+        : { label: "Standard tour", detail: "Six chapters · about 8 minutes" };
   surfaceRoot.dataset.profile = "codex-launch";
   surfaceRoot.setAttribute("aria-busy", "false");
   surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
@@ -2300,13 +2402,13 @@ const renderCodexLaunch = (): void => {
       <div class="codex-launch__status"><span aria-hidden="true"><i></i><i></i><i></i></span><p>${isDemo ? `Preparing ${escapeHtml(demoChoice.label)} · ${escapeHtml(demoChoice.detail)}` : `Preparing ${escapeHtml(agenticName())} live`}</p></div>
       <div class="codex-launch__copy">
         <p class="eyebrow">One quick handoff</p>
-        <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? "Loading your live demo…" : `Loading ${escapeHtml(agenticName())} beside you…`}</h1>
-        <p>${isDemo ? `${escapeHtml(agenticName())} will first ask where you want to watch: a controlled browser window or the Codex built-in browser. It will then run the real Hobart template there, pausing for Next and questions.` : `${escapeHtml(agenticName())} will first ask which browser you want to use, then build with you there and pause whenever your input matters.`}</p>
+        <h1 id="codex_launch_title">${codexLaunchCopied ? "Copied. Paste it into Codex." : isDemo ? demoDepth === "spotlight" ? "See Finite adapt with Codex." : "Your guided tour is ready." : `Bring ${escapeHtml(agenticName())} beside you.`}</h1>
+        <p>${isDemo ? demoDepth === "spotlight" ? `${escapeHtml(agenticName())} will open a real active plan, model one disruptive change through Finite’s page tools, and stop for your exact choice before anything is applied.` : `${escapeHtml(agenticName())} will first ask where you want to watch: a controlled browser window or the Codex built-in browser. It will then run the real Hobart template there, pausing for Next and questions.` : `${escapeHtml(agenticName())} will first ask which browser you want to use, then build with you there and pause whenever your input matters.`}</p>
         <button type="button" class="button codex-launch__copy-button" data-action="copy-codex-launch">${codexLaunchCopied ? "Copy again" : "Copy setup for Codex"}</button>
         <small data-codex-launch-copy-status>${codexLaunchCopied ? "Ready to paste into Codex. Its first question will be where you want to watch." : "Copy this once, open Codex and paste it. Codex will ask where you want the visible run before it touches Finite."}</small>
       </div>
       <details class="codex-launch__details"><summary>See what will be copied</summary><label><span>Codex setup</span><textarea readonly spellcheck="false" data-codex-launch-prompt>${escapeHtml(handoff.prompt)}</textarea></label></details>
-      <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? "Click Next when you are ready to keep watching, or ask Codex about anything you see." : "You can stop the guided view at any time."}</p></footer>
+      <footer class="entry-boundary"><span>${isDemo ? "A real run, not a recording." : "Codex operates; you stay in control."}</span><p>${isDemo ? demoDepth === "spotlight" ? "Finite will pause at the one decision only you can make." : "Click Next when you are ready to keep watching, or ask Codex about anything you see." : "You can stop the guided view at any time."}</p></footer>
     </section>
   </main>`;
   root.querySelector<HTMLButtonElement>("[data-action='copy-codex-launch']")?.addEventListener("click", async () => {
@@ -2330,6 +2432,8 @@ const renderCodexLaunch = (): void => {
   root.querySelector<HTMLButtonElement>("[data-action='back-from-codex-launch']")?.addEventListener("click", async () => {
     codexLaunchMode = null;
     guidedWalkthroughMode = false;
+    guideCurrentPlanMode = false;
+    scopedStorage.removeItem("finite-plan.guide-current-plan");
     demoPlaybackMode = false;
     demoPaused = false;
     lastDemoGuide = null;
@@ -2367,10 +2471,11 @@ const renderEntryGateway = (): void => {
         </button>
       </div>
       ${demoDepthPickerOpen ? `<section class="entry-demo-picker" id="entry_demo_picker" aria-labelledby="entry_demo_picker_title">
-        <header><div><p class="eyebrow">Choose your depth</p><h2 id="entry_demo_picker_title">How much Finite do you want to see?</h2><p>Every option uses the real product and the same editable Hobart plan. The longer tours simply keep going.</p></div><button type="button" data-action="close-demo-picker" aria-label="Close demo choices">×</button></header>
+        <header><div><p class="eyebrow">Choose your depth</p><h2 id="entry_demo_picker_title">How much Finite do you want to see?</h2><p>Every option uses the real product. Spotlight begins with an active Europe plan; the longer tours build and manage a Hobart plan from scratch.</p></div><button type="button" data-action="close-demo-picker" aria-label="Close demo choices">×</button></header>
         <div class="entry-demo-picker__options">
+          <button type="button" class="is-recommended" data-demo-depth="spotlight"><span>One decision · under 3 min</span><strong>See Finite adapt</strong><p>Watch WebMCP model a real change, then choose what the plan becomes.</p><em>Best proof →</em></button>
           <button type="button" data-demo-depth="basics"><span>2 chapters · about 3 min</span><strong>Just the basics</strong><p>Watch a template become a tailored, editable plan.</p><em>Choose this tour →</em></button>
-          <button type="button" class="is-recommended" data-demo-depth="standard"><span>6 chapters · about 8 min</span><strong>Standard</strong><p>Build the plan, start managing it, then adapt cleanly when rain changes the trip.</p><em>Best place to start →</em></button>
+          <button type="button" data-demo-depth="standard"><span>6 chapters · about 8 min</span><strong>Standard</strong><p>Build the plan, start managing it, then adapt cleanly when rain changes the trip.</p><em>Explore the product →</em></button>
           <button type="button" data-demo-depth="complete"><span>8 chapters · about 12 min</span><strong>All the bells &amp; whistles</strong><p>Add a custom tracker, compare ideas, then see the plan handle real change.</p><em>Show me everything →</em></button>
         </div>
       </section>` : ""}
@@ -2379,7 +2484,7 @@ const renderEntryGateway = (): void => {
   </main>`;
   root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute({ continueDemo: demoPlaybackMode }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='codex-live']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "live" }); });
-  root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", async () => { demoDepthPickerOpen = true; await render(); root.querySelector<HTMLButtonElement>("[data-demo-depth='standard']")?.focus(); });
+  root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", async () => { demoDepthPickerOpen = true; await render(); root.querySelector<HTMLButtonElement>("[data-demo-depth='spotlight']")?.focus(); });
   root.querySelector<HTMLButtonElement>("[data-action='close-demo-picker']")?.addEventListener("click", async () => { demoDepthPickerOpen = false; await render(); root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.focus(); });
   root.querySelectorAll<HTMLButtonElement>("[data-demo-depth]").forEach((button) => button.addEventListener("click", () => { const selected = button.dataset.demoDepth as DemoDepth; void openEntryRoute({ codexMode: "demo", selectedDemoDepth: selected }); }));
   root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void resumeCurrentWork(); });
@@ -2398,7 +2503,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
   const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
   const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
   const inputTrail = order?.inputs.filter((input) => !arrivalInputIsWorkflowOnly(input)).slice(-5).reverse() ?? [];
-  const planDraftMarkup = order ? renderPlanDraft() : "";
+  const planDraftMarkup = order?.status === "awaiting_human_authority" && pendingDraftMatchesArrival() ? renderPlanDraft() : "";
   const starterPlanMarkup = order ? renderStarterPlan(order) : "";
   const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup);
   surfaceRoot.dataset.profile = freshArrivalEntry ? "entry" : "arrival";
@@ -2456,7 +2561,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             </section>
           </form>
         </section>
-        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}` : `
+        ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+        ${renderChangeSummary()}` : `
         <section class="arrival-primary-action" aria-label="What happens next">
           <h1 id="arrival_order_title" class="sr-only">${escapeHtml(order.rawOutcome)}</h1>
           ${question ? `<section class="arrival-question"><p class="eyebrow">Next step / answer one question</p><h2>${escapeHtml(question.prompt)}</h2><form data-arrival-form="answer"><label><span>Your answer</span><input name="answer" required maxlength="1000" ${question.answerKind === "date" ? "type=\"date\"" : ""}></label><button class="button" type="submit" ${busy ? "disabled" : ""}>Save my answer</button></form><small>Your answer becomes part of the plan. ${escapeHtml(agenticName())} will not guess it for you.</small></section>` : ""}
@@ -2509,6 +2615,8 @@ const renderArrival = (manifest: SurfaceManifest): void => {
     entryPrefill = "";
     codexLaunchMode = null;
     guidedWalkthroughMode = false;
+    guideCurrentPlanMode = false;
+    scopedStorage.removeItem("finite-plan.guide-current-plan");
     demoPlaybackMode = false;
     demoNextRequired = false;
     demoNextAdvanced = false;
@@ -2606,7 +2714,19 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     announce("The request could not be saved yet. Your starting point is still here so you can try again.");
     return;
   }
-  if (arrivalResult.ok) { newPlanDraftMode = false; forceArrivalSurface = false; }
+  if (arrivalResult.ok) {
+    newPlanDraftMode = false;
+    forceArrivalSurface = false;
+    entryGatewayOpen = false;
+    if (!guidedWalkthroughMode) {
+      const target = new URL(location.href);
+      if (target.searchParams.get("start") === "fresh") {
+        target.searchParams.delete("start");
+        target.searchParams.delete("reset");
+        history.replaceState(null, "", `${target.pathname}${target.search}${target.hash}`);
+      }
+    }
+  }
   busy = false;
   announce(arrivalResult.ok ? (planningMode === "manual" ? "Your manual planning workspace is ready." : `Your rough plan is ready to edit or develop with ${agenticName()}.`) : `The request was not saved: ${arrivalResult.code}`);
   if (!arrivalResult.ok) {
@@ -2614,7 +2734,7 @@ const submitArrivalOrder = async (form: HTMLFormElement, planningMode: "codex" |
     return;
   }
   await render();
-  if (!demoPlaybackMode) void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
+  if (!demoPlaybackMode && planningMode === "codex") void prepareArrivalPlanDraft(arrivalResult).catch(() => undefined);
   if (planningMode === "codex" && !demoPlaybackMode) root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
@@ -2718,6 +2838,7 @@ const restoreWorkspaceUiState = (): void => {
 const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "detail" | "correction" | "answer" = "detail", message = "Your plan is updated.", source?: HTMLElement): Promise<boolean> => {
   const order = currentArrival();
   if (!order || busy) return false;
+  const previousStarter = starterPlanForArrival(order);
   captureWorkspaceUiState();
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const saveRegion = source ?? active?.closest<HTMLElement>("form,[data-workspace-record],[data-record-context],[data-category-record]") ?? null;
@@ -2746,8 +2867,30 @@ const saveWorkspaceMutation = async (payload: Record<string, unknown>, kind: "de
   }
   if (arrivalResult.ok && payload.workspaceOperation === "add" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.recordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.recordId);
   if (arrivalResult.ok && payload.workspaceOperation === "option_promote" && (payload.moduleId === "itinerary" || payload.moduleId === "schedule") && typeof payload.targetRecordId === "string") workspaceUiState.calendarSelections.set(payload.moduleId, payload.targetRecordId);
+  const updatedOrder = currentArrival();
+  const updatedStarter = updatedOrder ? starterPlanForArrival(updatedOrder) : null;
+  const moduleId = String(payload.moduleId ?? "");
+  const sectionLabel = moduleId === "overview" ? "Plan at a glance" : updatedStarter?.sections.find((section) => section.sectionId === moduleId)?.label;
+  try {
+    recordChangeSummary(workspaceChangeSummary(payload, {
+      message,
+      ...(sectionLabel ? { sectionLabel } : {}),
+      ...(updatedStarter?.overview.currency ? { currency: updatedStarter.overview.currency } : {}),
+      ...(previousStarter?.overview.currency ? { previousCurrency: previousStarter.overview.currency } : {}),
+      ...(updatedStarter ? {
+        moneyState: updatedStarter.overview.moneyState,
+        totalBudget: starterAmount(updatedStarter.overview.totalBudget),
+        allocated: updatedStarter.overview.categoryAllocated,
+        start: updatedStarter.overview.start,
+        end: updatedStarter.overview.end,
+      } : {}),
+    }));
+  } catch {
+    clearChangeSummary();
+  }
   announce(message);
   await render();
+  revealChangeSummary();
   return true;
 };
 
@@ -3048,7 +3191,7 @@ const submitKitchenReset = async (form: HTMLFormElement): Promise<void> => {
   if (result.ok && result.code === "KITCHEN_RESET") {
     clearFiniteScope(localStorage, activeStorageScope);
     if (localStorage.getItem(legacyCacheOwnerKey) === authSession.storageScope) localStorage.removeItem(legacyCacheOwnerKey);
-    location.assign("/");
+    location.replace("/?start=fresh&reset=complete");
     return;
   }
   busy = false;
@@ -3499,9 +3642,12 @@ const renderPlanInputItems = (section: PlanInputSection, contextId: string | nul
   const items = planInputsFor(section, contextId);
   if (!items.length) return "";
   const headings = planInputHeadings(items);
+  const unheadedItems = items.filter((item) => !planInputMessageBlocks(item.message).some((block) => block.heading));
   const pending = items.some((item) => item.mode === "codex" && item.baseCurrent);
-  const summary = headings.length ? headings.slice(0, 3).join(" · ") : contextId ? items[0]?.contextLabel ?? "Saved information" : `${planInputSectionLabel(section)} notes`;
-  const count = headings.length || items.length;
+  const summaryParts = headings.slice(0, 3);
+  if (unheadedItems.length) summaryParts.push(`${unheadedItems.length} ${unheadedItems.length === 1 ? "update" : "updates"}`);
+  const summary = summaryParts.length ? summaryParts.join(" · ") : contextId ? items[0]?.contextLabel ?? "Saved information" : `${planInputSectionLabel(section)} notes`;
+  const count = headings.length + unheadedItems.length || items.length;
   return `<details class="plan-input-items${compact ? " plan-input-items--compact" : ""}${pending ? " plan-input-items--pending" : ""}" ${pending ? "open" : ""}>
     <summary><span>${pending ? `Waiting for ${escapeHtml(agenticName())}` : "Saved plan information"}</span><strong>${escapeHtml(summary)}</strong><small>${count} ${count === 1 ? "section" : "sections"}</small></summary>
     <div class="plan-input-items__body">${items.map((item) => `<article class="plan-input-item plan-input-item--${escapeHtml(item.mode)}">
@@ -3967,7 +4113,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
   const hasPending = inputSection
     ? planInputsFor(inputSection).some((item) => item.mode === "codex" && item.baseCurrent)
     : timelineSection ? planInputsFor("timeline").some((item) => item.mode === "codex" && item.baseCurrent) : false;
-  const opened = openManagingZones.has(zone.zoneId) || hasPending;
+  const opened = openManagingZones.has(zone.zoneId) || hasPending || (zone.component === "approval_panel" && Boolean(kernel.stagedCandidate));
   return `<section class="zone zone--collapsible zone--${escapeHtml(zone.component)}" id="${escapeHtml(zone.zoneId)}"><details data-managing-zone data-zone-id="${escapeHtml(zone.zoneId)}" ${opened ? "open" : ""}>
     <summary class="zone__summary"><h2>${escapeHtml(zoneTitle)} ${inputSection ? pendingBadge(inputSection) : timelineSection ? pendingBadge("timeline") : ""}</h2><span>${opened ? "Close section" : "Open section"}</span></summary>
     <div class="zone__content"><div class="zone__heading-actions">${structuredEdit}${inputSection ? `<button type="button" data-action="open-plan-input" data-plan-input-section="${inputSection}">+ Add or change</button>` : ""}</div>${body}${inputSection ? renderPlanInputItems(inputSection) : ""}</div>
@@ -3989,6 +4135,7 @@ const profileMemoryKindLabel = (kind: ProfileMemoryKind): string => ({
 
 const renderPlanLessons = (): string => {
   const retrospective = planRetrospective ?? emptyRetrospective(runtime.kernel.profile.planId, runtime.kernel.revision);
+  const canUseProfileMemory = authSession.kind === "account" || localDemoMode;
   const memories = profileMemories.filter((memory) => memory.sourcePlanId === runtime.kernel.profile.planId && memory.status !== "rejected" && memory.status !== "retired");
   const proposed = memories.filter((memory) => memory.status === "proposed");
   const accepted = memories.filter((memory) => memory.status === "accepted");
@@ -4004,7 +4151,7 @@ const renderPlanLessons = (): string => {
       <label><span>Next time</span><textarea name="nextTime" maxlength="2000" placeholder="What would you do differently?">${escapeHtml(retrospective.nextTime)}</textarea></label>
       <button class="button button--secondary" type="submit" ${planLearningBusy ? "disabled" : ""}>${planLearningBusy ? "Saving…" : "Save to this plan"}</button>
     </form>
-    <section class="profile-memory-review" aria-labelledby="carry_forward_title">
+    ${canUseProfileMemory ? `<section class="profile-memory-review" aria-labelledby="carry_forward_title">
       <header><div><p class="eyebrow">Across plans</p><h3 id="carry_forward_title">Things to carry forward</h3></div><p>Only accepted items become reusable. Finite keeps the evidence with each one.</p></header>
       ${proposed.length ? `<div class="profile-memory-list profile-memory-list--proposed"><h4>Suggestions to review</h4>${proposed.map((memory) => `<form data-memory-decision class="profile-memory-card is-proposed"><input type="hidden" name="memoryId" value="${escapeHtml(memory.memoryId)}"><span>${escapeHtml(profileMemoryKindLabel(memory.kind))} · Suggested by ${escapeHtml(agenticName())}</span><input name="statement" maxlength="500" value="${escapeHtml(memory.statement)}" aria-label="Edit suggested memory"><p><b>Based on</b> ${escapeHtml(memory.evidence)}</p><div><button class="button button--secondary" name="status" value="accepted" type="submit">Remember this</button><button class="text-button" name="status" value="rejected" type="submit">Don’t use this</button></div></form>`).join("")}</div>` : ""}
       ${accepted.length ? `<div class="profile-memory-list"><h4>Saved from this plan</h4>${accepted.map((memory) => `<article class="profile-memory-card is-accepted"><span>${escapeHtml(profileMemoryKindLabel(memory.kind))} · Accepted</span><strong>${escapeHtml(memory.statement)}</strong><p><b>Based on</b> ${escapeHtml(memory.evidence)}</p></article>`).join("")}</div>` : ""}
@@ -4013,7 +4160,7 @@ const renderPlanLessons = (): string => {
         <input type="hidden" name="evidence" value="Added by you after ${escapeHtml(resolvePlanTitle({ proposed: projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel), brief: projectAcceptedPlanCopy(runtime.kernel.profile.surface.hero.brief, runtime.kernel) }))}.">
         <button class="button button--secondary" type="submit" ${planLearningBusy ? "disabled" : ""}>Add to future plans</button>
       </form>
-    </section>
+    </section>` : `<aside class="profile-memory-review profile-memory-review--unavailable"><p class="eyebrow">Across plans</p><h3>Carry lessons into future plans</h3><p>This retrospective stays with the temporary plan. Sign in when you want Finite to remember a lesson across plans.</p></aside>`}
   </details>`;
 };
 
@@ -4183,6 +4330,8 @@ const settingsReturnPath = (): string => {
 
 function renderSettings(): void {
   const canPersist = authSession.kind === "account" || localDemoMode;
+  const sourceStorageLabel = authSession.kind === "account" ? "signed-in account storage" : "24-hour demo storage";
+  const sourceWorkspaceLabel = authSession.kind === "account" ? "account" : "temporary demo";
   surfaceRoot.dataset.profile = "settings";
   surfaceRoot.setAttribute("aria-busy", String(settingsBusy));
   surfaceRoot.innerHTML = `
@@ -4194,12 +4343,12 @@ function renderSettings(): void {
       </header>
     </div>
     <main id="main" class="settings-main">
-      <header class="settings-hero"><p class="eyebrow">Your Finite account</p><h1>Settings</h1><p>Choose how Finite feels, speaks and stores work while the underlying safeguards stay the same.</p></header>
+      <header class="settings-hero"><p class="eyebrow">Your Finite workspace</p><h1>Settings</h1><p>Choose how Finite feels, speaks and stores work while the underlying safeguards stay the same.</p></header>
       <section class="settings-section settings-section--demo" aria-labelledby="demo_mode_title">
-        <div class="settings-section__intro"><p class="eyebrow">Storage</p><h2 id="demo_mode_title">Demo mode</h2><p>Use the full product without adding anything to the signed-in account. Plans and changes stay only in this browser.</p></div>
+        <div class="settings-section__intro"><p class="eyebrow">Storage</p><h2 id="demo_mode_title">Demo mode</h2><p>Use the full product without adding anything to this ${escapeHtml(sourceWorkspaceLabel)} workspace. Plans and changes stay only in this browser.</p></div>
         <div class="demo-mode-setting">
-          <label><input type="checkbox" data-action="toggle-local-demo" ${localDemoMode ? "checked" : ""}><span><strong>Keep this browser local</strong><small>${localDemoMode ? "On · remote writes are blocked" : "Off · signed-in account storage is active"}</small></span></label>
-          <p>${localDemoMode ? "Account plans are not loaded. Sharing, invitations and file uploads are unavailable. Turning this off never uploads the local workspace." : "Turning this on reloads Finite into a separate local workspace. Existing account plans remain untouched."}</p>
+          <label><input type="checkbox" data-action="toggle-local-demo" ${localDemoMode ? "checked" : ""}><span><strong>Keep this browser local</strong><small>${localDemoMode ? "On · remote writes are blocked" : `Off · ${escapeHtml(sourceStorageLabel)} is active`}</small></span></label>
+          <p>${localDemoMode ? `${authSession.kind === "account" ? "Account" : "Temporary demo"} plans are not loaded. Sharing, invitations and file uploads are unavailable. Turning this off never uploads the local workspace.` : `Turning this on reloads Finite into a separate local workspace. Existing ${escapeHtml(sourceWorkspaceLabel)} plans remain untouched.`}</p>
           ${localDemoMode ? `<button type="button" class="text-button" data-action="reset-local-demo">Reset local demo</button>` : ""}
         </div>
       </section>
@@ -4214,7 +4363,7 @@ function renderSettings(): void {
         </form>
       </section>
     </main>
-    <footer><p>Finite keeps your plans and your preferences separate.</p><span>Account settings</span></footer>
+    <footer><p>Finite keeps your plans and your preferences separate.</p><span>Workspace settings</span></footer>
     ${renderKitchenResetDialog()}
     ${renderThemeSettingsDialog()}`;
   enableNativeWritingAssistance();
@@ -4254,12 +4403,14 @@ function bindSettingsInteractions(): void {
   });
   root?.querySelector<HTMLButtonElement>("[data-action='reset-agentic-name']")?.addEventListener("click", () => { void saveAgenticName(defaultAgenticName); });
   root?.querySelector<HTMLInputElement>("[data-action='toggle-local-demo']")?.addEventListener("change", (event) => {
-    setLocalDemoMode(localStorage, (event.currentTarget as HTMLInputElement).checked);
-    location.reload();
+    const enabled = (event.currentTarget as HTMLInputElement).checked;
+    setLocalDemoMode(localStorage, enabled);
+    location.replace(enabled ? "/?start=fresh" : "/");
   });
   root?.querySelector<HTMLButtonElement>("[data-action='reset-local-demo']")?.addEventListener("click", () => {
     clearFiniteScope(localStorage, localDemoScope);
-    location.reload();
+    localStorage.removeItem(localDemoInstallationKey);
+    location.replace("/?start=fresh&reset=complete");
   });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", async () => {
     const response = await fetch("/api/auth/demo/end", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
@@ -4334,10 +4485,15 @@ function bindAboutYouInteractions(): void {
 
 async function render(): Promise<SurfaceManifest> {
   const kernel = runtime.kernel;
-  const reconciledMessage = reconcileScopedSurfaceMessage({ message, scope: messageScope }, currentMessageScope());
+  const activeScope = currentMessageScope();
+  const reconciledMessage = reconcileScopedSurfaceMessage({ message, scope: messageScope }, activeScope);
   if (message && !reconciledMessage.message) announcer!.textContent = "";
   message = reconciledMessage.message;
   messageScope = reconciledMessage.scope;
+  if (latestChangeSummary && latestChangeSummaryScope !== activeScope) {
+    latestChangeSummary = null;
+    latestChangeSummaryScope = "";
+  }
   const params = new URLSearchParams(location.search);
   const manifestPromise = compileSurfaceManifest(kernel.profile, kernel);
   if (params.get("about") === "1") {
@@ -4400,10 +4556,12 @@ async function render(): Promise<SurfaceManifest> {
     </div>
     <main id="main">
       ${kernel.lifecycleStatus === "active" ? "" : `<div class="plan-status-strip plan-status-strip--${escapeHtml(kernel.lifecycleStatus)}" role="status"><span>${escapeHtml(kernel.lifecycleStatus)}</span><strong>This plan is ${escapeHtml(kernel.lifecycleStatus)}. Ordinary changes are blocked.</strong>${kernel.lifecycleEvents.at(-1) ? `<small>${escapeHtml(kernel.lifecycleEvents.at(-1)!.reason)}</small>` : ""}</div>`}
+      ${renderSpotlightActivity()}
       <section class="hero">
         <div class="hero__heading"><div class="hero__copy"><p class="eyebrow">Current plan ${pendingBadge("general")}</p><h1>${escapeHtml(manifest.title)}</h1><p class="hero__brief">${escapeHtml(manifest.brief)}</p></div><button type="button" class="hero__add" data-action="open-plan-input" data-plan-input-section="general">+ Add or change</button></div>
       </section>
       ${message ? `<div class="service-message" role="status">${escapeHtml(message)}</div>` : ""}
+      ${renderChangeSummary()}
       ${renderLatestPlanUpdate()}
       ${renderPendingPlanPriority()}
       ${renderNextStep(manifest)}
@@ -4460,6 +4618,8 @@ const openPlan = async (planId: string): Promise<void> => {
   entryGatewayOpen = false;
   entryPrefill = "";
   guidedWalkthroughMode = false;
+  guideCurrentPlanMode = false;
+  scopedStorage.removeItem("finite-plan.guide-current-plan");
   busy = true;
   announce("");
   await render();
@@ -4863,9 +5023,11 @@ const confirmPendingPlanFacts = async (planFactChangeId: string): Promise<void> 
   const confirmationId = confirmed.ok ? String((confirmed.confirmation as { confirmationId?: string } | undefined)?.confirmationId ?? "") : "";
   const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
   busy = false;
+  if (applied.ok) recordChangeSummary(planFactChangeSummary({ changes: pending.changes, currency: planCurrencyCode(), availableMinor: runtime.kernel.accepted.bufferMinor }));
   announce(applied.ok ? "Plan details updated." : `Those values could not be saved: ${applied.code}`);
   if (applied.ok) await adapter?.refreshContextualTools();
   await render();
+  if (applied.ok) revealChangeSummary();
 };
 
 const openPlanInput = async (button: HTMLButtonElement): Promise<void> => {
@@ -4898,6 +5060,7 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
   const data = new FormData(form);
   const section = String(data.get("section") ?? "general") as PlanInputSection;
   planInputBusy = true;
+  let revealSavedChange = false;
   planInputError = "";
   await render();
   try {
@@ -4913,6 +5076,7 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
       idempotencyKey: `plan-input-${planInputEditingId ? "update" : "add"}-site-${crypto.randomUUID()}`,
       sourceSurface: "site" as const,
     };
+    const wasEditing = Boolean(planInputEditingId);
     const result = planInputEditingId
       ? await planInputRepository.update({ ...input, inputId: planInputEditingId })
       : await planInputRepository.add(input);
@@ -4921,11 +5085,21 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
       planInputs = result.inputs;
       planInputDialogOpen = false;
       planInputEditingId = null;
+      if (mode === "direct" && result.input) {
+        recordChangeSummary(planInputChangeSummary({
+          editing: wasEditing,
+          sectionLabel: planInputSectionLabel(result.input.section),
+          contextLabel: result.input.contextLabel,
+          kind: `${result.input.kind.charAt(0).toUpperCase()}${result.input.kind.slice(1)}`,
+        }));
+        revealSavedChange = true;
+      }
       announce(mode === "codex" ? `${planInputSectionLabel(result.input?.section ?? "general")} is pending.` : "Plan updated.");
     }
   } catch { planInputError = "That item could not be added. Nothing else changed."; }
   planInputBusy = false;
   await render();
+  if (revealSavedChange) revealChangeSummary();
 };
 
 const handlePlanInput = async (inputId: string): Promise<void> => {
@@ -4935,7 +5109,7 @@ const handlePlanInput = async (inputId: string): Promise<void> => {
   controls.forEach((button) => { button.disabled = true; button.textContent = "Marking…"; });
   try {
     const result = await planInputRepository.resolve({ inputId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, idempotencyKey: `plan-input-handle-site-${crypto.randomUUID()}`, sourceSurface: "site" });
-    if (result.ok) { planInputs = result.inputs; announce("Marked handled."); }
+    if (result.ok) { planInputs = result.inputs; clearChangeSummary(); announce("Marked handled."); }
     else announce(result.message || "That item could not be marked handled.");
   } catch { announce("That item could not be marked handled."); }
   planInputBusy = false;
@@ -4949,7 +5123,7 @@ const addChecklistItem = async (form: HTMLFormElement): Promise<void> => {
   planWorkBusy = true;
   try {
     const result = await planWorkRepository.addChecklist({ planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "general", contextId: null, contextLabel: null, label, origin: "human", sourceRef: null, position: checklistItems.length + 100, idempotencyKey: `checklist-add-site-${crypto.randomUUID()}`, sourceSurface: "site" });
-    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce("Added to your list."); }
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; clearChangeSummary(); announce("Added to your list."); }
     else announce(result.issues?.join(" ") || result.message || "That item could not be added.");
   } catch { announce("That item could not be added."); }
   planWorkBusy = false;
@@ -4968,7 +5142,7 @@ const toggleChecklistItem = async (itemId: string, done: boolean): Promise<void>
     .forEach((input) => { input.disabled = true; });
   try {
     const result = await planWorkRepository.setChecklist({ itemId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: item.section, contextId: item.contextId, contextLabel: item.contextLabel, status: done ? "done" : "open", idempotencyKey: `checklist-${done ? "done" : "reopen"}-site-${crypto.randomUUID()}`, sourceSurface: "site" });
-    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce(done ? "Ticked off." : "Put back on the list."); }
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; clearChangeSummary(); announce(done ? "Ticked off." : "Put back on the list."); }
     else { checklistItems = priorChecklist; announce(result.message || "That item could not be updated."); }
   } catch { checklistItems = priorChecklist; announce("That item could not be updated."); }
   planWorkBusy = false;
@@ -5010,7 +5184,7 @@ const saveAttachments = async (form: HTMLFormElement): Promise<void> => {
     const latest = [...results].reverse().find((result) => result.ok);
     if (latest) { checklistItems = latest.checklist; planAttachments = latest.attachments; }
     if (failure) planWorkError = failure.issues?.join(" ") || failure.message || "One of those items could not be added.";
-    else { attachmentDialogOpen = false; announce(results.length === 1 ? "Added to the plan." : `${results.length} items added to the plan.`); }
+    else { attachmentDialogOpen = false; clearChangeSummary(); announce(results.length === 1 ? "Added to the plan." : `${results.length} items added to the plan.`); }
   } catch { planWorkError = "Those items could not be added."; }
   planWorkBusy = false;
   await render();
@@ -5021,7 +5195,7 @@ const removeAttachment = async (attachmentId: string): Promise<void> => {
   planWorkBusy = true;
   try {
     const result = await planWorkRepository.removeAttachment({ attachmentId, planId: runtime.kernel.profile.planId, expectedRevision: runtime.kernel.revision, section: "general", contextId: null, contextLabel: null, idempotencyKey: `attachment-remove-site-${crypto.randomUUID()}`, sourceSurface: "site" });
-    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; announce("Attachment removed."); }
+    if (result.ok) { checklistItems = result.checklist; planAttachments = result.attachments; clearChangeSummary(); announce("Attachment removed."); }
     else announce(result.message || "That attachment could not be removed.");
   } catch { announce("That attachment could not be removed."); }
   planWorkBusy = false;
@@ -5030,6 +5204,7 @@ const removeAttachment = async (attachmentId: string): Promise<void> => {
 
 const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
   if (planFactBusy) return;
+  let planFactsSaved = false;
   const facts = new Map(currentEditablePlanFacts().map((fact) => [fact.factId, fact]));
   const data = new FormData(form);
   const changes: PlanFactChange[] = [];
@@ -5051,13 +5226,16 @@ const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
     const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId: pending.planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
     if (applied.ok) {
       planFactDialogOpen = false;
+      planFactsSaved = true;
       planDisplayNames.set(runtime.kernel.profile.planId, projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel));
+      recordChangeSummary(planFactChangeSummary({ changes: pending.changes, currency: planCurrencyCode(), availableMinor: runtime.kernel.accepted.bufferMinor }));
       announce("Plan details updated.");
       await adapter?.refreshContextualTools();
     } else planFactError = Array.isArray(applied.issues) ? applied.issues.map(String).join(" ") : `Those values could not be saved: ${applied.code}`;
   }
   planFactBusy = false;
   await render();
+  if (planFactsSaved) revealChangeSummary();
 };
 
 const bindPlanFactCalculation = (): void => {
@@ -5093,6 +5271,7 @@ const savePlanRetrospective = async (form: HTMLFormElement): Promise<void> => {
   if (result.ok) {
     planRetrospective = result.retrospective;
     profileMemories = result.memories;
+    clearChangeSummary();
     announce("Lessons saved with this plan.");
   } else planLearningError = result.issues?.join(" ") || "Those lessons could not be saved.";
   planLearningBusy = false;
@@ -5118,6 +5297,7 @@ const addProfileMemory = async (form: HTMLFormElement): Promise<void> => {
   if (result.ok) {
     planRetrospective = result.retrospective;
     profileMemories = result.memories;
+    clearChangeSummary();
     announce("Saved for future plans.");
   } else planLearningError = result.issues?.join(" ") || "That memory could not be saved.";
   planLearningBusy = false;
@@ -5144,6 +5324,7 @@ const decideProfileMemory = async (form: HTMLFormElement, submitter: HTMLButtonE
   if (result.ok) {
     planRetrospective = result.retrospective;
     profileMemories = result.memories;
+    clearChangeSummary();
     announce(status === "accepted" ? "Saved for future plans." : "Finite will not use that suggestion.");
   } else planLearningError = result.issues?.join(" ") || "That choice could not be saved.";
   planLearningBusy = false;

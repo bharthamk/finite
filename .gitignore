@@ -5,3 +5,4 @@ dist-test/
 .dev.vars*
 .DS_Store
 *.log
+/submission/

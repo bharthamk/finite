@@ -19,7 +19,7 @@ test("arrival interpretation renders consumer language without raw JSON or inter
     outcome: { kind: "multi_stop_europe_trip", source: "human_order" },
   });
   assert.match(rendered, /What|Budget|Maximum/);
-  assert.match(rendered, /A\$10,000|\$10,000/);
+  assert.match(rendered, /AUD\s*10,000/);
   assert.match(rendered, /Oktoberfest/);
   assert.match(rendered, /From your original order/);
   assert.match(rendered, /Not supplied yet/);
@@ -198,6 +198,9 @@ test("a natural travel brief turns stated nights and base currency into real pla
   assert.equal(starter.overview.end, "2026-10-19");
   assert.equal(starter.overview.totalBudget, "2600");
   assert.equal(starter.overview.currency, "NZD");
+  const currencyRecords = starter.sections.flatMap((section) => section.items).filter((item) => item.fields.currency);
+  assert.ok(currencyRecords.length > 5);
+  assert.ok(currencyRecords.every((item) => item.fields.currency === "NZD"));
 });
 
 test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {
@@ -355,6 +358,20 @@ test("a Codex-first order exposes its populated rough plan immediately without a
   assert.equal(starter.family, "event");
   assert.ok(starter.sections.find((section) => section.sectionId === "schedule").items.length > 0);
   assert.ok(starter.sections.find((section) => section.sectionId === "tasks").items.length > 0);
+});
+
+test("a stated event headcount replaces the dinner template default", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_dinner_eight", version: 1, status: "waiting_for_codex", rawOutcome: "Plan a dinner party at home for eight friends on Saturday 17 October 2026.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
+    inputs: [], interpretation: null, lastOperatorCheckpoint: 0, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z", checksum: "8".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  const scope = starter.sections.find((section) => section.sectionId === "scope");
+  assert.deepEqual(scope.items.map((item) => item.fields.headcount), ["8", "8"]);
+  assert.match(scope.openQuestions[0].prompt, /all 8 people/);
+  const drinks = starter.sections.find((section) => section.sectionId === "resources").items.find((item) => item.itemId === "starter_drinks");
+  assert.equal(drinks.fields.cost, "");
+  assert.doesNotMatch(String(drinks.fields.notes), /AUD 0/);
 });
 
 test("a dinner handoff opens as a detailed editable draft with section questions and human answers", () => {

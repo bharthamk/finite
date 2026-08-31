@@ -9,6 +9,7 @@ class Statement {
   constructor(db, query) { this.db = db; this.query = query; this.values = []; }
   bind(...values) { this.values = values; return this; }
   async first() {
+    if (this.query.includes("FROM demo_sessions WHERE session_hash")) return this.db.demos.get(this.values[0]) ?? null;
     if (this.query.includes("FROM plan_heads")) return this.db.heads.get(`${this.values[0]}:${this.values[1]}`) ?? null;
     if (this.query.includes("FROM plan_retrospectives")) return this.db.retrospectives.get(`${this.values[0]}:${this.values[1]}`) ?? null;
     if (this.query.includes("FROM plan_learning_receipts")) return this.db.receipts.get(`${this.values[0]}:${this.values[1]}`) ?? null;
@@ -24,6 +25,7 @@ class Statement {
 
 class LearningDb {
   heads = new Map();
+  demos = new Map();
   retrospectives = new Map();
   memories = new Map();
   receipts = new Map();
@@ -67,6 +69,19 @@ const request = (path, method = "GET", body, extras = {}) => new Request(`https:
 });
 const seed = (db) => db.heads.set(`${scopeId}:${planId}`, { revision: 3, profile_id: "event" });
 
+const demoToken = "learning-demo-token";
+const demoSessionHash = await authSha256({ demoToken });
+const demoScopeId = `demo_${(await authSha256({ demoSessionHash })).slice(0, 32)}`;
+const demoRequest = (path, method = "GET", body) => new Request(`https://finite.example${path}`, {
+  method,
+  headers: { cookie: `finite_demo=${demoToken}`, ...(body ? { "content-type": "application/json", origin: "https://finite.example" } : {}) },
+  ...(body ? { body: JSON.stringify(body) } : {}),
+});
+const seedDemo = (db) => {
+  db.demos.set(demoSessionHash, { session_hash: demoSessionHash, scope_id: demoScopeId, created_at: "2026-08-31T00:00:00.000Z", expires_at: "2099-08-31T00:00:00.000Z" });
+  db.heads.set(`${demoScopeId}:${planId}`, { revision: 3, profile_id: "event" });
+};
+
 test("retrospectives and reusable memories require concise evidence-backed text", () => {
   assert.equal(validateRetrospective({ worked: "Cooking together was fun.", changed: "", nextTime: "" }).ok, true);
   assert.equal(validateRetrospective({ worked: "", changed: "", nextTime: "" }).ok, false);
@@ -102,6 +117,18 @@ test("a finished plan keeps its own lessons while Codex suggestions remain propo
   const loaded = await (await handlePlanLearningRequest(request(`/api/plan-learning?planId=${planId}`), db)).json();
   assert.equal(loaded.memories[0].status, "accepted");
   assert.equal(loaded.retrospective.worked, "Cooking together was the highlight.");
+});
+
+test("a temporary server demo keeps plan-specific reflections but cannot create reusable profile memory", async () => {
+  const db = new LearningDb(); seedDemo(db);
+  const retrospectiveInput = { planId, expectedRevision: 3, worked: "The short practice blocks worked.", changed: "The interview moved one hour later.", nextTime: "Leave the last evening flexible.", idempotencyKey: "learning-demo-retro-0001", sourceSurface: "site" };
+  const saved = await handlePlanLearningRequest(demoRequest("/api/plan-learning/retrospective", "PUT", retrospectiveInput), db);
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).code, "RETROSPECTIVE_SAVED");
+
+  const blocked = await handlePlanLearningRequest(demoRequest("/api/plan-learning/memories", "POST", { planId, expectedRevision: 3, kind: "working_pattern", statement: "Keep preparation blocks short.", evidence: "The temporary interview plan worked best in short blocks.", idempotencyKey: "learning-demo-memory-0001", sourceSurface: "site" }), db);
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).code, "ACCOUNT_LEARNING_REQUIRED");
 });
 
 test("learning writes fail closed on stale plans, cross-origin requests, and conflicting retries", async () => {

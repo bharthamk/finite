@@ -1,7 +1,7 @@
 # Finite product north star
 
 Status: governing product direction  
-Updated: 2026-08-26
+Updated: 2026-08-31
 
 ## The product
 
@@ -25,18 +25,17 @@ The public promise is:
 
 ## The operating model
 
-**Codex is the chef. The human owns and shapes the order.**
+**Codex can operate the plan. The human owns and shapes the outcome.**
 
-Most software gives the human appliances to operate and adds AI to make those
-appliances easier to use. Finite gives the agent a kitchen designed for its
-work, but the kitchen is not the product's only usable surface. The Site is a
-highly useful, customisable ordering surface: the human can always see the
-current menu and draft, make selections, add or correct requests, inspect the
-finite picture, and retain the only consequential approval. Codex develops and
-coheres the order when the human wants the meal cooked; it is not a gate to
-seeing or shaping what they already accepted.
+Most software gives the human a complex application to operate and adds AI to
+make those controls easier to use. Finite gives Codex a bounded operating
+surface while keeping the visible product fully useful to the person. The human
+can always see the current plan, make selections, add or correct requests,
+inspect the finite picture, and retain the only consequential approval. Codex
+develops and coheres the plan when asked; it is not a gate to seeing or shaping
+what the person already accepted.
 
-Arrival has two explicit paths: **Give Codex my plan** or **Build it myself**.
+Arrival has four explicit paths: **Start fresh**, **Use a template**, **Use Codex live**, or **Watch the live demo**. A person can always build the plan manually; Codex is help, not a gate.
 There is no separate interpretation-confirmation tollbooth. On the Codex path,
 Codex turns the supplied facts and source-labelled working assumptions into a
 populated rough plan. On the manual path, Finite opens the same complete
@@ -157,7 +156,7 @@ time model, actions, and decision presentation adapt to the outcome.
 1. The human states the desired outcome or reports that reality changed.
 2. The human chooses whether Codex should build the first rough plan or whether
    to open the complete manual workspace immediately.
-3. On the Codex path, Codex opens the verified kitchen, asks only for genuinely
+3. On the Codex path, Codex opens the verified plan surface, asks only for genuinely
    missing human judgments, and returns a populated editable rough plan without
    a separate brief-confirmation step.
 4. Codex may research current external reality; Finite admits it only as
@@ -189,7 +188,7 @@ authority.
 
 The moat is the complete agent-operable system, not any single calculation:
 
-1. a kitchen that exposes exact, composable, page-native capabilities to
+1. a page-scoped operating surface that exposes exact, composable capabilities to
    Codex;
 2. a deterministic control plane that lets a frontier model be clever without
    trusting it with arithmetic, state, or authority;
@@ -205,7 +204,7 @@ The moat is the complete agent-operable system, not any single calculation:
 The working product currently includes:
 
 - travel, renovation, and event plan families;
-- 43 stable and three context-specific WebMCP tools, including one canonical Codex-entry bootstrap;
+- seven stable native WebMCP tools with bounded route-specific semantic manifests, including one canonical Codex-entry bootstrap;
 - native Codex discovery and operation from the live Site;
 - bounded deterministic option search and simulation;
 - typed evidence, entities, constraints, preferences, actuals, and locks;
@@ -213,7 +212,9 @@ The working product currently includes:
   content-addressed receipts;
 - authenticated D1 tenancy and cross-device operator continuity;
 - durable asynchronous continuity between Site-first and Codex-first journeys;
-- official ChatGPT sign-in plus an isolated expiring demo path; and
+- official ChatGPT sign-in, an isolated expiring demo path, and browser-local Demo mode that prevents remote writes;
+- live/frozen sharing plus authenticated view, suggest and edit-draft invitations;
+- a Codex-operated, pausable guided walkthrough of the real visible product; and
 - three materially different adaptive human surfaces.
 
 ## Product boundaries
@@ -239,7 +240,8 @@ Do not describe or design Finite as:
 4. **Operating inversion:** the agent operates; the human consumes and judges.
 5. **Why WebMCP:** Codex works through the same live page and accepted state.
 6. **Trust:** deterministic rules, human approval, evidence, and receipts.
-7. **Invitation:** sign in for a private kitchen or enter an isolated demo.
+7. **Invitation:** continue with ChatGPT or enter an isolated demo.
 
-The kitchen metaphor explains the architecture. It should support the product,
-not replace concrete demonstrations of what the product does.
+Internal tool names may retain the original kitchen metaphor for protocol
+compatibility. Consumer copy should call the product Finite and explain the
+concrete plan capability directly.

@@ -96,6 +96,30 @@ test("guided handoff walks the real product without taking human input or author
   assert.match(handoff.prompt, /Pause after each step/);
 });
 
+test("current-plan guide adapts to canonical lifecycle state and remains read-only", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    guideCurrentPlan: true,
+    guidePlanSurface: true,
+    entryIntent: "continue_current",
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 7, snapshotHash: "c".repeat(64) },
+  });
+  assert.match(handoff.detail, /this exact plan/i);
+  assert.match(handoff.detail, /leave every plan value unchanged/i);
+  assert.match(handoff.prompt, /live, read-only walkthrough of this exact current plan/i);
+  assert.match(handoff.prompt, /https:\/\/finite\.example\/\?start=plan-guide-active&plan=1/i);
+  assert.match(handoff.prompt, /Adapt the route to the plan's current lifecycle/i);
+  assert.match(handoff.prompt, /Planning, Managing, or Wrap-up surface/i);
+  assert.match(handoff.prompt, /pauseForNext true/i);
+  assert.match(handoff.prompt, /GUIDE_WAITING_FOR_PERSON/);
+  assert.match(handoff.prompt, /GUIDE_PAUSED_FOR_QUESTION/);
+  assert.match(handoff.prompt, /leave plan data unchanged/i);
+  assert.doesNotMatch(handoff.prompt, /three-night Hobart trip/i);
+});
+
 test("live demo handoff runs a real template and waits for the person's Next click", () => {
   const handoff = createCodexHandoff({
     siteOrigin: "https://finite.example",
@@ -143,7 +167,7 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /structured details are visibly present but still unsubmitted/i);
   assert.match(handoff.prompt, /That’s enough to open a useful first plan\. Everything here can still be changed, and anything left blank can be added later\./i);
   assert.match(handoff.prompt, /The top bar keeps the essentials close: switch or create plans, share or invite people, hand work to Codex, see whether Codex view is on, and open the menu\. We’ll return to each when it matters\./i);
-  assert.match(handoff.prompt, /orienting the person without operating any header control/i);
+  assert.match(handoff.prompt, /useful orientation without turning into an exhaustive feature tour/i);
   assert.doesNotMatch(handoff.prompt, /four ordinary routes/i);
   assert.doesNotMatch(handoff.prompt, /route labelled 'Start fresh'/i);
   assert.match(handoff.prompt, /explicitly say next, proceed, keep going, continue, or equivalent in Codex/i);
@@ -171,19 +195,13 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.match(handoff.prompt, /This is your plan at a glance\. Dates, budget, remaining money, and open work stay visible here/i);
   assert.match(handoff.prompt, /section_headers target/i);
   assert.match(handoff.prompt, /Each section keeps one part of the plan together\. Its header shows what belongs there, how many items and open questions it contains, and whether Codex is currently working there\./i);
-  assert.match(handoff.prompt, /open the real Calendar section with its visible header/i);
+  assert.match(handoff.prompt, /open only the real Calendar section/i);
   assert.match(handoff.prompt, /priority target with sectionId itinerary and pauseForNext true/i);
-  assert.match(handoff.prompt, /Calendar keeps the plan’s dates, places and activities together\. Select any item to see or change its details; related stays and transport remain connected to the same working plan\./i);
-  assert.match(handoff.prompt, /open_questions target with pauseForNext true/i);
-  assert.match(handoff.prompt, /Anything Finite still needs is gathered here\. Answer on the page or in Codex, and the answer becomes part of the working plan while the question clears\./i);
-  assert.match(handoff.prompt, /close Calendar, open the real People & commitments section with its visible header/i);
-  assert.match(handoff.prompt, /priority target with sectionId people and pauseForNext true/i);
-  assert.match(handoff.prompt, /People & commitments keeps companions, hosts and fixed appointments tied to the dates or decisions they affect\. Dependencies stay visible instead of getting buried in notes\./i);
-  assert.match(handoff.prompt, /continue through stays, transport, money, requirements and tasks in their visible on-page order before entering Chapter three/i);
+  assert.match(handoff.prompt, /Calendar shows how dates, places and activities connect/i);
+  assert.match(handoff.prompt, /Do not tour every section/i);
+  assert.doesNotMatch(handoff.prompt, /priority target with sectionId people/i);
   assert.ok(handoff.prompt.indexOf("section_headers target") < handoff.prompt.indexOf("budget_editor target"));
   assert.ok(handoff.prompt.indexOf("sectionId itinerary") < handoff.prompt.indexOf("budget_editor target"));
-  assert.ok(handoff.prompt.indexOf("open_questions target") < handoff.prompt.indexOf("budget_editor target"));
-  assert.ok(handoff.prompt.indexOf("sectionId people") < handoff.prompt.indexOf("budget_editor target"));
   assert.match(handoff.prompt, /budget_editor target/i);
   assert.match(handoff.prompt, /budget_editor target with pauseForNext true/i);
   assert.match(handoff.prompt, /Budgets change\. Edit the total or base currency here, and Finite updates the rest of the plan around it\. Next I’ll change both so you can see that happen\./i);
@@ -214,6 +232,38 @@ test("live demo handoff runs a real template and waits for the person's Next cli
   assert.doesNotMatch(handoff.prompt, /return to the human only when their judgment/i);
 });
 
+test("spotlight demo proves the native change-to-authority-to-receipt loop", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    demoPlayback: true,
+    demoDepth: "spotlight",
+    entryIntent: "continue_current",
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.detail, /one real plan change/i);
+  assert.match(handoff.prompt, /start=spotlight-active&tour=spotlight&plan=1/);
+  assert.match(handoff.prompt, /real already-active 18-day Europe plan/i);
+  assert.match(handoff.prompt, /finite_record_change_event/i);
+  assert.match(handoff.prompt, /Add three nights in Paris/i);
+  assert.match(handoff.prompt, /costDeltaMinor = 66000/i);
+  assert.match(handoff.prompt, /evidenceRefs = \[evidence_current\]/i);
+  assert.match(handoff.prompt, /finite_compare_options/i);
+  assert.match(handoff.prompt, /Use this option/i);
+  assert.match(handoff.prompt, /Confirm and update plan/i);
+  assert.match(handoff.prompt, /Do not click either control/i);
+  assert.match(handoff.prompt, /human authority is present/i);
+  assert.match(handoff.prompt, /finite_apply_approved_option/i);
+  assert.match(handoff.prompt, /finite_get_effort_receipt/i);
+  assert.match(handoff.prompt, /exactly one product decision/i);
+  assert.equal(handoff.copiedPayload.entryIntent, "continue_current");
+  assert.equal(handoff.copiedPayload.expectedPlanId, "plan_travel_europe");
+  assert.doesNotMatch(handoff.prompt, /Run six prepared chapters/i);
+  assert.doesNotMatch(handoff.prompt, /synthetic rainy-day change/i);
+});
+
 test("basic demo stops after the editable plan appears", () => {
   const handoff = createCodexHandoff({
     siteOrigin: "https://finite.example",
@@ -228,6 +278,25 @@ test("basic demo stops after the editable plan appears", () => {
   assert.match(handoff.prompt, /Basics complete/i);
   assert.doesNotMatch(handoff.prompt, /synthetic rainy-day change/i);
   assert.doesNotMatch(handoff.prompt, /custom_weather_watch/i);
+});
+
+test("standard demo proves the product loop without touring every section", () => {
+  const handoff = createCodexHandoff({
+    siteOrigin: "https://finite.example",
+    inline: false,
+    guidedWalkthrough: true,
+    demoPlayback: true,
+    demoDepth: "standard",
+    order: null,
+    plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
+  });
+  assert.match(handoff.prompt, /useful orientation without turning into an exhaustive feature tour/i);
+  assert.match(handoff.prompt, /open only the real Calendar section/i);
+  assert.match(handoff.prompt, /continue directly to the budget change/i);
+  assert.match(handoff.prompt, /Do not tour every section/i);
+  assert.doesNotMatch(handoff.prompt, /continue through stays, transport, money, requirements and tasks/i);
+  assert.match(handoff.prompt, /Start managing/i);
+  assert.match(handoff.prompt, /rainy-day change/i);
 });
 
 test("complete demo adds safe custom and comparison capabilities", () => {

@@ -20,7 +20,7 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
   root.innerHTML = `<main class="entry-shell" id="main">
     <section class="entry-card entry-card--product" aria-labelledby="entry_title">
       <header class="entry-card__top"><a class="brand" href="#main" aria-label="Finite home"><img src="/finite-wordmark.png" width="98" height="30" alt=""></a></header>
-      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with Codex, or watch the product run itself.</p></div>
+      <div class="entry-intro"><p class="eyebrow">Adaptive planning</p><h1 id="entry_title">Plans that survive contact with reality.</h1><p class="entry-lede">See a live plan absorb one disruptive change, or begin with something you need to make happen.</p></div>
       <div class="entry-route-grid">
         <a class="entry-route entry-route--fresh" data-public-entry="fresh" href="${escapeHtml(signInRoute(signInPath, "/?start=fresh"))}">
           <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. Continue into your private workspace, with hints waiting if you want them.</p><em>Start with my plan →</em>
@@ -33,28 +33,42 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
           <span>03 / Use Codex live</span><strong>Build with Codex beside you.</strong><p>Codex runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use Codex live →</em>
         </button>
         <button type="button" class="entry-route entry-route--live-demo" data-public-entry="live-demo">
-          <span>04 / Watch live demo</span><strong>Let Codex run Finite for you.</strong><p>Watch a real template become a working plan. Press Next to continue, or pause anywhere and ask Codex about what you see.</p><em>Watch the live demo →</em>
+          <span>04 / Recommended · under 3 minutes</span><strong>See Finite adapt.</strong><p>Watch WebMCP model one real plan change, then choose what the plan becomes before Codex can apply it.</p><em>Run the live decision →</em>
         </button>
       </div>
-      <footer class="entry-boundary"><span>Same real product in every route.</span><p>Fresh plans use your ChatGPT identity. Examples and walkthroughs open in an isolated 24-hour workspace.</p></footer>
+      <p class="entry-route-status" data-public-entry-status role="status" hidden></p>
+      <footer class="entry-boundary"><div><span>Same real product in every route.</span><p>The Spotlight stays in this browser. Fresh plans use your ChatGPT identity; templates and longer tours open in an isolated 24-hour workspace.</p></div><button type="button" class="text-button" data-public-entry="full-demo">Explore the longer guided tour</button></footer>
     </section>
   </main>`;
 
   const openDemoRoute = async (button: HTMLButtonElement, route: string): Promise<void> => {
+    const status = root.querySelector<HTMLElement>("[data-public-entry-status]");
     root.querySelectorAll<HTMLButtonElement>("button[data-public-entry], button[data-public-example]").forEach((control) => { control.disabled = true; });
+    root.setAttribute("aria-busy", "true");
     button.dataset.loading = "true";
     announcer.textContent = "Opening Finite…";
-    const response = await fetch("/api/auth/demo", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    if (response.ok) {
-      location.assign(route);
-      return;
+    if (status) {
+      status.hidden = false;
+      status.textContent = "Opening an isolated Finite workspace…";
+    }
+    try {
+      const response = await fetch("/api/auth/demo", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      if (response.ok) {
+        location.assign(route);
+        return;
+      }
+    } catch {
+      // The visible retry state below is the product recovery path.
     }
     root.querySelectorAll<HTMLButtonElement>("button[data-public-entry], button[data-public-example]").forEach((control) => { control.disabled = false; });
+    root.setAttribute("aria-busy", "false");
     delete button.dataset.loading;
     announcer.textContent = "Finite could not open that workspace. Nothing was saved.";
+    if (status) status.textContent = "That isolated workspace could not be opened. Nothing was saved. Please try again.";
   };
 
   root.querySelector<HTMLButtonElement>("[data-public-entry='codex-live']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=codex-live"); });
-  root.querySelector<HTMLButtonElement>("[data-public-entry='live-demo']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=live-demo"); });
+  root.querySelector<HTMLButtonElement>("[data-public-entry='live-demo']")?.addEventListener("click", () => { location.assign("/?start=live-demo&tour=spotlight&plan=1"); });
+  root.querySelector<HTMLButtonElement>("[data-public-entry='full-demo']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=live-demo&tour=standard"); });
   root.querySelectorAll<HTMLButtonElement>("[data-public-example]").forEach((button) => button.addEventListener("click", () => { void openDemoRoute(button, `/?start=example&example=${encodeURIComponent(button.dataset.publicExample ?? "")}`); }));
 };

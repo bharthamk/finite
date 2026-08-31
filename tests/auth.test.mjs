@@ -160,7 +160,7 @@ test("signed-out visitors receive an official ChatGPT route and can create an is
   const resumedPayload = await resumed.json();
   assert.equal(resumedPayload.code, "DEMO_SESSION");
   assert.equal(resumedPayload.session.kind, "demo");
-  assert.equal(resumedPayload.session.displayName, "Demo diner");
+  assert.equal(resumedPayload.session.displayName, "Finite demo");
 
   const protectedRead = await handleAcceptedTruthRequest(new Request("https://finite.example/api/accepted-truth/plan?profileHash=hash", { headers: { cookie } }), db);
   assert.equal(protectedRead.status, 404);

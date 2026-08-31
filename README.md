@@ -1,8 +1,30 @@
 # Finite
 
-Finite is an adaptive planning system for plans that must survive change. It is the live replanning layer between human intent, external reality, and agent execution. Codex is the operator, WebMCP is the page-scoped connection, the deterministic kernel owns accepted truth, and the human receives the result and supplies the only consequential approval.
+**Plans that survive contact with reality.**
 
-The product is not a travel planner, budgeting dashboard, task manager, or chat wrapper. Money is one constrained resource inside a plan alongside time, capacity, sequence, commitments, preferences, and contingency. One finite-plan grammar compiles into materially different travel, renovation, and event surfaces while preserving the same state, constraint, revision, authority, persistence, and receipt laws.
+Finite is an adaptive planning product for the moment a real plan stops matching the world. A date moves, a cost changes, a person becomes unavailable, rain arrives, or a commitment becomes fixed. Finite keeps the whole outcome coherent instead of turning every change into a new chat, spreadsheet or disconnected task list.
+
+[Open the live product](https://finite.bharthamk.chatgpt.site)
+
+Start with an ordinary sentence. Finite turns it into a visible, editable planning surface with the dates, people, money, stages, questions and tasks that fit the outcome. Build manually, adapt a template, work with Codex, or watch Codex run a guided live demonstration.
+
+From there you can:
+
+- edit any part of the draft directly and see dependent views update together;
+- move deliberately from Planning into Managing, then attach real-world changes to the stage they affect;
+- publish a live or frozen view, or invite someone to view, suggest or edit draft work;
+- complete, pause, learn from and reopen a plan; and
+- turn on browser-local Demo mode so exploration never writes to the signed-in account.
+
+Travel, renovation and event plans use different human surfaces. Finite can also compose bounded workspaces for outcomes such as interview preparation or recurring practice. It is not one generic dashboard with renamed labels.
+
+## The WebMCP difference
+
+Finite uses WebMCP as a product capability, not a button-automation layer. The page is simultaneously the surface where a person sees and edits the plan and the page-scoped operating environment where Codex discovers bounded, typed actions against that same state.
+
+The document exposes seven stable native tools for its lifetime. Codex selects a route-specific semantic manifest rather than accumulating hundreds of registered controls. Large results stay in a short-lived content-addressed vault and can be read by exact JSON Pointer. Every state-changing operation is checked again against current revision, evidence and authority.
+
+Human confirmation creators are structurally absent from WebMCP. Codex may interpret, research, compare and prepare; Finite owns accepted state, arithmetic, constraints, persistence and receipts; the person owns consequential authority. There is no application-owned model or hidden agent backend.
 
 The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_STAR.md). The defining question is: **Reality changed. What should the plan become now?**
 
@@ -50,19 +72,27 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and every new account/demo starts empty. Automatic “first account wins” legacy adoption has been removed; any future legacy transfer must be an explicit audited owner operation.
 - Account-scoped browser persistence: snapshots, custom-plan catalog, construction work, activation receipts, and active selection are namespaced by a server-derived opaque scope, so two identities sharing one browser origin cannot see or initialize from one another's cache.
 - Durable custom-plan catalog truth: D1 persists the complete validated compiler definition, evidence bundle, activation lineage, and receipt needed to reconstruct a custom adaptive plan on a browser-empty device.
-- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private kitchen; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, complete D1 tenant data, uploaded R2 objects, and authority traces are purged on end or expiry through a retry-safe cleanup record.
+- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private workspace; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, complete D1 tenant data, uploaded R2 objects, and authority traces are purged on end or expiry through a retry-safe cleanup record.
 - Browser-local Demo mode: a visible settings switch moves Finite into an isolated local namespace, replaces remote repositories with browser-backed equivalents, disables sharing/invitations/uploads, and installs a same-origin API mutation guard so judging and product exploration cannot write into the signed-in account. Turning it off never uploads local work.
 - Authenticated plan invitations: an owner can separately publish a bounded read-only page or issue one-account, expiring, revocable access with server-enforced `view`, `suggest`, or `edit draft` capability. Collaborator contributions remain provisional; accepted truth, activation, access administration, and real-world action stay owner-only.
+- Any-plan guided orientation: “Guide me through this plan” gives Codex a lifecycle-aware walkthrough contract across the person’s current visible plan, with explicit Next, Pause/resume and in-context question gates. The copied route tells Codex to leave plan values unchanged; Finite’s ordinary mutation tools retain their existing authority checks.
+- Visible causal feedback: successful Planning and Managing edits reveal a “What changed” summary naming the saved result, connected consequence and important untouched boundary instead of making adaptation feel magical.
 - Recoverable D1/R2 plan work: uploads and file removals record a deterministic pending operation before object storage changes, then commit metadata and the idempotent user receipt in one D1 transaction. Retrying the same action finishes an interrupted cross-store operation without duplicate records or untracked objects.
 - Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
 - Five-minute exact-command human challenges now bind every accepted mutation—options, corrections, preference changes, lifecycle, group decisions, external-action truth, and plan activation—and are consumed in the same D1 transaction as the accepted commit.
 - Production responses carry a consistent CSP, opener/resource isolation, permissions policy, no-referrer, and MIME-sniffing protections; production source maps are not published.
 - Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first kitchen call from a copied handoff, and all human authority creators remain absent.
+- Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first Finite call from a copied handoff, and all human authority creators remain absent.
 - A responsive, keyboard-operable consumption surface with no mobile horizontal overflow. Every draggable plan record also has labelled earlier/later buttons, so ordering never depends on pointer drag.
 - Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations and a reconciled current-schema snapshot that makes clean generation a no-op; there is no backend model or application-owned agent.
 - Append-only, human-confirmed ledgers for named group decisions and real-world action status, so disagreement is not averaged away and researched/quoted/held/booked/paid/verified/cancelled cannot collapse into one fluent claim.
 - Executable chef-effort and dropped-response benchmarks covering exact retry after a durable commit response is lost.
+
+## Current local acceptance
+
+On 31 August 2026, sixteen complete visible journeys were exercised sequentially through the real local interface: natural-language, template and manual starts; draft editing and open questions; workspace customisation; activation; Managing tasks and references; current-plan guidance; sharing boundaries; browser-local Demo mode; guided-demo depth; finish, reflection and reopen; cross-plan isolation; and a rainy-day Timeline update.
+
+Defects found during those journeys were repaired and the affected paths repeated. The final local gate is 324/324 tests, a passing TypeScript and production Vite build, a passing client-chunk budget, and a clean `git diff --check`. The complete dated receipt is [`USER_JOURNEY_ACCEPTANCE_2026-08-31.md`](./USER_JOURNEY_ACCEPTANCE_2026-08-31.md). This is local candidate proof, not a claim that the hosted Site has been updated.
 
 ## Run
 
@@ -80,9 +110,9 @@ Local development binds an isolated D1 named `finite-local`;
 product. Production continues to use the Sites-managed `DB` binding from
 `.openai/hosting.json`.
 
-The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows `Codex kitchen connected`. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
+The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows that Codex is connected. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
 
-The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). Sign in with ChatGPT to open it.
+The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). Continue with ChatGPT or open the isolated 24-hour demo.
 
 ## Product transaction
 

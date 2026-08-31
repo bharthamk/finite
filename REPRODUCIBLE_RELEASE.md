@@ -1,6 +1,6 @@
 # Reproducible release contract
 
-Date: 2026-08-30
+Updated: 2026-08-31
 
 Finite can be rebuilt from a clean checkout without a Finite-owned backend
 agent, model key, or user database. The runtime boundary is Node 22.13 or newer,
@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The accepted v157 gate is 255/255 tests, a successful TypeScript check, a
+The current local gate is 325/325 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is
@@ -54,8 +54,10 @@ fixtures and are not credentials.
 The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
-records both the commit and archive SHA-256 before the owner-private deployment
-is promoted.
+records both the commit and archive SHA-256 before a deployment is promoted.
+The currently deployed product is release v234 from source
+`3e0922699cc0569d1ad47fcd38e784dd3a5b802b`; this local submission tranche has
+not been deployed.
 
 ## Authority still required
 

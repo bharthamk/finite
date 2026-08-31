@@ -1,12 +1,12 @@
 # Finite prize-engineering scorecard
 
-Date: 2026-08-27
+Updated: 2026-08-31
 
 This is an engineering control surface, not submission copy. It translates the current WebMCP challenge judging dimensions—WebMCP leverage, execution, potential impact, and creativity/ambition—into falsifiable Finite gates. The product is not ready because a document says it is ready; every closed gate needs code, an executable check, a live receipt, or a fresh-operator trial.
 
 ## Winning claim
 
-Finite makes the browser application an agent-native operating environment. The human states the outcome, consumes options, supplies preference and exact authority, and judges the result. Codex operates the kitchen. Deterministic code owns accepted truth, constraints, arithmetic, concurrency, persistence, evidence admission, authority challenges, and receipts.
+Finite makes the browser application an agent-native operating environment. The human states the outcome, sees and edits the live plan, supplies preference and exact authority, and judges the result. Codex operates that same visible plan. Deterministic code owns accepted truth, constraints, arithmetic, concurrency, persistence, evidence admission, authority challenges, and receipts.
 
 The WebMCP leverage is not button automation. A fresh Codex must be able to enter the same signed-in plan the human sees, orient without prior Finite knowledge, discover only the safe tools for the current route, operate across delays and surfaces, recover dropped responses, and stop at the smallest genuine human boundary.
 
@@ -30,11 +30,11 @@ The WebMCP leverage is not button automation. A fresh Codex must be able to ente
 | Route replacement | Trigger response survives old-host unregister cancellation; explicit routes supersede queued automatic refreshes | Legacy-cancellation suite; v54 native route transition | Closed live for current route |
 | Operator effort | Hash-verifiable discovery, first-action, semantic-read, boundary, refusal, cancellation, route, failure and mutation counters | v54 live receipt; v55 native endurance hash `099938df…` | Closed; per-family comparison is presentation evidence, not a safety gap |
 | Live native proof | Current bounded contract exercised by Codex across the three adaptive families | v55 native travel/renovation/event run plus deployed seven-tool/entry/validator receipt | Closed |
-| Portable judging access | Public live demo or supplied judge credentials | Current deployment is owner-private; isolated demo exists | Open |
+| Portable judging access | Working live URL plus supplied judge access instructions | Live Site and isolated 24-hour demo exist; final submission must include any required credentials and one exact test route | Open submission task |
 | Open-source release | Sanitized public repository with visible owner-selected license | No Git remote or license in this working tree | Blocked on explicit public-release authority |
 | Reproducible source | Clean build contract, data exclusions, dependency/license inventory, exact deployment provenance | `REPRODUCIBLE_RELEASE.md`; `THIRD_PARTY_LICENSES.md`; clean audit | Closed locally |
 
-Current regression baseline: **148/148 tests pass** after the fresh-eyes integrity tranche added account-scoped browser persistence and foreign-cache removal, durable custom-plan catalog reconstruction, exact arrival/head binding, generalized authority challenges, complete demo garbage collection, production response isolation, and coverage-instrumented fixed-dispatcher endurance.
+Current regression baseline: **325/325 tests pass** across the deterministic kernel, adaptive surfaces, WebMCP quality and recovery, accepted truth, arrival and construction continuity, local Demo mode, collaboration, sharing, lifecycle learning, causal change summaries and full operator journeys.
 
 ## Measured baseline and correction
 
@@ -63,15 +63,16 @@ Scores are deliberately conservative until live proof closes the local/live gap.
 
 | Dimension | Current | Prize target | What moves it |
 |---|---:|---:|---|
-| WebMCP leverage | 10/10 | 10/10 | Closed: adaptive semantic operation, fixed discovery, safe authority and live proof |
-| Execution | 9.3/10 | 9.5/10 | Finish sanitized release reproducibility and judge-access proof |
-| Potential impact | 8.8/10 | 9/10 | Turn the three native family receipts into concise judge-visible evidence during the later UI pass |
-| Creativity and ambition | 9.7/10 | 10/10 | Make the adaptive surface transformation visually undeniable during the later UI pass |
+| WebMCP leverage | 9.9/10 | 10/10 | The reusable any-plan guide and bounded same-page operation are closed locally; prove them cleanly in the final live build |
+| Execution | 9.5/10 | 10/10 | Close public repository, license, judge access and one rehearsed release identity |
+| Potential impact | 9.3/10 | 10/10 | Add observed first-user evidence and make the change-and-recover payoff immediate in the film |
+| Creativity and ambition | 9.8/10 | 10/10 | Make the question-aware same-page guide and causal adaptation visually undeniable in the final video |
 
 ## Highest-impact open queue
 
-1. Preserve owner/demo, delayed-edit, stale-handoff, same-revision drift, dropped response, and two-browser concurrency as executable automated demonstrations; do not mutate the owner's live plan merely to repeat proofs already closed against D1.
-2. Keep the human-facing surface functional but defer aesthetic and interaction finalization to the later joint UI pass.
+1. Select the project license and publish the sanitized repository before submission; the rules require both and the current local repository has neither a remote nor a project license.
+2. Record one under-three-minute product-first video from the accepted guided route, with audio and a clean final release identity.
+3. Supply exact judge access and testing instructions, then freeze the submitted repository and live build after the deadline.
 
 ## Sources governing this scorecard
 
