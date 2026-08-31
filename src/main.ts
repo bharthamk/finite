@@ -582,15 +582,18 @@ const guideView = async (request: FiniteGuideViewRequest) => {
   if (!followCodexEnabled) return { ok: false, code: "FOLLOW_CODEX_DISABLED", acceptedStateChanged: false, next: "Ask the person to enable guided highlighting inside Finite's Codex handoff. Codex must not move or highlight their screen without that permission." };
   if (demoPlaybackMode && demoPaused) return { ok: true, code: "GUIDE_PAUSED_FOR_QUESTION", acceptedStateChanged: false, pausedAt: lastDemoGuide, next: "The person paused the live demo. Make no product changes. Answer their Codex questions using pausedAt and canonical Finite state, then retry the intended guide call at a modest interval until they resume." };
   if (demoPlaybackMode && demoNextRequired && !demoNextAdvanced) return { ok: true, code: "GUIDE_WAITING_FOR_PERSON", acceptedStateChanged: false, waitingForNext: true, pausedAt: lastDemoGuide, next: "The live demo is paused at a visible Next button. If the person asks a question in Codex, answer it from pausedAt and canonical Finite state without changing the product. If they explicitly say next, proceed, keep going, continue, or equivalent in Codex, use the normal visible interface to click Next for them, then retry the intended finite_guide_view call. Otherwise keep waiting." };
+  const guideRequest: FiniteGuideViewRequest = demoPlaybackMode && request.target === "start_managing"
+    ? { ...request, surface: "current" }
+    : request;
   if (demoNextAdvanced) {
     demoNextRequired = false;
     demoNextAdvanced = false;
   }
-  if (request.target === "priority" && request.sectionId) {
-    activeCodexPrioritySectionId = request.sectionId;
-    scopedStorage.setItem("finite-plan.codex-priority-section", request.sectionId);
+  if (guideRequest.target === "priority" && guideRequest.sectionId) {
+    activeCodexPrioritySectionId = guideRequest.sectionId;
+    scopedStorage.setItem("finite-plan.codex-priority-section", guideRequest.sectionId);
   }
-  if (request.refresh) {
+  if (guideRequest.refresh) {
     arrivalResult = await arrivalRepository.open();
     await runtime.hydrateAcceptedTruth();
     await runtime.hydrateConstructionPacket();
@@ -599,24 +602,24 @@ const guideView = async (request: FiniteGuideViewRequest) => {
     await refreshPlanWork();
     await refreshPlanLearning();
   }
-  if (request.surface !== "current") {
-    const openingFreshCodexRun = codexLaunchMode !== null || (demoPlaybackMode && request.surface === "arrival");
+  if (guideRequest.surface !== "current") {
+    const openingFreshCodexRun = codexLaunchMode !== null || (demoPlaybackMode && guideRequest.surface === "arrival");
     if (codexLaunchMode) {
       codexLaunchMode = null;
       guidedWalkthroughAutoOpened = true;
     }
     entryGatewayOpen = false;
-    forceArrivalSurface = request.surface === "arrival";
+    forceArrivalSurface = guideRequest.surface === "arrival";
     newPlanDraftMode = openingFreshCodexRun;
     const target = new URL(location.href);
     target.searchParams.delete("kitchen");
     target.searchParams.delete("lab");
-    if (request.surface === "plan") target.searchParams.set("plan", "1");
+    if (guideRequest.surface === "plan") target.searchParams.set("plan", "1");
     else target.searchParams.delete("plan");
     if (guidedWalkthroughMode) target.searchParams.set("start", demoPlaybackMode ? "demo-active" : "guided-active");
     history.replaceState({}, "", target);
   }
-  return { ok: true, code: "VIEW_GUIDED", guide: request, acceptedStateChanged: false, next: "Keep working from canonical Finite state. Move the person's view again only when it materially helps them follow along." };
+  return { ok: true, code: "VIEW_GUIDED", guide: guideRequest, acceptedStateChanged: false, next: "Keep working from canonical Finite state. Move the person's view again only when it materially helps them follow along." };
 };
 const modelContext = document.modelContext;
 window.finitePlanCanary?.adapter?.dispose();

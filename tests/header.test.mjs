@@ -55,6 +55,12 @@ test("guided demos always use the isolated browser-local workspace", () => {
   assert.match(source, /Demo mode · Local only/);
 });
 
+test("the Start managing guide cannot reopen the blank first chapter", () => {
+  assert.match(source, /demoPlaybackMode && request\.target === "start_managing"/);
+  assert.match(source, /\{ \.\.\.request, surface: "current" \}/);
+  assert.match(handoffSource, /surface current and the start_managing target/);
+});
+
 test("public bootstrap routes do not preload the authenticated operator surface", () => {
   assert.match(entry, /if \(auth\.session\) \{[\s\S]*await import\("\.\/main\.js"\)/);
   assert.match(entry, /await import\("\.\/share-entry\.js"\)/);
@@ -526,9 +532,9 @@ test("the guided workspace keeps Codex state in section headers without a duplic
 });
 
 test("the live demo starts on the ordinary blank first form even when saved work exists", () => {
-  assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null \|\| \(demoPlaybackMode && request\.surface === "arrival"\);/);
+  assert.match(source, /const openingFreshCodexRun = codexLaunchMode !== null \|\| \(demoPlaybackMode && guideRequest\.surface === "arrival"\);/);
   assert.match(source, /entryGatewayOpen = false;/);
-  assert.match(source, /forceArrivalSurface = request\.surface === "arrival";/);
+  assert.match(source, /forceArrivalSurface = guideRequest\.surface === "arrival";/);
   assert.match(source, /newPlanDraftMode = openingFreshCodexRun;/);
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
   assert.match(source, /if \(!demoPlaybackMode\) void prepareArrivalPlanDraft\(arrivalResult\)/);
@@ -644,7 +650,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /scopedStorage\.getItem\("finite-plan\.follow-codex"\) === "true"/);
   assert.match(source, /FOLLOW_CODEX_DISABLED/);
   assert.match(source, /enable guided highlighting inside Finite's Codex handoff/);
-  assert.match(source, /request\.surface !== "current"/);
+  assert.match(source, /guideRequest\.surface !== "current"/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.match(source, /const guideTargetSelectors: Record<FiniteGuideTarget/);
   assert.match(source, /open_questions: \{ label: "the open questions", selectors: \["\.starter-module\[open\] \.starter-module__questions"\] \}/);
@@ -669,7 +675,7 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /workspace_customisation: \{ label: "workspace customisation", selectors: \["\[data-custom-workspace-dialog\]\[open\]", "\[data-action='open-custom-workspace'\]"\] \}/);
   assert.match(source, /start_managing: \{ label: "the Start managing boundary", selectors: \["\[data-action='progress-arrival-plan'\]"\] \}/);
   assert.match(source, /This relabels base-currency amounts; it does not convert them\./);
-  assert.match(source, /demoPlaybackMode && request\.surface === "arrival"/);
+  assert.match(source, /demoPlaybackMode && guideRequest\.surface === "arrival"/);
   assert.match(source, /element\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
   assert.match(source, /\$\{agenticName\(\)\} is showing \$\{descriptor\.label\}/);
   assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} view on/);
