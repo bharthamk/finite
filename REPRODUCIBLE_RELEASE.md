@@ -55,13 +55,20 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The currently deployed product is release v234 from source
-`3e0922699cc0569d1ad47fcd38e784dd3a5b802b`; this local submission tranche has
-not been deployed.
+The currently deployed product is release v236 from source
+`3e5fd8e48e45c78549e033550bf733285c3ae76e`, with release marker
+`hosted-release-marker-v236`, at `https://finite.bharthamk.chatgpt.site`.
+Release v235 was superseded during live acceptance after a previously used
+browser exposed stale browser-local demo scope. v236 consumes a one-use fresh
+Spotlight launch parameter, removes it from the stable URL, and then preserves
+the accepted plan across reload. Production acceptance covered signed-out HTTP,
+the returning-browser reset, native WebMCP change recording and legal option
+generation, visible human choice and confirmation, a revision-bound apply from
+revision 1 to 2, the visible receipt, and post-reload continuity.
 
 ## Authority still required
 
 This repository intentionally has no project license yet. Selecting a license,
 creating a public remote, changing Site access, or publishing judge credentials
-are owner release decisions. Reproducibility is ready; public release is not
-silently implied.
+remain owner release decisions. The public Site deployment does not imply any
+of those separate submission or repository decisions.
