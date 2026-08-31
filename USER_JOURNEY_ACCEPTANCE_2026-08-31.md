@@ -22,7 +22,7 @@ This ledger records sequential use of the real local Finite interface at `http:/
 | 14 | Finish, reflect, and reopen | Pass after repair | Finished the interview plan, saved three plan-local lessons, saw reusable memory remain sign-in-only, reopened through explicit review and confirmation, and returned to Managing at revision 3 with tasks, references, and custom sections intact. Temporary demos may now save their own retrospective without gaining reusable profile-memory writes. |
 | 15 | Switch plans without state leakage | Pass | Switched from interview to Hobart and back. Interview task, Jira reference, and Practice log were absent from Hobart and present again on return; Hobart tasks did not leak into interview. |
 | 16 | Record a real-world weather update in its natural section | Pass after repair | Added a rainy-day Timeline update to Hobart, received a bounded change summary, reloaded, opened Timeline, and found the saved update. Timeline summaries now show `Calendar · 1 update · 2 sections` instead of incorrectly claiming only one section. |
-| 17 | Run the under-three-minute WebMCP Spotlight from a clean browser | Pass after repair | A cookie-free in-app Browser and clean Chrome both opened the active Europe plan. Native WebMCP recorded one sourced Paris change, produced three legal routes, stopped at visible human choice and confirmation, applied only the approved option, advanced revision 1 to 2, and showed the plan-update receipt. The trial exposed and repaired missing evidence, collapsed Decisions and approval panels, and a stale receipt guide target. |
+| 17 | Run the under-three-minute WebMCP Spotlight from a clean or previously used browser | Pass after repair | Chrome and an in-app Browser with older local Finite history both opened a newly isolated active Europe plan. Native WebMCP recorded one sourced Paris change, produced three legal routes, stopped at visible human choice and confirmation, applied only the approved option, advanced revision 1 to 2, and showed the plan-update receipt. The trial exposed and repaired shared-cookie dependence, stale browser-local scope inheritance, missing evidence, collapsed Decisions and approval panels, and a stale receipt guide target. |
 
 ## Repairs earned by the journeys
 
@@ -36,7 +36,7 @@ This ledger records sequential use of the real local Finite interface at `http:/
 - The finished-plan UI explains that boundary and does not offer a control that will be refused.
 - Saved-section summaries count unheaded plain-language updates as well as structured headings.
 - Local submission instructions no longer imply that collaboration roles can be tested from temporary or browser-local demo storage.
-- The recommended Spotlight route is browser-local and cookie-free, so a judge may choose either supported browser after copying the Codex setup.
+- The recommended Spotlight route is browser-local and cookie-free, and its one-use `fresh` handoff creates a new local scope before removing that reset marker from the stable URL. A judge may therefore choose either supported browser even when it contains older Finite demo history.
 - Spotlight includes its registered synthetic evidence, opens Decisions when options arrive, opens Exact approval after a choice, and guides the final plan-update receipt.
 
 ## Definition of done

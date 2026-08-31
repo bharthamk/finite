@@ -53,7 +53,7 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
     ? `${siteOrigin}/?start=plan-guide-active${context.guidePlanSurface === true ? "&plan=1" : ""}`
     : demoPlayback
       ? demoDepth === "spotlight"
-        ? `${siteOrigin}/?start=spotlight-active&tour=spotlight&plan=1`
+        ? `${siteOrigin}/?start=spotlight-active&tour=spotlight&plan=1&fresh=1`
         : `${siteOrigin}/?start=demo-active&tour=${demoDepth}`
       : siteOrigin;
   const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");

@@ -403,8 +403,15 @@ updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
 const startupQuery = new URLSearchParams(location.search);
 const startupStartMode = startupQuery.get("start");
-const freshSpotlightLaunch = startupStartMode === "live-demo" && startupQuery.get("tour") === "spotlight";
+const freshSpotlightLaunch = startupQuery.get("tour") === "spotlight" && (
+  startupStartMode === "live-demo" || (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1")
+);
 if (freshSpotlightLaunch) localStorage.removeItem(localDemoInstallationKey);
+if (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1") {
+  const stableSpotlightUrl = new URL(location.href);
+  stableSpotlightUrl.searchParams.delete("fresh");
+  history.replaceState(null, "", `${stableSpotlightUrl.pathname}${stableSpotlightUrl.search}${stableSpotlightUrl.hash}`);
+}
 const guidedDemoLocalMode = startupStartMode === "live-demo" || startupStartMode === "demo-active" || startupStartMode === "spotlight-active";
 const localDemoMode = guidedDemoLocalMode || localDemoModeEnabled(localStorage);
 const localDemoScope = localDemoStorageScope(localStorage);

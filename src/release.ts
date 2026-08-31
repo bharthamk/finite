@@ -1,3 +1,3 @@
 export const finiteRelease = {
-  build: "hosted-release-marker-v235",
+  build: "hosted-release-marker-v236",
 } as const;

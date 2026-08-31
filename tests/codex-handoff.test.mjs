@@ -244,7 +244,7 @@ test("spotlight demo proves the native change-to-authority-to-receipt loop", () 
     plan: { planId: "plan_travel_europe", profileId: "travel", profileHash: "b".repeat(64), revision: 1, snapshotHash: null },
   });
   assert.match(handoff.detail, /one real plan change/i);
-  assert.match(handoff.prompt, /start=spotlight-active&tour=spotlight&plan=1/);
+  assert.match(handoff.prompt, /start=spotlight-active&tour=spotlight&plan=1&fresh=1/);
   assert.match(handoff.prompt, /real already-active 18-day Europe plan/i);
   assert.match(handoff.prompt, /finite_record_change_event/i);
   assert.match(handoff.prompt, /Add three nights in Paris/i);

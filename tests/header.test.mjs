@@ -49,8 +49,10 @@ test("structured rough plans collect changes in their natural sections instead o
 });
 
 test("guided demos always use the isolated browser-local workspace", () => {
-  assert.match(source, /const freshSpotlightLaunch = startupStartMode === "live-demo" && startupQuery\.get\("tour"\) === "spotlight"/);
+  assert.match(source, /const freshSpotlightLaunch = startupQuery\.get\("tour"\) === "spotlight"/);
+  assert.match(source, /startupStartMode === "spotlight-active" && startupQuery\.get\("fresh"\) === "1"/);
   assert.match(source, /if \(freshSpotlightLaunch\) localStorage\.removeItem\(localDemoInstallationKey\)/);
+  assert.match(source, /stableSpotlightUrl\.searchParams\.delete\("fresh"\)/);
   assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active" \|\| startupStartMode === "spotlight-active"/);
   assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
   assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
