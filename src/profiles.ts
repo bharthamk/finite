@@ -208,7 +208,7 @@ const unsafeSurfaceText = (value: string): boolean => /<\/?(?:script|style|ifram
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const safeBoundedText = (value: unknown, max = 200): value is string => typeof value === "string" && Boolean(value.trim()) && value.length <= max && !unsafeSurfaceText(value);
 const boundedId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9_-]{2,63}$/.test(value);
-const topLevelKeys = new Set(["schemaVersion", "profileId", "planId", "name", "accepted", "locks", "preferenceLabels", "preferenceWeights", "actuals", "entities", "relationships", "moves", "searchPolicy", "evidencePolicy", "contextualCapabilities", "planningDimensions", "surface"]);
+const topLevelKeys = new Set(["schemaVersion", "profileId", "planId", "name", "currencyCode", "accepted", "locks", "preferenceLabels", "preferenceWeights", "actuals", "entities", "relationships", "moves", "searchPolicy", "evidencePolicy", "contextualCapabilities", "planningDimensions", "surface"]);
 
 export class ProfileValidationError extends Error {
   constructor(readonly issues: string[]) {
@@ -243,6 +243,7 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   if (profile.schemaVersion !== "finite-plan-profile.v1") issues.push("unsupported schemaVersion");
   if (!boundedId(profile.planId)) issues.push("planId must be a lowercase bounded identifier");
   if (!safeBoundedText(profile.name, 120)) issues.push("name must be safe text up to 120 characters");
+  if (profile.currencyCode !== undefined && !/^[A-Z]{3}$/.test(profile.currencyCode)) issues.push("currencyCode must be a three-letter uppercase code");
   if (profile.locks.length > 30 || profile.locks.some((lock) => !boundedId(lock))) issues.push("locks must contain at most 30 bounded identifiers");
   if (new Set(profile.locks).size !== profile.locks.length) issues.push("locks must be unique");
   if (profile.preferenceLabels.length > 20 || profile.preferenceLabels.some((label) => !boundedId(label))) issues.push("preferenceLabels must contain at most 20 bounded identifiers");

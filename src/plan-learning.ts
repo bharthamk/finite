@@ -130,7 +130,7 @@ export class BrowserPlanLearningRepository implements PlanLearningRepository {
     const state = this.read(); const validation = validateProfileMemory(input); if (!validation.ok) return { ...this.result("PROFILE_MEMORY_INVALID", state), ok: false, issues: validation.issues };
     const now = this.now().toISOString(); const memory: ProfileMemory = { memoryId: `memory_${crypto.randomUUID().replaceAll("-", "")}`, family: String(input.family ?? "general"), ...validation.value, sourcePlanId: String(input.sourcePlanId ?? input.planId ?? "local_demo"), sourceSurface: input.sourceSurface === "codex" ? "codex" : "site", status: immediate ? "accepted" : "proposed", createdAt: now, updatedAt: now, decidedAt: immediate ? now : null }; state.memories.push(memory); this.write(state); return this.result("PROFILE_MEMORY_ADDED_LOCAL", state, null, memory);
   }
-  addMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.add(input, false); }
+  addMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.add(input, input.sourceSurface === "site"); }
   addProfileMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.add({ ...input, evidence: String(input.evidence ?? "Added directly in local Demo mode.") }, true); }
   async decideMemory(input: Record<string, unknown>): Promise<PlanLearningResult> { return this.changeProfileMemory(input); }
   async changeProfileMemory(input: Record<string, unknown>): Promise<PlanLearningResult> {

@@ -38,7 +38,7 @@ import type {
   ToolResult,
 } from "./types.js";
 import { PlanSnapshotStore } from "./persistence.js";
-import { currencyContract, externalActionStatuses, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
+import { currencyContractFor, externalActionStatuses, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
 import { editablePlanFacts, PlanFactValidationError, projectPlanFactChanges, type PlanFactChange, type PlanFactProjection } from "./plan-facts.js";
 
 interface PendingCorrection {
@@ -534,6 +534,7 @@ export class FinitePlanKernel {
   }
 
   getCapabilities(): ToolResult {
+    const currency = currencyContractFor(this.profile.currencyCode);
     return {
       ok: true,
       code: "CAPABILITIES",
@@ -550,7 +551,7 @@ export class FinitePlanKernel {
       evidenceAdmission: { trustAssigned: "untrusted_external", contentExecuted: false, deduplication: "sha256_content", recordBinding: "sha256_provenance", acceptedPersistence: "referenced_evidence_only" },
       decisionLifecycle: ["record_change", "search_or_simulate", "stage", "human_approval", "apply", "receipt"],
       planLifecycle: { status: this.lifecycleStatus, transitions: ["active", "paused", "completed", "abandoned"], humanConfirmationRequired: true },
-      currency: currencyContract,
+      currency,
       externalActionLaw: { statuses: externalActionStatuses, planningDoesNotEqualExecution: true, humanAttestationRequiredFor: ["booked", "paid", "verified", "cancelled"] },
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
@@ -565,7 +566,7 @@ export class FinitePlanKernel {
   getState(selectors: StateSelector[] = ["identity", "allocations", "constraints", "pending"]): ToolResult {
     const unique = [...new Set(selectors)];
     const state: Record<string, unknown> = {};
-    if (unique.includes("identity")) state.identity = { planId: this.profile.planId, name: this.profile.name, profileId: this.profile.profileId, profileHash: this.profile.profileHash, revision: this.revision, currency: currencyContract };
+    if (unique.includes("identity")) state.identity = { planId: this.profile.planId, name: this.profile.name, profileId: this.profile.profileId, profileHash: this.profile.profileHash, revision: this.revision, currency: currencyContractFor(this.profile.currencyCode) };
     if (unique.includes("lifecycle")) state.lifecycle = { status: this.lifecycleStatus, history: clone(this.lifecycleEvents), pending: clone(this.pendingLifecycleChange) };
     if (unique.includes("allocations")) state.allocations = clone(this.accepted);
     if (unique.includes("actuals")) state.actuals = this.currentActuals();

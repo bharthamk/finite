@@ -41,6 +41,7 @@ const starter = {
 test("a complete editable workspace becomes one compiler-valid adaptive plan without Codex authority", async () => {
   const progression = arrivalProgressionFromStarter(order, starter);
   assert.equal(progression.intake.profileId, "event");
+  assert.equal(progression.intake.currencyCode, "AUD");
   assert.equal(progression.intake.allocation.totalBudgetMinor, 50_000);
   assert.equal(progression.intake.allocation.forecastMinor, 50_000);
   assert.equal(progression.intake.allocation.bufferMinor, 0);
@@ -59,7 +60,25 @@ test("a complete editable workspace becomes one compiler-valid adaptive plan wit
   const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
   assert.equal(staged.code, "PLAN_DRAFT_STAGED_FROM_INTAKE", JSON.stringify(staged));
   assert.equal(staged.draft.profile.name, "Saturday dinner for ten");
+  assert.equal(staged.draft.profile.currencyCode, "AUD");
   assert.equal(runtime.kernel.profile.planId, "plan_travel_europe");
+});
+
+test("the editable base currency becomes the immutable managed-plan currency", async () => {
+  const candidate = structuredClone(starter);
+  candidate.family = "travel";
+  candidate.familyLabel = "Travel";
+  candidate.overview.currency = "NZD";
+  candidate.overview.start = "2026-10-16";
+  candidate.overview.end = "2026-10-19";
+  const progression = arrivalProgressionFromStarter({ ...order, orderId: "arrival_nzd_progress_01" }, candidate);
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const assessed = await runtime.assessPlanIntake(progression.intake);
+  const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
+  assert.equal(staged.draft.profile.currencyCode, "NZD");
+  assert.equal(staged.draft.profile.entities.trip_days.values.days, 4);
 });
 
 test("manual progression compiles every built-in planning family", async () => {

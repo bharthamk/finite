@@ -689,6 +689,7 @@ export class FinitePlanRuntime {
     else if (this.plans.has(facts.planId!)) conflict("planId", "PLAN_ID_ALREADY_EXISTS", "Use a new plan id, or derive an immutable amendment blueprint from the active version.");
     if (!boundedText(facts.name, 120)) ask("name", "PLAN_NAME_REQUIRED", "What should the human call this plan?");
     if (!boundedText(facts.brief, 500)) ask("brief", "OUTCOME_BRIEF_REQUIRED", "What useful outcome is the human ordering, in one bounded sentence?");
+    if (facts.currencyCode !== undefined && !/^[A-Z]{3}$/.test(facts.currencyCode)) conflict("currencyCode", "CURRENCY_CODE_INVALID", "Use one uppercase three-letter base-currency code.");
 
     const dimensionStates = new Set(["not_applicable", "unknown", "zero", "positive"]);
     const suppliedDimensions = facts.planningDimensions ?? {};
@@ -880,6 +881,7 @@ export class FinitePlanRuntime {
       ...clone(template),
       planId: facts.planId!,
       name: facts.name!,
+      currencyCode: facts.currencyCode ?? template.currencyCode ?? "AUD",
       accepted: clone(facts.allocation as ProfileDefinition["accepted"]),
       actuals: clone(facts.actuals ?? []),
       locks: clone(facts.locks ?? []),

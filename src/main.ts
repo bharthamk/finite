@@ -1172,8 +1172,9 @@ const violationMessage = (code: string): string => ({
   INSUFFICIENT_CAPACITY: "The current plan does not have enough room for this combination.",
 }[code] ?? "This option conflicts with one of the plan's current boundaries.");
 
+const planCurrencyCode = (): string => runtime.kernel.profile.currencyCode ?? "AUD";
 const money = (minor: number): string => new Intl.NumberFormat("en-AU", {
-  style: "currency", currency: "AUD", maximumFractionDigits: 0,
+  style: "currency", currency: planCurrencyCode(), currencyDisplay: "code", maximumFractionDigits: 0,
 }).format(minor / 100);
 
 const announce = (value: string): void => {
@@ -1892,7 +1893,11 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
   const scheduleCount = starter.family === "travel" ? scheduleSection?.items.filter((item) => String(item.fields.kind || "location") === "location").length ?? 0 : scheduleSection?.items.length ?? 0;
   const timingDetail = overview.includeTime
     ? `${overview.startTime || "Start open"}${overview.endTime ? ` – ${overview.endTime}` : ""}${overview.timeZone ? ` · ${overview.timeZone}` : ""}`
-    : overview.singleDay ? "Single-day plan" : `${scheduleCount} ${starter.family === "travel" ? "stops" : starter.family === "general" ? "scheduled items" : "stages"}`;
+    : overview.singleDay ? "Single-day plan" : starter.family === "travel"
+      ? `${scheduleCount} ${scheduleCount === 1 ? "stop" : "stops"}`
+      : starter.family === "general"
+        ? `${scheduleCount} ${scheduleCount === 1 ? "scheduled item" : "scheduled items"}`
+        : `${scheduleCount} ${scheduleCount === 1 ? "stage" : "stages"}`;
   const splitDetail = overview.categories.slice(0, 2).map((item) => {
     const amount = starterAmount(item.fields.amount);
     const percentage = limit > 0 ? (amount / limit) * 100 : 0;
@@ -3644,7 +3649,7 @@ const renderPlanInputDialog = (): string => {
 const currentEditablePlanFacts = (): EditablePlanFact[] => editablePlanFacts(runtime.kernel.profile, runtime.kernel.accepted, runtime.kernel.entities);
 
 const formatPlanFactValue = (fact: EditablePlanFact): string => fact.format === "money" ? money(fact.value)
-  : fact.format === "days" ? `${fact.value} days`
+  : fact.format === "days" ? `${fact.value} ${fact.value === 1 ? "day" : "days"}`
     : String(fact.value);
 
 const renderPlanFactDialog = (): string => {
@@ -3658,7 +3663,7 @@ const renderPlanFactDialog = (): string => {
         const value = moneyFact ? fact.value / 100 : fact.value;
         const minimum = moneyFact ? fact.minimum / 100 : fact.minimum;
         const maximum = fact.maximum === null ? "" : String(moneyFact ? fact.maximum / 100 : fact.maximum);
-        return `<label><span>${escapeHtml(fact.label)}</span><div class="plan-fact-input">${moneyFact ? `<span aria-hidden="true">$</span>` : ""}<input type="number" inputmode="${moneyFact ? "decimal" : "numeric"}" name="${escapeHtml(fact.factId)}" value="${escapeHtml(value)}" min="${escapeHtml(minimum)}" ${maximum ? `max="${escapeHtml(maximum)}"` : ""} step="${moneyFact ? "0.01" : escapeHtml(fact.step)}" required></div></label>`;
+        return `<label><span>${escapeHtml(fact.label)}</span><div class="plan-fact-input">${moneyFact ? `<span aria-hidden="true">${escapeHtml(planCurrencyCode())}</span>` : ""}<input type="number" inputmode="${moneyFact ? "decimal" : "numeric"}" name="${escapeHtml(fact.factId)}" value="${escapeHtml(value)}" min="${escapeHtml(minimum)}" ${maximum ? `max="${escapeHtml(maximum)}"` : ""} step="${moneyFact ? "0.01" : escapeHtml(fact.step)}" required></div></label>`;
       }).join("")}</div>
       <div class="plan-fact-dialog__calculation"><span>Available after assigned costs</span><output data-plan-fact-available>${money(runtime.kernel.accepted.bufferMinor)}</output></div>
       ${planFactError ? `<p class="plan-input-dialog__error" role="alert">${escapeHtml(planFactError)}</p>` : ""}
@@ -3770,11 +3775,15 @@ const renderLifecycleControl = (): string => {
   </details>`;
 };
 
-const renderPlanStatusDialog = (): string => runtime.kernel.lifecycleStatus !== "active" ? "" : `<dialog class="plan-status-dialog" data-plan-status-dialog aria-labelledby="plan_status_dialog_title">
+const renderPlanStatusDialog = (): string => {
+  if (runtime.kernel.lifecycleStatus !== "active") return "";
+  const openItems = secondaryPlanDataReady ? checklistItems.filter((item) => item.status !== "done").length : 0;
+  return `<dialog class="plan-status-dialog" data-plan-status-dialog aria-labelledby="plan_status_dialog_title">
   <button type="button" class="dialog-close" data-action="close-plan-status" aria-label="Close plan status">×</button>
   <header><p class="eyebrow">Plan status</p><h2 id="plan_status_dialog_title">Finish or pause this plan</h2><p>You are currently in <strong>Managing</strong>. Finite only moves to the finished summary after you finish the plan here.</p></header>
   <form class="plan-finish__form" data-plan-lifecycle data-plan-complete>
     <input type="hidden" name="status" value="completed">
+    ${openItems ? `<p class="quiet"><strong>${openItems} ${openItems === 1 ? "item is" : "items are"} still open.</strong> You can finish if the real outcome happened; the summary will keep them visible.</p>` : ""}
     <label><span>Closing note <small>optional</small></span><textarea name="reason" maxlength="1000" placeholder="What happened?"></textarea></label>
     <button class="button button--finish" type="submit" ${busy ? "disabled" : ""}>Finish plan and open summary</button>
   </form>
@@ -3787,6 +3796,7 @@ const renderPlanStatusDialog = (): string => runtime.kernel.lifecycleStatus !== 
     </form>
   </details>
 </dialog>`;
+};
 
 const renderHumanRealityControl = (): string => {
   const kernel = runtime.kernel;
@@ -3935,7 +3945,12 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     body = `<div class="pressure-copy"><strong>${money(kernel.accepted.bufferMinor)}</strong><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} remains · ${percentage}% of the finite total</span></div><div class="pressure-track" role="meter" aria-label="Remaining buffer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}"><span style="width:${percentage}%"></span></div>`;
   } else if (["timeline_lane", "phase_lane", "run_of_show"].includes(zone.component)) body = renderStages(manifest, zone.component);
   else if (zone.component === "commitment_stack") body = `<div class="truth-list"><div><span>Spent and evidenced</span><strong>${money(kernel.accepted.spentMinor)}</strong></div><div><span>Already committed</span><strong>${money(kernel.accepted.committedMinor)}</strong></div><div><span>Protected locks</span><strong>${kernel.profile.locks.length}</strong></div></div>`;
-  else if (zone.component === "actual_forecast") body = `<div class="actual-list">${(actualsState.actuals ?? []).map((actual) => `<div><span>${escapeHtml(actual.label)}</span><strong>${money(actual.currentAmountMinor)}</strong></div>`).join("")}</div>`;
+  else if (zone.component === "actual_forecast") {
+    const actuals = actualsState.actuals ?? [];
+    body = actuals.length
+      ? `<div class="actual-list">${actuals.map((actual) => `<div><span>${escapeHtml(actual.label)}</span><strong>${money(actual.currentAmountMinor)}</strong></div>`).join("")}</div>`
+      : `<div class="zone-empty"><strong>No actual spending recorded yet.</strong><p>Forecast amounts remain in Plan details. Add actual spend when real costs are known.</p></div>`;
+  }
   else if (zone.component === "constraint_panel") body = `<div class="lock-list">${kernel.profile.locks.map((lock) => `<span><b aria-hidden="true">×</b>${escapeHtml(lock.replaceAll("_", " "))}</span>`).join("")}</div><p class="preference-line">Preference signal: ${kernel.profile.preferenceLabels.map((label) => escapeHtml(label.replaceAll("_", " "))).join(" · ")}</p>`;
   else if (zone.component === "change_tray") body = latestEvent ? `<p class="change-title">${escapeHtml(latestEvent.title)}</p><div class="change-numbers"><span>${latestEvent.costDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(latestEvent.costDeltaMinor))}</span><span>${latestEvent.daysDelta >= 0 ? "+" : ""}${latestEvent.daysDelta} days</span></div>` : `<p class="quiet">No active disruption.</p>`;
   else if (zone.component === "option_compare") body = renderOptions();
@@ -4028,7 +4043,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
     <main id="main" class="wrap-up-main">
       <header class="wrap-up-hero">
         <div class="wrap-up-hero__status"><p class="eyebrow">Finished</p><span>Completed</span></div>
-        <div class="wrap-up-hero__copy"><h1>${escapeHtml(manifest.title)}</h1><p>${escapeHtml(manifest.brief)}</p></div>
+        <div class="wrap-up-hero__copy"><h1>${escapeHtml(manifest.title)}</h1><span>Original goal</span><p>${escapeHtml(manifest.brief)}</p></div>
         <blockquote><span>What happened</span><p>${escapeHtml(completion?.reason ?? "The planned outcome happened.")}</p>${completion?.occurredAt ? `<small>Completed ${escapeHtml(new Date(completion.occurredAt).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }))}</small>` : ""}</blockquote>
       </header>
 
@@ -4057,7 +4072,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
       </details>
 
       <details class="wrap-up-section" aria-labelledby="wrap_journey_title">
-        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Plan journey</p><h2 id="wrap_journey_title">How it came together</h2></div><span>${manifest.stages.length} stages</span></summary>
+        <summary class="wrap-up-section__summary"><div><p class="eyebrow">Plan journey</p><h2 id="wrap_journey_title">How it came together</h2></div><span>${manifest.stages.length} ${manifest.stages.length === 1 ? "stage" : "stages"}</span></summary>
         <ol class="wrap-up-journey">${manifest.stages.map((stage, index) => {
           const checklist = checklistForStage(stage.stageId);
           const stageInputs = directInputs.filter((item) => item.section === "timeline" && item.contextId === stage.stageId);
@@ -4075,7 +4090,7 @@ const renderWrapUpSurface = (manifest: SurfaceManifest): string => {
 
       ${renderPlanLessons()}
 
-      ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share" data-share-context="plan">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><form class="wrap-up-actual-form" data-plan-lifecycle data-record-actual><input type="hidden" name="status" value="completed"><label><span>${recordedActual ? "Change actual spend" : "Record actual spend"}</span><div class="plan-fact-input"><span aria-hidden="true">$</span><input name="actualSpend" type="number" inputmode="decimal" min="0" step="0.01" ${recordedActual?.actualSpendMinor !== undefined && recordedActual.actualSpendMinor !== null ? `value="${recordedActual.actualSpendMinor / 100}"` : ""} required></div></label><input type="hidden" name="reason" value="Actual spend recorded after completion."><button class="button button--secondary" type="submit">Save actual</button></form><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
+      ${pendingLifecycle ? renderLifecycleControl() : `<section class="wrap-up-next" id="plan_status" aria-labelledby="wrap_next_title"><div><p class="eyebrow">Keep going</p><h2 id="wrap_next_title">What would you like to do next?</h2><p>Share a read-only summary, begin something new, or reopen this plan if the outcome needs more work.</p></div><div class="wrap-up-next__actions"><button class="button" type="button" data-action="open-plan-share" data-share-context="plan">Share this summary</button><button class="button button--secondary" type="button" data-action="start-new-plan">Start another plan</button></div><form class="wrap-up-actual-form" data-plan-lifecycle data-record-actual><input type="hidden" name="status" value="completed"><label><span>${recordedActual ? "Change actual spend" : "Record actual spend"}</span><div class="plan-fact-input"><span aria-hidden="true">${escapeHtml(planCurrencyCode())}</span><input name="actualSpend" type="number" inputmode="decimal" min="0" step="0.01" ${recordedActual?.actualSpendMinor !== undefined && recordedActual.actualSpendMinor !== null ? `value="${recordedActual.actualSpendMinor / 100}"` : ""} required></div></label><input type="hidden" name="reason" value="Actual spend recorded after completion."><button class="button button--secondary" type="submit">Save actual</button></form><details><summary>Reopen this plan</summary><form data-plan-lifecycle><input type="hidden" name="status" value="active"><label><span>Why are you reopening it?</span><textarea name="reason" required maxlength="1000" placeholder="What still needs work?"></textarea></label><button class="button" type="submit">Review reopening</button></form></details></section>`}
     </main>
     <footer><p>This summary comes from the plan you completed.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderPlanShareDialog()}

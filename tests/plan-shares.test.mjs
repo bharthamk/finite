@@ -12,6 +12,7 @@ class Statement {
 const definition = {
   profileId: "travel",
   name: "Europe, 18 days",
+  currencyCode: "NZD",
   surface: {
     hero: { eyebrow: "18 days · Europe", title: "More Paris, without losing the trip.", brief: "Protect the fixed flights across 18 days." },
     primaryMeasures: [
@@ -84,6 +85,7 @@ test("the owner chooses an exact bounded projection before publication", async (
   assert.equal(body.publication.mode, "live");
   assert.deepEqual(body.publication.sections, ["overview", "stages"]);
   assert.equal(body.publication.plan.headline, "More Paris, without losing the trip.");
+  assert.equal(body.publication.plan.currencyCode, "NZD");
   assert.equal(body.publication.plan.stages.length, 2);
   assert.equal("allocation" in body.publication.plan, false);
   assert.equal("measures" in body.publication.plan, false);

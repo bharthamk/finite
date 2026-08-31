@@ -2,7 +2,7 @@ import { sha256 } from "./crypto.js";
 import { HttpArrivalRepository, isArrivalDraftReady, type ArrivalInputKind, type ArrivalOrientation, type ArrivalRepository } from "./arrival.js";
 import type { FinitePlanRuntime } from "./runtime.js";
 import type { ModelContextHost, ProfileId, ToolResult, WebMCPToolDefinition, WebMCPToolObserver } from "./types.js";
-import { assessExternalAction, currencyContract, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
+import { assessExternalAction, currencyContractFor, groupDecisionContract, humanRealityContract } from "./operator-policy.js";
 import { isWaitingArrivalStatus } from "./experience-route.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetRepository, type KitchenResetResult } from "./kitchen-reset.js";
 import { HttpThemeRepository, themeCoreTokenKeys, themeSchema, type ThemeCoreTokens, type ThemeMode, type ThemeRepository, type ThemeResult } from "./theme.js";
@@ -1067,7 +1067,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
       planInputs: planInputPacket,
       planWork: planWorkPacket,
       profileContext,
-      currency: currencyContract,
+      currency: currencyContractFor(runtime.kernel.profile.currencyCode),
       humanReality: humanRealityContract,
       groupDecision: groupDecisionContract,
       externalActionLaw: { statuses: ["researched", "quoted", "held", "booked", "paid", "verified", "cancelled"], planningDoesNotEqualExecution: true },

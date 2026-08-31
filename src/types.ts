@@ -213,6 +213,8 @@ export interface ProfileDefinition {
   profileId: ProfileId;
   planId: string;
   name: string;
+  /** Optional so profiles accepted before plan-level currency retain their exact hash. */
+  currencyCode?: string;
   accepted: Allocation;
   locks: string[];
   preferenceLabels: string[];
@@ -446,6 +448,7 @@ export interface PlanIntakeInput {
   planId?: string;
   name?: string;
   brief?: string;
+  currencyCode?: string;
   planningDimensions?: Partial<PlanningDimensions>;
   allocation?: Partial<Allocation>;
   actuals?: ActualDefinition[];

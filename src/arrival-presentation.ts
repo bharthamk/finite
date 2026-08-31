@@ -422,10 +422,11 @@ const sectionAliases: Record<string, string> = { destinations: "itinerary", date
 const moneyAmount = (text: string): string => {
   if (hasExplicitZeroSpendIntent(text)) return "0";
   const value = "(-?\\d+(?:,\\d{3})*(?:\\.\\d+)?)\\s*([kmb])?";
+  const currency = "(?:a\\$|aud|nz\\$|nzd|us\\$|usd|ca\\$|cad|sg\\$|sgd|hk\\$|hkd|€|eur|£|gbp|cny|chf|inr|\\$)";
   const matches = [
-    ...text.matchAll(new RegExp(`(?:a\\$|aud|us\\$|usd|€|eur|£|gbp|\\$)\\s*${value}\\b`, "gi")),
-    ...text.matchAll(new RegExp(`\\b(?:budget|cost|price|spend|financial limit|money|cap)(?:(?:\\s+(?:is|of|at|under|up to|no more than|around|about|roughly))|\\s*:)?\\s*(?:a\\$|aud|us\\$|usd|€|eur|£|gbp|\\$)?\\s*${value}\\b`, "gi")),
-    ...text.matchAll(new RegExp(`\\b${value}\\s*(?:aud|usd|eur|gbp|dollars?|bucks?)\\b`, "gi")),
+    ...text.matchAll(new RegExp(`${currency}\\s*${value}\\b`, "gi")),
+    ...text.matchAll(new RegExp(`\\b(?:budget|cost|price|spend|financial limit|money|cap)(?:(?:\\s+(?:is|of|at|under|up to|no more than|around|about|roughly))|\\s*:)?\\s*${currency}?\\s*${value}\\b`, "gi")),
+    ...text.matchAll(new RegExp(`\\b${value}\\s*(?:aud|nzd|usd|cad|sgd|hkd|eur|gbp|cny|chf|inr|dollars?|bucks?)\\b`, "gi")),
   ];
   const candidates = matches.map((match) => {
     const base = Number(match[1]!.replaceAll(",", ""));
@@ -440,9 +441,16 @@ const moneyAmount = (text: string): string => {
 const moneyCurrency = (text: string, parent: Record<string, unknown>): string => {
   if (typeof parent.currencyCode === "string" && parent.currencyCode.trim()) return parent.currencyCode.trim().toUpperCase();
   if (/a\$|\baud\b/i.test(text)) return "AUD";
+  if (/nz\$|\bnzd\b/i.test(text)) return "NZD";
   if (/us\$|\busd\b/i.test(text)) return "USD";
+  if (/ca\$|\bcad\b/i.test(text)) return "CAD";
+  if (/sg\$|\bsgd\b/i.test(text)) return "SGD";
+  if (/hk\$|\bhkd\b/i.test(text)) return "HKD";
   if (/€|\beur\b/i.test(text)) return "EUR";
   if (/£|\bgbp\b/i.test(text)) return "GBP";
+  if (/\bcny\b/i.test(text)) return "CNY";
+  if (/\bchf\b/i.test(text)) return "CHF";
+  if (/\binr\b/i.test(text)) return "INR";
   return "";
 };
 
@@ -508,6 +516,8 @@ const requestedDurationEnd = (order: ArrivalOrder, start: string): { end: string
   if (months) return { end: addMonths(start, Number(months[1]) || words[months[1]!] || 1), provisional: approximate };
   const weeks = text.match(/\b(\d+|one|two|three|four|five|six)\s+weeks?\b/);
   if (weeks) return { end: addDays(start, (Number(weeks[1]) || words[weeks[1]!] || 1) * 7), provisional: approximate };
+  const nights = text.match(/\b(\d+|one|two|three|four|five|six)[ -]+nights?\b/);
+  if (nights) return { end: addDays(start, Number(nights[1]) || words[nights[1]!] || 1), provisional: approximate };
   const days = text.match(/\b(\d+)\s+days?\b/);
   if (days) return { end: addDays(start, Number(days[1])), provisional: approximate };
   return { end: "", provisional: false };

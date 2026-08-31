@@ -15,6 +15,7 @@ export interface PublicPlanProjection {
   plan: {
     name: string;
     family: string;
+    currencyCode?: string;
     revision: number;
     status: string;
     updatedAt: string;

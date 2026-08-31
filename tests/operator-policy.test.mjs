@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessExternalAction, currencyContract, externalActionStatuses, groupDecisionContract, humanRealityPolicy } from "../dist-test/src/operator-policy.js";
+import { assessExternalAction, currencyContract, currencyContractFor, externalActionStatuses, groupDecisionContract, humanRealityPolicy } from "../dist-test/src/operator-policy.js";
 
 test("the human-reality contract covers every audited human failure mode exactly once", () => {
   assert.deepEqual(humanRealityPolicy.map((rule) => rule.auditId), Array.from({ length: 24 }, (_, index) => index + 31));
@@ -13,6 +13,14 @@ test("the release has one explicit AUD minor-unit contract and never implies con
   assert.equal(currencyContract.minorUnit, 100);
   assert.match(currencyContract.scope, /new immutable plan version/i);
   assert.match(currencyContract.scope, /never inferred/i);
+});
+
+test("each accepted plan exposes its own immutable base-currency contract", () => {
+  const nzd = currencyContractFor("NZD");
+  assert.equal(nzd.code, "NZD");
+  assert.equal(nzd.minorUnit, 100);
+  assert.match(nzd.scope, /one NZD ledger/i);
+  assert.match(nzd.scope, /conversion is never inferred/i);
 });
 
 test("external action state cannot be promoted from fluent planning language", () => {

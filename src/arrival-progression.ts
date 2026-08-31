@@ -145,7 +145,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
   const venueCapacity = Math.max(guestCount, firstPositiveInteger(...scopeItems.map((item) => item.fields.capacity), ...scopeItems.map((item) => item.fields.headcount)) ?? guestCount);
   const entityValues: Record<string, Record<string, number>> = profileId === "travel"
     ? {
-      trip_days: { days: Math.max(1, Math.round((Date.parse(starter.overview.end) - Date.parse(starter.overview.start)) / 86_400_000) || 1) },
+      trip_days: { days: Math.max(1, Math.round((Date.parse(starter.overview.end) - Date.parse(starter.overview.start)) / 86_400_000) + 1 || 1) },
       booked_segment_days: { days: 0 },
     }
     : profileId === "renovation"
@@ -163,6 +163,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     planId: `plan_${planSlug}_${suffix}`,
     name: starter.title.slice(0, 120),
     brief: starter.brief.slice(0, 500),
+    currencyCode: starter.overview.currency,
     planningDimensions: {
       money: starter.overview.moneyState ?? (totalBudgetMinor > 0 ? "positive" : "zero"),
       location: starter.sections.some((section) => section.items.some((item) => String(item.fields.location ?? "").trim())) ? "positive" : "unknown",

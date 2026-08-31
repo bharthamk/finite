@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateProfileMemory, validateRetrospective } from "../dist-test/src/plan-learning.js";
+import { BrowserPlanLearningRepository, validateProfileMemory, validateRetrospective } from "../dist-test/src/plan-learning.js";
+import { MemoryStorage } from "../dist-test/src/persistence.js";
 import { handlePlanLearningRequest } from "../dist-test/worker/plan-learning.js";
 import { authSha256 } from "../dist-test/worker/auth.js";
 
@@ -71,6 +72,15 @@ test("retrospectives and reusable memories require concise evidence-backed text"
   assert.equal(validateRetrospective({ worked: "", changed: "", nextTime: "" }).ok, false);
   assert.equal(validateProfileMemory({ kind: "preference", statement: "I like collaborative cooking.", evidence: "The group chose to cook together." }).ok, true);
   assert.equal(validateProfileMemory({ kind: "preference", statement: "I like collaborative cooking.", evidence: "" }).ok, false);
+});
+
+test("local Demo mode accepts a person's own memory while keeping Codex reads proposed", async () => {
+  const repository = new BrowserPlanLearningRepository(new MemoryStorage(), "test-learning", () => new Date("2026-08-31T00:00:00.000Z"));
+  const human = await repository.addMemory({ planId, kind: "working_pattern", statement: "Keep outdoor days flexible.", evidence: "Added by you after this plan.", sourceSurface: "site" });
+  assert.equal(human.memory.status, "accepted");
+  assert.equal(human.memory.sourcePlanId, planId);
+  const codex = await repository.addMemory({ planId, kind: "preference", statement: "You may prefer indoor backups.", evidence: "The plan changed after a rain forecast.", sourceSurface: "codex" });
+  assert.equal(codex.memory.status, "proposed");
 });
 
 test("a finished plan keeps its own lessons while Codex suggestions remain proposed until the person accepts them", async () => {

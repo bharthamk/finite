@@ -1409,7 +1409,10 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .wrap-up-hero__status .eyebrow { margin:0; }
 .wrap-up-hero__status>span { padding:7px 11px; color:var(--on-deep); background:var(--deep); font:700 .65rem/1 var(--skin-meta); letter-spacing:.09em; text-transform:uppercase; }
 .wrap-up-hero__copy h1 { max-width:820px; margin:0; font-size:clamp(3rem,7vw,7.2rem); line-height:.88; letter-spacing:-.065em; }
-.wrap-up-hero__copy>p { max-width:740px; margin:24px 0 0; color:var(--muted); font-size:clamp(1rem,1.6vw,1.25rem); line-height:1.55; }
+.wrap-up-hero__copy>span { display:block; margin-top:24px; color:var(--muted); font:700 .64rem/1.2 var(--skin-meta); letter-spacing:.08em; text-transform:uppercase; }
+.wrap-up-hero__copy>p { max-width:740px; margin:8px 0 0; color:var(--muted); font-size:clamp(1rem,1.6vw,1.25rem); line-height:1.55; }
+.zone-empty { display:grid; gap:6px; padding:18px; border:1px solid var(--line); background:var(--paper); }
+.zone-empty p { margin:0; color:var(--muted); line-height:1.5; }
 .wrap-up-hero blockquote { align-self:end; margin:0; padding:24px; border-left:5px solid var(--accent); background:var(--panel); }
 .wrap-up-hero blockquote span { color:var(--muted); font:700 .64rem/1.2 var(--skin-meta); letter-spacing:.08em; text-transform:uppercase; }
 .wrap-up-hero blockquote p { margin:12px 0 0; font-size:clamp(1.25rem,2.2vw,1.8rem); line-height:1.25; }

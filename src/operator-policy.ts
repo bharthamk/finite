@@ -1,10 +1,12 @@
 import type { ExternalActionStatus, ToolResult } from "./types.js";
 
-export const currencyContract = {
-  code: "AUD",
+export const currencyContractFor = (code = "AUD") => ({
+  code,
   minorUnit: 100,
-  scope: "This release operates one AUD ledger per plan. A different currency requires a new immutable plan version; conversion is never inferred.",
-} as const;
+  scope: `This plan operates one ${code} ledger. A different currency requires a new immutable plan version; conversion is never inferred.`,
+} as const);
+
+export const currencyContract = currencyContractFor();
 
 export const externalActionStatuses = ["researched", "quoted", "held", "booked", "paid", "verified", "cancelled"] as const;
 

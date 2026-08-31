@@ -83,6 +83,7 @@ export const sanitizeProjection = async (db: D1Database, scopeId: string, row: P
   const plan: JsonRecord = {
     name: projectCopy(definition.name, "Shared Finite plan"),
     family: typeof definition.profileId === "string" ? definition.profileId : "plan",
+    currencyCode: typeof definition.currencyCode === "string" && /^[A-Z]{3}$/.test(definition.currencyCode) ? definition.currencyCode : "AUD",
     revision: row.revision,
     status: typeof lifecycle.status === "string" ? lifecycle.status : "active",
     updatedAt: row.updated_at,

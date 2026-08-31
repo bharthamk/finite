@@ -187,6 +187,19 @@ test("real-plan sentence dates and shorthand money produce the intended editable
   assert.ok(starter.overview.categoryPercent <= 100);
 });
 
+test("a natural travel brief turns stated nights and base currency into real plan facts", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_hobart_nights", version: 1, status: "waiting_for_codex",
+    rawOutcome: "Plan a three-night Hobart trip departing Sydney on 16 October 2026 with an NZD 2,600 total budget.", structured: { planningMode: "codex" }, attachments: [], inputs: [], pendingClarification: null, interpretation: null,
+    lastOperatorCheckpoint: null, createdAt: "2026-08-31T00:00:00.000Z", updatedAt: "2026-08-31T00:00:00.000Z", checksum: "a".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.overview.start, "2026-10-16");
+  assert.equal(starter.overview.end, "2026-10-19");
+  assert.equal(starter.overview.totalBudget, "2600");
+  assert.equal(starter.overview.currency, "NZD");
+});
+
 test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {
   const order = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_overview", version: 6, status: "waiting_for_codex", rawOutcome: "Plan a one-day event.", structured: { planningMode: "manual" }, attachments: [], pendingClarification: null,
