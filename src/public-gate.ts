@@ -37,7 +37,7 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
         </button>
       </div>
       <p class="entry-route-status" data-public-entry-status role="status" hidden></p>
-      <footer class="entry-boundary"><div><span>Same real product in every route.</span><p>The Spotlight stays in this browser. Fresh plans use your ChatGPT identity; templates and longer tours open in an isolated 24-hour workspace.</p></div><button type="button" class="text-button" data-public-entry="full-demo">Explore the longer guided tour</button></footer>
+      <footer class="entry-boundary"><div><span>Same real product in every route.</span><p>Spotlight and guided tours stay in this browser. Fresh plans use your ChatGPT identity; templates open in an isolated 24-hour workspace.</p></div><button type="button" class="text-button" data-public-entry="full-demo">Explore the longer guided tour</button></footer>
     </section>
   </main>`;
 
@@ -69,6 +69,6 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
 
   root.querySelector<HTMLButtonElement>("[data-public-entry='codex-live']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=codex-live"); });
   root.querySelector<HTMLButtonElement>("[data-public-entry='live-demo']")?.addEventListener("click", () => { location.assign("/?start=live-demo&tour=spotlight&plan=1"); });
-  root.querySelector<HTMLButtonElement>("[data-public-entry='full-demo']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=live-demo&tour=standard"); });
+  root.querySelector<HTMLButtonElement>("[data-public-entry='full-demo']")?.addEventListener("click", () => { location.assign("/?start=live-demo&tour=standard"); });
   root.querySelectorAll<HTMLButtonElement>("[data-public-example]").forEach((button) => button.addEventListener("click", () => { void openDemoRoute(button, `/?start=example&example=${encodeURIComponent(button.dataset.publicExample ?? "")}`); }));
 };

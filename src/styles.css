@@ -1808,6 +1808,14 @@ footer.entry-boundary .text-button { color:var(--on-deep); }
 footer p { margin:0; font-size:1.1rem; }
 footer span { font:500 .7rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 
+@media (max-width:1366px) and (min-width:981px) {
+  .site-header { grid-template-columns:auto minmax(210px,1fr) auto; row-gap:8px; padding-block:10px; }
+  .brand { grid-column:1; grid-row:1; }
+  .plan-switcher { grid-column:2; grid-row:1; }
+  .site-header>.header-action--share { grid-column:3; grid-row:1; }
+  .header-actions { grid-column:1/4; grid-row:2; width:100%; justify-self:stretch; justify-content:flex-end; flex-wrap:wrap; }
+}
+
 @media (max-width:980px) {
   .theme-token-grid { grid-template-columns:repeat(2,1fr); }
   .skin-trait-grid { grid-template-columns:repeat(2,1fr); }

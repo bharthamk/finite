@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, isValidPlanDateRange, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 import { resolvePlanTitle } from "../dist-test/src/plan-title.js";
 
 test("legacy generic accepted names project as useful plan names", () => {
@@ -209,6 +209,28 @@ test("a natural travel brief turns stated nights and base currency into real pla
   const currencyRecords = starter.sections.flatMap((section) => section.items).filter((item) => item.fields.currency);
   assert.ok(currencyRecords.length > 5);
   assert.ok(currencyRecords.every((item) => item.fields.currency === "NZD"));
+});
+
+test("a domestic Hobart weekend respects place, duration, party size, and local trip semantics", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_hobart_weekend", version: 1, status: "waiting_for_codex",
+    rawOutcome: "Plan a weekend trip from Sydney to Hobart for two people starting 9 October 2026.", structured: { planningMode: "codex" }, attachments: [], inputs: [], pendingClarification: null, interpretation: null,
+    lastOperatorCheckpoint: null, createdAt: "2026-09-02T00:00:00.000Z", updatedAt: "2026-09-02T00:00:00.000Z", checksum: "b".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.deepEqual([starter.overview.start, starter.overview.end], ["2026-10-09", "2026-10-11"]);
+  assert.equal(starter.sections.find((section) => section.sectionId === "itinerary").items.some((item) => item.fields.location === "Hobart"), true);
+  assert.equal(starter.sections.find((section) => section.sectionId === "people").items.some((item) => /2 people/.test(item.label)), true);
+  assert.match(starter.sections.find((section) => section.sectionId === "transport").items[0].fields.title, /Domestic return/);
+  const productText = JSON.stringify(starter);
+  assert.equal(/long-haul|passport validity|visa and entry|entry requirements/i.test(productText), false);
+});
+
+test("plan date ranges reject invalid and reverse-ordered dates", () => {
+  assert.equal(isValidPlanDateRange("2026-10-09", "2026-10-11"), true);
+  assert.equal(isValidPlanDateRange("2026-10-11", "2026-10-09"), false);
+  assert.equal(isValidPlanDateRange("2026-02-30", "2026-03-02"), false);
+  assert.equal(isValidPlanDateRange("2026-10-09", "", true), true);
 });
 
 test("plan overview settings support a timed single-day event and category allocations above 100 percent", () => {

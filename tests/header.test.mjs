@@ -49,18 +49,19 @@ test("structured rough plans collect changes in their natural sections instead o
 });
 
 test("guided demos always use the isolated browser-local workspace", () => {
-  assert.match(source, /const freshSpotlightLaunch = startupQuery\.get\("tour"\) === "spotlight"/);
+  assert.match(source, /const freshGuidedDemoLaunch = startupStartMode === "live-demo"/);
   assert.match(source, /startupStartMode === "spotlight-active" && startupQuery\.get\("fresh"\) === "1"/);
-  assert.match(source, /if \(freshSpotlightLaunch\) \{\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*setLocalDemoMode\(localStorage, true\);\s*\}/);
+  assert.match(source, /if \(freshGuidedDemoLaunch\) \{\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*setLocalDemoMode\(localStorage, true\);\s*\}/);
   assert.match(source, /stableSpotlightUrl\.searchParams\.delete\("fresh"\)/);
   assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active" \|\| startupStartMode === "spotlight-active"/);
   assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
   assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
   assert.match(source, /Demo mode · Local only/);
-  assert.match(entry, /const localSpotlight = \(startupQuery\.get\("start"\) === "live-demo" \|\| startupQuery\.get\("start"\) === "spotlight-active"\)/);
+  assert.match(entry, /const localSpotlight = \(startMode === "live-demo" \|\| startMode === "spotlight-active"\)/);
   assert.match(entry, /const localDemoResume = localDemoModeEnabled\(localStorage\)/);
   assert.match(entry, /storageScope: localSpotlight \? "local-spotlight-bootstrap" : "local-demo-bootstrap"/);
-  assert.ok(entry.indexOf("} else if (localSpotlight || localDemoResume) {") < entry.indexOf('fetch("/api/auth/session"'));
+  assert.match(entry, /const localDemoBootstrap = shouldBootstrapLocalDemo/);
+  assert.ok(entry.indexOf("} else if (localDemoBootstrap) {") < entry.indexOf('fetch("/api/auth/session"'));
 });
 
 test("the browser-local Spotlight exits without inventing a server demo session", () => {
@@ -127,7 +128,7 @@ test("the signed-out first page is the four-route Finite gateway", () => {
   assert.match(publicGate, /Choose a template\./);
   assert.match(publicGate, /Use Codex live/);
   assert.match(publicGate, /See Finite adapt\./);
-  assert.match(publicGate, /Spotlight stays in this browser/);
+  assert.match(publicGate, /Spotlight and guided tours stay in this browser/);
   assert.match(publicGate, /try \{[\s\S]{0,200}fetch\("\/api\/auth\/demo"/);
   assert.match(publicGate, /That isolated workspace could not be opened\. Nothing was saved\. Please try again\./);
   assert.doesNotMatch(publicGate, /Borrow a useful beginning/);
@@ -165,10 +166,10 @@ test("cold navigation shows a useful loading state instead of an empty page", ()
   assert.match(source, /if \(!opensFreshArrival && !opensProfileSurface\) await hydrateCanonicalRuntime\(\)/);
   assert.match(source, /const \[, construction\] = await Promise\.all\(\[\s*runtime\.hydrateAcceptedTruth\(\),\s*runtime\.hydrateConstructionPacket\(\),\s*\]\)/);
   assert.match(source, /CONSTRUCTION_PACKET_REMOTE_HYDRATED[\s\S]{0,120}runtime\.resumeConstructionPacket\(\)/);
-  assert.match(source, /if \(opensFreshArrival\) void hydrateCanonicalRuntime\(\)/);
+  assert.match(source, /if \(opensFreshArrival && shouldLoadDurablePlanData/);
   assert.match(source, /const initialSecondaryPlanData = startupSurface === "plan"/);
   assert.match(source, /refreshSecondaryPlanData\(\)\.finally\(\(\) => \{ secondaryPlanDataReady = true; \}\)/);
-  assert.match(source, /if \(startupSurface === "arrival"\) \{[\s\S]{0,180}refreshSecondaryPlanData\(\), refreshProfileContext\(\)/);
+  assert.match(source, /else if \(startupSurface === "arrival"\) \{[\s\S]{0,180}refreshProfileContext\(\)/);
   assert.match(source, /initialSecondaryPlanData\.then\(async \(\) =>/);
   assert.match(source, /if \(opensProfileSurface\) \{[\s\S]{0,140}refreshProfileContext\(\)\.then\(\(\) => render\(\)\)/);
   assert.match(styles, /\.app-loading \{ min-height:100vh;/);
@@ -322,7 +323,7 @@ test("plan sharing publishes a selected plate without registering a kitchen on t
   assert.match(source, /renderShareHeaderAction\("arrival"\)/);
   assert.match(source, /renderShareHeaderAction\("plan"\)/);
   assert.equal(source.match(/\$\{renderPlanShareDialog\(\)\}/g)?.length, 3);
-  assert.match(source, /function bindArrivalInteractions\(\): void \{\s*bindCodexHandoffInteractions\(\);\s*bindPlanShareInteractions\(\);/);
+  assert.match(source, /function bindArrivalInteractions\(\): void \{\s*bindDialogTriggerTracking\(\);\s*bindCodexHandoffInteractions\(\);\s*bindPlanShareInteractions\(\);/);
   assert.match(styles, /html \.header-action--share/);
   assert.match(styles, /\.site-header>\.header-action--share \{ grid-column:3; grid-row:2; \}/);
   assert.match(styles, /@media \(max-width:460px\)[\s\S]*\.header-actions \{ grid-column:1; grid-row:2;/);

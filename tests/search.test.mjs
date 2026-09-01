@@ -223,3 +223,27 @@ test("malformed events and material changes without evidence never become viable
   assert.equal(kernel.revision, 1);
   assert.equal(allocationTotal(kernel.accepted), kernel.accepted.totalBudgetMinor);
 });
+
+test("unsafe money and changes that would make forecast negative fail closed", async () => {
+  const profile = (await compileBuiltInProfiles()).get("travel");
+  assert(profile);
+  const kernel = new FinitePlanKernel(profile);
+  const unsafe = kernel.recordChangeEvent({
+    type: "intent_change", title: "Unsafe money", costDeltaMinor: Number.MAX_SAFE_INTEGER + 1, daysDelta: 0,
+    minimumBufferMinor: 0, expectedRevision: 1,
+  });
+  assert.equal(unsafe.code, "INVALID_CHANGE_EVENT");
+
+  const negative = kernel.recordChangeEvent({
+    type: "intent_change", title: "Refund beyond the whole forecast", costDeltaMinor: -(kernel.accepted.forecastMinor + 1), daysDelta: 0,
+    minimumBufferMinor: 0, evidenceRefs: [], expectedRevision: 1,
+  });
+  const compared = await kernel.compareOptions({ eventId: negative.event.eventId, generate: true });
+  assert.equal(compared.code, "NO_VALID_OPTION");
+  assert.equal(compared.options.every((option) => option.valid === false), true);
+  assert.equal(compared.options.every((option) => option.violations.some((violation) => violation.code === "NEGATIVE_FORECAST")), true);
+  const refused = await kernel.stageOption({ candidateId: compared.options[0].candidateId, expectedRevision: 1 });
+  assert.equal(refused.code, "INVALID_CANDIDATE");
+  assert.equal(kernel.revision, 1);
+  assert.equal(allocationTotal(kernel.accepted), kernel.accepted.totalBudgetMinor);
+});

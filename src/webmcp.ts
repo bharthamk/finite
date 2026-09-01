@@ -1838,10 +1838,32 @@ export class FinitePlanWebMCPAdapter {
         let routedResult: ToolResult = result;
         const effectivelyReadOnly = tool.annotations?.readOnlyHint === true || (tool.name === "finite_invoke" && result.dispatchedReadOnly === true);
         if (!cancelled && !kitchenReset && !effectivelyReadOnly && tool.name !== "finite_open_toolset") {
-          const entered = await enterKitchen(this.runtime, this.arrival, this.planInputs, this.planWork, this.planLearning, { entryIntent: "continue_current" }, context);
-          if (entered.ok) {
-            const packet = record(entered.operatorPacket);
-            routedResult = { ...result, operatorContinuation: { nextAction: packet.nextAction, currency: packet.currency, externalActionLaw: packet.externalActionLaw } };
+          try {
+            const entered = await enterKitchen(this.runtime, this.arrival, this.planInputs, this.planWork, this.planLearning, { entryIntent: "continue_current" }, context);
+            if (entered.ok) {
+              const packet = record(entered.operatorPacket);
+              routedResult = { ...result, operatorContinuation: { nextAction: packet.nextAction, currency: packet.currency, externalActionLaw: packet.externalActionLaw } };
+            } else {
+              routedResult = {
+                ...result,
+                operatorContinuation: {
+                  unavailable: true,
+                  code: "OPERATOR_CONTINUATION_UNAVAILABLE",
+                  acceptedStateChanged: false,
+                  next: "The operation result remains authoritative. Re-enter the kitchen to refresh the next-action route.",
+                },
+              };
+            }
+          } catch {
+            routedResult = {
+              ...result,
+              operatorContinuation: {
+                unavailable: true,
+                code: "OPERATOR_CONTINUATION_UNAVAILABLE",
+                acceptedStateChanged: false,
+                next: "The operation result remains authoritative. Re-enter the kitchen to refresh the next-action route.",
+              },
+            };
           }
         }
         routedResult = this.dispatcherResult(routedResult);
@@ -1898,8 +1920,12 @@ export class FinitePlanWebMCPAdapter {
         const complete = { ...observed, ...(toolsetReceipt ? { webmcpToolset: toolsetReceipt } : {}), operationProof: { ...proofBase, operationHash: await sha256(proofBase) } };
         const bounded = await this.boundedResult(tool.name, complete);
         if (refreshRouteAfterResponse) {
-          if (this.stableDispatcher) await this.applyToolset(this.groupFromResult(result) ?? await this.inferredToolset());
-          else this.scheduleRouteRefresh(result);
+          try {
+            if (this.stableDispatcher) await this.applyToolset(this.groupFromResult(result) ?? await this.inferredToolset());
+            else this.scheduleRouteRefresh(result);
+          } catch {
+            // The completed operation and its proof remain authoritative even when route discovery is temporarily unavailable.
+          }
         }
         return bounded;
       },

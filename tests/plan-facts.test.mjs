@@ -54,6 +54,19 @@ test("planned cost is a generic editable fact and recalculates available money",
   assert.equal(projection.changes[0].label, "Planned cost");
 });
 
+test("total limit and planned cost can be raised together from an empty plan", () => {
+  const event = profiles.get("event");
+  assert(event);
+  const empty = { totalBudgetMinor: 0, spentMinor: 0, committedMinor: 0, forecastMinor: 0, bufferMinor: 0 };
+  const facts = editablePlanFacts(event, empty, event.entities);
+  assert.equal(facts.find((fact) => fact.factId === "allocations.forecastMinor").maximum, null);
+  const projection = projectPlanFactChanges(event, empty, event.entities, [
+    { factId: "allocations.totalBudgetMinor", value: 100_000 },
+    { factId: "allocations.forecastMinor", value: 90_000 },
+  ]);
+  assert.deepEqual(projection.accepted, { totalBudgetMinor: 100_000, spentMinor: 0, committedMinor: 0, forecastMinor: 90_000, bufferMinor: 10_000 });
+});
+
 test("one human save commits, receipts, replays and reloads schema-derived values", async () => {
   const event = profiles.get("event");
   assert(event);

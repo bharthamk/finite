@@ -354,6 +354,40 @@ test("authority-only tools appear after human authority and remain for exact rec
   assert.equal((await host.execute("finite_apply_approved_option", input)).code, "IDEMPOTENT_REPLAY");
 });
 
+test("a failed post-operation kitchen refresh never masks a successful mutation or replay", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  let arrivalOpens = 0;
+  const unavailableArrival = { open: async () => {
+    arrivalOpens += 1;
+    if (arrivalOpens === 1) return { ok: false, code: "ARRIVAL_NOT_FOUND", order: null, acceptedStateChanged: false };
+    throw new Error("continuation unavailable");
+  } };
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, unavailableArrival);
+  await adapter.register();
+  await host.execute("finite_open_toolset", { group: "planning" });
+  const recorded = await host.execute("travel_extend_stay", { destination: "Paris", nights: 1, nightlyMinor: 10_000, minimumBufferMinor: 0 });
+  assert.equal(recorded.code, "CHANGE_RECORDED");
+  assert.equal(recorded.operatorContinuation.code, "OPERATOR_CONTINUATION_UNAVAILABLE");
+  const compared = await host.execute("finite_compare_options", { eventId: recorded.event.eventId, generate: true });
+  const candidate = compared.options.find((option) => option.valid);
+  await host.execute("finite_open_toolset", { group: "decisions" });
+  const staged = await host.execute("finite_stage_option", { candidateId: candidate.candidateId, expectedRevision: 1 });
+  const approved = await runtime.kernel.humanApprove({ candidateId: candidate.candidateId, warningsAcknowledged: candidate.warnings.map((warning) => warning.code) });
+  await host.execute("finite_open_toolset", { group: "decisions" });
+  const input = { candidateId: staged.staged.candidateId, approvalId: approved.approval.approvalId, expectedRevision: 1, idempotencyKey: "continuation-outage-0001" };
+  const applied = await host.execute("finite_apply_approved_option", input);
+  assert.equal(applied.code, "OPTION_APPLIED");
+  assert.equal(applied.acceptedStateChanged, true);
+  assert.equal(applied.operatorContinuation.code, "OPERATOR_CONTINUATION_UNAVAILABLE");
+  assert.equal(runtime.kernel.revision, 2);
+  const replayed = await host.execute("finite_apply_approved_option", input);
+  assert.equal(replayed.code, "IDEMPOTENT_REPLAY");
+  assert.equal(replayed.operatorContinuation.code, "OPERATOR_CONTINUATION_UNAVAILABLE");
+  assert.equal(runtime.kernel.revision, 2);
+});
+
 test("context switches require the exact current plan guard and return a checksum receipt", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");

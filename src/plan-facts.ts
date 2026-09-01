@@ -80,7 +80,7 @@ export const editablePlanFacts = (
     format: "money",
     value: accepted.forecastMinor,
     minimum: 0,
-    maximum: accepted.totalBudgetMinor - accepted.spentMinor - accepted.committedMinor,
+    maximum: null,
     step: 100,
   }];
   for (const binding of profile.surface.primaryMeasures) {

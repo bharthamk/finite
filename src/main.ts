@@ -10,8 +10,8 @@ import { HttpConstructionPacketRepository, MemoryConstructionPacketRepository } 
 import { HttpArrivalRepository, MemoryArrivalRepository, type ArrivalOrder, type ArrivalResult } from "./arrival.js";
 import { createCodexHandoff, type DemoDepth } from "./codex-handoff.js";
 import { finiteRelease } from "./release.js";
-import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
-import { isWaitingArrivalStatus, selectExperienceSurface, shouldOpenEntryGateway } from "./experience-route.js";
+import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, isValidPlanDateRange, renderHumanValue, renderTextList, starterPlanForArrival } from "./arrival-presentation.js";
+import { isWaitingArrivalStatus, selectExperienceSurface, shouldLoadDurablePlanData, shouldOpenEntryGateway } from "./experience-route.js";
 import { reconcileScopedSurfaceMessage } from "./surface-message.js";
 import { HttpKitchenResetRepository, kitchenResetConfirmation, type KitchenResetResult } from "./kitchen-reset.js";
 import { applyThemeDefinition, builtInThemes, defaultTheme, HttpThemeRepository, themeCoreTokenKeys, type ThemeCatalogResult, type ThemeCoreTokens, type ThemeDefinition, type ThemeMode, type ThemeResult } from "./theme.js";
@@ -237,7 +237,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </div>
           <ol class="service-line" aria-label="Finite operating sequence">
             <li><span>01 / Order</span><h3>You state the outcome.</h3><p>Bring the change, preferences and hard constraints. Finite does not make you translate them into a dashboard.</p></li>
-            <li><span>02 / Operate</span><h3>Codex works across the whole plan.</h3><p>It sees accepted truth, legal moves, current evidence and the exact next safe action.</p></li>
+            <li><span>02 / Operate</span><h3>Codex works across the whole plan.</h3><p>It sees accepted truth, available moves, current evidence and the exact next safe action.</p></li>
             <li><span>03 / Connect</span><h3>WebMCP uses the same live page.</h3><p>The operator works through page-scoped tools against the plan you can see, not a hidden parallel state.</p></li>
             <li><span>04 / Authority</span><h3>You approve one exact result.</h3><p>No consequential change lands until you choose the bound option and authorize that revision.</p></li>
           </ol>
@@ -265,7 +265,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
           </div>
           <div class="trust-laws">
             <article><span>01</span><h3>One accepted truth</h3><p>Immutable revisions, exact plan state and replayable lineage survive the session.</p></article>
-            <article><span>02</span><h3>Rules stay code</h3><p>Conservation, locks, relationships and legal moves are recalculated deterministically.</p></article>
+            <article><span>02</span><h3>Rules stay code</h3><p>Conservation, locks, relationships and valid moves are recalculated deterministically.</p></article>
             <article><span>03</span><h3>Research stays evidence</h3><p>Prices, availability and observations enter as provenance-bound untrusted data.</p></article>
             <article><span>04</span><h3>Authority stays human</h3><p>Approval creators remain outside WebMCP and bind only one candidate and revision.</p></article>
             <article><span>05</span><h3>Every change leaves a receipt</h3><p>Applied outcomes carry content-addressed before-and-after proof and replay protection.</p></article>
@@ -403,10 +403,9 @@ updateOpeningStatus("Loading your saved plans…");
 const profiles = await compileBuiltInProfiles();
 const startupQuery = new URLSearchParams(location.search);
 const startupStartMode = startupQuery.get("start");
-const freshSpotlightLaunch = startupQuery.get("tour") === "spotlight" && (
-  startupStartMode === "live-demo" || (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1")
-);
-if (freshSpotlightLaunch) {
+const freshGuidedDemoLaunch = startupStartMode === "live-demo"
+  || (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1");
+if (freshGuidedDemoLaunch) {
   localStorage.removeItem(localDemoInstallationKey);
   setLocalDemoMode(localStorage, true);
 }
@@ -523,6 +522,10 @@ const planDisplayNames = new Map<string, string>();
 const refreshPlanDisplayNames = async (): Promise<void> => {
   const plans = runtime.listPlans().plans as Array<{ planId: string; profileHash: string; name: string; title: string }>;
   await Promise.all(plans.map(async (plan) => {
+    if (!shouldLoadDurablePlanData({ localDemoMode, planId: plan.planId, persistedPlanIds })) {
+      planDisplayNames.set(plan.planId, plan.title);
+      return;
+    }
     try {
       const envelope = await acceptedRepository.load(plan.planId, plan.profileHash);
       const receipts = envelope?.snapshot.receipts ?? [];
@@ -572,6 +575,7 @@ const refreshSecondaryPlanData = (): Promise<unknown[]> => Promise.all([
 ]);
 let secondaryPlanDataReady = startupSurface !== "plan" || opensProfileSurface;
 const initialSecondaryPlanData = startupSurface === "plan" && !opensProfileSurface
+  && shouldLoadDurablePlanData({ localDemoMode, planId: runtime.kernel.profile.planId, persistedPlanIds })
   ? refreshSecondaryPlanData().finally(() => { secondaryPlanDataReady = true; })
   : Promise.resolve([]);
 const syncAdaptiveChecklist = async (): Promise<void> => {
@@ -747,6 +751,7 @@ let planInputDialogOpen = false;
 let planInputBusy = false;
 let planInputError = "";
 let planInputEditingId: string | null = null;
+let planInputDraft: { kind: PlanInputKind; section: PlanInputSection; message: string } | null = null;
 let planInputContext: { section: PlanInputSection; contextId: string | null; contextLabel: string | null } = { section: "general", contextId: null, contextLabel: null };
 let attachmentDialogOpen = false;
 let planWorkBusy = false;
@@ -761,6 +766,7 @@ let attachmentContext: { section: PlanInputSection; contextId: string | null; co
 let planFactDialogOpen = false;
 let planFactBusy = false;
 let planFactError = "";
+let planFactDraftValues: Record<string, number> | null = null;
 let planStatusDialogOpen = false;
 const openManagingZones = new Set<string>();
 let draftReturnFormOpen = false;
@@ -782,6 +788,44 @@ let sharePreviewKey = "";
 let planPublications: PlanPublicationRecord[] = [];
 let planInvitations: PlanInvitationRecord[] = [];
 let planContributions: PlanContributionRecord[] = [];
+let dialogReturnFocusSelector = "";
+
+const datasetAttribute = (key: string): string => `data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+const rememberDialogTrigger = (button: HTMLButtonElement): void => {
+  const attributes = Object.entries(button.dataset)
+    .filter(([, value]) => typeof value === "string" && value.length > 0)
+    .map(([key, value]) => `[${datasetAttribute(key)}="${CSS.escape(value!)}"]`)
+    .join("");
+  dialogReturnFocusSelector = attributes ? `button${attributes}` : "";
+};
+const restoreDialogTriggerFocus = (): void => {
+  const selector = dialogReturnFocusSelector;
+  dialogReturnFocusSelector = "";
+  if (selector) queueMicrotask(() => root?.querySelector<HTMLButtonElement>(selector)?.focus());
+};
+
+const bindDialogTriggerTracking = (): void => {
+  root?.querySelectorAll<HTMLButtonElement>("button[data-action^='open-'], button[data-action='edit-plan-input']")
+    .forEach((button) => button.addEventListener("click", () => rememberDialogTrigger(button)));
+};
+
+const bindDialogAccessibility = (): void => {
+  root?.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); dialog.close(); });
+    dialog.addEventListener("close", () => {
+      if (dialog.matches(".attachment-dialog")) { attachmentDialogOpen = false; planWorkError = ""; }
+      else if (dialog.matches(".plan-input-dialog")) { planInputDialogOpen = false; planInputEditingId = null; planInputDraft = null; planInputError = ""; }
+      else if (dialog.matches(".plan-fact-dialog")) { planFactDialogOpen = false; planFactDraftValues = null; planFactError = ""; }
+      else if (dialog.matches(".plan-status-dialog")) planStatusDialogOpen = false;
+      else if (dialog.matches("[data-custom-workspace-dialog]")) customWorkspaceOpen = false;
+      else if (dialog.matches("[data-theme-settings-dialog]")) themeSettingsOpen = false;
+      else if (dialog.matches("[data-plan-share-dialog]")) shareDialogMode = "closed";
+      const recordOptionsKey = dialog.dataset.recordOptionsKey;
+      if (recordOptionsKey) workspaceUiState.openRecordOptions.delete(recordOptionsKey);
+      restoreDialogTriggerFocus();
+    });
+  });
+};
 let inviteDraft: { label: string; role: PlanCollaborationRole; sections: PlanShareSection[]; expiresInDays: 7 | 30 | 90 } = { label: "Plan collaborator", role: "suggest", sections: ["overview"], expiresInDays: 30 };
 let invitePreview: PublicPlanProjection | null = null;
 let invitePreviewKey = "";
@@ -1348,11 +1392,11 @@ const renderSpotlightActivity = (): string => {
       : kernel.stagedCandidate
         ? { step: "Review", title: "Check the exact effect before confirming.", detail: "The option is staged, but accepted plan truth has not changed." }
         : validCandidates.length
-          ? { step: "Choose", title: `${validCandidates.length} legal routes are ready.`, detail: "Finite checked the compiled move space. Choose the trade-off you want; Codex cannot choose for you." }
+          ? { step: "Choose", title: `${validCandidates.length} constraint-valid routes are ready.`, detail: "Finite checked the compiled move space. Choose the trade-off you want; Codex cannot choose for you." }
           : candidates.length
             ? { step: "Blocked", title: "No legal route yet.", detail: "Finite kept the plan unchanged because every route broke a protected boundary. Codex can revise the change or explain why." }
           : kernel.activeEventId
-            ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while legal combinations are compared." }
+            ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while boundary-respecting combinations are compared." }
             : { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "Finite is ready; no agent has changed the plan yet." };
   return `<section class="spotlight-activity" role="status" aria-live="polite" aria-atomic="true" aria-label="Finite and Codex activity">
     <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
@@ -3034,9 +3078,18 @@ const saveWorkspaceOverview = async (form: HTMLFormElement): Promise<void> => {
     const start = String(data.get("start") ?? "").trim();
     const singleDay = form.querySelector<HTMLInputElement>("input[name='singleDay']")?.checked === true;
     const includeTime = form.querySelector<HTMLInputElement>("input[name='includeTime']")?.checked === true;
+    const end = singleDay ? start : String(data.get("end") ?? "").trim();
+    const endInput = form.elements.namedItem("end") as HTMLInputElement | null;
+    endInput?.setCustomValidity("");
+    if (!isValidPlanDateRange(start, end, singleDay)) {
+      endInput?.setCustomValidity("Choose an end date on or after the start date.");
+      (endInput ?? form.elements.namedItem("start") as HTMLInputElement | null)?.reportValidity();
+      announce("The plan dates were not saved. Choose an end date on or after the start date.");
+      return;
+    }
     Object.assign(fields, {
       start,
-      end: singleDay ? start : String(data.get("end") ?? "").trim(),
+      end,
       datesProvisional: form.querySelector<HTMLInputElement>("input[name='datesProvisional']")?.checked === true,
       singleDay,
       includeTime,
@@ -3378,6 +3431,7 @@ const bindThemeSettingsInteractions = (): void => {
 };
 
 function bindArrivalInteractions(): void {
+  bindDialogTriggerTracking();
   bindCodexHandoffInteractions();
   bindPlanShareInteractions();
   bindFollowCodexInteractions();
@@ -3503,6 +3557,7 @@ function bindArrivalInteractions(): void {
   root?.querySelector<HTMLFormElement>("[data-plan-return]")?.addEventListener("submit", (event) => { event.preventDefault(); void returnPlanDraft(event.currentTarget as HTMLFormElement); });
   root?.querySelector<HTMLButtonElement>("[data-action='discard-returned-draft']")?.addEventListener("click", (event) => { void discardReturnedDraft((event.currentTarget as HTMLButtonElement).dataset.packet ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", () => { void endCurrentDemo(); });
+  bindDialogAccessibility();
 }
 
 const activeCandidates = (): Candidate[] => [...runtime.kernel.candidates.values()]
@@ -3808,9 +3863,9 @@ const renderNextStep = (manifest: SurfaceManifest): string => {
 
 const renderPlanInputDialog = (): string => {
   const editing = planInputEditingId ? planInputs.find((item) => item.inputId === planInputEditingId) ?? null : null;
-  const kind = editing?.kind ?? "decision";
-  const section = editing?.section ?? planInputContext.section;
-  const messageValue = editing?.message ?? "";
+  const kind = planInputDraft?.kind ?? editing?.kind ?? "decision";
+  const section = planInputDraft?.section ?? editing?.section ?? planInputContext.section;
+  const messageValue = planInputDraft?.message ?? editing?.message ?? "";
   return `<dialog class="plan-input-dialog" aria-labelledby="plan_input_title">
   <button type="button" class="dialog-close" data-action="close-plan-input" aria-label="Close">×</button>
   <form data-plan-input-form data-plan-input-id="${escapeHtml(editing?.inputId ?? "")}">
@@ -3845,7 +3900,8 @@ const renderPlanFactDialog = (): string => {
       <header><p class="eyebrow">Plan details</p><h2 id="plan_fact_title">Change the numbers</h2></header>
       <div class="plan-fact-dialog__fields">${facts.map((fact) => {
         const moneyFact = fact.format === "money";
-        const value = moneyFact ? fact.value / 100 : fact.value;
+        const draftValue = planFactDraftValues?.[fact.factId] ?? fact.value;
+        const value = moneyFact ? draftValue / 100 : draftValue;
         const minimum = moneyFact ? fact.minimum / 100 : fact.minimum;
         const maximum = fact.maximum === null ? "" : String(moneyFact ? fact.maximum / 100 : fact.maximum);
         return `<label><span>${escapeHtml(fact.label)}</span><div class="plan-fact-input">${moneyFact ? `<span aria-hidden="true">${escapeHtml(planCurrencyCode())}</span>` : ""}<input type="number" inputmode="${moneyFact ? "decimal" : "numeric"}" name="${escapeHtml(fact.factId)}" value="${escapeHtml(value)}" min="${escapeHtml(minimum)}" ${maximum ? `max="${escapeHtml(maximum)}"` : ""} step="${moneyFact ? "0.01" : escapeHtml(fact.step)}" required></div></label>`;
@@ -3899,7 +3955,7 @@ const renderOptions = (): string => {
     <div><span>What stays true</span><strong>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</strong></div>
     <div><span>What you’re choosing</span><strong>Which compromise fits best</strong><small>Nothing changes until you confirm one.</small></div>
   </div>` : ""}${search && Number.isFinite(exploredCombinations) ? `<section class="option-search-proof" aria-label="How Finite found these options">
-    <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} distinct legal routes are surfaced so the trade-offs stay understandable.</p></div>
+    <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} meaningfully different routes are surfaced so the trade-offs stay understandable.</p></div>
     <dl><div><dt>Legal combinations</dt><dd>${legalCombinations}</dd></div><div><dt>Rejected combinations</dt><dd>${rejectedCombinations}</dd></div><div><dt>Refused before choice</dt><dd>${escapeHtml(lockedMoves.length ? lockedMoves.join(" · ") : "No fixed item was offered as a trade")}</dd></div></dl>
   </section>` : ""}<div class="option-grid">
     ${candidates.map((candidate, index) => `
@@ -3967,7 +4023,7 @@ const renderLatestPlanUpdate = (): string => {
     <dl class="latest-plan-update__proof">
       <div><dt>Why this route</dt><dd>${escapeHtml(objective)}${changes.length ? ` · ${escapeHtml(changes.join(" · "))}` : ""}</dd></div>
       <div><dt>Still protected</dt><dd>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</dd></div>
-      <div><dt>Search proof</dt><dd>${Number.isFinite(explored) ? `${explored} combinations checked · ${surfaced} legal routes surfaced` : "Bounded legal search completed"}</dd></div>
+      <div><dt>Search proof</dt><dd>${Number.isFinite(explored) ? `${explored} combinations checked · ${surfaced} viable routes surfaced` : "Bounded constraint search completed"}</dd></div>
       <div><dt>Authority</dt><dd>You confirmed this exact route for revision ${receipt.fromRevision}. Codex applied only that approval.</dd></div>
     </dl>
     <p class="latest-plan-update__receipt">Receipt ${escapeHtml(receipt.receiptId)} · replay-safe · accepted once</p>
@@ -5123,6 +5179,7 @@ const openPlanInput = async (button: HTMLButtonElement): Promise<void> => {
     contextLabel: button.dataset.planInputLabel || null,
   };
   planInputEditingId = null;
+  planInputDraft = null;
   planInputError = "";
   planInputDialogOpen = true;
   await render();
@@ -5133,6 +5190,7 @@ const editPlanInput = async (inputId: string): Promise<void> => {
   const item = planInputs.find((candidate) => candidate.inputId === inputId);
   if (!item) return;
   planInputEditingId = item.inputId;
+  planInputDraft = null;
   planInputContext = { section: item.section, contextId: item.contextId, contextLabel: item.contextLabel };
   planInputError = "";
   planInputDialogOpen = true;
@@ -5144,6 +5202,7 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
   if (planInputBusy) return;
   const data = new FormData(form);
   const section = String(data.get("section") ?? "general") as PlanInputSection;
+  planInputDraft = { kind: String(data.get("kind") ?? "decision") as PlanInputKind, section, message: String(data.get("message") ?? "") };
   planInputBusy = true;
   let revealSavedChange = false;
   planInputError = "";
@@ -5170,6 +5229,7 @@ const savePlanInput = async (form: HTMLFormElement, mode: PlanInputMode): Promis
       planInputs = result.inputs;
       planInputDialogOpen = false;
       planInputEditingId = null;
+      planInputDraft = null;
       if (mode === "direct" && result.input) {
         recordChangeSummary(planInputChangeSummary({
           editing: wasEditing,
@@ -5297,6 +5357,7 @@ const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
     const raw = Number(data.get(factId));
     changes.push({ factId, value: fact.format === "money" ? Math.round(raw * 100) : raw });
   }
+  planFactDraftValues = Object.fromEntries(changes.map((change) => [change.factId, change.value]));
   planFactBusy = true;
   planFactError = "";
   await render();
@@ -5311,6 +5372,7 @@ const savePlanFacts = async (form: HTMLFormElement): Promise<void> => {
     const applied = confirmationId ? await runtime.kernel.applyConfirmedPlanFactChanges({ planFactChangeId: pending.planFactChangeId, confirmationId, expectedRevision: revision, idempotencyKey: `plan-facts-site-${crypto.randomUUID()}` }) : confirmed;
     if (applied.ok) {
       planFactDialogOpen = false;
+      planFactDraftValues = null;
       planFactsSaved = true;
       planDisplayNames.set(runtime.kernel.profile.planId, projectAcceptedPlanCopy(runtime.kernel.profile.name, runtime.kernel));
       recordChangeSummary(planFactChangeSummary({ changes: pending.changes, currency: planCurrencyCode(), availableMinor: runtime.kernel.accepted.bufferMinor }));
@@ -5327,14 +5389,17 @@ const bindPlanFactCalculation = (): void => {
   const form = root?.querySelector<HTMLFormElement>("[data-plan-fact-form]");
   if (!form) return;
   const total = form.elements.namedItem("allocations.totalBudgetMinor") as HTMLInputElement | null;
+  const forecast = form.elements.namedItem("allocations.forecastMinor") as HTMLInputElement | null;
   const output = form.querySelector<HTMLOutputElement>("[data-plan-fact-available]");
   if (!total || !output) return;
   const update = (): void => {
     const totalMinor = Math.round(Number(total.value) * 100);
-    const assigned = runtime.kernel.accepted.spentMinor + runtime.kernel.accepted.committedMinor + runtime.kernel.accepted.forecastMinor;
+    const forecastMinor = forecast ? Math.round(Number(forecast.value) * 100) : runtime.kernel.accepted.forecastMinor;
+    const assigned = runtime.kernel.accepted.spentMinor + runtime.kernel.accepted.committedMinor + forecastMinor;
     output.value = Number.isFinite(totalMinor) ? money(Math.max(0, totalMinor - assigned)) : "—";
   };
   total.addEventListener("input", update);
+  forecast?.addEventListener("input", update);
 };
 
 const savePlanRetrospective = async (form: HTMLFormElement): Promise<void> => {
@@ -5417,6 +5482,7 @@ const decideProfileMemory = async (form: HTMLFormElement, submitter: HTMLButtonE
 };
 
 function bindInteractions(): void {
+  bindDialogTriggerTracking();
   bindCodexHandoffInteractions();
   bindFollowCodexInteractions();
   bindPlanShareInteractions();
@@ -5431,22 +5497,22 @@ function bindInteractions(): void {
   root?.querySelectorAll<HTMLFormElement>("[data-memory-decision]").forEach((form) => form.addEventListener("submit", (event) => { event.preventDefault(); void decideProfileMemory(event.currentTarget as HTMLFormElement, (event as SubmitEvent).submitter as HTMLButtonElement | null); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-input']").forEach((button) => button.addEventListener("click", () => { void openPlanInput(button); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='edit-plan-input']").forEach((button) => button.addEventListener("click", () => { void editPlanInput(String(button.dataset.planInputId ?? "")); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputError = ""; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-input']").forEach((button) => button.addEventListener("click", async () => { planInputDialogOpen = false; planInputEditingId = null; planInputDraft = null; planInputError = ""; await render(); restoreDialogTriggerFocus(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-input-form]")?.addEventListener("submit", (event) => { event.preventDefault(); const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null; const mode: PlanInputMode = submitter?.value === "codex" ? "codex" : "direct"; void savePlanInput(event.currentTarget as HTMLFormElement, mode); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='handle-plan-input']").forEach((button) => button.addEventListener("click", () => { void handlePlanInput(String(button.dataset.planInputId ?? "")); }));
   root?.querySelector<HTMLFormElement>("[data-checklist-add]")?.addEventListener("submit", (event) => { event.preventDefault(); void addChecklistItem(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLInputElement>("[data-action='toggle-checklist']").forEach((input) => input.addEventListener("change", () => { void toggleChecklistItem(String(input.dataset.checklistId ?? ""), input.checked); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='reopen-stage']").forEach((button) => button.addEventListener("click", () => { void toggleChecklistItem(String(button.dataset.checklistId ?? ""), false); }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-attachment']").forEach((button) => button.addEventListener("click", () => { void openAttachmentDialog(button); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-attachment']").forEach((button) => button.addEventListener("click", async () => { attachmentDialogOpen = false; planWorkError = ""; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-attachment']").forEach((button) => button.addEventListener("click", async () => { attachmentDialogOpen = false; planWorkError = ""; await render(); restoreDialogTriggerFocus(); }));
   root?.querySelector<HTMLFormElement>("[data-attachment-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void saveAttachments(event.currentTarget as HTMLFormElement); });
   root?.querySelectorAll<HTMLButtonElement>("[data-action='remove-attachment']").forEach((button) => button.addEventListener("click", () => { void removeAttachment(String(button.dataset.attachmentId ?? "")); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactError = ""; planFactDialogOpen = true; await render(); root.querySelector<HTMLInputElement>("[data-plan-fact-form] input")?.focus(); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactDialogOpen = false; planFactError = ""; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactError = ""; planFactDraftValues = null; planFactDialogOpen = true; await render(); root.querySelector<HTMLInputElement>("[data-plan-fact-form] input")?.focus(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-facts']").forEach((button) => button.addEventListener("click", async () => { planFactDialogOpen = false; planFactDraftValues = null; planFactError = ""; await render(); restoreDialogTriggerFocus(); }));
   root?.querySelector<HTMLFormElement>("[data-plan-fact-form]")?.addEventListener("submit", (event) => { event.preventDefault(); void savePlanFacts(event.currentTarget as HTMLFormElement); });
   bindPlanFactCalculation();
   root?.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-status']").forEach((button) => button.addEventListener("click", async () => { planStatusDialogOpen = true; await render(); root.querySelector<HTMLTextAreaElement>(".plan-status-dialog textarea")?.focus(); }));
-  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-status']").forEach((button) => button.addEventListener("click", async () => { planStatusDialogOpen = false; await render(); }));
+  root?.querySelectorAll<HTMLButtonElement>("[data-action='close-plan-status']").forEach((button) => button.addEventListener("click", async () => { planStatusDialogOpen = false; await render(); restoreDialogTriggerFocus(); }));
   root?.querySelectorAll<HTMLDetailsElement>("[data-managing-zone]").forEach((details) => details.addEventListener("toggle", () => {
     const zoneId = String(details.dataset.zoneId ?? "");
     if (!zoneId) return;
@@ -5482,17 +5548,20 @@ function bindInteractions(): void {
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-facts']")?.addEventListener("click", async () => { runtime.kernel.pendingPlanFactChange = null; runtime.kernel.planFactConfirmation = null; announce("Plan detail changes cancelled."); await render(); });
   if (labMode) root?.querySelector<HTMLButtonElement>("[data-action='run-handoff-acceptance']")?.addEventListener("click", () => { void runAuthenticatedHandoffAcceptance(); });
   root?.querySelector<HTMLButtonElement>("[data-action='end-demo']")?.addEventListener("click", () => { void endCurrentDemo(); });
+  bindDialogAccessibility();
 }
 
 if (labMode) await seedDecision();
 updateOpeningStatus("Opening your workspace…");
 await render();
 window.finitePlanCanary = { runtime, adapter, refresh: () => { void render(); } };
-if (opensFreshArrival) void hydrateCanonicalRuntime();
+if (opensFreshArrival && shouldLoadDurablePlanData({ localDemoMode, planId: runtime.kernel.profile.planId, persistedPlanIds })) {
+  void hydrateCanonicalRuntime();
+}
 if (opensProfileSurface) {
   void refreshProfileContext().then(() => render()).catch(() => { /* About you keeps its safe empty state if reusable context is unavailable. */ });
 } else if (startupSurface === "arrival") {
-  void Promise.all([refreshSecondaryPlanData(), refreshProfileContext()]).then(() => render()).catch(() => { /* The starting surface stays usable without reusable context. */ });
+  void refreshProfileContext().then(() => render()).catch(() => { /* The starting surface stays usable without reusable context. */ });
 }
 if (startupSurface === "plan") {
   void initialSecondaryPlanData.then(async () => {
@@ -5500,7 +5569,7 @@ if (startupSurface === "plan") {
     await syncAdaptiveChecklist();
     await render();
   }).catch(() => { /* The core plan remains usable if secondary records cannot be loaded. */ });
-} else {
+} else if (shouldLoadDurablePlanData({ localDemoMode, planId: runtime.kernel.profile.planId, persistedPlanIds })) {
   void syncAdaptiveChecklist().catch(() => { /* The plan remains usable if its suggested checklist cannot be synced yet. */ });
 }
 };

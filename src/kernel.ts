@@ -768,13 +768,13 @@ export class FinitePlanKernel {
   recordChangeEvent(input: ChangeEventInput): ToolResult {
     if (this.lifecycleStatus !== "active") return { ok: false, code: "PLAN_NOT_ACTIVE", lifecycleStatus: this.lifecycleStatus, acceptedStateChanged: false, next: "Ask the human whether to reopen the plan, then stage that lifecycle change for confirmation." };
     if (input.expectedRevision !== this.revision) return { ok: false, code: "STALE_REVISION", currentRevision: this.revision, acceptedStateChanged: false, next: "Read identity state and retry against its revision." };
-    const invalidNumbers = [input.costDeltaMinor, input.daysDelta ?? 0, input.minimumBufferMinor].filter((value) => !Number.isInteger(value));
+    const invalidNumbers = [input.costDeltaMinor, input.daysDelta ?? 0, input.minimumBufferMinor].filter((value) => !Number.isSafeInteger(value));
     if (typeof input.type !== "string" || typeof input.title !== "string" || !input.type.trim() || !input.title.trim() || invalidNumbers.length || input.minimumBufferMinor < 0) return { ok: false, code: "INVALID_CHANGE_EVENT", acceptedStateChanged: false, next: "Supply a type, title, integer money/day deltas, and a non-negative minimum buffer." };
     const malformedEntityChanges = (input.entityChanges ?? []).filter((change) => {
       const hasDelta = change.delta !== undefined;
       const hasValue = change.value !== undefined;
       const amount = hasValue ? change.value : change.delta;
-      return hasDelta === hasValue || !Number.isInteger(amount);
+      return hasDelta === hasValue || !Number.isSafeInteger(amount);
     });
     if (malformedEntityChanges.length) return { ok: false, code: "INVALID_ENTITY_CHANGE", malformedEntityChanges, acceptedStateChanged: false, next: "Each entity change must contain exactly one integer delta or value." };
     const invalidEntityChanges = (input.entityChanges ?? []).filter((change) => !this.entities[change.entityId] || !(change.field in (this.entities[change.entityId]?.values ?? {})));
@@ -921,10 +921,13 @@ export class FinitePlanKernel {
     const selectedMoves = moveIds.map((moveId) => ({ moveId, ...clone(this.profile.moves[moveId]!) }));
     const savingsMinor = sum(selectedMoves.map((move) => move.savingsMinor));
     const netForecastDeltaMinor = event.costDeltaMinor - savingsMinor;
+    const resultingForecastMinor = this.accepted.forecastMinor + netForecastDeltaMinor;
     const resultingBufferMinor = this.accepted.bufferMinor - netForecastDeltaMinor;
     const resultingDaysDelta = event.daysDelta + sum(selectedMoves.map((move) => move.daysDelta));
     const resultingEntities = this.entitiesAfter(event.entityChanges);
     const violations: ConstraintViolation[] = [];
+    if (![netForecastDeltaMinor, resultingForecastMinor, resultingBufferMinor].every(Number.isSafeInteger)) violations.push({ code: "UNSAFE_ALLOCATION_ARITHMETIC" });
+    if (resultingForecastMinor < 0) violations.push({ code: "NEGATIVE_FORECAST", actualMinor: resultingForecastMinor });
     if (resultingBufferMinor < event.minimumBufferMinor) violations.push({ code: "MINIMUM_BUFFER", requiredMinor: event.minimumBufferMinor, actualMinor: resultingBufferMinor });
     if (this.profile.locks.includes("completion_date") && resultingDaysDelta > 0) violations.push({ code: "LOCKED_COMPLETION_DATE", daysLate: resultingDaysDelta });
     violations.push(...this.relationshipViolations(resultingEntities));
@@ -1163,6 +1166,9 @@ export class FinitePlanKernel {
     const authorityChallengeId = this.approval.authorityChallengeId ?? null;
     const before = clone(this.accepted);
     const after = { ...before, forecastMinor: before.forecastMinor + canonical.netForecastDeltaMinor, bufferMinor: before.bufferMinor - canonical.netForecastDeltaMinor };
+    const allocationComponents = [after.totalBudgetMinor, after.spentMinor, after.committedMinor, after.forecastMinor, after.bufferMinor];
+    if (!allocationComponents.every(Number.isSafeInteger)) return { ok: false, code: "UNSAFE_ALLOCATION_ARITHMETIC", acceptedStateChanged: false };
+    if (allocationComponents.some((value) => value < 0)) return { ok: false, code: "NEGATIVE_ALLOCATION_COMPONENT", acceptedStateChanged: false };
     if (sumAllocation(before) !== before.totalBudgetMinor || sumAllocation(after) !== after.totalBudgetMinor) return { ok: false, code: "FINITE_TOTAL_INVARIANT_FAILED", acceptedStateChanged: false };
     const checkpoint = this.checkpoint();
     const fromRevision = this.revision;

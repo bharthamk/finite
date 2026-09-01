@@ -1,4 +1,5 @@
 import { localDemoModeEnabled } from "./local-demo.js";
+import { shouldBootstrapLocalDemo } from "./experience-route.js";
 
 interface AuthStatus {
   session: {
@@ -18,13 +19,14 @@ export {};
 const shareId = location.pathname.startsWith("/share/") ? decodeURIComponent(location.pathname.slice(7)) : null;
 const collaborationToken = location.pathname.startsWith("/collaborate/") ? decodeURIComponent(location.pathname.slice(13)) : null;
 const startupQuery = new URLSearchParams(location.search);
-const localSpotlight = (startupQuery.get("start") === "live-demo" || startupQuery.get("start") === "spotlight-active")
-  && startupQuery.get("tour") === "spotlight";
+const startMode = startupQuery.get("start");
+const localSpotlight = (startMode === "live-demo" || startMode === "spotlight-active") && startupQuery.get("tour") === "spotlight";
 const localDemoResume = localDemoModeEnabled(localStorage);
+const localDemoBootstrap = shouldBootstrapLocalDemo({ pathname: location.pathname, startMode, collaborationToken, localDemoResume });
 if (shareId && !shareId.includes("/")) {
   const { renderShare } = await import("./share-entry.js");
   await renderShare(shareId);
-} else if (localSpotlight || localDemoResume) {
+} else if (localDemoBootstrap) {
   const { startKitchen } = await import("./main.js");
   try {
     await startKitchen({

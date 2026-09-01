@@ -1,5 +1,32 @@
 export type FiniteExperienceSurface = "arrival" | "plan";
 
+const localDemoStartModes = new Set(["live-demo", "demo-active", "spotlight-active"]);
+
+export const shouldBootstrapLocalDemo = ({
+  pathname,
+  startMode,
+  collaborationToken,
+  localDemoResume,
+}: {
+  pathname: string;
+  startMode: string | null;
+  collaborationToken: string | null;
+  localDemoResume: boolean;
+}): boolean => {
+  if (localDemoStartModes.has(startMode ?? "")) return true;
+  return localDemoResume && pathname === "/" && startMode === null && !collaborationToken;
+};
+
+export const shouldLoadDurablePlanData = ({
+  localDemoMode,
+  planId,
+  persistedPlanIds,
+}: {
+  localDemoMode: boolean;
+  planId: string;
+  persistedPlanIds: ReadonlySet<string>;
+}): boolean => localDemoMode || persistedPlanIds.has(planId);
+
 export const isWaitingArrivalStatus = (status: unknown): boolean => (
   typeof status === "string" && status.length > 0 && status !== "accepted" && status !== "closed"
 );

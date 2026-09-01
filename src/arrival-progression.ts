@@ -102,7 +102,9 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
   const categoryForecastMinor = starter.overview.categories
     .filter((item) => item.fields.moneyRole === "cost")
     .reduce((total, item) => total + amountMinor(item.fields.amount), 0);
-  const forecastMinor = Math.min(totalBudgetMinor, categoryForecastMinor);
+  const hasKnownBudgetLimit = totalBudgetMinor > 0;
+  const accountingTotalMinor = hasKnownBudgetLimit ? totalBudgetMinor : categoryForecastMinor;
+  const forecastMinor = Math.min(accountingTotalMinor, categoryForecastMinor);
   const schedule = starter.sections.find((section) => section.variant === "calendar")?.items ?? [];
   const taskItems = starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
   const stageSource = profileId === "general" && taskItems.length ? taskItems : schedule.length ? schedule : taskItems;
@@ -119,7 +121,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
   const locks = requirementItems.map((item) => boundedSlug(itemTitle(item)).slice(0, 64)).filter(Boolean).slice(0, 30);
   if (!locks.length) locks.push("preserve_the_accepted_scope");
   const openQuestions = starter.sections.flatMap((section) => section.openQuestions.map((question) => ({ section, question })));
-  const dependencies = openQuestions.slice(0, categoryForecastMinor > totalBudgetMinor ? 49 : 50).map(({ section, question }, index) => ({
+  const dependencies = openQuestions.slice(0, hasKnownBudgetLimit && categoryForecastMinor > totalBudgetMinor ? 49 : 50).map(({ section, question }, index) => ({
     dependencyId: `human_question_${index + 1}`,
     kind: "human_decision" as const,
     title: question.prompt,
@@ -127,7 +129,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     blocking: false,
     sourcePaths: [`workspace.${section.sectionId}.openQuestions.${question.questionId}`],
   }));
-  if (categoryForecastMinor > totalBudgetMinor) dependencies.push({
+  if (hasKnownBudgetLimit && categoryForecastMinor > totalBudgetMinor) dependencies.push({
     dependencyId: "budget_overallocated",
     kind: "human_decision",
     title: `Current category budgets exceed the total by ${((categoryForecastMinor - totalBudgetMinor) / 100).toFixed(2)} ${starter.overview.currency}.`,
@@ -143,10 +145,11 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     ...scopeItems.map((item) => item.fields.headcount),
   ) ?? 1;
   const venueCapacity = Math.max(guestCount, firstPositiveInteger(...scopeItems.map((item) => item.fields.capacity), ...scopeItems.map((item) => item.fields.headcount)) ?? guestCount);
+  const tripDays = Math.max(1, Math.round((Date.parse(starter.overview.end) - Date.parse(starter.overview.start)) / 86_400_000) + 1 || 1);
   const entityValues: Record<string, Record<string, number>> = profileId === "travel"
     ? {
-      trip_days: { days: Math.max(1, Math.round((Date.parse(starter.overview.end) - Date.parse(starter.overview.start)) / 86_400_000) + 1 || 1) },
-      booked_segment_days: { days: 0 },
+      trip_days: { days: tripDays },
+      booked_segment_days: { days: tripDays },
     }
     : profileId === "renovation"
       ? { completion_day: { day: Math.max(1, stages.length) }, committed_completion_day: { day: Math.max(1, stages.length) } }
@@ -169,7 +172,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
       location: starter.sections.some((section) => section.items.some((item) => String(item.fields.location ?? "").trim())) ? "positive" : "unknown",
       capacity: profileId === "event" ? "positive" : "not_applicable",
     },
-    allocation: { totalBudgetMinor, spentMinor: 0, committedMinor: 0, forecastMinor, bufferMinor: totalBudgetMinor - forecastMinor },
+    allocation: { totalBudgetMinor: accountingTotalMinor, spentMinor: 0, committedMinor: 0, forecastMinor, bufferMinor: accountingTotalMinor - forecastMinor },
     actuals: [],
     locks,
     preferenceLabels: ["preserve_human_set_details", "keep_working_assumptions_visible"],

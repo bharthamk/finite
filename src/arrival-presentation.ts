@@ -282,6 +282,12 @@ const statedEventHeadcount = (value: string): number | null => {
   return count > 0 ? count : null;
 };
 
+const domesticAustralianTravel = (value: string): boolean => {
+  const places = "sydney|melbourne|brisbane|gold coast|adelaide|perth|canberra|darwin|hobart|tasmania";
+  const matches = value.toLowerCase().match(new RegExp(`\\b(?:${places})\\b`, "g")) ?? [];
+  return new Set(matches).size >= 2 || (/\bhobart|tasmania\b/i.test(value) && !/\binternational|overseas|europe|asia|america|africa\b/i.test(value));
+};
+
 const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
   const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
   const eventSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
@@ -301,7 +307,7 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     stays: ["What accommodation style and minimum standard should the plan use?"],
     transport: ["Which departure point, baggage needs, and comfort trade-offs should guide transport choices?"],
     money: ["Where should the budget flex first if researched prices run high?"],
-    requirements: ["Which passport, visa, insurance, accessibility, or health requirements need checking?"],
+    requirements: [domesticAustralianTravel(eventSource) ? "Which identification, insurance, accessibility, health, or local travel requirements need checking?" : "Which passport, visa, insurance, accessibility, or health requirements need checking?"],
     tasks: ["Which planning tasks do you want to handle yourself?"],
   };
   if (family === "renovation") return {
@@ -522,6 +528,17 @@ const addMonths = (value: string, months: number): string => {
   return date.toISOString().slice(0, 10);
 };
 
+const validIsoDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && Number.isFinite(Date.parse(`${value}T00:00:00Z`))
+  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+
+export const isValidPlanDateRange = (start: string, end: string, singleDay = false): boolean => {
+  if (!start && !end) return true;
+  if (!validIsoDate(start)) return false;
+  if (singleDay) return true;
+  return validIsoDate(end) && end >= start;
+};
+
 const requestedDurationEnd = (order: ArrivalOrder, start: string): { end: string; provisional: boolean } => {
   if (!start) return { end: "", provisional: false };
   const text = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${JSON.stringify(order.interpretation?.known ?? {})} ${JSON.stringify(order.interpretation?.inferred ?? {})}`.toLowerCase();
@@ -533,6 +550,7 @@ const requestedDurationEnd = (order: ArrivalOrder, start: string): { end: string
   if (weeks) return { end: addDays(start, (Number(weeks[1]) || words[weeks[1]!] || 1) * 7), provisional: approximate };
   const nights = text.match(/\b(\d+|one|two|three|four|five|six)[ -]+nights?\b/);
   if (nights) return { end: addDays(start, Number(nights[1]) || words[nights[1]!] || 1), provisional: approximate };
+  if (/\bweekend\b/.test(text)) return { end: addDays(start, 2), provisional: approximate };
   const days = text.match(/\b(\d+)\s+days?\b/);
   if (days) return { end: addDays(start, Number(days[1])), provisional: approximate };
   return { end: "", provisional: false };
@@ -575,17 +593,22 @@ const seedRoughPlan = (
     let locations = itinerary.filter((item) => String(item.fields.location ?? "").trim() && !/leaving from|origin/i.test(item.label));
     const sourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""} ${JSON.stringify(order.interpretation?.known ?? {})} ${JSON.stringify(order.interpretation?.inferred ?? {})}`;
     if (!locations.length) {
-      const hints: Array<[RegExp, string]> = [[/oktoberfest/i, "Munich"], [/budapest|hungary/i, "Budapest"], [/poland/i, "Kraków"], [/estonia/i, "Tallinn"], [/finland/i, "Helsinki"], [/albania/i, "Tirana"], [/germany/i, "Berlin"], [/france/i, "Paris"], [/italy/i, "Milan"]];
+      const hints: Array<[RegExp, string]> = [[/hobart|tasmania/i, "Hobart"], [/oktoberfest/i, "Munich"], [/budapest|hungary/i, "Budapest"], [/poland/i, "Kraków"], [/estonia/i, "Tallinn"], [/finland/i, "Helsinki"], [/albania/i, "Tirana"], [/germany/i, "Berlin"], [/france/i, "Paris"], [/italy/i, "Milan"]];
       const inferredStops = hints.filter(([pattern]) => pattern.test(sourceText)).map(([, location]) => location);
       const fallbackStops = inferredStops.length ? inferredStops : /europe/i.test(sourceText) ? ["Berlin", "Prague", "Vienna"] : ["First destination"];
       fallbackStops.forEach((location, index) => seed("itinerary", `route_${index}`, location, { title: location, location, notes: "Rough first-pass stop — change or remove it." }));
       locations = sectionItems.get("itinerary")!.filter((item) => String(item.fields.location ?? "").trim());
     }
+    const domestic = domesticAustralianTravel(sourceText);
+    const travellerCount = statedEventHeadcount(sourceText) ?? 1;
+    if (travellerCount > 1 && !(sectionItems.get("people") ?? []).some((item) => /traveller group/i.test(item.label))) {
+      seed("people", "traveller_group", `Traveller group · ${travellerCount} people`, { title: `Traveller group · ${travellerCount} people`, role: `${travellerCount} travellers`, status: "confirmed", notes: "Party size supplied in the starting brief." });
+    }
     locations.forEach((item, index) => {
       const location = String(item.fields.location || item.fields.title);
       const allowance = travelAllowance(location);
       if (!item.fields.start && firstDate) item.fields.start = addDays(firstDate, index * 4);
-      if (!item.fields.end && item.fields.start) item.fields.end = addDays(String(item.fields.start), 3);
+      if (!item.fields.end && item.fields.start) item.fields.end = addDays(String(item.fields.start), /\bweekend\b/i.test(sourceText) ? 2 : 3);
       if (!item.fields.dailyBudget) item.fields.dailyBudget = String(allowance.daily);
       if (!item.fields.currency) item.fields.currency = seedCurrency;
       item.fields.notes = `${String(item.fields.notes ?? "").trim()}${item.fields.notes ? " · " : ""}Rough timing and daily allowance; not live checked.`;
@@ -595,26 +618,40 @@ const seedRoughPlan = (
     const routeLocations = locations.map((item) => String(item.fields.location || item.fields.title));
     const origin = itinerary.find((item) => /leaving from|origin/i.test(item.label))?.fields.location;
     if (routeLocations.length && !(sectionItems.get("transport") ?? []).length) {
-      seed("transport", "arrival_flight", `Flight to ${routeLocations[0]}`, { title: "Long-haul flight option", from: String(origin || "Home airport"), to: routeLocations[0]!, start: firstDate, provider: "To compare", cost: String(/australia|gold coast|brisbane|sydney|melbourne/i.test(String(origin)) ? 1500 : 900), currency: seedCurrency, notes: "Rough one-way allowance; no fare or seat has been checked." });
+      const perPersonAllowance = domestic ? 250 : /australia|gold coast|brisbane|sydney|melbourne/i.test(String(origin)) ? 1500 : 900;
+      seed("transport", "arrival_flight", `Flight to ${routeLocations[0]}`, { title: domestic ? "Domestic return flight option" : "Long-haul flight option", from: String(origin || "Home airport"), to: routeLocations[0]!, start: firstDate, provider: "To compare", cost: String(perPersonAllowance * travellerCount), currency: seedCurrency, notes: `${domestic ? "Rough return" : "Rough one-way"} allowance for ${travellerCount} traveller${travellerCount === 1 ? "" : "s"}; no fare or seat has been checked.` });
     }
     routeLocations.slice(0, -1).forEach((location, index) => seed("transport", `leg_${index}`, `${location} → ${routeLocations[index + 1]}`, { title: "Intercity transport", from: location, to: routeLocations[index + 1]!, start: String(locations[index]?.fields.end ?? ""), provider: "Rail / coach / low-cost flight", cost: "80", currency: seedCurrency, notes: "Rough allowance; mode, timetable and availability are open." }));
     const allowances = locations.map((item) => travelAllowance(String(item.fields.location || item.fields.title)));
     if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "daily")) seed("money", "daily_spend", "Daily spending allowance", { title: "Daily spending allowance", amount: String(Math.round(allowances.reduce((sum, item) => sum + item.daily, 0) / Math.max(1, allowances.length))), currency: seedCurrency, moneyRole: "daily", notes: "Average first-pass allowance across the rough route." });
     const transportAllowance = (sectionItems.get("transport") ?? []).reduce((sum, item) => sum + Number(item.fields.cost || 0), 0);
-    const stayAllowance = allowances.reduce((sum, item) => sum + item.nightly * 4, 0);
-    const dayAllowance = allowances.reduce((sum, item) => sum + item.daily * 4, 0);
+    const weekendTrip = /\bweekend\b/i.test(sourceText);
+    const routeNights = locations.map((item) => {
+      const start = String(item.fields.start ?? "");
+      const end = String(item.fields.end ?? "");
+      const difference = validIsoDate(start) && validIsoDate(end) ? Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000) : 0;
+      return weekendTrip ? Math.max(1, difference || 2) : 4;
+    });
+    const stayAllowance = allowances.reduce((sum, item, index) => sum + item.nightly * routeNights[index]!, 0);
+    const dayAllowance = allowances.reduce((sum, item, index) => sum + item.daily * (weekendTrip ? routeNights[index]! + 1 : 4) * travellerCount, 0);
     const categorySeeds: Array<[string, string, number, string]> = [
       ["transport_allowance", "Flights & transport", transportAllowance, "Rough transport allocation from the current route; no fares have been checked."],
       ["stay_allowance", "Accommodation", stayAllowance, "Four rough nights per stop; edit dates or stays to replace this centering estimate."],
       ["day_allowance", "Food & daily spending", dayAllowance, "Daily allowance multiplied across the rough route."],
-      ["admin_allowance", "Insurance, visas & admin", 300, "Starter allowance only; live requirements and quotes are not checked."],
+      ["admin_allowance", domestic ? "Insurance & trip admin" : "Insurance, visas & admin", domestic ? 100 : 300, "Starter allowance only; live requirements and quotes are not checked."],
     ];
     const knownLimit = Number((sectionItems.get("money") ?? []).filter((item) => item.fields.moneyRole === "limit").at(-1)?.fields.amount || 0);
     const remaining = knownLimit - categorySeeds.reduce((sum, item) => sum + item[2], 0);
     categorySeeds.push(["flexible_allowance", "Experiences & flexible buffer", Math.max(0, remaining), "Uncommitted space for experiences, price movement, or route changes."]);
     categorySeeds.forEach(([id, title, amount, notes]) => seed("money", id, title, { title, amount: String(Math.round(amount)), currency: seedCurrency, moneyRole: "cost", notes }));
-    (["passport:Passport validity check", "visa:Visa and entry-requirement check", "insurance:Travel insurance"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!requirements.some((item) => String(item.fields.title).toLowerCase().includes(id))) seed("requirements", id, title, { title, status: "open", notes: "Required check; not legal or live entry advice." }); });
-    (["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"] as const).forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
+    const requirementSeeds = domestic
+      ? ["photo_id:Confirm carrier photo-ID requirements", "insurance:Decide whether travel insurance is needed"]
+      : ["passport:Passport validity check", "visa:Visa and entry-requirement check", "insurance:Travel insurance"];
+    requirementSeeds.forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!requirements.some((item) => String(item.fields.title).toLowerCase().includes(id))) seed("requirements", id, title, { title, status: "open", notes: "Required trip check; current provider information has not been verified." }); });
+    const taskSeeds = domestic
+      ? ["live_fares:Compare live flight and transport prices", "local_conditions:Check current local travel conditions", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates and traveller availability"]
+      : ["live_fares:Compare live flight and transport prices", "entry_rules:Verify current entry requirements", "stay_options:Compare flexible accommodation", "fixed_dates:Confirm fixed dates, people and events"];
+    taskSeeds.forEach((entry) => { const [id, title] = entry.split(":") as [string, string]; if (!tasks.some((item) => String(item.fields.title).toLowerCase() === title.toLowerCase())) seed("tasks", id, title, { title, done: false, notes: "Useful next check before committing." }); });
     return;
   }
   const sourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.inputs.map((input) => JSON.stringify(input.payload)).join(" ")} ${order.interpretation?.summary ?? ""}`;
@@ -1062,6 +1099,17 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       if (operation.startsWith("module_")) return;
       if (operation === "overview") {
         const overviewFields = safeFields(input.payload.fields);
+        const carriesDates = ["start", "end", "singleDay"].some((key) => Object.prototype.hasOwnProperty.call(overviewFields, key));
+        if (carriesDates) {
+          const nextStart = String(overviewFields.start ?? overviewOverrides.start ?? "");
+          const nextSingleDay = typeof overviewFields.singleDay === "boolean" ? overviewFields.singleDay : overviewOverrides.singleDay === true;
+          const nextEnd = nextSingleDay ? nextStart : String(overviewFields.end ?? overviewOverrides.end ?? "");
+          if (!isValidPlanDateRange(nextStart, nextEnd, nextSingleDay)) {
+            delete overviewFields.start;
+            delete overviewFields.end;
+            delete overviewFields.singleDay;
+          }
+        }
         Object.assign(overviewOverrides, overviewFields);
         const totalBudget = typeof overviewFields.totalBudget === "string" ? overviewFields.totalBudget.trim() : "";
         const currency = typeof overviewFields.currency === "string" ? overviewFields.currency.trim().toUpperCase() : "";
@@ -1207,8 +1255,10 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const start = String(overviewOverrides.start || anchoredEventDate || anchoredRequestStart || dateEntries[0]?.value || "");
   const requestedDuration = requestedDurationEnd(order, start);
   const explicitEnd = dateEntries.filter((entry) => entry.value !== start && ["request", "known", "human"].includes(entry.item.source)).at(-1)?.value ?? "";
-  const end = singleDay ? start : String(overviewOverrides.end || explicitRequestRange.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
-  const datesProvisional = typeof overviewOverrides.datesProvisional === "boolean"
+  const candidateEnd = singleDay ? start : String(overviewOverrides.end || explicitRequestRange.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);
+  const dateRangeAccepted = isValidPlanDateRange(start, candidateEnd, singleDay);
+  const end = dateRangeAccepted ? candidateEnd : start;
+  const datesProvisional = !dateRangeAccepted ? true : typeof overviewOverrides.datesProvisional === "boolean"
     ? overviewOverrides.datesProvisional
     : Boolean(requestedDuration.end ? requestedDuration.provisional || !dateEntries.some((entry) => entry.value === requestedDuration.end && !starterItemIsProvisional(entry.item)) : dateEntries.some((entry) => starterItemIsProvisional(entry.item)));
   const currency = String(overviewOverrides.currency || moneyItems.find((item) => item.fields.currency)?.fields.currency || "AUD").toUpperCase();

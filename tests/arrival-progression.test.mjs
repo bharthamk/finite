@@ -79,6 +79,22 @@ test("the editable base currency becomes the immutable managed-plan currency", a
   const staged = await runtime.compileIntakeToDraft({ packetId: assessed.constructionPacket.packetId, expectedChecksum: assessed.constructionPacket.checksum });
   assert.equal(staged.draft.profile.currencyCode, "NZD");
   assert.equal(staged.draft.profile.entities.trip_days.values.days, 4);
+  assert.equal(staged.draft.profile.entities.booked_segment_days.values.days, 4);
+});
+
+test("an unknown total carries category forecast into a finite valid allocation", () => {
+  const candidate = structuredClone(starter);
+  candidate.family = "travel";
+  candidate.overview.start = "2026-10-09";
+  candidate.overview.end = "2026-10-11";
+  candidate.overview.totalBudget = "";
+  candidate.overview.moneyState = "unknown";
+  candidate.overview.categories = [item("stay", "Stay", { title: "Stay", amount: "600", moneyRole: "cost" }), item("food", "Food", { title: "Food", amount: "300", moneyRole: "cost" })];
+  const progression = arrivalProgressionFromStarter({ ...order, orderId: "arrival_unknown_total_01" }, candidate);
+  assert.deepEqual(progression.intake.allocation, { totalBudgetMinor: 90_000, spentMinor: 0, committedMinor: 0, forecastMinor: 90_000, bufferMinor: 0 });
+  assert.deepEqual(progression.intake.entityValues.trip_days, { days: 3 });
+  assert.deepEqual(progression.intake.entityValues.booked_segment_days, { days: 3 });
+  assert.equal(progression.intake.dependencies.some((dependency) => dependency.dependencyId === "budget_overallocated"), false);
 });
 
 test("manual progression compiles every built-in planning family", async () => {
