@@ -12,7 +12,10 @@ Finite is a new project created during the WebMCP Challenge submission period.
   product source above.
 - Documentation reconciliation after product freeze: `07d5225519801534cb224206e703ef335b8b8422`.
 - Final local v241 media-package assembly: `165f07cff83a3ac9647ddd6526cd74fdcbe6588e`.
-- Live release: Sites v242 with marker `hosted-release-marker-v242`.
+- v242 submission-story reconciliation: `c9640daf01e78b18084edf87eaec4d1e1bf6b4aa`.
+- Live release: Sites v242 with marker `hosted-release-marker-v242`, version ID
+  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_27b5872b1df48191a3a7a0d280f573cc`
+  and deployment ID `appgdep_6a9736c4d91c8191bcef1024ecce1598`.
 
 The complete dated Git history therefore supplies direct evidence that the
 project and its WebMCP implementation were created after the submission period
@@ -24,4 +27,4 @@ transaction tests under `tests/`.
 The final source gate is 367/367 tests plus TypeScript, production client and
 Worker builds, client chunk budget, and diff integrity. The accepted public
 transaction and deployment facts are recorded in
-`FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`.
+`FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md`.

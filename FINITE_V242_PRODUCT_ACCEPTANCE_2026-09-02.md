@@ -7,8 +7,13 @@ Accepted: 2026-09-02
 - Live product: https://finite.bharthamk.chatgpt.site/
 - Sites version: v242
 - Product source: `11558d2346b404cc13312f9d5cd7f1daf9a051e7`
+- Deployed source: `c9640daf01e78b18084edf87eaec4d1e1bf6b4aa`
 - Marker: `hosted-release-marker-v242`
-- Deployment: recorded after Sites publication in the release breadcrumb.
+- Sites version ID:
+  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_27b5872b1df48191a3a7a0d280f573cc`
+- Deployment ID: `appgdep_6a9736c4d91c8191bcef1024ecce1598`
+- Packaged archive SHA-256:
+  `dedba0a84e007c2a7e2f2f5cc25073be74d451e7f126f721b3e935ea014bfa2e`
 - Rollback: Sites v241 from
   `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`.
 
@@ -50,6 +55,11 @@ one accepted apply and a durable receipt.
 - Client chunk budget passes.
 - Submission working gate passes with seven explicit owner-controlled fields.
 - `git diff --check` passes.
+- The deployed root returned HTTP 200 with the v242 build marker and no desktop
+  horizontal overflow in the in-app judge check.
+- The deployed page advertised the semantic WebMCP kitchen; its public status
+  returned `WEBMCP_READY`, and `finite_enter_kitchen` returned
+  `KITCHEN_ENTERED` with unchanged accepted state and a human-input question.
 
 ## Honest remaining gap
 
