@@ -1,6 +1,7 @@
 # WebMCP Challenge requirements
 
-Verified against the official Devpost rules and challenge page on 2026-09-01.
+Verified against the official Devpost rules, challenge page and OpenAI challenge
+overview again on 2026-09-02.
 The official rules govern if any helper, FAQ, or draft conflicts with them.
 
 ## Deadline
@@ -53,6 +54,11 @@ equally weighted dimensions:
 4. Creativity and ambition.
 
 WebMCP leverage is the first tie-break criterion.
+
+The OpenAI challenge overview also frames the quality bar as usefulness,
+originality, execution, thoughtful WebMCP use and the quality of the human-agent
+experience. The submission story therefore must make the operating relationship
+clear, not merely show a working tool invocation.
 
 ## Governing sources
 

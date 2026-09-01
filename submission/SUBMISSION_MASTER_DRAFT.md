@@ -5,11 +5,11 @@ to paste after the four owner-controlled fields are resolved.
 
 ## Release lock
 
-- Product: Finite v241
-- Source: `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`
+- Product: Finite v242
+- Source: `11558d2346b404cc13312f9d5cd7f1daf9a051e7`
 - Live URL: https://finite.bharthamk.chatgpt.site/
 - Judge route: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Gate: 358/358 tests, 20/20 hostile Spotlight kernel runs, production builds,
+- Gate: 367/367 tests, 20/20 hostile Spotlight kernel runs, production builds,
   revision 1→2 production receipt, replay/reload continuity, responsive proof
 - Submission deadline: 2026-09-04 06:00 AEST
 
@@ -25,8 +25,7 @@ to paste after the four owner-controlled fields are resolved.
 Use `DEVPOST_SUBMISSION_DRAFT.md` verbatim as the current content baseline. Its
 tagline is:
 
-> Plans that survive contact with reality—Codex works the change; people choose
-> what becomes true.
+> You state the outcome. Codex operates. You decide what becomes true.
 
 ## Judge package
 
@@ -37,9 +36,17 @@ tagline is:
 
 ## Media package
 
-- Storyboard: `DEMO_VIDEO_STORYBOARD.md`
-- Full narration: `DEMO_VIDEO_SCRIPT.md`
-- Screenshots and recording: `SCREENSHOT_AND_CAPTURE_PLAN.md`
+- Site-grounded operating-inversion storyboard: `DEMO_VIDEO_STORYBOARD.md`
+- Site-grounded narration: `DEMO_VIDEO_SCRIPT.md`
+- Final 2:38 local master: `media/video/finite_v241_hackathon_film.mp4`
+- Standalone English captions: `media/video/finite_v241_hackathon_film.en.srt`
+- Five final 16:9 images and YouTube thumbnail: `media/images/`
+- Screenshot intent, captions and alt text: `SCREENSHOT_AND_CAPTURE_PLAN.md`
+- Technical and judge-facing film certification: `VIDEO_QC_2026-09-01.md`
+
+The previous travel-first v3 film is withdrawn. It remains a technical proof
+source only; it is not the submission video. The v4 operating-inversion master
+is the only approved local upload candidate.
 
 ## Final assembly order
 
@@ -47,8 +54,10 @@ tagline is:
 2. Publish the exact sanitized source and verify the repository host detects the
    license at the top of the repository page.
 3. Run the public repository from a clean clone.
-4. Capture five v241 images and the sub-three-minute public video.
-5. Verify the YouTube upload with audio and captions.
+4. Upload `media/video/finite_v241_hackathon_film.mp4` and use
+   `media/images/finite_v241_submission_thumbnail.png` as the thumbnail.
+5. Verify the public YouTube playback with audio, burned captions and the
+   selectable English subtitle track.
 6. Replace every `[OWNER: ...]` field and run the submission consistency check.
 7. Save the Devpost draft, rehearse from an unprimed browser, and submit.
 8. Freeze the Devpost entry, repository, live Site, and video through judging.

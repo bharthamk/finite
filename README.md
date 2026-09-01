@@ -1,12 +1,14 @@
 # Finite
 
-**Plans that survive contact with reality.**
+**You state the outcome. Codex operates. You decide what becomes true.**
 
-Finite is an adaptive planning product for the moment a real plan stops matching the world. A date moves, a cost changes, a person becomes unavailable, rain arrives, or a commitment becomes fixed. Finite keeps the whole outcome coherent instead of turning every change into a new chat, spreadsheet or disconnected task list.
+Finite is the agent-native working layer behind plans that must survive change. People describe what needs to happen in ordinary language. Codex operates the same live plan they can see. Finite keeps accepted facts, constraints, evidence, revisions and receipts coherent. The person consumes the result, chooses between meaningful trade-offs and approves what becomes true.
+
+Most software gives the person the kitchen—forms, dashboards and workflows—and still expects them to do the cooking. Finite inverts that relationship. The person is the diner, Codex is the chef, and Finite is the kitchen and service system built for Codex to operate without taking judgment or authority away from the person.
 
 [Open the live product](https://finite.bharthamk.chatgpt.site)
 
-Start with an ordinary sentence. Finite turns it into a visible, editable planning surface with the dates, people, money, stages, questions and tasks that fit the outcome. Build manually, adapt a template, work with Codex, or watch Codex run a guided live demonstration.
+Start with an ordinary sentence. Finite turns it into a visible, editable planning surface whose time model, measures, records and decisions fit the outcome. Build manually, adapt a template, work with Codex, or watch Codex run a guided live demonstration.
 
 From there you can:
 
@@ -16,11 +18,13 @@ From there you can:
 - complete, pause, learn from and reopen a plan; and
 - turn on browser-local Demo mode so exploration never writes to the signed-in account.
 
-Travel, renovation and event plans use different human surfaces. Finite can also compose bounded workspaces for outcomes such as interview preparation or recurring practice. It is not one generic dashboard with renamed labels.
+Travel becomes a calendar and route. Renovation becomes phases, dependencies and contingency. An event becomes a run-of-show, suppliers and capacity. Finite also composes bounded workspaces for interview preparation, recurring practice and general outcomes. These are projections of one planning grammar, not one generic dashboard with renamed labels.
 
 ## The WebMCP difference
 
-Finite uses WebMCP as a product capability, not a button-automation layer. The page is simultaneously the surface where a person sees and edits the plan and the page-scoped operating environment where Codex discovers bounded, typed actions against that same state.
+WebMCP is what lets the chef work inside the kitchen. The page is simultaneously the calm surface where a person understands and changes the plan and the page-scoped operating environment where Codex discovers accepted state, current evidence, bounded typed actions and the exact next safe step.
+
+The plan the person sees is the plan Codex operates. There is no copied chat context, hidden agent replica or pixel guessing.
 
 The document exposes seven stable native tools for its lifetime. Codex selects a route-specific semantic manifest rather than accumulating hundreds of registered controls. Large results stay in a short-lived content-addressed vault and can be read by exact JSON Pointer. Every state-changing operation is checked again against current revision, evidence and authority.
 
@@ -36,8 +40,8 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 - Immutable, SHA-256-bound travel, renovation, and event profiles.
 - A validated adaptive-surface compiler with a closed safe component grammar, revision-bound intent, mandatory control laws, field bindings, and manifest hashes.
 - Three distinct projections: calendar travel timeline, renovation phase lane, and event run-of-show.
-- Typed entities, executable relationships, locks, legal moves, evidence materiality/freshness, and preference weights.
-- Compiled bounded option search that enumerates legal move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
+- Typed entities, executable relationships, locks, constraint-valid moves, evidence materiality/freshness, and preference weights.
+- Compiled bounded option search that enumerates permitted move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
 - Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
 - One-call operator orientation: `finite_enter_kitchen` arbitrates arrival-versus-plan work and returns a compact content-addressed service ticket containing canonical identity, one authoritative `nextAction`, known and missing inputs, authority state, and a state-grounded chef menu without asking the human to explain the application.
 - A document-lifetime-safe native registry: the browser permanently exposes seven tools—status, entry, capabilities, bounded toolset selection, exact result reading, effort receipt, and semantic invocation. `finite_open_toolset` returns one typed action manifest without registering more browser tools; `finite_invoke` revalidates the selected group, plan revision, evidence, and human authority before dispatch. Long route churn can no longer exhaust Chrome's experimental WebMCP registration budget.
@@ -90,13 +94,13 @@ The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_
 
 ## Current acceptance
 
-Sites v241 is the accepted live release. The public Spotlight completed the
+Sites v242 is the accepted live release. The public Spotlight completes the
 native WebMCP transaction from revision 1 to 2, exposed 26 checked combinations
-and three legal routes, stopped at visible human choice and exact confirmation,
+and three distinct routes that satisfy the current constraints, stopped at visible human choice and exact confirmation,
 applied only the returned authority, projected the accepted Paris extension
 consistently, and retained the complete before/after receipt after reload.
 
-The release passes 358/358 tests, including 20 independent hostile Spotlight
+The release passes 367/367 tests, including 20 independent hostile Spotlight
 runs, plus TypeScript, the production Vite client and Worker builds, the client
 chunk budget, and diff integrity. A live 390 by 844 viewport has no horizontal
 overflow and a 44-pixel minimum target height for visible controls. See
@@ -104,9 +108,10 @@ overflow and a 44-pixel minimum target height for visible controls. See
 and [`REPRODUCIBLE_RELEASE.md`](./REPRODUCIBLE_RELEASE.md).
 
 The WebMCP Challenge working set is in [`submission/`](./submission/). It keeps
-the product release fixed while the public repository, owner-selected open
-source license, public YouTube demo, screenshots, and final Devpost entry are
-completed.
+the product release fixed and now includes the certified 2:38 video master,
+standalone captions, five final images and a YouTube thumbnail. The public
+repository, owner-selected open-source license, YouTube publication and final
+Devpost entry remain owner-controlled.
 
 ## Run
 
@@ -134,7 +139,7 @@ in ChatGPT's in-app browser.
 ## Product transaction
 
 1. Codex opens one checksum-bound service ticket containing canonical identity, authority state, the exact next route, and a compact menu. Full deterministic detail is content-addressed and selected by exact semantic path only if the route actually needs it.
-2. Codex records a change, explores legal moves, and composes deterministic options.
+2. Codex records a change, explores the bounded option space, and composes deterministic options.
 3. The application validates and stages one exact option.
 4. The human sees the decision packet and approves that exact result.
 5. The application atomically applies the approved option and emits a receipt.
@@ -168,7 +173,7 @@ There is no backend model and no application-owned agent. Natural-language inter
 Chrome-native self-invocation proves the browser protocol independently. A
 fresh Codex task has also completed authenticated live page-tool discovery,
 canonical kitchen entry, bounded state reading, delayed human-input
-reconciliation, and correct refusal at the human-preference boundary. The v241
+reconciliation, and correct refusal at the human-preference boundary. The v242
 public Spotlight now closes the same-page change, search, human-authority,
 accepted-apply, receipt, and reload path. Remaining work is submission packaging
 and fresh-user evidence, not basic WebMCP availability or an unfinished product

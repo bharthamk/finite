@@ -1,8 +1,8 @@
 # Finite — Devpost submission draft
 
-Status: content-complete draft for accepted public release v241. Only the public
-repository URL, public YouTube URL, entrant/team details, and final media remain
-owner-supplied.
+Status: content-complete draft for accepted public release v242. The final video,
+five images and thumbnail are packaged locally. Only the public repository URL,
+public YouTube URL, entrant/team details and license remain owner-supplied.
 
 ## Project name
 
@@ -10,40 +10,58 @@ Finite
 
 ## Tagline
 
-Plans that survive contact with reality—Codex works the change; people choose
-what becomes true.
+You state the outcome. Codex operates. You decide what becomes true.
 
 ## Short description
 
-Finite is an agent-native planning product for the moment a real plan stops
-matching the world. A cost changes, dates move, someone becomes unavailable, or
-a commitment becomes fixed. Through WebMCP, Codex works directly against the
-same visible, versioned plan the person sees. Finite tests legal combinations,
-shows distinct trade-offs, stops for exact human authority, and applies one
-replay-safe revision without pretending that planning completed a real-world
-action.
+Finite is the agent-native working layer behind plans that must survive change.
+People state outcomes in ordinary language; Codex operates the same live plan
+through WebMCP; Finite keeps accepted facts, constraints, evidence, revisions
+and receipts coherent; the person chooses and approves. Its adaptive planning
+grammar changes shape across travel, renovations, events, interviews and more.
 
 ## Inspiration
 
-Planning tools are good at recording an initial intention and poor at absorbing
-reality. When one assumption changes, people usually rebuild the plan in chat,
-patch a spreadsheet, or update disconnected tasks by hand. Agent chat can reason
-about the change, but it often lacks canonical state and can blur advice,
-authority, and accepted truth.
+Most software gives the person the kitchen: forms, dashboards, settings and
+workflows. Then the person still has to cook. Adding an AI assistant often means
+the same work with advice about which controls to use.
+
+Finite inverts that relationship. The person is the diner: they describe the
+outcome, preferences and hard boundaries, then judge what is served. Codex is
+the chef. Finite is the kitchen and service system that Codex operates.
+
+We chose planning because it exposes the failure of the old model. Planning
+tools can record an initial intention, but when one assumption changes people
+usually rebuild the plan in chat, patch a spreadsheet or update disconnected
+tasks by hand. A chat agent can reason about the change, but without a canonical
+operating surface it cannot reliably keep the whole outcome together.
 
 Finite asks a sharper question: **Reality changed. What should the plan become
 now?**
 
+It is for the person who remains accountable after the original plan stops
+being correct: a traveller with fixed bookings, a household coordinating
+trades, an event producer balancing capacity and suppliers, or anyone carrying
+an outcome across changing dates, money, evidence and commitments.
+
 ## What it does
 
-Finite turns an ordinary goal into a visible, editable plan with finite dates,
-money, stages, tasks, evidence, commitments, and open decisions. When reality
-changes, Codex can use page-defined WebMCP tools to:
+Finite carries an outcome through the complete planning lifecycle: rough intent,
+an editable plan, day-to-day management, real-world disruption, consequential
+decisions, accepted revisions, completion and reusable learning.
+
+The human surface adapts to the work. Travel becomes a calendar and route.
+Renovation becomes phases, dependencies and contingency. An event becomes a
+run-of-show, capacity and suppliers. Interview preparation, recurring practice
+and a dinner for eight use different records and measures—not a travel dashboard
+with renamed labels.
+
+When reality changes, Codex uses page-defined WebMCP tools to:
 
 - enter the current plan without asking the person to restate it;
 - record the new pressure without changing accepted truth;
 - inspect constraints, locks, evidence, and movable parts;
-- enumerate and compare bounded legal combinations;
+- evaluate the bounded option space against current constraints;
 - present distinct routes with explicit protections and trade-offs; and
 - apply only the exact route the person chose and confirmed.
 
@@ -53,11 +71,14 @@ verification are the same action.
 
 ## Why WebMCP
 
-This experience depends on the website and agent sharing one live operating
-surface. Browser automation would force Codex to infer state from pixels and
-controls. A conventional API would detach the agent from the page the person is
-judging. WebMCP lets Finite expose bounded semantic tools from the document
-itself, tied to the current plan, revision, evidence, and visible human
+WebMCP is what lets the chef work inside the kitchen. The live page explains the
+plan to the person and, at the same time, exposes its accepted facts, evidence,
+available actions and next safe step to Codex as typed, page-scoped tools.
+
+That shared surface is essential. Browser automation would make Codex guess at
+pixels and controls. A conventional API or hidden agent backend would create a
+parallel state the person cannot see. Through WebMCP, the plan on screen is the
+plan Codex operates, tied to the current revision and the visible human
 authority boundary.
 
 The result is not “an agent clicks the app.” Codex handles interpretation,
@@ -67,12 +88,15 @@ receipts; the person owns consequential choice.
 
 ## Better human-agent experience
 
-Before WebMCP, the person had to explain the plan again, the agent had to guess
-which interface state was current, and approval could become another ambiguous
-chat message. With Finite, Codex enters canonical state in one call, requests
-only the semantic detail needed for the current route, works visibly in the same
-plan, and stops at one exact decision. The human can see what each option
-protects, what it trades, why it works, and precisely what changed after apply.
+Without WebMCP, the person must operate the planning machinery or repeatedly
+translate the plan into chat. The agent can recommend, but the person must
+manually reconcile every affected date, cost, commitment and task.
+
+With Finite, the person states what needs to happen. Codex enters canonical
+state in one call, requests only the semantic detail needed, explores the change
+across the whole plan and stops at the exact decision only the person can make.
+The human sees what each option protects, what it trades and precisely what will
+change. Codex does the work; the person keeps judgment and authority.
 
 ## How it was built
 
@@ -84,14 +108,16 @@ dispatch. Large deterministic results live in an ephemeral content-addressed
 vault and can be recovered by exact JSON Pointer rather than flooding model
 context.
 
-The deterministic kernel uses integer money, immutable profile hashes, legal
-move enumeration, revision-bound candidates, five-minute exact authority
+The deterministic kernel uses integer money, immutable profile hashes,
+constraint-valid move enumeration, revision-bound candidates, five-minute exact authority
 challenges, optimistic concurrency, atomic receipts, and idempotent replay.
 Human confirmation creators are never registered with WebMCP.
 
 ## Challenges we ran into
 
-The hard problem was not generating options. It was keeping five states
+The hard problem was not generating options. It was making Codex a genuine
+operator without turning the product into an autonomous black box. That required
+keeping five states
 separate under retries, reloads, and shared human-agent control: observed
 reality, proposed change, human choice, exact authority, and accepted truth.
 Early versions also exposed too many route-specific tools and returned too much
@@ -118,12 +144,14 @@ separate made Finite both safer and more comprehensible.
 ## Accomplishments
 
 - A complete public revision 1→2 WebMCP transaction with visible human choice.
-- 26 bounded combinations distilled into three legal, understandable routes.
+- 26 bounded combinations distilled into three distinct, understandable routes
+  that satisfy the current encoded constraints.
 - Seven stable document tools instead of an ever-growing browser registry.
 - Complete before/after, authority, search, and replay proof in one receipt.
-- Travel, renovation, event, interview-preparation, and recurring-practice plan
-  shapes on one closed adaptive grammar.
-- 358 passing tests, including 20 repeated hostile Spotlight kernel transaction runs.
+- A complete product lifecycle and distinct travel, renovation, event,
+  interview-preparation, recurring-practice and general-plan surfaces on one
+  adaptive grammar.
+- 367 passing tests, including 20 repeated hostile Spotlight kernel transaction runs.
 - Reload-safe accepted truth, isolated public Demo mode, responsive layout, and
   keyboard/screen-reader hardening.
 - A production route completed in three calls to first useful action with zero
@@ -131,9 +159,10 @@ separate made Finite both safer and more comprehensible.
 
 ## What's next
 
-Observe new users running the Spotlight without coaching, then improve only
-demonstrated comprehension failures. Longer term, expand the adaptive grammar
-and evidence connectors without weakening the same authority and accepted-truth
+Observe new users bringing their own outcomes and running the Spotlight without
+coaching, then improve demonstrated comprehension failures. Longer term, extend
+the adaptive grammar and evidence connectors so Codex can operate more kinds of
+real plans without weakening the same human-authority and accepted-truth
 contract.
 
 ## Links

@@ -1,27 +1,27 @@
 # Finite — final hackathon video storyboard
 
-Target: 2:28.793. Hard limit: less than three minutes. Every shot is captured from
-the accepted public v241 product or created from Finite-owned identity assets.
+Target: approximately 2:38. Hard limit: less than three minutes. Every frame
+comes from the accepted public v241 product, its real WebMCP transaction or
+Finite-owned editorial assets.
 
 | Time | Shot and motion | On-screen proof | Judge purpose |
 |---:|---|---|---|
-| 0:00–0:06 | Cold open on the active plan hero; restrained pan | `Finite plan · revision 1` | Execution: this is already a functioning product and live plan. |
-| 0:06–0:15 | Move through Paris, fixed-flight boundary, and AUD freedom | **REALITY CHANGED · Add three nights in Paris** | Impact: make the replanning problem concrete before explanation. |
-| 0:15–0:18 | Finite positioning card resolves, then clears | **FINITE · Plans that survive contact with reality** | Creativity: name and position the product quickly. |
-| 0:18–0:25 | Real handoff/page-tool result with a clean callout | `finite_enter_kitchen → KITCHEN_ENTERED` | WebMCP leverage: canonical semantic entry, not visual guessing. |
-| 0:25–0:32 | Exact source-line inset over the product | `document.modelContext.registerTool({` · **Typed · version-aware** | Viability: explicitly show imperative WebMCP implementation. |
-| 0:32–0:39 | Real pressure call enters; revision 1 remains in frame | `finite_record_change_event` | WebMCP leverage: the agent changes workflow state through the page. |
-| 0:39–0:48 | Accepted plan remains revision 1 | **Pressure recorded · accepted truth unchanged** | Creativity: separate request, work, and accepted truth. |
-| 0:48–0:57 | Search receipt numbers hold over the real decision surface | **26 checked · 18 legal · 8 rejected** | Execution: visible deterministic work, not a fluent answer. |
-| 0:57–1:09 | All three untouched route cards remain readable | **3 distinct legal routes** | Impact: useful trade-offs reach the human in inspectable form. |
-| 1:09–1:19 | Human selects **Protect breathing room** with a visible click ring | **Human action 1 · choose** | Human-agent collaboration: Codex cannot choose the preference. |
-| 1:19–1:30 | Human confirms the exact effect with a second click ring | **Human action 2 · confirm exact revision** | Trust: authority is narrow, visible, and separate from selection. |
-| 1:30–1:37 | Canonical re-entry shows authority present; apply begins | `finite_apply_approved_option` | WebMCP leverage: the agent resumes from page truth, not chat memory. |
-| 1:37–1:48 | Revision 2 lands; highlight Paris 4→7, duration 18→21, AUD 910 | **Applied once · revision 1→2** | Execution: show the coherent product result. |
-| 1:48–1:58 | Receipt detail with before/after, authority, search and replay | **One receipt · complete proof** | Execution and ambition: transaction-grade accountability. |
-| 1:58–2:06 | Current-tab reload, then exact idempotent replay result | **Reload-safe · replay-safe · revision 2→2** | Viability: durability is demonstrated, not asserted. |
-| 2:06–2:22 | Five product-shape cards: travel, renovation, event, interview, practice | **One adaptive grammar · many real plans** | Potential impact: credible breadth without inventing adoption. |
-| 2:22–2:29 | Fade to mark and public URL | **CODEX WORKS THE CHANGE · YOU DECIDE WHAT BECOMES TRUE** | Memorable close and core product thesis. |
+| 0:00–0:06 | Fast macro details of forms and dashboards resolve into Finite's public surface | **Software usually gives you the kitchen** | Establish the category problem without making Finite look like a travel app. |
+| 0:06–0:13 | Public operating-inversion section; move across Order → Operate → Connect → Authority | **Codex operates · You consume, choose and approve** | Creativity: explain the product model before the demo mechanics. |
+| 0:13–0:23 | Live page/Codex seam, then diner → chef → kitchen labels integrated with the real interface | **Human / outcome · Codex / operator · Finite / working layer** | Make the restaurant comparison architectural, not decorative. |
+| 0:23–0:30 | Real page-tool discovery with a short `registerTool` inset | **Typed page tools · same live plan** | WebMCP leverage and stage-one viability. |
+| 0:30–0:36 | Return to the unchanged visible plan with Codex operating beside it | **No hidden replica · no pixel guessing** | Show why WebMCP materially changes the experience. |
+| 0:36–0:45 | Active Spotlight plan: revision 1, Paris, fixed flights, AUD 500 floor | **REALITY CHANGED · Add three nights in Paris** | Make the replanning problem specific and consequential. |
+| 0:45–0:55 | Connected dates, transport, budget and commitments react around the requested change | **One request disturbs the whole plan** | Contrast Finite with an isolated chat suggestion. |
+| 0:55–1:05 | Canonical entry and pressure call; revision 1 remains visible | **Pressure recorded · accepted truth unchanged** | Creativity: separate new information from permission to rewrite truth. |
+| 1:05–1:13 | Search proof over the real options surface | **26 checked · 18 meet constraints · 8 rejected** | Execution: deterministic work rather than fluent improvisation. |
+| 1:13–1:21 | Three untouched routes remain readable | **3 distinct outcomes** | Give the person meaningful, inspectable trade-offs. |
+| 1:21–1:32 | Human selects Protect breathing room and inspects before/after | **Human judgment** | Show the division of labour: Codex works; the person chooses. |
+| 1:32–1:39 | Human confirms the exact option and revision | **Human authority · not a WebMCP tool** | Make the consequential boundary unmistakable. |
+| 1:39–1:44 | Literal apply invocation and result land on revision 2 | **Applied once · revision 1→2** | Prove WebMCP causes the accepted product change. |
+| 1:44–1:56 | Receipt, current-tab reload and idempotent replay result | **Reload-safe · replay-safe · same receipt** | Execution: durable transaction proof. |
+| 1:56–2:28 | Real travel, renovation and event surfaces, then interview and dinner entry examples | **One system · the plan changes shape with the work** | Potential impact and evidence that travel is only one proof. |
+| 2:28–2:38 | Return to the operating inversion and Finite mark | **CODEX RUNS THE KITCHEN · YOU DECIDE WHAT GETS SERVED** | Memorable product thesis and close. |
 
 ## Visual system
 
@@ -30,8 +30,10 @@ the accepted public v241 product or created from Finite-owned identity assets.
   bundled product fonts for editorial overlays.
 - Overlays: warm paper cards with 1px ink borders; never obscure the exact value
   being narrated. Proof numbers use one accent colour only.
-- Motion: restrained push-ins, position changes under 6%, 6–10-frame dissolves,
-  and hard cuts at state transitions. No generic tech b-roll.
+- The restaurant model is expressed through typography and product motion, not
+  stock restaurant footage or literal chef imagery.
+- Motion: hard cuts for state transitions and short, restrained moves within a
+  state. The picture should feel operated, not presented as slides.
 - Cursor: show only for the two human actions and the reload. Add a subtle ring
   on click; do not simulate Codex clicking human controls.
 - Audio: voice first. No copyrighted music, third-party footage, personal data,
@@ -42,24 +44,26 @@ the accepted public v241 product or created from Finite-owned identity assets.
 Capture the transaction in one fresh browser-local Spotlight run, then collect
 clean inserts without resetting accepted state:
 
-1. Revision-1 hero and plan boundaries.
-2. Canonical entry and stable tool inventory.
-3. Pressure recorded while accepted truth remains revision 1.
-4. Search counts and all three legal routes.
-5. First human action: stage **Protect breathing room**.
-6. Second human action: confirm the exact effect.
-7. Canonical authority re-entry and single apply.
-8. Revision-2 outcome and complete receipt.
-9. Current-tab reload and same receipt.
-10. Gateway/template and product-shape inserts for the impact montage.
+1. Public operating inversion and WebMCP same-page seam.
+2. Real travel, renovation and event surface-family shots.
+3. Revision-1 hero and plan boundaries.
+4. Canonical entry and stable tool inventory.
+5. Pressure recorded while accepted truth remains revision 1.
+6. Search counts and all three distinct routes.
+7. Human selection and exact confirmation.
+8. Canonical authority re-entry and single apply.
+9. Revision-2 outcome, complete receipt, current-tab reload and replay.
+10. Interview and dinner outcome-intake inserts for the closing breadth beat.
 
 ## Story acceptance
 
-- A judge who watches only the first 30 seconds can identify the product,
-  problem, live state, and WebMCP mechanism.
+- By 30 seconds, a judge can state the operating inversion and why WebMCP is
+  essential.
+- By 60 seconds, the judge understands the concrete changed-reality problem.
+- The Paris transaction proves the system; it never defines the product.
 - All four equally weighted criteria receive explicit visible proof.
-- The WebMCP leverage appears before the first third of the film and remains the
-  causal mechanism—not a footer claim.
+- WebMCP appears within the opening thesis and remains the causal mechanism—not
+  a footer claim.
 - The film shows the functioning product, contains English audio and captions,
   and ends before 2:59.
 - The human chooses and confirms; Codex records, compares, re-enters and applies.

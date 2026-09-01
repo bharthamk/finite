@@ -1,123 +1,153 @@
-# Finite — final hackathon video script
+# Finite — hackathon video script
 
-Target: 2:28.793. Hard maximum: 2:59. Use only the accepted public v241
-synthetic Spotlight. Spoken copy is 316 words.
+Target: approximately 2:38. Hard maximum: 2:59. Use one continuous, energetic
+190–195 word-per-minute performance and only the accepted public v241 product
+with its synthetic Spotlight data.
 
-## 0:00–0:15 — Cold open: reality changed
+## 0:00–0:23 — The operating inversion
 
-**Picture:** Begin inside the active Europe plan, not on a title card. Frame the
-18-day plan, fixed flights, Paris stage, and freedom floor. Animate one restrained
-caption: **REALITY CHANGED · Add three nights in Paris**.
-
-**Narration:**
-
-“An eighteen-day Europe trip is already underway. Flights are fixed. Paris
-matters. Five hundred Australian dollars must stay free. Then one request
-changes the geometry of the whole plan: add three nights in Paris.”
-
-## 0:15–0:32 — Name the product and prove WebMCP fit
-
-**Picture:** Finite wordmark resolves over the live plan for less than one
-second. Show the canonical page-tool entry and a compact code inset containing
-`document.modelContext.registerTool(...)`. Return immediately to the product.
-On-screen proof: **Typed tools · canonical state · one visible workspace**.
+**Picture:** Open on a rapid sequence of conventional form and dashboard details
+resolving into Finite's public product surface. Show the public **Codex operates.
+You consume, choose and approve.** line, then the live page/Codex WebMCP seam.
+No generic stock footage.
 
 **Narration:**
 
-“This is Finite. Through WebMCP, the page registers typed, version-aware tools
-that let Codex read and operate the same plan on screen. No screenshot guessing.
-No copying the plan into chat. The browser remains the shared workspace.”
+“Most software gives you the kitchen: menus, forms, dashboards, workflows. Then
+you do the cooking.
 
-## 0:32–0:48 — Record pressure without rewriting truth
+Finite flips that relationship.
 
-**Picture:** Show `finite_enter_kitchen → KITCHEN_ENTERED`, then the real
-pressure call. Keep **Finite plan · revision 1** visible before and after. Let the
-activity strip move from ready to checking.
+You state what needs to happen. Codex operates. Finite keeps the working layer
+behind the outcome coherent. You consume, choose and approve.
 
-**Narration:**
+In restaurant terms, you are the diner. Codex is the chef. Finite is the
+kitchen and the service around it. And WebMCP is what lets the chef actually
+work inside that kitchen.”
 
-“Codex records the pressure against revision one: three extra nights, fixed
-international flights, and the freedom floor. Notice what does not happen. The
-plan does not change. A request is evidence to replan, not authority to rewrite
-accepted truth.”
+## 0:23–0:36 — Why WebMCP is the product enabler
 
-## 0:48–1:09 — Bounded search, visible reasoning
-
-**Picture:** Reveal the real decision surface. Hold long enough to read **26
-checked · 18 legal · 8 rejected**, then show all three legal routes. Use a slow
-push toward their protection and trade-off copy.
+**Picture:** Move from the live Finite plan to real page-tool discovery and a
+brief, readable `document.modelContext.registerTool(...)` inset. Return to the
+same visible plan. On-screen proof: **ONE LIVE PLAN · HUMAN + CODEX**.
 
 **Narration:**
 
-“Finite’s deterministic kernel evaluates twenty-six bounded combinations.
-Eighteen satisfy current constraints; eight are rejected. It returns three
-distinct legal routes, each with its protected value, trade-off, and exact
-effect. Codex does the search. I receive a decision I can inspect.”
+“The live page exposes accepted facts, current evidence, available actions and
+the exact next safe step as typed tools. The plan you see is the plan Codex
+operates. There is no copied chat context, hidden agent replica or pixel
+guessing.”
 
-## 1:09–1:30 — The human authority boundary
+## 0:36–0:55 — Reality changes
 
-**Picture:** Select **Protect breathing room**. Show **Use this option**, then
-the exact approval panel with **Confirm and update plan**. Pause before each
-human click. Add one small label: **Human action**. Never imply that Codex clicked
-either control.
-
-**Narration:**
-
-“Here is the boundary that makes the agent useful without making it reckless.
-Codex cannot choose an outcome or manufacture approval. I select Protect
-breathing room, see eighteen days become twenty-one, and confirm this exact
-candidate against this exact revision. That authority expires and cannot be
-reused elsewhere.”
-
-## 1:30–1:48 — Apply exactly once
-
-**Picture:** Show canonical re-entry reporting authority present, then the
-single apply. Land on revision 2 and the accepted values: Paris 4→7 nights,
-18→21 days, and AUD 910 freedom.
+**Picture:** Enter the active Europe plan at revision 1. Frame the 18-day
+duration, fixed flights, Paris objective and AUD 500 floor. Animate only:
+**REALITY CHANGED · Add three nights in Paris**.
 
 **Narration:**
 
-“Codex re-enters canonical state, receives the candidate and authority
-identifiers, and applies once. Revision one becomes revision two. Paris expands
-from four nights to seven; trip and booked duration stay coherent; nine hundred
-and ten dollars remains free.”
+“Here is the shortest proof.
 
-## 1:48–2:06 — Durable proof, not a promise
+An eighteen-day European plan is already underway. The international flights are
+fixed. Paris matters. At least five hundred Australian dollars must remain
+free.
 
-**Picture:** Open the before/after receipt and show its search, authority, and
-replay sections. Reload the current tab—not the `fresh=1` URL—and return to the
-same revision and receipt. On-screen proof: **Reload-safe · replay-safe**.
+Then reality changes: add three nights in Paris.
 
-**Narration:**
+A chat assistant can suggest a new itinerary. It leaves you to reconcile the
+dates, bookings, transport, budget and everything that suggestion just
+disturbed.”
 
-“The receipt binds the search, human decision, before-and-after values, and
-replay proof. Reload the page: revision two and the same receipt remain. Repeat
-the apply: no duplicate change. This is a real transaction, not a conversational
-promise.”
+## 0:55–1:21 — A versioned decision, not a generated answer
 
-## 2:06–2:29 — Impact, ambition, memorable close
-
-**Picture:** A fast, readable montage of Finite’s travel, renovation, event,
-interview, and recurring-practice shapes. Return to the accepted plan, then end
-on the Finite mark and public URL. Final lock-up:
-**CODEX WORKS THE CHANGE · YOU DECIDE WHAT BECOMES TRUE**.
+**Picture:** Show canonical entry, record the pressure and keep **Finite plan ·
+revision 1** visible. Reveal the real options surface and hold **26 checked · 18
+meet constraints · 8 rejected** before showing all three untouched routes.
 
 **Narration:**
 
-“Finite generalizes this pattern anywhere plans collide with reality—travel,
-renovations, events, interviews, recurring practice. The ambition is simple:
-turn the open web into a trustworthy place where people and agents act together.
-Codex works the change. You decide what becomes true.”
+“Finite turns the change into a versioned decision transaction.
+
+Through WebMCP, Codex records the new pressure against revision one. The
+accepted plan does not move. A request is a reason to replan—not permission to
+rewrite what is true.
+
+Finite then evaluates twenty-six bounded combinations against the whole plan.
+Eighteen satisfy the current constraints. Eight fail them. Three meaningfully
+different routes come back, each protecting something different and showing
+its exact effect.
+
+Codex did the work. It did not make the decision.”
+
+## 1:21–1:44 — Human judgment, exact authority
+
+**Picture:** Show the human selecting **Protect breathing room**, reviewing its
+before/after values, then clicking **Confirm and update plan**. Silence or duck
+the score on confirmation. Next show canonical re-entry and the literal
+`finite_apply_approved_option` call/result.
+
+**Narration:**
+
+“On the same visible page, I choose Protect breathing room, inspect the before
+and after, and confirm that exact option against that exact revision. No WebMCP
+tool can manufacture my approval.
+
+Codex re-enters the current plan, receives the bound authority, and applies the
+change once. Revision one becomes revision two. Paris expands from four nights
+to seven. The trip remains coherent at twenty-one days, and nine hundred and ten
+dollars remains free.”
+
+## 1:44–1:56 — Durable proof
+
+**Picture:** Open the complete receipt, reload the current tab and show revision
+2 restored. Finish with the exact idempotent replay result: revision 2→2,
+accepted state unchanged, same receipt.
+
+**Narration:**
+
+“The receipt binds the search, the human choice and every before-and-after
+value. Reload the page: revision two remains. Repeat the apply: nothing
+duplicates.”
+
+## 1:56–2:38 — One system, many outcomes
+
+**Picture:** Use the real public Finite surfaces: travel calendar, renovation
+phase lane, event run-of-show, then outcome-intake examples for interview and
+dinner. End on the public operating inversion and Finite mark. Final lock-up:
+**CODEX RUNS THE KITCHEN · YOU DECIDE WHAT GETS SERVED**.
+
+**Narration:**
+
+“Travel is one proof. It is not the product.
+
+The same Finite system becomes renovation phases when a supplier slips, an
+event run-of-show when the guest list grows, interview preparation, a dinner
+for eight, or any plan where dates, money, evidence, commitments and trade-offs
+must move together.
+
+These are not travel screens with new labels. The time model, measures,
+entities, actions and decision surface change with the work, while one
+underlying system carries the outcome from rough intent, through execution and
+disruption, to an accepted revision and a durable record of what happened.
+
+That is why WebMCP matters. It turns a webpage from something an agent can
+merely look at into a real operating surface—while the application keeps truth
+deterministic and consequential authority human.
+
+Codex runs the kitchen. You decide what gets served.
+
+Finite. Plans that survive contact with reality.”
 
 ## Performance and edit direction
 
-- Voice: calm, assured, human; approximately 128–132 words per minute with
-  deliberate pauses at the two human actions and the reload proof.
+- Voice: one continuous expressive performance; assured, energetic and human.
+- Pace: 190–195 spoken words per minute, with micro-pauses only at the operating
+  inversion, human confirmation and reload proof.
 - Captions: verbatim English captions, sentence case, no more than two lines.
-- Music: none. Use restrained, self-created interface ticks only if they improve
-  comprehension; silence under the authority clicks is preferable.
-- Visual rhythm: no shot shorter than 1.2 seconds; no decorative transition that
-  competes with product text; one proof point per frame.
+- Score: original, restrained and rhythmically useful; duck beneath proof and
+  remove or nearly remove it at the human confirmation.
+- Visual rhythm: genuine product interaction and purposeful state changes; no
+  static screenshot slideshow or decorative technology imagery.
 - Crop: product and tool outcomes must remain readable at 960px playback width.
 - Final export: 1920×1080, H.264, AAC audio, less than 2:59, with no personal
   data, notifications, unrelated browser chrome, or unsupported claims.

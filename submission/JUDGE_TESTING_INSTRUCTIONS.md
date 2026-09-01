@@ -3,14 +3,22 @@
 No account or credential is required for the judge route. It runs in visibly
 labelled browser-local Demo mode and writes no personal data or signed-in plan.
 
-Accepted release: Sites v241, marker `hosted-release-marker-v241`.
+Accepted release: Sites v242, marker `hosted-release-marker-v242`.
+
+## What this route proves
+
+Finite is not a travel assistant. It is the agent-native working layer behind a
+plan: the person states and judges the outcome, Codex operates the same visible
+canonical plan through WebMCP, and Finite keeps facts, constraints, revisions
+and receipts coherent. The Europe scenario is the shortest complete proof of
+that operating model.
 
 ## 60-second visual route
 
 Open the Spotlight link below. The page immediately shows the already-active
 Europe plan, its Paris objective, revision, timeline, and the boundaries the
 live transaction must protect. The status correctly reads **Ready for WebMCP**:
-no pressure event or legal route exists until Codex runs the declared synthetic
+no pressure event or candidate route exists until Codex runs the declared synthetic
 change. No mutation is required to inspect the starting plan.
 
 ## Recommended route
@@ -24,7 +32,7 @@ change. No mutation is required to inspect the starting plan.
    browser when asked where to watch.
 4. Codex records the built-in synthetic change—add three nights in Paris while
    preserving fixed international flights and at least AUD 500 of freedom—and
-   asks Finite to compare legal options.
+   asks Finite to compare the bounded option space against current constraints.
 5. At the visible decision boundary, choose **Protect breathing room**, select
    **Use this option**, review the exact effect, and select **Confirm and update
    plan**. Codex cannot perform either human action.
@@ -34,8 +42,9 @@ change. No mutation is required to inspect the starting plan.
    the receipt, the changed measures, and the accepted seven-night Paris
    projection remain visible.
 
-Expected search proof: 26 bounded combinations, 18 legal combinations, 8
-rejected combinations, and 3 surfaced legal routes. Expected protected truth:
+Expected search proof: 26 bounded combinations, 18 combinations that satisfy
+the current constraints, 8 rejected combinations, and 3 surfaced routes.
+Expected protected truth:
 international flights and total budget.
 
 This route never books, buys, cancels, contacts anyone, or uses personal data.

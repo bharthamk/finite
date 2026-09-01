@@ -1,24 +1,30 @@
 # Finite submission control
 
-Updated: 2026-09-01
+Updated: 2026-09-02
 
-Product source is frozen at `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`.
+Product source is frozen at `11558d2346b404cc13312f9d5cd7f1daf9a051e7`.
 Submission closes 2026-09-04 at 06:00 AEST.
 
 ## Ready now
 
-- [x] Public working v241 URL and matching release marker.
+- [x] Public working v242 URL and matching release marker.
 - [x] No-credential browser-local judge route.
 - [x] Native imperative WebMCP registration in source.
 - [x] Reproducible build and complete source/assets/instructions.
 - [x] Verified new-project provenance inside the submission period.
 - [x] Draft text aligned to all four required explanation prompts.
 - [x] Exact judge testing instructions.
-- [x] Under-three-minute product-first video plan.
-- [x] 358/358 tests, 20/20 hostile Spotlight kernel runs, build, mobile, accessibility,
+- [x] Under-three-minute operating-inversion video script and storyboard.
+- [x] 367/367 tests, 20/20 hostile Spotlight kernel runs, build, mobile, accessibility,
   reload, and public transaction proof.
 - [x] Criterion-by-criterion judging narrative and claim/evidence matrix.
-- [x] Timed storyboard, full narration draft, and screenshot/capture plan.
+- [x] Timed site-grounded storyboard, full narration draft, and a screenshot
+  plan that establishes product breadth before the Paris proof.
+- [x] Final 2:38 full-HD operating-inversion master with burned captions,
+  selectable English subtitle track and locally generated score.
+- [x] Five final submission images plus a purpose-built YouTube thumbnail.
+- [x] Full decode, frame sampling, black-frame scan, loudness measurement and
+  mixed-master intelligibility check.
 
 ## Decisions to make together
 
@@ -27,21 +33,24 @@ Submission closes 2026-09-04 at 06:00 AEST.
 - [ ] Select Finite's open-source license.
 - [ ] Select the public repository owner/name and publish the sanitized source.
 - [ ] Confirm the repository host detects and displays the license.
-- [ ] Decide the final video voice and whether the entrant appears on camera.
-- [ ] Select the strongest 3–5 v241 screenshots from the prepared shot list.
+- [ ] Approve the final continuous voice performance and whether the entrant
+  appears on camera.
+- [x] Select the strongest five submission images from the prepared v241 capture set.
 - [ ] Decide whether to add team members and contributor credits.
 
 ## Production tasks
 
-- [ ] Record the v241 Spotlight from a fresh public route using the prepared
-  narration and shot sequence.
-- [ ] Edit and export below three minutes.
+- [x] Capture the public operating inversion, adaptive product families and the
+  captured Spotlight transaction using the prepared narration and shot sequence.
+- [x] Replace the withdrawn travel-first v3 film with the current site-grounded
+  cut and export below three minutes.
 - [ ] Upload publicly to YouTube and verify the public playback with audio.
 - [ ] Replace the pending repository and video links in the Devpost draft.
 - [ ] Create/save the Devpost draft and paste the final text.
 - [ ] Add live URL, public repository, public YouTube video, screenshots, built-
   with tags, and exact testing instructions.
-- [ ] Perform final English, IP, privacy, accessibility, and claim review.
+- [x] Perform final English, IP, privacy, accessibility, and claim review on the
+  local package; repeat only the public playback check after upload.
 - [ ] Rehearse once from an unprimed ChatGPT in-app browser task.
 - [ ] Submit before the deadline and preserve a timestamped receipt.
 

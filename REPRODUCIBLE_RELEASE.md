@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The current local gate is 358/358 tests, a successful TypeScript check, a
+The current local gate is 367/367 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is
@@ -55,9 +55,9 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The currently deployed product is Sites v241 from source
-`8194ce37ae6795ebda217ce82f4bf25bb86b73ef`, with release marker
-`hosted-release-marker-v241`, at `https://finite.bharthamk.chatgpt.site`.
+The currently deployed product is Sites v242 from source
+`11558d2346b404cc13312f9d5cd7f1daf9a051e7`, with release marker
+`hosted-release-marker-v242`, at `https://finite.bharthamk.chatgpt.site`.
 Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_c182c9054e688191827769b2d55ce963`
 was promoted by deployment `appgdep_6a96603e3bc48191990deb69c842c235`.
 The local release archive SHA-256 is
