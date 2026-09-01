@@ -406,7 +406,10 @@ const startupStartMode = startupQuery.get("start");
 const freshSpotlightLaunch = startupQuery.get("tour") === "spotlight" && (
   startupStartMode === "live-demo" || (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1")
 );
-if (freshSpotlightLaunch) localStorage.removeItem(localDemoInstallationKey);
+if (freshSpotlightLaunch) {
+  localStorage.removeItem(localDemoInstallationKey);
+  setLocalDemoMode(localStorage, true);
+}
 if (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1") {
   const stableSpotlightUrl = new URL(location.href);
   stableSpotlightUrl.searchParams.delete("fresh");
@@ -420,9 +423,10 @@ installLocalDemoWriteGuard(window, localDemoMode);
 clearForeignFiniteScopes(localStorage, activeStorageScope, [localDemoScope, authSession.storageScope]);
 const scopedStorage = new ScopedStorage(localStorage, activeStorageScope);
 const endCurrentDemo = async (): Promise<void> => {
-  if (authSession.storageScope === "local-spotlight-bootstrap") {
+  if (authSession.storageScope === "local-spotlight-bootstrap" || authSession.storageScope === "local-demo-bootstrap") {
     clearFiniteScope(localStorage, activeStorageScope);
     localStorage.removeItem(localDemoInstallationKey);
+    setLocalDemoMode(localStorage, false);
     location.replace("/");
     return;
   }
@@ -479,9 +483,10 @@ if (remoteCatalog) {
 const catalogEntries = await compileCatalogEntries(catalogStore.load(), catalogStore.loadActivationReceipts());
 const persistedPlanIds = new Set(catalogEntries.map((entry) => entry.profile.planId));
 const savedProfile = scopedStorage.getItem("finite-plan.surface.active-profile");
-const savedBuiltIn = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" ? savedProfile : null;
+const savedBuiltInProfile = savedProfile === "renovation" || savedProfile === "event" || savedProfile === "travel" || savedProfile === "general" ? savedProfile : null;
+const savedBuiltInPlan = [...profiles.values()].some((profile) => profile.planId === savedProfile) ? savedProfile : null;
 const savedPlan = catalogEntries.some(({ profile }) => profile.planId === savedProfile) ? savedProfile : null;
-const initialProfile = savedPlan ?? savedBuiltIn ?? "travel";
+const initialProfile = savedPlan ?? savedBuiltInPlan ?? savedBuiltInProfile ?? "travel";
 let accountSettings: AgentSettings = loadedSettings?.ok ? loadedSettings.settings : defaultAgentSettings();
 const agenticName = (): string => accountSettings.agenticName || defaultAgenticName;
 let themeCatalog: ThemeCatalogResult = loadedThemes?.ok ? loadedThemes : { ok: true, code: "THEME_CATALOG_FALLBACK", builtIns: builtInThemes, custom: [], activeThemeId: defaultTheme.themeId, activeTheme: defaultTheme, acceptedStateChanged: false };
@@ -1000,7 +1005,7 @@ const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): 
   </select></label>`;
 };
 
-const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}" ${localDemoMode ? "disabled title=\"Sharing is unavailable while Demo mode is local only\"" : ""}>${context === "plan" && runtime.kernel.lifecycleStatus === "completed" ? "Share this summary" : "Share or invite"}</button>`;
+const renderShareHeaderAction = (context: "arrival" | "plan"): string => `<button type="button" class="header-action header-action--share" data-action="open-plan-share" data-share-context="${context}" ${localDemoMode ? "disabled title=\"Sharing is unavailable while Demo mode is local only\"" : ""}>${localDemoMode ? "Sharing unavailable · local demo" : context === "plan" && runtime.kernel.lifecycleStatus === "completed" ? "Share this summary" : "Share or invite"}</button>`;
 
 type FiniteLifecycleStage = "starting" | "planning" | "managing" | "wrapping";
 const finiteLifecycleStages: Array<{ id: FiniteLifecycleStage; label: string; detail: string }> = [
@@ -1348,7 +1353,7 @@ const renderSpotlightActivity = (): string => {
             ? { step: "Blocked", title: "No legal route yet.", detail: "Finite kept the plan unchanged because every route broke a protected boundary. Codex can revise the change or explain why." }
           : kernel.activeEventId
             ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while legal combinations are compared." }
-            : { step: "Live WebMCP", title: "Codex is reading the same active plan you can see.", detail: "Next it will record one synthetic change without altering accepted truth." };
+            : { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "Finite is ready; no agent has changed the plan yet." };
   return `<section class="spotlight-activity" role="status" aria-live="polite" aria-atomic="true" aria-label="Finite and Codex activity">
     <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
   </section>`;
@@ -4105,6 +4110,7 @@ const renderPlanDraft = (): string => {
     </section>`;
   }
   if (!draft) return "";
+  if (draft.basePlanId !== runtime.kernel.profile.planId) return "";
   const priorReview = runtime.lastConstructionReturnReview?.status === "resolved" && runtime.lastConstructionReturnReview.packet.kind === "draft"
     ? runtime.lastConstructionReturnReview
     : null;

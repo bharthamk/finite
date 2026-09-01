@@ -32,8 +32,12 @@ const humanScalar = (value: unknown, key = "", parent: Record<string, unknown> =
   if (value === null || value === undefined || value === "") return "Not supplied yet";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number" && key.toLowerCase().endsWith("minor")) {
-    const currency = typeof parent.currencyCode === "string" ? parent.currencyCode : "AUD";
-    return new Intl.NumberFormat("en-AU", { style: "currency", currency, currencyDisplay: "code", maximumFractionDigits: 0 }).format(value / 100);
+    const suppliedCurrency = typeof parent.currencyCode === "string" ? parent.currencyCode.toUpperCase() : "";
+    try {
+      return new Intl.NumberFormat("en-AU", { style: "currency", currency: suppliedCurrency || "AUD", currencyDisplay: "code", maximumFractionDigits: 0 }).format(value / 100);
+    } catch {
+      return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", currencyDisplay: "code", maximumFractionDigits: 0 }).format(value / 100);
+    }
   }
   if (typeof value === "number") return new Intl.NumberFormat("en-AU").format(value);
   const text = String(value);

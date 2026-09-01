@@ -70,6 +70,22 @@ test("the page-start entry proxy stays registered while the adapter supplies its
   assert.equal(entered.operationProof.toolName, "finite_enter_kitchen");
 });
 
+test("a Site-selected Spotlight enters its bounded operator route without inventing a second human menu choice", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, new MemoryArrivalRepository());
+  await adapter.register();
+  const entered = await host.execute("finite_enter_kitchen", { entryIntent: "continue_current", journeyIntent: "spotlight" });
+  assert.equal(entered.code, "KITCHEN_ENTERED");
+  assert.equal(entered.operatorPacket.nextAction.stage, "spotlight_ready");
+  assert.equal(entered.operatorPacket.nextAction.nextTool, "finite_open_toolset");
+  assert.deepEqual(entered.operatorPacket.nextAction.knownArgs, { group: "planning" });
+  assert.equal(entered.operatorPacket.nextAction.requiresHuman, false);
+  assert.equal(entered.operatorPacket.chefMenu.items[0].menuItemId, "run_spotlight_pressure");
+  assert.match(entered.operatorPacket.chefMenu.law, /Human choice and confirmation remain required/);
+});
+
 test("kitchen entry prioritises new human source material without asking for another permission", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");

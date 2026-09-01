@@ -1595,10 +1595,10 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .money-overview dl { margin:0; border-top:1px solid var(--line); }
 .money-overview dl div { display:flex; justify-content:space-between; gap:20px; padding:15px 0; border-bottom:1px solid var(--line); }
 .money-overview dd { margin:0; font-weight:600; }
-.plan-detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:1px; margin-top:24px; border:1px solid var(--line); background:var(--line); }
-.plan-detail { min-height:112px; display:grid; align-content:space-between; gap:12px; padding:18px; border:0; color:var(--ink); background:var(--panel); text-align:left; }
+.plan-detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:1px; margin-top:24px; border:1px solid var(--line); background:var(--line); }
+.plan-detail { min-width:0; min-height:112px; display:grid; align-content:space-between; gap:12px; padding:18px; border:0; color:var(--ink); background:var(--panel); text-align:left; }
 .plan-detail>span { color:var(--muted); font-size:.72rem; }
-.plan-detail>strong { font-size:clamp(1.55rem,3vw,2.5rem); font-weight:500; letter-spacing:-.055em; }
+.plan-detail>strong { min-width:0; font-size:clamp(1.25rem,2.1vw,2.05rem); font-weight:500; line-height:1; letter-spacing:-.045em; overflow-wrap:anywhere; }
 .plan-detail>small { color:var(--accent); font:600 .6rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
 .plan-detail--editable { cursor:pointer; }
 .plan-detail--editable:hover,.plan-detail--editable:focus-visible { position:relative; z-index:1; outline:2px solid var(--focus); outline-offset:-2px; }
@@ -2317,6 +2317,7 @@ html[data-skin="soft-system"] .entry-card { width:min(980px,100%); }
 .plan-share-dialog { width:min(1180px,calc(100vw - 28px)); max-height:calc(100vh - 28px); overflow:auto; border:1px solid var(--ink); padding:clamp(26px,3.5vw,44px); color:var(--ink); background:var(--paper); box-shadow:18px 18px 0 color-mix(in srgb,var(--ink) 34%,transparent); }
 html .header-action--share { min-height:38px; border-color:var(--deep); padding:9px 14px; color:var(--on-deep); background:var(--deep); white-space:nowrap; box-shadow:none; transform:none; }
 html .header-action--share:hover { border-color:var(--deep); color:var(--deep); background:var(--signal); }
+html .header-action--share:disabled { border-color:var(--line); color:var(--muted); background:var(--panel); cursor:not-allowed; opacity:1; }
 .plan-share-dialog::backdrop { background:color-mix(in srgb,var(--deep) 76%,transparent); backdrop-filter:blur(5px); }
 .plan-share-dialog__close { position:absolute; top:14px; right:14px; width:38px; height:38px; border:1px solid var(--line); color:var(--ink); background:var(--panel); font-size:1.45rem; }
 .plan-share-dialog__head { padding-right:54px; }

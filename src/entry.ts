@@ -1,3 +1,5 @@
+import { localDemoModeEnabled } from "./local-demo.js";
+
 interface AuthStatus {
   session: {
     kind: "account" | "demo";
@@ -18,19 +20,20 @@ const collaborationToken = location.pathname.startsWith("/collaborate/") ? decod
 const startupQuery = new URLSearchParams(location.search);
 const localSpotlight = (startupQuery.get("start") === "live-demo" || startupQuery.get("start") === "spotlight-active")
   && startupQuery.get("tour") === "spotlight";
+const localDemoResume = localDemoModeEnabled(localStorage);
 if (shareId && !shareId.includes("/")) {
   const { renderShare } = await import("./share-entry.js");
   await renderShare(shareId);
-} else if (localSpotlight) {
+} else if (localSpotlight || localDemoResume) {
   const { startKitchen } = await import("./main.js");
   try {
     await startKitchen({
       kind: "demo",
       provider: "demo",
-      displayName: "Finite Spotlight",
+      displayName: localSpotlight ? "Finite Spotlight" : "Finite local demo",
       email: null,
       expiresAt: null,
-      storageScope: "local-spotlight-bootstrap",
+      storageScope: localSpotlight ? "local-spotlight-bootstrap" : "local-demo-bootstrap",
       legacyBrowserCacheEligible: false,
     });
   } catch (error) {

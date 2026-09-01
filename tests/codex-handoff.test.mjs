@@ -261,7 +261,9 @@ test("spotlight demo proves the native change-to-authority-to-receipt loop", () 
   assert.match(handoff.prompt, /finite_get_effort_receipt/i);
   assert.match(handoff.prompt, /exactly one product decision/i);
   assert.equal(handoff.copiedPayload.entryIntent, "continue_current");
+  assert.equal(handoff.copiedPayload.journeyIntent, "spotlight");
   assert.equal(handoff.copiedPayload.expectedPlanId, "plan_travel_europe");
+  assert.match(handoff.prompt, /"journeyIntent":"spotlight"/);
   assert.doesNotMatch(handoff.prompt, /Run six prepared chapters/i);
   assert.doesNotMatch(handoff.prompt, /synthetic rainy-day change/i);
 });

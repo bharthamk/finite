@@ -23,7 +23,7 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
       <div class="entry-intro"><p class="eyebrow">Adaptive planning</p><h1 id="entry_title">Plans that survive contact with reality.</h1><p class="entry-lede">See a live plan absorb one disruptive change, or begin with something you need to make happen.</p></div>
       <div class="entry-route-grid">
         <a class="entry-route entry-route--fresh" data-public-entry="fresh" href="${escapeHtml(signInRoute(signInPath, "/?start=fresh"))}">
-          <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. Continue into your private workspace, with hints waiting if you want them.</p><em>Start with my plan →</em>
+          <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>One sentence is enough. Continue into your private workspace, with hints waiting if you want them.</p><em>ChatGPT sign-in required · Start with my plan →</em>
         </a>
         <section class="entry-route entry-route--examples" aria-labelledby="entry_examples_title">
           <span>02 / Start from a template</span><strong id="entry_examples_title">Choose a template.</strong><p>Pick a ready-made starting point and tailor it to your plan.</p>

@@ -51,22 +51,45 @@ test("structured rough plans collect changes in their natural sections instead o
 test("guided demos always use the isolated browser-local workspace", () => {
   assert.match(source, /const freshSpotlightLaunch = startupQuery\.get\("tour"\) === "spotlight"/);
   assert.match(source, /startupStartMode === "spotlight-active" && startupQuery\.get\("fresh"\) === "1"/);
-  assert.match(source, /if \(freshSpotlightLaunch\) localStorage\.removeItem\(localDemoInstallationKey\)/);
+  assert.match(source, /if \(freshSpotlightLaunch\) \{\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*setLocalDemoMode\(localStorage, true\);\s*\}/);
   assert.match(source, /stableSpotlightUrl\.searchParams\.delete\("fresh"\)/);
   assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active" \|\| startupStartMode === "spotlight-active"/);
   assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
   assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
   assert.match(source, /Demo mode · Local only/);
   assert.match(entry, /const localSpotlight = \(startupQuery\.get\("start"\) === "live-demo" \|\| startupQuery\.get\("start"\) === "spotlight-active"\)/);
-  assert.match(entry, /storageScope: "local-spotlight-bootstrap"/);
-  assert.ok(entry.indexOf("} else if (localSpotlight) {") < entry.indexOf('fetch("/api/auth/session"'));
+  assert.match(entry, /const localDemoResume = localDemoModeEnabled\(localStorage\)/);
+  assert.match(entry, /storageScope: localSpotlight \? "local-spotlight-bootstrap" : "local-demo-bootstrap"/);
+  assert.ok(entry.indexOf("} else if (localSpotlight || localDemoResume) {") < entry.indexOf('fetch("/api/auth/session"'));
 });
 
 test("the browser-local Spotlight exits without inventing a server demo session", () => {
-  assert.match(source, /authSession\.storageScope === "local-spotlight-bootstrap"/);
-  assert.match(source, /clearFiniteScope\(localStorage, activeStorageScope\);\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*location\.replace\("\/"\);/);
+  assert.match(source, /authSession\.storageScope === "local-spotlight-bootstrap" \|\| authSession\.storageScope === "local-demo-bootstrap"/);
+  assert.match(source, /clearFiniteScope\(localStorage, activeStorageScope\);\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*setLocalDemoMode\(localStorage, false\);\s*location\.replace\("\/"\);/);
   assert.equal((source.match(/fetch\("\/api\/auth\/demo\/end"/g) ?? []).length, 1);
   assert.equal((source.match(/void endCurrentDemo\(\)/g) ?? []).length, 3);
+});
+
+test("judge-facing entry and Spotlight states are explicit about prerequisites and inactivity", () => {
+  assert.match(publicGate, /ChatGPT sign-in required · Start with my plan/);
+  assert.match(source, /Ready for WebMCP/);
+  assert.match(source, /Finite is ready; no agent has changed the plan yet/);
+  assert.doesNotMatch(source, /Codex is reading the same active plan you can see/);
+  assert.match(source, /Sharing unavailable · local demo/);
+  assert.match(styles, /\.header-action--share:disabled/);
+  assert.match(bootstrap, /journeyIntent: \{ type: "string", enum: \["spotlight"\]/);
+});
+
+test("built-in plan identity and pending drafts stay scoped to the exact active plan", () => {
+  assert.match(source, /savedBuiltInPlan = \[\.\.\.profiles\.values\(\)\]\.some\(\(profile\) => profile\.planId === savedProfile\)/);
+  assert.match(source, /savedPlan \?\? savedBuiltInPlan \?\? savedBuiltInProfile \?\? "travel"/);
+  assert.match(source, /if \(draft\.basePlanId !== runtime\.kernel\.profile\.planId\) return ""/);
+});
+
+test("plan summary values have a responsive wrapping budget", () => {
+  assert.match(styles, /\.plan-detail-grid \{[^}]*minmax\(155px,1fr\)/);
+  assert.match(styles, /\.plan-detail \{[^}]*min-width:0/);
+  assert.match(styles, /\.plan-detail>strong \{[^}]*overflow-wrap:anywhere/);
 });
 
 test("the Start managing guide cannot reopen the blank first chapter", () => {

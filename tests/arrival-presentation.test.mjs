@@ -33,6 +33,11 @@ test("arrival interpretation renders consumer language without raw JSON or inter
   assert.equal(rendered.includes("}"), false);
 });
 
+test("invalid source currency metadata degrades to AUD instead of crashing the arrival view", () => {
+  const rendered = renderHumanValue({ maximumMinor: 250_000, currencyCode: "not-a-currency" });
+  assert.match(rendered, /AUD\s*2,500/);
+});
+
 test("recent human updates hide protocol identifiers and keep the answer readable", () => {
   const rendered = renderHumanValue({ questionId: "arrival_question_internal_4", value: "Its open ended, but im thinking one month or so" });
   assert.match(rendered, /one month or so/);

@@ -26,6 +26,7 @@ export interface CodexHandoff {
     siteOrigin: string;
     entryTool: "finite_enter_kitchen";
     entryIntent: "start_new" | "continue_current" | "resume_handoff";
+    journeyIntent?: "spotlight";
     orderId: string | null;
     expectedOrderVersion: number | null;
     expectedOrderChecksum: string | null;
@@ -57,8 +58,10 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
         : `${siteOrigin}/?start=demo-active&tour=${demoDepth}`
       : siteOrigin;
   const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
+  const journeyIntent = demoPlayback && demoDepth === "spotlight" ? "spotlight" as const : undefined;
   const toolInput = {
     entryIntent,
+    ...(journeyIntent ? { journeyIntent } : {}),
     ...(order ? {
       orderId: order.orderId,
       expectedOrderVersion: order.version,
@@ -178,6 +181,7 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
       siteOrigin,
       entryTool: "finite_enter_kitchen",
       entryIntent,
+      ...(journeyIntent ? { journeyIntent } : {}),
       orderId: order?.orderId ?? null,
       expectedOrderVersion: order?.version ?? null,
       expectedOrderChecksum: order?.checksum ?? null,

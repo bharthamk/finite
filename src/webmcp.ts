@@ -848,6 +848,40 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
   let chefMenu = orientation || entryIntent === "start_new"
     ? arrivalChefMenu(orientation)
     : plan.chefMenu;
+  if (input.journeyIntent === "spotlight" && entryIntent === "continue_current" && !orientation && nextAction.stage === "menu_ready") {
+    nextAction = {
+      actionVersion: "finite-next-action.v1",
+      stage: "spotlight_ready",
+      reason: "The person selected Finite's bounded synthetic Spotlight journey on the Site. That chooses the demonstration route, not a plan outcome or approval.",
+      nextTool: "finite_open_toolset",
+      knownArgs: { group: "planning" },
+      derivedArgs: [],
+      missingInputs: [],
+      requiresHuman: false,
+      exactQuestion: null,
+      targetId: active?.planId ?? null,
+      authorityPresent: false,
+    };
+    chefMenu = {
+      menuVersion: "finite-chef-menu.v1",
+      basis: { planId: active?.planId ?? null, revision: active?.revision ?? null, journeyIntent: "spotlight" },
+      items: [{
+        menuItemId: "run_spotlight_pressure",
+        rank: 1,
+        kind: "operator_action",
+        title: "Run the bounded Spotlight pressure test",
+        offer: "Record the declared synthetic change, compare legal routes, then stop for the person's one real option choice.",
+        status: "ready",
+        viability: "not_yet_tested",
+        nextTool: "finite_open_toolset",
+        knownArgs: { group: "planning" },
+        missingInputs: [],
+        tradeoffs: ["Selecting the Spotlight is not authority to choose or apply a plan outcome"],
+        evidence: { status: "available", refs: ["evidence_current"] },
+      }],
+      law: "This route selection authorizes only the synthetic demonstration sequence. Human choice and confirmation remain required for the resulting option.",
+    };
+  }
   if (orientation && isArrivalDraftReady(orientation.order.status) && orientation.interpretationIsCurrent && constructionCurrent && nextAction.stage !== "arrival_construction_ready") {
     const currentMenu = record(chefMenu);
     const currentItems = Array.isArray(currentMenu.items) ? currentMenu.items : [];
@@ -1205,7 +1239,7 @@ const coreDefinitions = (runtime: FinitePlanRuntime, onProfileChanged: () => Pro
   define({ name: "finite_get_capabilities", title: "Inspect the finite-plan kitchen", description: "Read the active plan, selectors, mutation classes, approval law, and contextual vocabulary.", readOnly: true, execute: () => runtime.kernel.getCapabilities() }),
   define({ name: "finite_guide_view", title: "Guide the person through Finite", description: "With the person's guided-view permission, refresh the current Finite truth, move only between the arrival and active-plan surfaces, highlight one bounded named area or exact rough-plan section, and show one brief explanatory note. A live demo may pause at a visible Next gate. This cannot change plan truth, type into human fields, approve anything, open an arbitrary URL, or target an arbitrary selector.", readOnly: true, inputSchema: objectSchema({ surface: { type: "string", enum: finiteGuideSurfaces }, target: { type: "string", enum: finiteGuideTargets }, refresh: { type: "boolean" }, sectionId: { type: "string", pattern: "^[a-z][a-z0-9_]{0,99}$", maxLength: 100, description: "Exact rough-plan section identity, used only with target priority." }, message: { type: "string", minLength: 1, maxLength: 240, description: "Brief plain-language guidance shown in Finite's visible walkthrough overlay." }, pauseForNext: { type: "boolean", description: "In live-demo mode only, show a visible Next gate before the following guided step." } }, ["surface", "target"]), execute: (input) => guideView({ surface: input.surface as FiniteGuideSurface, target: input.target as FiniteGuideTarget, refresh: input.refresh === true, ...(input.sectionId !== undefined ? { sectionId: String(input.sectionId) } : {}), ...(input.message !== undefined ? { message: String(input.message) } : {}), ...(input.pauseForNext !== undefined ? { pauseForNext: input.pauseForNext === true } : {}) }) }),
   define({ name: "finite_open_kitchen", title: "Open the live operator kitchen", description: "Read one checksum-bound orientation packet containing exact accepted truth, family projection, move space, pending work, catalog context, authority boundary, and the next safe route.", readOnly: true, execute: (_input, context) => runtime.openKitchen(context) }),
-  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, pending current-plan updates, accepted-plan source-work queue, accepted reusable profile context, one authoritative next action, and a state-grounded chef menu. Proposed profile reads cannot shape work until the person accepts them. The copied prompt is never authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, sinceVersion: { type: "integer", minimum: 0, description: "Cursor returned by operatorPacket.humanChanges.nextSinceVersion when hasMore is true." }, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, planInputs, planWork, planLearning, input, context) }),
+  define({ name: "finite_enter_kitchen", title: "Enter Finite as the operator", description: "Use this as the first call from a copied Finite handoff. It returns the canonical human arrival, pending current-plan updates, accepted-plan source-work queue, accepted reusable profile context, one authoritative next action, and a state-grounded chef menu. Proposed profile reads cannot shape work until the person accepts them. The copied prompt is never authentication, plan truth, or human authority.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, journeyIntent: { type: "string", enum: ["spotlight"], description: "A bounded Site-selected demonstration journey. This is route intent only, never plan choice or approval authority." }, orderId: string, sinceVersion: { type: "integer", minimum: 0, description: "Cursor returned by operatorPacket.humanChanges.nextSinceVersion when hasMore is true." }, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => enterKitchen(runtime, arrival, planInputs, planWork, planLearning, input, context) }),
   define({ name: "finite_get_chef_menu", title: "Read the chef's current menu", description: "Return a small state-grounded menu for the human. It prioritizes current-plan updates explicitly waiting for Codex, then source material, and distinguishes untested suggestions, research routes, constraint-validated options, and authority-bound decisions.", readOnly: true, inputSchema: objectSchema({ entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"] }, orderId: string, expectedOrderVersion: { type: "integer", minimum: 1 }, expectedOrderChecksum: { type: "string", minLength: 64, maxLength: 64 }, expectedPlanId: string, expectedPlanRevision: revision, expectedProfileHash: { type: "string", minLength: 64, maxLength: 64 }, expectedSnapshotHash: { type: "string", minLength: 64, maxLength: 64 } }), execute: (input, context) => getChefMenu(runtime, arrival, planInputs, planWork, planLearning, input, context) }),
   define({ name: "finite_create_arrival_order", title: "Capture a human order", description: "Persist the human's requested outcome exactly as supplied from Codex. This creates append-only non-authoritative intake, not a plan, interpretation, or human approval.", inputSchema: objectSchema({ idempotencyKey, rawOutcome: { type: "string", minLength: 1, maxLength: 4000 }, structured: { type: "object" }, attachments: { type: "array", maxItems: 20 } }, ["idempotencyKey", "rawOutcome"]), execute: (input, context) => arrival.create({ idempotencyKey: String(input.idempotencyKey), rawOutcome: String(input.rawOutcome), structured: input.structured && typeof input.structured === "object" && !Array.isArray(input.structured) ? input.structured as Record<string, unknown> : {}, attachments: Array.isArray(input.attachments) ? input.attachments : [], sourceSurface: "codex" }, context) }),
   define({ name: "finite_append_arrival_input", title: "Append human-supplied arrival detail", description: "Append one human-supplied detail, constraint, preference, commitment, answer, evidence reference, or correction against an exact order version. This records provenance and never converts Codex inference into human fact.", inputSchema: objectSchema({ orderId: string, expectedVersion: revision, kind: { type: "string", enum: ["detail", "constraint", "preference", "commitment", "answer", "evidence_reference", "correction"] }, payload: { type: "object" } }, ["orderId", "expectedVersion", "kind", "payload"]), execute: (input, context) => arrival.appendInput({ orderId: String(input.orderId), expectedVersion: Number(input.expectedVersion), kind: input.kind as ArrivalInputKind, payload: input.payload as Record<string, unknown>, sourceSurface: "codex" }, context) }),

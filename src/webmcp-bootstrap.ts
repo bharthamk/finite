@@ -22,6 +22,7 @@ if (document.modelContext && !location.pathname.startsWith("/share/")) {
       type: "object",
       properties: {
         entryIntent: { type: "string", enum: ["start_new", "continue_current", "resume_handoff"], description: "Whether to start, continue, or resume a handed-off kitchen." },
+        journeyIntent: { type: "string", enum: ["spotlight"], description: "A bounded Site-selected demonstration journey. This is route intent only, never plan choice or approval authority." },
         orderId: { type: "string", minLength: 1, maxLength: 200, description: "Canonical human arrival-order identity." },
         sinceVersion: { type: "integer", minimum: 0, description: "Human-change cursor returned by the prior kitchen entry when more page edits remain." },
         expectedOrderVersion: { type: "integer", minimum: 1, description: "Arrival-order event version copied into the handoff." },
