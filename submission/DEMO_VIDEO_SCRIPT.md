@@ -1,6 +1,6 @@
 # Finite demo video script
 
-Target: 2:30–2:40. Hard maximum: 2:59. Use the v240 public synthetic Spotlight.
+Target: 2:30–2:40. Hard maximum: 2:59. Use the v241 public synthetic Spotlight.
 
 ## 0:00–0:12 — The problem
 

@@ -3,14 +3,15 @@
 No account or credential is required for the judge route. It runs in visibly
 labelled browser-local Demo mode and writes no personal data or signed-in plan.
 
-Accepted release: Sites v240, marker `hosted-release-marker-v240`.
+Accepted release: Sites v241, marker `hosted-release-marker-v241`.
 
 ## 60-second visual route
 
-Open the Spotlight link below. The page immediately shows the active plan,
-fixed international flights, total budget, current freedom, and the synthetic
-Paris pressure. Expand **Decisions** to inspect the three legal routes and the
-rejected-combination count. No mutation is required to understand the product.
+Open the Spotlight link below. The page immediately shows the already-active
+Europe plan, its Paris objective, revision, timeline, and the boundaries the
+live transaction must protect. The status correctly reads **Ready for WebMCP**:
+no pressure event or legal route exists until Codex runs the declared synthetic
+change. No mutation is required to inspect the starting plan.
 
 ## Recommended route
 
@@ -29,8 +30,9 @@ rejected-combination count. No mutation is required to understand the product.
    plan**. Codex cannot perform either human action.
 6. Codex re-enters canonical state, detects the exact authority, applies only
    that candidate, and shows the revision 1→2 receipt.
-7. Reload. Revision 2, the receipt, the changed measures, and the accepted
-   seven-night Paris projection remain visible.
+7. Reload the current tab. Do not reopen the original `fresh=1` URL. Revision 2,
+   the receipt, the changed measures, and the accepted seven-night Paris
+   projection remain visible.
 
 Expected search proof: 26 bounded combinations, 18 legal combinations, 8
 rejected combinations, and 3 surfaced legal routes. Expected protected truth:
@@ -44,8 +46,13 @@ The accepted plan advances from revision 1 to 2 exactly once.
 
 ## If WebMCP tools do not appear
 
-- In ChatGPT, keep the Site open in the in-app browser and refresh once.
+- Use **Hand off to Codex** and open the generated route in ChatGPT or Codex's
+  built-in browser; the transaction depends on the page tools available there.
+- Keep that Site tab open and refresh the current tab once.
 - In Chrome, use Chrome 149 or later, enable
-  `chrome://flags/#enable-webmcp-testing`, restart Chrome, and reopen the route.
-- The visible product remains inspectable without tools; no credentials or
-  private test data are required.
+  `chrome://flags/#enable-webmcp-testing`, restart Chrome, and open the fresh
+  Spotlight route once.
+- Without WebMCP, inspect the visible starting plan and use the submitted demo
+  video for the change→options→human authority→receipt transaction. Finite does
+  not fake that agent work locally. No credentials or private test data are
+  required.

@@ -2,12 +2,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseSource = "a33897152d38bb08e74015974612d2b30fa19dd4";
+const releaseSource = "8194ce37ae6795ebda217ce82f4bf25bb86b73ef";
+const releaseLabel = "v241";
+const testBaseline = "358";
+const finalMode = process.argv.includes("--final");
 const liveUrl = "https://finite.bharthamk.chatgpt.site/";
 
 const requiredFiles = [
   "README.md",
-  "FINITE_V240_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md",
+  "FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md",
   "REPRODUCIBLE_RELEASE.md",
   "THIRD_PARTY_LICENSES.md",
   "submission/HACKATHON_REQUIREMENTS_2026-09-01.md",
@@ -39,7 +42,7 @@ for (const file of [
   "submission/SUBMISSION_CONTROL.md",
   "submission/SUBMISSION_MASTER_DRAFT.md",
 ]) {
-  requireText(file, "v240");
+  requireText(file, releaseLabel);
 }
 
 for (const file of [
@@ -49,12 +52,15 @@ for (const file of [
   "submission/SUBMISSION_CONTROL.md",
   "submission/SUBMISSION_MASTER_DRAFT.md",
 ]) {
-  requireText(file, "353");
+  requireText(file, testBaseline);
 }
 
-requireText("FINITE_V240_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md", releaseSource);
+requireText("FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md", releaseSource);
 requireText("submission/HACKATHON_PROVENANCE.md", releaseSource);
 requireText("submission/SUBMISSION_MASTER_DRAFT.md", releaseSource);
+requireText("REPRODUCIBLE_RELEASE.md", releaseLabel);
+requireText("REPRODUCIBLE_RELEASE.md", testBaseline);
+requireText("REPRODUCIBLE_RELEASE.md", releaseSource);
 requireText("submission/DEVPOST_SUBMISSION_DRAFT.md", liveUrl);
 requireText("submission/JUDGE_TESTING_INSTRUCTIONS.md", `${liveUrl}?start=spotlight-active`);
 requireText("submission/HACKATHON_REQUIREMENTS_2026-09-01.md", "shorter than three minutes");
@@ -76,6 +82,7 @@ const allowedOwnerFields = new Set([
 for (const field of ownerFields) {
   if (!allowedOwnerFields.has(field)) failures.push(`unexpected owner field: ${field}`);
 }
+if (finalMode && ownerFields.length) failures.push(`final submission still contains ${ownerFields.length} owner placeholder(s)`);
 
 const legacyClaimPatterns = [
   /v237 is the accepted live release/i,
@@ -105,5 +112,5 @@ if (failures.length) {
 }
 
 console.log(
-  `Submission gate passed: ${requiredFiles.length} artifacts, release v240, 353-test baseline, ${ownerFields.length} explicit owner placeholders.`,
+  `Submission ${finalMode ? "final" : "working"} gate passed: ${requiredFiles.length} artifacts, release ${releaseLabel}, ${testBaseline}-test baseline, ${ownerFields.length} explicit owner placeholders.`,
 );

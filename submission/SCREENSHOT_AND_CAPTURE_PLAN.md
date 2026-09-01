@@ -1,6 +1,6 @@
 # Finite screenshot and capture plan
 
-Prepare five 16:9 images from the public v240 synthetic Spotlight. Keep the
+Prepare five 16:9 images from the public v241 synthetic Spotlight. Keep the
 browser chrome minimal, text readable at Devpost width, and no personal account
 information visible.
 
@@ -40,7 +40,7 @@ information visible.
 
 ## Capture acceptance
 
-- [ ] v240 marker confirmed before recording.
+- [ ] v241 marker confirmed before recording.
 - [ ] 1920×1080 or higher source frame.
 - [ ] No browser notifications, task titles, email addresses, or personal data.
 - [ ] Text remains readable when displayed at 960px wide.

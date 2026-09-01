@@ -1,18 +1,18 @@
-# Finite v240 product A+ acceptance
+# Finite v241 product A+ acceptance
 
 Accepted: 2026-09-01
 
 ## Release identity
 
 - Live product: https://finite.bharthamk.chatgpt.site/
-- Sites version: v240
-- Source: `a33897152d38bb08e74015974612d2b30fa19dd4`
-- Marker: `hosted-release-marker-v240`
-- Deployment: `appgdep_6a95bd8dcdb08191a5937713ee7dd99a`
+- Sites version: v241
+- Source: `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`
+- Marker: `hosted-release-marker-v241`
+- Deployment: `appgdep_6a96603e3bc48191990deb69c842c235`
 - Archive SHA-256:
-  `87dbfc80f2225f91c1741846c014e789bb5da23b918e7ab7371cc50281811a6b`
-- Rollback: Sites v237 from
-  `9ad3dc47656ce9578e63c356fecab3a2bbedcf92`
+  `89cd2224c38d51c292b27fcc2708574e26f71822e07cc48fd10028b96676fa37`
+- Rollback: Sites v240 from
+  `a33897152d38bb08e74015974612d2b30fa19dd4`
 
 ## Product acceptance
 
@@ -42,8 +42,8 @@ calls, one accepted mutation, and two human-boundary turns.
 
 ## Quality gate
 
-- 353/353 automated tests pass.
-- 20/20 hostile independent Spotlight runs pass.
+- 358/358 automated tests pass.
+- 20/20 hostile independent Spotlight kernel transaction runs pass.
 - TypeScript passes.
 - Production client and Worker builds pass.
 - Client chunk budget passes.
@@ -57,8 +57,10 @@ calls, one accepted mutation, and two human-boundary turns.
 
 Sites v238 was never accepted because its compiled marker still identified
 v237. v239 restored matching release identity and supplied the complete public
-transaction proof. v240 changed only the release marker and the verified mobile
-interaction finish above, then superseded v239 as the accepted product.
+transaction proof. v240 completed the verified mobile interaction finish. v241
+repairs local Spotlight reload/resume, makes the Site-selected Spotlight route
+canonical, removes false pre-connection activity, isolates pending drafts by
+plan, restores built-in plan identity, and closes responsive judge-path defects.
 
 ## Honest remaining gap
 

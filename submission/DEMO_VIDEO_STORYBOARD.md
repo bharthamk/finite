@@ -1,7 +1,7 @@
 # Finite demo video storyboard
 
 Target length: 2 minutes 35 seconds. Hard limit: less than 3 minutes. Audio is
-required. Record the accepted v240 public Spotlight in ChatGPT's in-app browser.
+required. Record the accepted v241 public Spotlight in ChatGPT's in-app browser.
 
 | Time | Picture | Narration purpose |
 |---:|---|---|
@@ -17,7 +17,7 @@ required. Record the accepted v240 public Spotlight in ChatGPT's in-app browser.
 
 ## Capture rules
 
-- Use only the public v240 Site and synthetic Spotlight data.
+- Use only the public v241 Site and synthetic Spotlight data.
 - Keep the browser, Finite plan, option explanation, approval, and receipt large
   enough to read at normal YouTube playback size.
 - Narrate what WebMCP enables, not implementation trivia.

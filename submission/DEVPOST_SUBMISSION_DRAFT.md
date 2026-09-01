@@ -1,6 +1,6 @@
 # Finite — Devpost submission draft
 
-Status: content-complete draft for accepted public release v240. Only the public
+Status: content-complete draft for accepted public release v241. Only the public
 repository URL, public YouTube URL, entrant/team details, and final media remain
 owner-supplied.
 
@@ -123,7 +123,7 @@ separate made Finite both safer and more comprehensible.
 - Complete before/after, authority, search, and replay proof in one receipt.
 - Travel, renovation, event, interview-preparation, and recurring-practice plan
   shapes on one closed adaptive grammar.
-- 353 passing tests, including 20 hostile end-to-end Spotlight runs.
+- 358 passing tests, including 20 repeated hostile Spotlight kernel transaction runs.
 - Reload-safe accepted truth, isolated public Demo mode, responsive layout, and
   keyboard/screen-reader hardening.
 - A production route completed in three calls to first useful action with zero

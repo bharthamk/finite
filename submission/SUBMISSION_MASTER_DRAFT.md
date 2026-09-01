@@ -5,11 +5,11 @@ to paste after the four owner-controlled fields are resolved.
 
 ## Release lock
 
-- Product: Finite v240
-- Source: `a33897152d38bb08e74015974612d2b30fa19dd4`
+- Product: Finite v241
+- Source: `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`
 - Live URL: https://finite.bharthamk.chatgpt.site/
 - Judge route: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Gate: 353/353 tests, 20/20 hostile Spotlight runs, production builds,
+- Gate: 358/358 tests, 20/20 hostile Spotlight kernel runs, production builds,
   revision 1→2 production receipt, replay/reload continuity, responsive proof
 - Submission deadline: 2026-09-04 06:00 AEST
 
@@ -33,7 +33,7 @@ tagline is:
 - Testing: `JUDGE_TESTING_INSTRUCTIONS.md`
 - Criteria and evidence: `JUDGING_NARRATIVE_AND_EVIDENCE.md`
 - Provenance: `HACKATHON_PROVENANCE.md`
-- Public product acceptance: `../FINITE_V240_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`
+- Public product acceptance: `../FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`
 
 ## Media package
 
@@ -47,7 +47,7 @@ tagline is:
 2. Publish the exact sanitized source and verify the repository host detects the
    license at the top of the repository page.
 3. Run the public repository from a clean clone.
-4. Capture five v240 images and the sub-three-minute public video.
+4. Capture five v241 images and the sub-three-minute public video.
 5. Verify the YouTube upload with audio and captions.
 6. Replace every `[OWNER: ...]` field and run the submission consistency check.
 7. Save the Devpost draft, rehearse from an unprimed browser, and submit.

@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The current local gate is 346/346 tests, a successful TypeScript check, a
+The current local gate is 358/358 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is
@@ -55,19 +55,17 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The currently deployed product is Sites v237 from source
-`9ad3dc47656ce9578e63c356fecab3a2bbedcf92`, with release marker
-`hosted-release-marker-v237`, at `https://finite.bharthamk.chatgpt.site`.
-Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_bbd0640bc71c8191873fe519740bc498`
-was promoted by deployment `appgdep_6a9592d33f648191bdea2675e6d0fce2`.
-It adds visible bounded-search reasoning, a full before/after accepted-change
-receipt, consistent accepted stage projection, stronger keyboard and
-screen-reader state, mobile interaction targets, and a 20-run hostile Spotlight
-acceptance matrix. Production acceptance covered the public marker and
-signed-out boundary, one complete native WebMCP revision 1→2 transaction,
-visible choice and exact confirmation, the applied receipt, reload continuity,
-and a 390-pixel-wide layout with no horizontal overflow and a 44-pixel minimum
-interactive target height.
+The currently deployed product is Sites v241 from source
+`8194ce37ae6795ebda217ce82f4bf25bb86b73ef`, with release marker
+`hosted-release-marker-v241`, at `https://finite.bharthamk.chatgpt.site`.
+Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_c182c9054e688191827769b2d55ce963`
+was promoted by deployment `appgdep_6a96603e3bc48191990deb69c842c235`.
+The local release archive SHA-256 is
+`89cd2224c38d51c292b27fcc2708574e26f71822e07cc48fd10028b96676fa37`.
+Production acceptance covered the public marker, signed-out prerequisite copy,
+canonical Spotlight WebMCP entry, browser-local reload continuity, honest
+pre-connection activity, disabled-share explanation, and a 390-pixel-wide
+layout with no horizontal overflow or console errors.
 
 ## Authority still required
 

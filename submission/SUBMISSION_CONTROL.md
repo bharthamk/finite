@@ -2,12 +2,12 @@
 
 Updated: 2026-09-01
 
-Product source is frozen at `a33897152d38bb08e74015974612d2b30fa19dd4`.
+Product source is frozen at `8194ce37ae6795ebda217ce82f4bf25bb86b73ef`.
 Submission closes 2026-09-04 at 06:00 AEST.
 
 ## Ready now
 
-- [x] Public working v240 URL and matching release marker.
+- [x] Public working v241 URL and matching release marker.
 - [x] No-credential browser-local judge route.
 - [x] Native imperative WebMCP registration in source.
 - [x] Reproducible build and complete source/assets/instructions.
@@ -15,7 +15,7 @@ Submission closes 2026-09-04 at 06:00 AEST.
 - [x] Draft text aligned to all four required explanation prompts.
 - [x] Exact judge testing instructions.
 - [x] Under-three-minute product-first video plan.
-- [x] 353/353 tests, 20/20 hostile Spotlight runs, build, mobile, accessibility,
+- [x] 358/358 tests, 20/20 hostile Spotlight kernel runs, build, mobile, accessibility,
   reload, and public transaction proof.
 - [x] Criterion-by-criterion judging narrative and claim/evidence matrix.
 - [x] Timed storyboard, full narration draft, and screenshot/capture plan.
@@ -28,12 +28,12 @@ Submission closes 2026-09-04 at 06:00 AEST.
 - [ ] Select the public repository owner/name and publish the sanitized source.
 - [ ] Confirm the repository host detects and displays the license.
 - [ ] Decide the final video voice and whether the entrant appears on camera.
-- [ ] Select the strongest 3–5 v240 screenshots from the prepared shot list.
+- [ ] Select the strongest 3–5 v241 screenshots from the prepared shot list.
 - [ ] Decide whether to add team members and contributor credits.
 
 ## Production tasks
 
-- [ ] Record the v240 Spotlight from a fresh public route using the prepared
+- [ ] Record the v241 Spotlight from a fresh public route using the prepared
   narration and shot sequence.
 - [ ] Edit and export below three minutes.
 - [ ] Upload publicly to YouTube and verify the public playback with audio.

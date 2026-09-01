@@ -16,7 +16,7 @@ becomes accepted truth.
 - **Non-trivial WebMCP:** seven imperative document tools provide canonical
   entry, bounded semantic routing, exact detail recovery, staged decisions,
   authority-bound apply, receipts, and guided view.
-- **Working product:** public v240 runs without judge credentials through the
+- **Working product:** public v241 runs without judge credentials through the
   synthetic Spotlight and preserves revision 2 across reload.
 - **Public proof:** source, build instructions, live URL, video, and license are
   all required before submission; only repository/video/license owner actions
@@ -45,7 +45,7 @@ Proof to show:
 
 - A public responsive application spanning plan creation, editing, activation,
   management, replanning, evidence, collaboration, completion, and recovery.
-- 353/353 tests, 20 hostile Spotlight runs, production builds, chunk budget,
+- 358/358 tests, 20 hostile Spotlight kernel runs, production builds, chunk budget,
   keyboard operation, mobile target floor, and reload continuity.
 - Cloudflare D1 accepted truth, R2 attachments, optimistic concurrency, atomic
   receipts, isolated browser-local Demo mode, and account-scoped persistence.
@@ -83,8 +83,8 @@ backend model or an application-owned agent.
 | Human alone chooses and confirms | Confirmation creators absent from WebMCP; visible two-step UI | Video + screenshot 4 |
 | One revision, replay-safe | Revision 1→2 receipt retained after replay/reload | Video + screenshot 5 |
 | Three calls to first useful action, zero failures | Accepted effort receipt | Devpost + README |
-| 353 tests and 20 hostile runs | Repository test gate and v240 acceptance | README + repository |
-| Complete product, not a demo | Ten-section v240 acceptance | Video montage + Devpost |
+| 358 tests and 20 hostile kernel runs | Repository test gate and v241 acceptance | README + repository |
+| Complete product, not a demo | Ten-section v241 acceptance | Video montage + Devpost |
 | No credential required | Browser-local Spotlight and public Site | Testing instructions |
 | New during submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |
 
