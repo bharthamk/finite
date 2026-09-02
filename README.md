@@ -149,17 +149,19 @@ this change. If only one direction works, Finite returns one.
 
 </details>
 
-## System architecture
+## One live plan, two ways to work with it
 
-Finite has no backend language model and no application-owned agent. Codex is
-the operator. Finite is the deterministic product and persistence layer.
+Finite keeps one live plan shared by the visible product and Codex. You work
+with it through the interface. Codex works with it through WebMCP. Both reach
+the same planning engine, so dates, costs, constraints, choices and revisions
+stay aligned.
 
-![Finite system architecture showing the human authority boundary, browser document and durable Cloudflare layer](./docs/media/diagram-system-architecture.png)
+![Finite architecture showing the visible product and WebMCP sharing one planning engine and durable plan](./docs/media/diagram-shared-plan-architecture.png)
 
-The browser runtime compiles adaptive surfaces, validates typed actions and
-keeps proposed work separate from accepted state. The Worker owns authenticated
-durability across D1 and R2. Every accepted mutation is revision-bound,
-authority-bound and idempotent.
+Inside the browser, Finite shapes the workspace around the work, runs the
+calculations and checks each change against the connected plan. A Cloudflare
+Worker stores plan history in D1 and files and evidence in R2, so the same plan
+survives reloads and can continue across devices.
 
 [Read the complete engineering architecture](./docs/ARCHITECTURE.md)
 

@@ -117,37 +117,46 @@ def decision_transaction() -> None:
 
 
 def system_architecture() -> None:
-    image, draw = canvas(1800, 900, "System architecture", "One visible plan for people and Codex.", "Finite owns deterministic state and persistence. Codex remains the operator.")
+    image, draw = canvas(
+        1800,
+        900,
+        "Shared-plan architecture",
+        "One live plan. Two ways to work with it.",
+        "You use the visible product. Codex uses WebMCP. Both reach the same planning engine.",
+    )
 
-    lanes = [
-        (60, 250, 430, 765, "HUMAN BOUNDARY", "#e7f1bd"),
-        (485, 250, 1245, 765, "BROWSER DOCUMENT", "#dce9e4"),
-        (1300, 250, 1740, 765, "DURABLE LAYER", "#f8ded7"),
+    box(draw, (70, 290, 335, 430), "YOU", "See the plan\nshape the work", accent=MINT, title_size=24, body_size=17)
+    box(draw, (70, 530, 335, 670), "CODEX", "Compare options\nwork through change", accent=CORAL, title_size=24, body_size=17)
+
+    box(draw, (445, 290, 760, 430), "VISIBLE PRODUCT", "The plan you read,\nquestion and refine", accent=MINT, title_size=21, body_size=17)
+    box(draw, (445, 530, 760, 670), "WEBMCP", "Direct actions on\nthe same live plan", accent=CORAL, title_size=22, body_size=17)
+
+    draw.rounded_rectangle((875, 285, 1265, 675), radius=28, fill="#dce9e4", outline=GREEN, width=3)
+    draw.text((915, 320), "FINITE PLANNING ENGINE", font=font(22, bold=True), fill=GREEN)
+    engine_steps = [
+        "Choose the plan shape",
+        "Keep connected facts aligned",
+        "Run calculations and checks",
+        "Record each revision",
     ]
-    for x0, y0, x1, y1, label, fill_colour in lanes:
-        draw.rounded_rectangle((x0, y0, x1, y1), radius=26, fill=fill_colour, outline=GREEN, width=2)
-        draw.text((x0 + 28, y0 + 24), label, font=font(18, mono=True), fill=GREEN)
+    for index, step in enumerate(engine_steps):
+        y = 395 + index * 62
+        draw.ellipse((918, y + 4, 934, y + 20), fill=TEAL)
+        draw.text((955, y), step, font=font(18), fill=INK)
 
-    box(draw, (95, 335, 395, 475), "PERSON", "Outcome · edits\nchoice · confirmation", accent=MINT, title_size=24, body_size=17)
-    box(draw, (95, 550, 395, 685), "CODEX", "External operator\ntyped page tools", accent=CORAL, title_size=24, body_size=17)
+    box(draw, (1380, 335, 1725, 485), "CLOUDFLARE WORKER", "Keeps the plan available\nacross reloads and devices", accent=CORAL, title_size=20, body_size=17)
+    box(draw, (1380, 560, 1535, 695), "D1", "Plan\nhistory", accent=GREEN, title_size=24, body_size=17)
+    box(draw, (1570, 560, 1725, 695), "R2", "Files and\nevidence", accent=TEAL, title_size=24, body_size=17)
 
-    box(draw, (530, 325, 835, 470), "VISIBLE UI", "Adaptive human\nplanning surface", accent=MINT, title_size=22, body_size=17)
-    box(draw, (885, 325, 1200, 470), "WEBMCP", "Stable dispatcher\nbounded manifests", accent=CORAL, title_size=22, body_size=17)
-    box(draw, (705, 550, 1025, 695), "FINITE KERNEL", "Validation · search\nrevision · receipts", accent=TEAL, title_size=22, body_size=17)
-
-    box(draw, (1340, 335, 1700, 480), "CLOUDFLARE WORKER", "Authenticated APIs\nretry-safe coordination", accent=CORAL, title_size=21, body_size=17)
-    box(draw, (1340, 555, 1500, 690), "D1", "Accepted\ntruth", accent=GREEN, title_size=24, body_size=17)
-    box(draw, (1540, 555, 1700, 690), "R2", "Files and\nevidence", accent=TEAL, title_size=24, body_size=17)
-
-    arrow(draw, (395, 405), (530, 405), label="VISIBLE")
-    arrow(draw, (395, 617), (885, 417), label="TYPED TOOLS")
-    arrow(draw, (682, 470), (790, 550))
-    arrow(draw, (1042, 470), (940, 550))
-    arrow(draw, (1025, 622), (1340, 420), label="VERSIONED")
-    arrow(draw, (1520, 480), (1420, 555))
-    arrow(draw, (1560, 480), (1620, 555))
-    footer(draw, 1800, 900, "NO BACKEND LANGUAGE MODEL · NO APPLICATION-OWNED AGENT")
-    image.save(OUT / "diagram-system-architecture.png", optimize=True)
+    arrow(draw, (335, 360), (445, 360))
+    arrow(draw, (335, 600), (445, 600))
+    arrow(draw, (760, 360), (875, 420))
+    arrow(draw, (760, 600), (875, 540))
+    arrow(draw, (1265, 480), (1380, 410))
+    arrow(draw, (1505, 485), (1460, 560))
+    arrow(draw, (1600, 485), (1650, 560))
+    footer(draw, 1800, 900, "THE SAME PLAN POWERS WHAT YOU SEE AND WHAT CODEX CAN DO")
+    image.save(OUT / "diagram-shared-plan-architecture.png", optimize=True)
 
 
 def webmcp_surface() -> None:

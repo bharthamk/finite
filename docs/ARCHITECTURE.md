@@ -1,16 +1,16 @@
 # Finite engineering architecture
 
-This document explains how Finite lets Codex operate a live plan without giving
-the agent control over human decisions or making a language model responsible
-for accepted truth.
+This document explains how the visible Finite product and Codex operate the
+same live plan through two interfaces, backed by one planning engine and a
+durable Cloudflare data layer.
 
 ## Design boundary
 
-Finite is a deterministic planning product. Codex is an external operator that
-uses typed page tools. There is no backend language model and no hidden
-application-owned agent.
+Finite supplies the browser planning engine, WebMCP actions and durable
+storage. Codex is the external operator that uses those actions to work with
+the same plan a person sees in the product.
 
-![Finite system architecture showing the human authority boundary, browser document and durable Cloudflare layer](./media/diagram-system-architecture.png)
+![Finite architecture showing the visible product and WebMCP sharing one planning engine and durable plan](./media/diagram-shared-plan-architecture.png)
 
 The approval path enters through the visible human interface. It is not exposed
 as a WebMCP capability. Apply operations require the exact approval, candidate,
