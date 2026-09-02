@@ -139,3 +139,9 @@ See [the v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANC
 
 Finite is a project by [Benji Hart](https://github.com/bharthamk), created during
 the WebMCP Challenge submission period.
+
+## License
+
+The source and documentation are available under the [MIT License](./LICENSE).
+The Finite name, wordmark and logo identify this project; the licence grants no
+trademark rights in that branding.

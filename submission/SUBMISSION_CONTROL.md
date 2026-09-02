@@ -30,9 +30,9 @@ Submission closes 2026-09-04 at 06:00 AEST.
 
 - [ ] Confirm entrant identity, residence eligibility, individual/team status,
   and Devpost registration.
-- [ ] Select Finite's open-source license.
-- [ ] Select the public repository owner/name and publish the sanitized source.
-- [ ] Confirm the repository host detects and displays the license.
+- [x] Select Finite's open-source license: MIT.
+- [x] Publish the sanitized source at `https://github.com/bharthamk/finite`.
+- [x] Confirm the repository host detects and displays the MIT license.
 - [ ] Approve the final continuous voice performance and whether the entrant
   appears on camera.
 - [x] Select the strongest five submission images from the prepared v241 capture set.

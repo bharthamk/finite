@@ -67,9 +67,8 @@ canonical Spotlight WebMCP entry, browser-local reload continuity, honest
 pre-connection activity, disabled-share explanation, and a 390-pixel-wide
 layout with no horizontal overflow or console errors.
 
-## Authority still required
+## Remaining publication boundary
 
-This repository intentionally has no project license yet. Selecting a license,
-creating a public remote, changing Site access, or publishing judge credentials
-remain owner release decisions. The public Site deployment does not imply any
-of those separate submission or repository decisions.
+This repository is released under the MIT License. The Finite name and marks
+remain outside that trademark grant. Publishing judge credentials, the final
+YouTube URL and the Devpost entry remain separate owner release actions.

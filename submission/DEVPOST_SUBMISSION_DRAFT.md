@@ -1,8 +1,8 @@
 # Finite — Devpost submission draft
 
 Status: content-complete draft for accepted public release v242. The final video,
-five images and thumbnail are packaged locally. Only the public repository URL,
-public YouTube URL, entrant/team details and license remain owner-supplied.
+five images and thumbnail are packaged locally. Only the public YouTube URL and
+entrant/team details remain owner-supplied.
 
 ## Project name
 
@@ -169,7 +169,7 @@ contract.
 
 - Live app: https://finite.bharthamk.chatgpt.site/
 - Judge Spotlight: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Public source repository: `[OWNER: paste public repository URL]`
+- Public source repository: https://github.com/bharthamk/finite
 - Public YouTube demo: `[OWNER: paste public YouTube URL]`
 
 ## Built with

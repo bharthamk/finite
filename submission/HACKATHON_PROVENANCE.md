@@ -16,6 +16,7 @@ Finite is a new project created during the WebMCP Challenge submission period.
 - Live release: Sites v242 with marker `hosted-release-marker-v242`, version ID
   `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_27b5872b1df48191a3a7a0d280f573cc`
   and deployment ID `appgdep_6a9736c4d91c8191bcef1024ecce1598`.
+- Public source: `https://github.com/bharthamk/finite`, released under MIT.
 
 The complete dated Git history therefore supplies direct evidence that the
 project and its WebMCP implementation were created after the submission period

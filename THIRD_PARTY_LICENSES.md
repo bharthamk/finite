@@ -17,4 +17,4 @@ package and must be regenerated from the lockfile for a public release artifact.
 | `wrangler` | 4.126.0 | Local D1 and Worker tooling | MIT OR Apache-2.0 |
 
 `npm audit --omit=dev` reported zero runtime vulnerabilities at this release
-gate. This inventory does not choose a license for Finite itself.
+gate. Finite itself is released under the MIT License in `LICENSE`.

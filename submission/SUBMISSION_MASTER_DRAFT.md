@@ -1,7 +1,7 @@
 # Finite submission master draft
 
 This is the assembly surface for the final Devpost entry. It is complete enough
-to paste after the four owner-controlled fields are resolved.
+to paste after the remaining entrant and video fields are resolved.
 
 ## Release lock
 
@@ -16,8 +16,8 @@ to paste after the four owner-controlled fields are resolved.
 ## Owner-controlled fields
 
 - Entrant: `[OWNER: individual, team, or organization]`
-- Public repository: `[OWNER: URL]`
-- Detected open-source license: `[OWNER: license]`
+- Public repository: https://github.com/bharthamk/finite
+- Detected open-source license: MIT
 - Public YouTube demo: `[OWNER: URL]`
 
 ## Primary copy
@@ -58,6 +58,6 @@ is the only approved local upload candidate.
    `media/images/finite_v241_submission_thumbnail.png` as the thumbnail.
 5. Verify the public YouTube playback with audio, burned captions and the
    selectable English subtitle track.
-6. Replace every `[OWNER: ...]` field and run the submission consistency check.
+6. Replace every remaining owner placeholder and run the submission consistency check.
 7. Save the Devpost draft, rehearse from an unprimed browser, and submit.
 8. Freeze the Devpost entry, repository, live Site, and video through judging.
