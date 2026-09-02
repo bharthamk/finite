@@ -63,11 +63,11 @@ test("one active change order prevents same-revision candidate and approval mixi
 
   const secondOptions = await kernel.compareOptions({ eventId: second.event.eventId, generate: true });
   assert.equal(secondOptions.code, "OPTIONS_AVAILABLE");
-  assert.equal(kernel.candidates.size, profile.searchPolicy.optionCount);
+  assert.equal(kernel.candidates.size, secondOptions.options.length);
   assert([...kernel.candidates.values()].every((candidate) => candidate.eventId === second.event.eventId));
   const pendingAfterSearch = kernel.getState(["pending"]).state.pending;
   assert.equal(pendingAfterSearch.decisionStatus, "options_available");
-  assert.equal(pendingAfterSearch.candidateIds.length, profile.searchPolicy.optionCount);
+  assert.equal(pendingAfterSearch.candidateIds.length, secondOptions.options.length);
 });
 
 test("unaccepted change orders remain volatile while applied event lineage persists", async () => {

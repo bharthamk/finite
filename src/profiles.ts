@@ -31,7 +31,7 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       release_rail_allowance: { savingsMinor: 15_000, daysDelta: 0, dimension: "rail_flexibility", tradeoff: "Less ticket-change flexibility", impacts: { comfort: 15, schedule: 40 } },
       change_international_flights: { savingsMinor: 90_000, daysDelta: 0, dimension: "international_flights", tradeoff: "Changes locked flights", impacts: { comfort: 70, experience: 70, schedule: 80 } },
     },
-    searchPolicy: { objectives: ["preserve_comfort", "balanced", "preserve_buffer"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
+    searchPolicy: { objectives: ["balanced", "preserve_comfort", "preserve_experience", "preserve_schedule", "preserve_buffer"], maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 50_000, maxAgeDaysBySourceClass: { supplier_quote: 7, actual_receipt: 3650, user_statement: 30 } },
     contextualCapabilities: ["travel_extend_stay", "travel_change_comfort", "travel_move_segment"],
     surface: {
@@ -81,7 +81,7 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       simplify_splashback: { savingsMinor: 38_000, daysDelta: -2, dimension: "splashback_scope", tradeoff: "Simpler splashback pattern", impacts: { experience: 45 } },
       move_completion_date: { savingsMinor: 25_000, daysDelta: 14, dimension: "completion_date", tradeoff: "Changes locked completion date", impacts: { schedule: 100 } },
     },
-    searchPolicy: { objectives: ["preserve_schedule", "balanced", "preserve_contingency"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
+    searchPolicy: { objectives: ["balanced", "preserve_comfort", "preserve_experience", "preserve_schedule", "preserve_contingency"], maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 50_000, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 30 } },
     contextualCapabilities: ["renovation_replace_material", "renovation_shift_phase", "renovation_update_quote"],
     surface: {
@@ -131,7 +131,7 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
       shorten_program: { savingsMinor: 18_000, daysDelta: 0, dimension: "run_of_show", tradeoff: "Program shortened by twenty minutes", impacts: { experience: 40, schedule: 10 } },
       exceed_venue_capacity: { savingsMinor: 10_000, daysDelta: 0, dimension: "venue_capacity", tradeoff: "Exceeds locked venue capacity", impacts: { comfort: 80, experience: 80 } },
     },
-    searchPolicy: { objectives: ["preserve_experience", "balanced", "preserve_buffer"], optionCount: 3, maxMovesPerOption: 3, maxCombinations: 64 },
+    searchPolicy: { objectives: ["balanced", "preserve_comfort", "preserve_experience", "preserve_schedule", "preserve_buffer"], maxMovesPerOption: 3, maxCombinations: 64 },
     evidencePolicy: { asOf: "2026-08-26", materialityMinor: 30_000, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 14 } },
     contextualCapabilities: ["event_change_headcount", "event_replace_vendor", "event_move_run_item"],
     surface: {
@@ -171,7 +171,7 @@ const definitions: Record<ProfileId, ProfileDefinition> = {
     },
     relationships: [],
     moves: {},
-    searchPolicy: { objectives: ["balanced"], optionCount: 1, maxMovesPerOption: 0, maxCombinations: 1 },
+    searchPolicy: { objectives: ["balanced"], maxMovesPerOption: 0, maxCombinations: 1 },
     evidencePolicy: { asOf: "2026-08-30", materialityMinor: 0, maxAgeDaysBySourceClass: { supplier_quote: 14, actual_receipt: 3650, user_statement: 30 } },
     contextualCapabilities: [],
     planningDimensions: { money: "unknown", location: "unknown", capacity: "unknown" },
@@ -304,9 +304,8 @@ const compileProfileUnchecked = async (input: ProfileDefinition): Promise<Compil
   const legalMoveCount = Object.values(profile.moves).filter((move) => !profile.locks.includes(move.dimension)).length;
   if (!profile.searchPolicy.objectives.length || new Set(profile.searchPolicy.objectives).size !== profile.searchPolicy.objectives.length) issues.push("search objectives must be non-empty and unique");
   if (profile.searchPolicy.objectives.some((objective) => !searchObjectives.has(objective))) issues.push("search contains an unsupported objective");
-  if (!Number.isInteger(profile.searchPolicy.optionCount) || profile.searchPolicy.optionCount < 1 || profile.searchPolicy.optionCount > profile.searchPolicy.objectives.length) issues.push("search optionCount must fit the objective count");
   if (!Number.isInteger(profile.searchPolicy.maxMovesPerOption) || profile.searchPolicy.maxMovesPerOption < 0 || profile.searchPolicy.maxMovesPerOption > legalMoveCount) issues.push("search maxMovesPerOption must fit the legal move count");
-  if (!Number.isInteger(profile.searchPolicy.maxCombinations) || profile.searchPolicy.maxCombinations < profile.searchPolicy.optionCount || profile.searchPolicy.maxCombinations > 256) issues.push("search maxCombinations must be between optionCount and 256");
+  if (!Number.isInteger(profile.searchPolicy.maxCombinations) || profile.searchPolicy.maxCombinations < 1 || profile.searchPolicy.maxCombinations > 256) issues.push("search maxCombinations must be between 1 and 256");
   const expectedCapabilities = definitions[profile.profileId].contextualCapabilities;
   if (profile.contextualCapabilities.some((name) => !name.startsWith(`${profile.profileId}_`))) issues.push("contextual capability prefix must match profileId");
   if (profile.contextualCapabilities.length !== expectedCapabilities.length || expectedCapabilities.some((name) => !profile.contextualCapabilities.includes(name))) issues.push("contextual capabilities must match the implemented profile tool set");

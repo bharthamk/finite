@@ -517,6 +517,8 @@ export class FinitePlanRuntime {
       route = { stage: "awaiting_human", nextTool: null, humanAction: "approve_reject_or_give_feedback", targetId: this.kernel.stagedCandidate.candidateId, authorityPresent: false };
     } else if (this.kernel.activeEventId && this.kernel.candidates.size) {
       route = { stage: "options_available", nextTool: "finite_stage_option", targetId: this.kernel.activeEventId, authorityPresent: false };
+    } else if (this.kernel.activeEventId && Number(this.kernel.lastOptionSearch?.validOptionCount) === 0) {
+      route = { stage: "options_available", nextTool: null, targetId: this.kernel.activeEventId, authorityPresent: false };
     } else if (this.kernel.activeEventId) {
       route = { stage: "change_recorded", nextTool: "finite_compare_options", targetId: this.kernel.activeEventId, authorityPresent: false };
     } else if (this.kernel.lifecycleStatus !== "active") {
@@ -762,7 +764,7 @@ export class FinitePlanRuntime {
     if (!facts.preferenceLabels?.length) ask("preferenceLabels", "PREFERENCES_REQUIRED", "What should Codex preserve when trade-offs are necessary?");
     else facts.preferenceLabels = [...new Set(facts.preferenceLabels.slice(0, 20).map((value, index) => normalizeIdentifier(String(value), `preference_${index + 1}`)))];
     if (facts.moves && Object.keys(facts.moves).length > 12) conflict("moves", "TOO_MANY_MOVES", "Keep the bounded recovery menu to twelve moves or fewer.");
-    if (facts.searchPolicy && (!Number.isSafeInteger(facts.searchPolicy.optionCount) || !Number.isSafeInteger(facts.searchPolicy.maxMovesPerOption) || !Number.isSafeInteger(facts.searchPolicy.maxCombinations))) conflict("searchPolicy", "SEARCH_POLICY_INVALID", "Use bounded integer option, move, and combination limits.");
+    if (facts.searchPolicy && (!Number.isSafeInteger(facts.searchPolicy.maxMovesPerOption) || !Number.isSafeInteger(facts.searchPolicy.maxCombinations))) conflict("searchPolicy", "SEARCH_POLICY_INVALID", "Use bounded integer move and combination limits.");
     if (!facts.stages?.length && profileId === "general" && adaptiveShell) {
       facts.stages = [{ stageId: "begin", label: "Begin the plan", detail: "Choose the first practical action.", marker: "Up next", status: "current" }];
       constructionAssumptions.push({ path: "stages.begin", value: 1, basis: "No sequence was supplied, so the general plan begins with one editable starter action.", sourcePaths: ["reviewed_interpretation"], status: "working" });

@@ -18,11 +18,10 @@ authority.
 - **Non-trivial WebMCP:** seven imperative document tools provide canonical
   entry, bounded semantic routing, exact detail recovery, staged decisions,
   authority-bound apply, receipts, and guided view.
-- **Working product:** public v242 runs without judge credentials through the
+- **Working product:** public v245 runs without judge credentials through the
   synthetic Spotlight and preserves revision 2 across reload.
-- **Public proof:** source, build instructions, live URL, video, and license are
-  all required before submission; only repository/video/license owner actions
-  remain open.
+- **Public proof:** source, build instructions, live URL and MIT licence are
+  public and verified; only video publication and entrant fields remain.
 
 ## 1. WebMCP leverage
 
@@ -45,7 +44,7 @@ Proof to show:
 
 **Judge takeaway:** Finite is a complete, coherent product from rough outcome to
 editable plan, active management, disruption, decision, accepted revision,
-completion and learning—not a protocol demo.
+completion and learning, not a protocol demo.
 
 Proof to show:
 
@@ -53,7 +52,7 @@ Proof to show:
   management, replanning, evidence, collaboration, completion and recovery.
 - The same planning grammar produces structurally different travel, renovation,
   event, interview, practice and general-plan surfaces.
-- 367/367 tests, 20 hostile Spotlight kernel runs, production builds, chunk budget,
+- 368/368 tests, 20 hostile Spotlight kernel runs, production builds, chunk budget,
   keyboard operation, mobile target floor, and reload continuity.
 - Cloudflare D1 accepted truth, R2 attachments, optimistic concurrency, atomic
   receipts, isolated browser-local Demo mode, and account-scoped persistence.
@@ -98,15 +97,15 @@ an application-owned agent.
 
 | Public claim | Evidence | Best surface |
 |---|---|---|
-| 26 combinations, 18 satisfy current constraints, 8 rejected, 3 surfaced | Production Spotlight receipt and kernel tests | Video + screenshot 4 |
+| 26 combinations, 18 satisfy current constraints, 8 rejected, five distinct workable directions | Production Spotlight receipt and kernel tests | Video + screenshot 4 |
 | Human alone chooses and confirms | Confirmation creators absent from WebMCP; visible two-step UI | Video + screenshot 4 |
 | One revision, replay-safe | Revision 1→2 receipt retained after replay/reload | Video + screenshot 5 |
 | Same visible plan serves person and Codex | Public operating seam, canonical entry and page-tool registry | Video + screenshot 3 |
 | Three calls to first useful action, zero failures | Accepted effort receipt | Devpost + README |
-| 367 tests and 20 hostile kernel runs | Repository test gate and v242 acceptance | README + repository |
-| Complete product, not a demo | Ten-section v242 acceptance | Video montage + Devpost |
+| 368 tests and 20 hostile kernel runs | Repository test gate and v245 acceptance | README + repository |
+| Complete product, not a demo | Ten-section v245 acceptance | Video montage + Devpost |
 | No credential required | Browser-local Spotlight and public Site | Testing instructions |
-| New during submission period | First commit `1e3b3c8`, 2026-08-26 09:30 AEST | Provenance file |
+| New during submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |
 
 ## Claims to avoid
 
@@ -115,5 +114,5 @@ an application-owned agent.
 - Do not imply that every proposed option is universally safe; say it satisfies
   the currently encoded plan constraints and still requires human judgment.
 - Do not say v238 was a release; it was a rejected marker-mismatch intermediate.
-- Do not claim the public repository, license, or video exists until the owner
-  has completed and verified those actions.
+- The public repository and MIT licence are verified. Do not claim a public
+  video exists until the owner has completed and verified that action.

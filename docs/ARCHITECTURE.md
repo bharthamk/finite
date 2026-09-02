@@ -101,9 +101,9 @@ if a later optional route refresh or presentation step fails.
 
 ## Verification
 
-The accepted v242 release passes 367 automated tests, 20 hostile Spotlight
+The accepted v245 release passes 368 automated tests, 20 hostile Spotlight
 kernel transactions, TypeScript, production browser and Worker builds, client
 chunk limits and the submission consistency gate.
 
-See the [v242 product acceptance record](./acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md)
+See the [v245 product acceptance record](./acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md)
 and [reproducible release guide](../REPRODUCIBLE_RELEASE.md).

@@ -26,9 +26,10 @@ const eventInputs = {
 
 const allocationTotal = (allocation) => allocation.spentMinor + allocation.committedMinor + allocation.forecastMinor + allocation.bufferMinor;
 
-test("bounded search enumerates legal combinations and returns three deterministic distinct options per profile", async () => {
+test("bounded search returns every distinct viable objective route without a fixed suggestion count", async () => {
   const profiles = await compileBuiltInProfiles();
   const expectedCombinationCounts = { travel: 26, renovation: 15, event: 15 };
+  const expectedSuggestionCounts = { travel: 5, renovation: 5, event: 5 };
   for (const [profileId, profile] of profiles) {
     if (profileId === "general") {
       assert.deepEqual(profile.moves, {});
@@ -45,8 +46,8 @@ test("bounded search enumerates legal combinations and returns three determinist
     assert.equal(first.search.strategy, "bounded_legal_move_enumeration");
     assert.equal(first.search.exploredCombinationCount, expectedCombinationCounts[profileId]);
     assert.equal(first.search.truncated, false);
-    assert.equal(first.options.length, profile.searchPolicy.optionCount);
-    assert.deepEqual(first.options.map((option) => option.objective), profile.searchPolicy.objectives.slice(0, profile.searchPolicy.optionCount));
+    assert.equal(first.options.length, expectedSuggestionCounts[profileId]);
+    assert.deepEqual(first.options.map((option) => option.objective), profile.searchPolicy.objectives);
     assert.equal(new Set(first.options.map((option) => option.moveIds.join("|"))).size, first.options.length);
     for (const option of first.options) {
       assert.equal(option.source, "bounded_search");
@@ -57,7 +58,7 @@ test("bounded search enumerates legal combinations and returns three determinist
     const firstIds = first.options.map((option) => option.candidateId);
     const second = await kernel.compareOptions({ eventId: recorded.event.eventId, generate: true });
     assert.deepEqual(second.options.map((option) => option.candidateId), firstIds);
-    assert.equal(kernel.candidates.size, profile.searchPolicy.optionCount);
+    assert.equal(kernel.candidates.size, first.options.length);
     const chosen = second.options[0];
     const staged = await kernel.stageOption({ candidateId: chosen.candidateId, expectedRevision: 1 });
     const approved = await kernel.humanApprove({ candidateId: staged.staged.candidateId });
@@ -76,16 +77,14 @@ test("bounded search enumerates legal combinations and returns three determinist
 test("profile compiler refuses malformed search policy and preference impacts", async () => {
   const invalid = getProfileDefinition("travel");
   invalid.searchPolicy.objectives = ["balanced", "unsafe", "balanced"];
-  invalid.searchPolicy.optionCount = 4;
   invalid.searchPolicy.maxMovesPerOption = 99;
-  invalid.searchPolicy.maxCombinations = 1;
+  invalid.searchPolicy.maxCombinations = 0;
   invalid.moves.reduce_meal_forecast.impacts.experience = 101;
   await assert.rejects(
     () => compileProfile(invalid),
     (error) => error instanceof ProfileValidationError
       && error.issues.some((issue) => issue.includes("objectives"))
       && error.issues.some((issue) => issue.includes("unsupported objective"))
-      && error.issues.some((issue) => issue.includes("optionCount"))
       && error.issues.some((issue) => issue.includes("maxMovesPerOption"))
       && error.issues.some((issue) => issue.includes("maxCombinations"))
       && error.issues.some((issue) => issue.includes("impact experience")),
@@ -102,7 +101,20 @@ test("search stops at the compiled combination cap", async () => {
   assert.equal(compared.search.exploredCombinationCount, 3);
   assert.equal(compared.search.maxCombinations, 3);
   assert.equal(compared.search.truncated, true);
-  assert(kernel.candidates.size <= profile.searchPolicy.optionCount);
+  assert(kernel.candidates.size <= profile.searchPolicy.objectives.length);
+});
+
+test("search returns one suggestion when every objective resolves to the same workable plan", async () => {
+  const definition = getProfileDefinition("travel");
+  definition.searchPolicy.maxMovesPerOption = 0;
+  const profile = await compileProfile(definition);
+  const kernel = new FinitePlanKernel(profile);
+  const recorded = kernel.recordChangeEvent({ ...eventInputs.travel, costDeltaMinor: 10_000 });
+  const compared = await kernel.compareOptions({ eventId: recorded.event.eventId, generate: true });
+  assert.equal(compared.code, "OPTIONS_AVAILABLE");
+  assert.equal(compared.options.length, 1);
+  assert.equal(compared.search.generatedOptionCount, 1);
+  assert.equal(compared.search.validOptionCount, 1);
 });
 
 test("candidate fields cannot be mutated before staging", async () => {
@@ -189,10 +201,10 @@ test("locked, stale, and impossible search paths fail closed without accepted-st
   });
   const impossible = await eventKernel.compareOptions({ eventId: impossibleEvent.event.eventId, generate: true });
   assert.equal(impossible.code, "NO_VALID_OPTION");
-  assert(impossible.options.every((option) => option.valid === false));
+  assert.equal(impossible.options.length, 0);
   const before = structuredClone(eventKernel.accepted);
-  const refusedStage = await eventKernel.stageOption({ candidateId: impossible.options[0].candidateId, expectedRevision: 1 });
-  assert.equal(refusedStage.code, "INVALID_CANDIDATE");
+  const refusedStage = await eventKernel.stageOption({ candidateId: "candidate_missing", expectedRevision: 1 });
+  assert.equal(refusedStage.code, "CANDIDATE_NOT_FOUND");
   assert.deepEqual(eventKernel.accepted, before);
   assert.equal(eventKernel.revision, 1);
 });
@@ -219,7 +231,8 @@ test("malformed events and material changes without evidence never become viable
   });
   const compared = await kernel.compareOptions({ eventId: material.event.eventId, generate: true });
   assert.equal(compared.code, "NO_VALID_OPTION");
-  assert(compared.options.every((option) => option.violations.some((violation) => violation.code === "MATERIAL_EVIDENCE_REQUIRED")));
+  assert.equal(compared.options.length, 0);
+  assert.equal(compared.search.validOptionCount, 0);
   assert.equal(kernel.revision, 1);
   assert.equal(allocationTotal(kernel.accepted), kernel.accepted.totalBudgetMinor);
 });
@@ -240,10 +253,10 @@ test("unsafe money and changes that would make forecast negative fail closed", a
   });
   const compared = await kernel.compareOptions({ eventId: negative.event.eventId, generate: true });
   assert.equal(compared.code, "NO_VALID_OPTION");
-  assert.equal(compared.options.every((option) => option.valid === false), true);
-  assert.equal(compared.options.every((option) => option.violations.some((violation) => violation.code === "NEGATIVE_FORECAST")), true);
-  const refused = await kernel.stageOption({ candidateId: compared.options[0].candidateId, expectedRevision: 1 });
-  assert.equal(refused.code, "INVALID_CANDIDATE");
+  assert.equal(compared.options.length, 0);
+  assert.equal(compared.search.validOptionCount, 0);
+  const refused = await kernel.stageOption({ candidateId: "candidate_missing", expectedRevision: 1 });
+  assert.equal(refused.code, "CANDIDATE_NOT_FOUND");
   assert.equal(kernel.revision, 1);
   assert.equal(allocationTotal(kernel.accepted), kernel.accepted.totalBudgetMinor);
 });

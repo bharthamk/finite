@@ -74,7 +74,7 @@ test("the browser-local Spotlight exits without inventing a server demo session"
 test("judge-facing entry and Spotlight states are explicit about prerequisites and inactivity", () => {
   assert.match(publicGate, /ChatGPT sign-in required · Start with my plan/);
   assert.match(source, /Ready for WebMCP/);
-  assert.match(source, /Finite is ready; no agent has changed the plan yet/);
+  assert.match(source, /The live plan is ready for Codex to work through this change/);
   assert.doesNotMatch(source, /Codex is reading the same active plan you can see/);
   assert.match(source, /Sharing unavailable · local demo/);
   assert.match(styles, /\.header-action--share:disabled/);
@@ -227,7 +227,9 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /All the bells &amp; whistles/);
   assert.match(source, /See Finite adapt/);
   assert.match(source, /See Finite adapt with Codex\./);
-  assert.match(source, /No legal route yet\./);
+  assert.match(source, /No workable direction yet\./);
+  assert.match(source, /workable \$\{validCandidates\.length === 1 \? "direction is" : "directions are"\} ready/);
+  assert.match(source, /Compare the trade-offs or ask Codex to keep working through them with you\./);
   assert.match(source, /element\.closest<HTMLDetailsElement>\("details"\) \?\? element\.querySelector<HTMLDetailsElement>\("details"\)/);
   assert.match(source, /zone\.component === "approval_panel" && Boolean\(kernel\.stagedCandidate\)/);
   assert.match(source, /receipt: \{ label: "the latest plan update", selectors: \["\.latest-plan-update", "\.receipt"\] \}/);
@@ -371,7 +373,7 @@ test("consumer copy uses plan language outside explicit how-it-works explanation
   assert.match(source, /This is all they can see\./);
   assert.match(source, /Build my rough plan/);
   assert.match(source, /Build it myself/);
-  assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan\./);
+  assert.match(source, /\$\{escapeHtml\(agenticName\(\)\)\} works through the plan with you\./);
 });
 
 test("arrival shows the complete human starting point without protocol language or overlay-prone disclosure sizing", () => {
@@ -439,7 +441,7 @@ test("arrival offers Codex or manual starts and keeps the rough plan directly ed
   assert.match(source, /data-arrival-form="workspace-option-update"/);
   assert.match(source, /data-action="workspace-option-promote"/);
   assert.match(source, /data-action="workspace-option-delete"/);
-  assert.match(source, /Compare researched or manually added alternatives here\. Nothing changes in the working plan until you choose Add to plan\./);
+  assert.match(source, /Compare researched or manually added alternatives, then add the one you want to develop in the plan\./);
   assert.match(source, /data-action="open-record-options"/);
   assert.match(source, /data-record-options-dialog/);
   assert.match(source, /data-parent-record-id/);
@@ -923,7 +925,8 @@ test("a reality change reads as one human decision and leaves a visible outcome"
   assert.match(source, />Use this option<\/button>/);
   assert.match(source, />Confirm and update plan<\/button>/);
   assert.match(source, /The change is now part of your plan\./);
-  assert.match(source, /This updates your plan only—it does not book, buy, cancel, or contact anyone\./);
+  assert.match(source, /This updates the plan\. Booking, buying, cancelling, and contacting people remain separate real-world actions\./);
+  assert.match(source, /Choose an option to review its exact effect on the plan\./);
   assert.match(source, /item\.receiptType === "plan_option" && item\.toRevision === kernel\.revision/);
   assert.match(styles, /\.change-context \{/);
   assert.match(styles, /\.latest-plan-update \{/);

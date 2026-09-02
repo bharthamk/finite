@@ -171,7 +171,6 @@ export interface MoveDefinition {
 
 export interface SearchPolicy {
   objectives: string[];
-  optionCount: number;
   maxMovesPerOption: number;
   maxCombinations: number;
 }

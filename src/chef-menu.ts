@@ -175,7 +175,6 @@ const genericReadyMenu = (kernel: FinitePlanKernel): ChefMenuItem[] => {
 const candidateMenu = (kernel: FinitePlanKernel): ChefMenuItem[] => [...kernel.candidates.values()]
   .filter((candidate) => candidate.baseRevision === kernel.revision && candidate.eventId === kernel.activeEventId)
   .sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore)
-  .slice(0, 3)
   .map((candidate, index) => ({
     menuItemId: `candidate_${candidate.candidateId}`,
     rank: index + 1,
@@ -266,11 +265,11 @@ export const buildChefMenu = (kernel: FinitePlanKernel, route: KitchenRoute): { 
   else if (route.stage === "change_recorded" && kernel.activeEventId) {
     items = [{
       menuItemId: "generate_constraint_validated_options", rank: 1, kind: "operator_action",
-      title: "Cook three viable routes", offer: "I can search every bounded legal move and return three distinct outcomes for comparison.",
+      title: "Find the workable routes", offer: "I can test the available ways to adapt this plan and bring back each distinct outcome that still works.",
       whyNow: "The change is recorded against current accepted truth; options have not yet been generated.",
       status: "ready", viability: "not_yet_tested", nextTool: "finite_compare_options",
       knownArgs: { eventId: kernel.activeEventId, generate: true }, missingInputs: [],
-      tradeoffs: ["Search is bounded by the compiled move policy", "No option is staged or approved automatically"],
+      tradeoffs: ["The available moves and current plan limits define which routes can work"],
       evidence: { status: "not_required", refs: [] },
     }];
   } else items = readyMenus[kernel.profile.planId] ?? genericReadyMenu(kernel);

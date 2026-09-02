@@ -5,7 +5,7 @@ Together they must explain the product before they explain the travel proof.
 Keep browser chrome minimal, text readable at Devpost width, and no personal
 account information visible.
 
-## 1. Product thesis — plans that survive change
+## 1. Product thesis: plans that survive change
 
 - Show the public **Plans that survive contact with reality** hero and its
   question: **Reality changed. What should the plan become now?**
@@ -16,7 +16,7 @@ account information visible.
 
 - Show the real travel calendar, renovation phase lane and event run-of-show in
   one clean composite or adjacent crop from the public product page.
-- Caption: **The plan changes shape with the work—not just the labels.**
+- Caption: **The plan changes shape with the work, not just the labels.**
 
 ## 3. The WebMCP operating inversion
 

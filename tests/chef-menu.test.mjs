@@ -390,7 +390,8 @@ test("generated candidates replace suggestions with a validated menu and preserv
   assert.equal(menu.code, "KITCHEN_ENTERED");
   assert.equal(menu.operatorPacket.nextAction.stage, "menu_ready");
   assert.equal(menu.operatorPacket.nextAction.requiresHuman, true);
-  assert.equal(menu.operatorPacket.chefMenu.items.length, 3);
+  assert.equal(menu.operatorPacket.chefMenu.items.length, compared.options.length);
+  assert.equal(menu.operatorPacket.chefMenu.items.length, 5);
   assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.kind === "validated_option"), true);
   assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.viability === "constraint_validated"), true);
   assert.equal(menu.operatorPacket.chefMenu.items.every((item) => item.nextTool === "finite_stage_option"), true);

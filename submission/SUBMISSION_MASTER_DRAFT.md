@@ -5,11 +5,11 @@ to paste after the remaining entrant and video fields are resolved.
 
 ## Release lock
 
-- Product: Finite v242
-- Source: `b7e112486f2a56dc68f131cac76dc8a3d8796994`
+- Product: Finite v245
+- Product source: `b196755208028262ebbcbb17d6eca8467477d596`
 - Live URL: https://finite.bharthamk.chatgpt.site/
 - Judge route: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Gate: 367/367 tests, 20/20 hostile Spotlight kernel runs, production builds,
+- Gate: 368/368 tests, 20/20 hostile Spotlight kernel runs, production builds,
   revision 1→2 production receipt, replay/reload continuity, responsive proof
 - Submission deadline: 2026-09-04 06:00 AEST
 
@@ -38,8 +38,8 @@ tagline is:
 
 - Site-grounded operating-inversion storyboard: `DEMO_VIDEO_STORYBOARD.md`
 - Site-grounded narration: `DEMO_VIDEO_SCRIPT.md`
-- Final 2:38 local master: `media/video/finite_v241_hackathon_film.mp4`
-- Standalone English captions: `media/video/finite_v241_hackathon_film.en.srt`
+- Final 1:56.5 local master: `media/video/finite_v243_hackathon_film.mp4`
+- Standalone English captions: `media/video/finite_v243_hackathon_film.en.srt`
 - Five final 16:9 images and YouTube thumbnail: `media/images/`
 - Screenshot intent, captions and alt text: `SCREENSHOT_AND_CAPTURE_PLAN.md`
 - Technical and judge-facing film certification: `VIDEO_QC_2026-09-01.md`
@@ -54,8 +54,8 @@ is the only approved local upload candidate.
 2. Publish the exact sanitized source and verify the repository host detects the
    license at the top of the repository page.
 3. Run the public repository from a clean clone.
-4. Upload `media/video/finite_v241_hackathon_film.mp4` and use
-   `media/images/finite_v241_submission_thumbnail.png` as the thumbnail.
+4. Upload `media/video/finite_v243_hackathon_film.mp4` and use
+   `media/images/finite_devpost_thumbnail_3x2.png` as the thumbnail.
 5. Verify the public YouTube playback with audio, burned captions and the
    selectable English subtitle track.
 6. Replace every remaining owner placeholder and run the submission consistency check.

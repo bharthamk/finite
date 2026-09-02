@@ -56,8 +56,8 @@ for (let run = 1; run <= 20; run += 1) {
     assert.equal(compared.code, "OPTIONS_AVAILABLE");
     assert.equal(compared.search.exploredCombinationCount, 26);
     assert.equal(compared.search.legalCombinationCount + compared.search.rejectedCombinationCount, 26);
-    assert.equal(compared.search.generatedOptionCount, 3);
-    assert.equal(compared.search.validOptionCount, 3);
+    assert.equal(compared.search.generatedOptionCount, 5);
+    assert.equal(compared.search.validOptionCount, 5);
     assert.deepEqual(kernel.lastOptionSearch, compared.search);
 
     const chosen = compared.options[(run - 1) % compared.options.length];
@@ -91,7 +91,7 @@ for (let run = 1; run <= 20; run += 1) {
     assert.equal(applied.receipt.payload.changeEvent.title, spotlightEvent.title);
     assert.equal(applied.receipt.payload.objective, chosen.objective);
     assert.equal(applied.receipt.payload.search.exploredCombinationCount, 26);
-    assert.equal(applied.receipt.payload.search.validOptionCount, 3);
+    assert.equal(applied.receipt.payload.search.validOptionCount, 5);
     assert.equal(kernel.entities.trip_days.values.days, 21);
     assert.equal(kernel.entities.booked_segment_days.values.days, 21);
     assert.equal(allocationTotal(kernel.accepted), kernel.accepted.totalBudgetMinor);

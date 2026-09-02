@@ -3,7 +3,7 @@
 No account or credential is required for the judge route. It runs in visibly
 labelled browser-local Demo mode and writes no personal data or signed-in plan.
 
-Accepted release: Sites v242, marker `hosted-release-marker-v242`.
+Accepted release: Sites v245, marker `hosted-release-marker-v245`.
 
 ## What this route proves
 
@@ -30,8 +30,8 @@ change. No mutation is required to inspect the starting plan.
 3. Select **Hand off to Codex**, then **Start the live walkthrough**. Copy the
    generated introduction into the current Codex task and choose the built-in
    browser when asked where to watch.
-4. Codex records the built-in synthetic change—add three nights in Paris while
-   preserving fixed international flights and at least AUD 500 of freedom—and
+4. Codex records the built-in synthetic change: add three nights in Paris while
+   preserving fixed international flights and at least AUD 500 of freedom. It
    asks Finite to compare the bounded option space against current constraints.
 5. At the visible decision boundary, choose **Protect breathing room**, select
    **Use this option**, review the exact effect, and select **Confirm and update
@@ -43,7 +43,9 @@ change. No mutation is required to inspect the starting plan.
    projection remain visible.
 
 Expected search proof: 26 bounded combinations, 18 combinations that satisfy
-the current constraints, 8 rejected combinations, and 3 surfaced routes.
+the current constraints, 8 rejected combinations, and five meaningfully
+different workable directions. The count is a result of the plan. Another plan
+may return one direction or several.
 Expected protected truth:
 international flights and total budget.
 

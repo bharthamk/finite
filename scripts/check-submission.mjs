@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseSource = "b7e112486f2a56dc68f131cac76dc8a3d8796994";
-const releaseLabel = "v242";
-const testBaseline = "367";
+const releaseSource = "b196755208028262ebbcbb17d6eca8467477d596";
+const releaseLabel = "v245";
+const testBaseline = "368";
 const finalMode = process.argv.includes("--final");
 const liveUrl = "https://finite.bharthamk.chatgpt.site/";
 
 const requiredFiles = [
   "README.md",
-  "docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md",
+  "docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md",
   "REPRODUCIBLE_RELEASE.md",
   "THIRD_PARTY_LICENSES.md",
   "submission/HACKATHON_REQUIREMENTS_2026-09-01.md",
@@ -55,7 +55,7 @@ for (const file of [
   requireText(file, testBaseline);
 }
 
-requireText("docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md", releaseSource);
+requireText("docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md", releaseSource);
 requireText("submission/HACKATHON_PROVENANCE.md", releaseSource);
 requireText("submission/SUBMISSION_MASTER_DRAFT.md", releaseSource);
 requireText("REPRODUCIBLE_RELEASE.md", releaseLabel);

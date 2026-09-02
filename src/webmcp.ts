@@ -870,7 +870,7 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
         rank: 1,
         kind: "operator_action",
         title: "Run the bounded Spotlight pressure test",
-        offer: "Record the declared synthetic change, compare legal routes, then stop for the person's one real option choice.",
+        offer: "Record the declared synthetic change, compare the workable directions, then bring the trade-offs back into the planning conversation.",
         status: "ready",
         viability: "not_yet_tested",
         nextTool: "finite_open_toolset",
@@ -1463,7 +1463,7 @@ const compactNextAction = (value: unknown): Record<string, unknown> | undefined 
 
 const compactMenu = (value: unknown): Array<Record<string, unknown>> => {
   const items = Array.isArray(record(value).items) ? record(value).items as unknown[] : [];
-  return items.slice(0, 3).map(record).map((item) => ({
+  return items.map(record).map((item) => ({
     id: item.menuItemId ?? null,
     title: shortText(item.title, 90) ?? "Untitled route",
     status: item.status ?? "unknown",
@@ -1701,7 +1701,7 @@ export class FinitePlanWebMCPAdapter {
     const candidate = record(result.candidate);
     const optionValues = Array.isArray(result.options) ? result.options : [];
     const actionNames = Array.isArray(result.actionNames) ? result.actionNames.map(String).slice(0, 20) : [];
-    const options = optionValues.slice(0, 3).map(record).map((option) => ({
+    const options = optionValues.map(record).map((option) => ({
       candidateId: option.candidateId,
       objective: shortText(option.objective, 80),
       valid: option.valid === true,

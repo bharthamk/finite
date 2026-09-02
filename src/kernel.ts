@@ -1046,12 +1046,10 @@ export class FinitePlanKernel {
         const ranked = await Promise.all(moveSets.map((moveIds) => this.createCandidate(event, moveIds, objective, "bounded_search")));
         if (objectiveIndex === 0) legalCombinationCount = ranked.filter((candidate) => candidate.valid).length;
         ranked.sort((a, b) => Number(b.valid) - Number(a.valid) || b.preferenceScore - a.preferenceScore || a.moveIds.join("|").localeCompare(b.moveIds.join("|")));
-        const selected = ranked.find((candidate) => candidate.valid && !chosenMoveSets.has(candidate.moveIds.join("|")))
-          ?? ranked.find((candidate) => !chosenMoveSets.has(candidate.moveIds.join("|")));
+        const selected = ranked.find((candidate) => candidate.valid && !chosenMoveSets.has(candidate.moveIds.join("|")));
         if (!selected) continue;
         chosenMoveSets.add(selected.moveIds.join("|"));
         this.candidates.set(selected.candidateId, selected);
-        if (chosenMoveSets.size >= this.profile.searchPolicy.optionCount) break;
       }
       search = {
         strategy: "bounded_legal_move_enumeration",

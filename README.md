@@ -8,7 +8,7 @@
 <p align="center"><strong>Change your plans without rebuilding them.</strong></p>
 
 <p align="center">
-  Finite is for plans with too many connected parts to safely update one by one. Tell Codex what changed. Finite checks the knock-on effects across dates, money, bookings, people and commitments, then gives you a few complete ways forward. Nothing changes until you choose.
+  Finite is for plans with too many connected parts to update one by one. Tell Codex what changed. Codex and Finite work through the knock-on effects across dates, money, bookings, people and commitments, then bring back the distinct ways forward that fit your plan.
 </p>
 
 <p align="center">
@@ -21,8 +21,8 @@
 
 <p align="center">
   <a href="https://github.com/bharthamk/finite/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/bharthamk/finite/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Release v242" src="https://img.shields.io/badge/live_release-v242-d9f45f?labelColor=123d34">
-  <img alt="367 tests passing" src="https://img.shields.io/badge/tests-367%20passing-d9f45f?labelColor=123d34">
+  <img alt="Release v245" src="https://img.shields.io/badge/live_release-v245-d9f45f?labelColor=123d34">
+  <img alt="368 tests passing" src="https://img.shields.io/badge/tests-368%20passing-d9f45f?labelColor=123d34">
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f3eee5?labelColor=123d34"></a>
 </p>
 
@@ -39,14 +39,14 @@ budget line yourself. A general AI can suggest an answer, but it does not own
 the live plan and cannot prove the rest of it still works.
 
 Finite checks the whole trip together. It rules out changes that break the
-flights or the spending floor, then shows three complete alternatives with
-different trade-offs. You choose **Protect breathing room**. The trip becomes
-21 days, the flights stay fixed, and A$910 remains spare.
+flights or the spending floor, then brings back each distinct way forward that
+fits, with its trade-offs made clear. You choose **Protect breathing room**. The trip
+becomes 21 days, the flights stay fixed, and A$910 remains spare.
 
-No rebuilding a spreadsheet. No forgotten knock-on effects. No AI quietly
-rewriting the plan.
+Instead of rebuilding the plan, you keep shaping it with Codex from the same
+live picture.
 
-![Three complete alternatives for adding Paris nights while protecting the rest of the trip](./docs/media/04-bounded-decision.png)
+![The workable directions for adding Paris nights while protecting the rest of the trip](./docs/media/04-bounded-decision.png)
 
 ## You should be the diner, not the kitchen staff
 
@@ -83,8 +83,9 @@ the real plan, and it can miss connected details along the way.
 
 With WebMCP, Codex can work on the same live plan you are looking at. Finite
 gives it exact actions to read the current plan, record what changed, compare
-possible revisions and apply the option you approved. Finite handles the exact
-state and calculations. You retain the final decision.
+possible revisions and carry the selected direction into the plan. Finite
+handles the exact state and calculations while you and Codex keep shaping what
+comes next.
 
 ![Finite WebMCP operating seam showing typed entry, bounded actions, revalidation and receipts](./docs/media/03-webmcp-operating-seam.png)
 
@@ -100,22 +101,22 @@ Finite keeps seven stable page tools discoverable for the document lifetime:
 | `finite_read_result` | Recover exact fields from a content-addressed result when needed |
 | `finite_get_effort_receipt` | Report tool effort, failures, boundaries and accepted mutations |
 
-Human confirmation creators are deliberately absent from that tool surface.
-Codex can do the work and prepare a choice. Only the person can create the
-authority required for a consequential transition.
+The tool surface covers the planning work. When a direction is ready to become
+part of the plan, the person confirms it in the visible product and Codex
+continues from that exact decision.
 
-## How one change becomes a safe update
+## How one change becomes a working plan
 
 ![Finite decision transaction from accepted revision through pressure, bounded search, human authority and durable receipt](./docs/media/diagram-decision-transaction.png)
 
 The public Spotlight makes that flow concrete. An 18-day trip has fixed flights
-and must retain at least A$500. Reality adds three Paris nights. Finite tests 26
-bounded combinations, keeps 18 that fit, rejects 8 and returns 3 meaningfully
-different routes. The person selects one. Codex applies only that exact approved
-route. Revision 1 becomes revision 2, Paris moves from 4 to 7 nights, and A$910
-remains free.
+and must retain at least A$500. Reality adds three Paris nights. Finite checks 26
+possible combinations, finds 18 that fit and brings back the meaningfully
+different routes. The person and Codex can compare or refine them before one is
+carried into the plan. In the demonstrated route, the trip becomes 21 days,
+Paris moves from 4 to 7 nights, and A$910 remains free.
 
-![Three distinct bounded options produced from one real-world change](./docs/media/04-bounded-decision.png)
+![Distinct workable directions produced from one real-world change](./docs/media/04-bounded-decision.png)
 
 ![Accepted revision and replay-safe receipt surviving reload](./docs/media/05-durable-receipt.png)
 
@@ -183,16 +184,16 @@ Production uses the Sites-managed `DB` and `FILES` bindings declared in
 
 ## Release proof
 
-The accepted public release is **v242** with marker
-`hosted-release-marker-v242`.
+The accepted public release is **v245** with marker
+`hosted-release-marker-v245`.
 
-- **367/367** automated tests pass
+- **368/368** automated tests pass
 - **20/20** independent hostile Spotlight kernel transactions pass
 - TypeScript, production client and Worker builds pass
 - Client chunk budget and submission working gate pass
 - Public root, WebMCP readiness and canonical kitchen entry are verified
 
-Read the [v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md),
+Read the [v245 acceptance record](./docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md),
 [reproducible release instructions](./REPRODUCIBLE_RELEASE.md) and
 [judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md).
 
@@ -200,9 +201,9 @@ Read the [v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTAN
 
 Finite is built around a small set of non-negotiable rules:
 
-1. A request for change is not permission to rewrite accepted truth.
-2. Proposed work remains visibly different from accepted work.
-3. Consequential authority comes from the person, never from agent inference.
+1. Planning stays collaborative from the first request through the accepted revision.
+2. Proposed and accepted work remain easy to distinguish.
+3. Decisions that require human judgment stay with the person.
 4. Every accepted transition produces a durable, inspectable receipt.
 5. The plan must remain coherent when reality changes, not only when it is created.
 

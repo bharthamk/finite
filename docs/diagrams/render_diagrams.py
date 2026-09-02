@@ -94,13 +94,13 @@ def footer(draw: ImageDraw.ImageDraw, width: int, height: int, text: str) -> Non
 
 
 def decision_transaction() -> None:
-    image, draw = canvas(1800, 760, "Versioned decision transaction", "Reality can change without silently changing the plan.", "Codex does the work. The person creates consequential authority.")
+    image, draw = canvas(1800, 760, "Versioned decision transaction", "One change becomes one coherent new revision.", "Codex works through the options with you from the same live plan.")
     labels = [
         ("ACCEPTED V1", "Canonical plan\nrevision 1", GREEN),
         ("NEW PRESSURE", "Change recorded\ntruth unchanged", CORAL),
         ("BOUNDED SEARCH", "26 tested\n18 fit · 8 fail", TEAL),
-        ("CLEAR CHOICES", "3 distinct routes\ntrade-offs visible", GREEN_2),
-        ("HUMAN AUTHORITY", "Exact option\nexact revision", MINT),
+        ("WAYS FORWARD", "Distinct directions\ntrade-offs visible", GREEN_2),
+        ("CONFIRMATION", "Chosen direction\nexact revision", MINT),
         ("ACCEPTED V2", "Apply once\nreceipt + replay", GREEN),
     ]
     x_positions = [70, 365, 660, 955, 1250, 1515]
@@ -111,8 +111,8 @@ def decision_transaction() -> None:
         if index < len(labels) - 1:
             arrow(draw, (x0 + w + 8, 412), (x_positions[index + 1] - 10, 412), colour=GREEN_2)
     draw.rounded_rectangle((1240, 582, 1740, 646), radius=16, fill=INK)
-    draw.text((1292, 602), "No human approval tool exists", font=font(21, bold=True), fill=MINT)
-    footer(draw, 1800, 760, "REVISION-BOUND · AUTHORITY-BOUND · IDEMPOTENT")
+    draw.text((1274, 602), "Confirmation happens in the product", font=font(21, bold=True), fill=MINT)
+    footer(draw, 1800, 760, "REVISION-BOUND · EXACT · REPLAY-SAFE")
     image.save(OUT / "diagram-decision-transaction.png", optimize=True)
 
 
@@ -241,16 +241,16 @@ def github_hero() -> None:
     draw.text((90, 317), "DON'T START OVER.", font=font(56, bold=True), fill=MINT)
     draw.multiline_text(
         (94, 430),
-        "Ask for a change in plain English. Finite checks\nevery affected date, cost and commitment, then\ngives you a few plans that still work.",
+        "Ask for a change in plain English. Finite checks\nevery affected date, cost and commitment, then\nbrings back the distinct ways forward that work.",
         font=font(26), fill=WHITE, spacing=12,
     )
 
     draw.rounded_rectangle((90, 625, 770, 920), radius=30, fill=INK, outline=GREEN_2, width=2)
     draw.text((132, 670), "WHY USE IT?", font=font(20, mono=True), fill=CORAL)
     benefits = [
-        "No rebuilding spreadsheets",
-        "No missed knock-on effects",
-        "No changes you didn't approve",
+        "Stop rebuilding spreadsheets",
+        "See the knock-on effects",
+        "Keep shaping the plan with Codex",
     ]
     for index, benefit in enumerate(benefits):
         y = 738 + index * 62
@@ -278,10 +278,10 @@ def github_hero() -> None:
     draw.line((915, 682, 1650, 682), fill=LINE, width=2)
 
     draw.text((915, 724), "YOU GET", font=font(19, mono=True), fill=CORAL)
-    draw.text((915, 762), "3 complete plans that work.", font=font(32, bold=True), fill=INK)
-    draw.text((915, 814), "Choose one. The whole trip updates.", font=font(24), fill=GREEN_2)
+    draw.text((915, 762), "The ways forward that work.", font=font(32, bold=True), fill=INK)
+    draw.text((915, 814), "Compare them. Refine them. Keep planning.", font=font(24), fill=GREEN_2)
     draw.rounded_rectangle((915, 875, 1650, 925), radius=14, fill=INK)
-    draw.text((1086, 889), "NOTHING CHANGES UNTIL YOU CHOOSE", font=font(18, bold=True), fill=MINT)
+    draw.text((1040, 889), "WORK FROM ONE LIVE PLAN WITH CODEX", font=font(18, bold=True), fill=MINT)
 
     draw.text((90, 990), "Trips · renovations · events · any plan where one change affects everything else", font=font(20, mono=True), fill="#bcd0c8")
     image.save(OUT / "finite-overview.png", optimize=True)

@@ -239,7 +239,7 @@ const renderAuthGate = (signInPath = "/signin-with-chatgpt"): void => {
             <li><span>01 / Order</span><h3>You state the outcome.</h3><p>Bring the change, preferences and hard constraints. Finite does not make you translate them into a dashboard.</p></li>
             <li><span>02 / Operate</span><h3>Codex works across the whole plan.</h3><p>It sees accepted truth, available moves, current evidence and the exact next safe action.</p></li>
             <li><span>03 / Connect</span><h3>WebMCP uses the same live page.</h3><p>The operator works through page-scoped tools against the plan you can see, not a hidden parallel state.</p></li>
-            <li><span>04 / Authority</span><h3>You approve one exact result.</h3><p>No consequential change lands until you choose the bound option and authorize that revision.</p></li>
+            <li><span>04 / Decide</span><h3>You choose what fits.</h3><p>Compare the trade-offs with Codex, refine the direction if needed, then carry your decision into the plan.</p></li>
           </ol>
           <div class="webmcp-seam">
             <div class="webmcp-seam__page">
@@ -857,7 +857,7 @@ const renderHeaderControls = (): string => {
         <p><span>Signed in as</span><strong>${escapeHtml(accountName)}</strong></p>
         <details class="account-menu__how">
           <summary>How Finite works</summary>
-          <div><p>Finite keeps the working layer behind your plan coherent: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and you approve the exact result.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>You review and approve every consequential change.</li></ol></div>
+          <div><p>Finite keeps the working layer behind your plan coherent: you describe the outcome, ${escapeHtml(agenticName())} works through the moving parts, and together you keep shaping the plan.</p><ol><li>Say what needs to happen.</li><li>${escapeHtml(agenticName())} keeps the whole plan coherent.</li><li>Compare what works and keep planning.</li></ol></div>
         </details>
         ${authSession.kind === "account" ? `<a href="${escapeHtml(aboutPath)}">About you</a>` : ""}
         <a href="${escapeHtml(settingsPath)}">Settings</a>
@@ -1392,12 +1392,12 @@ const renderSpotlightActivity = (): string => {
       : kernel.stagedCandidate
         ? { step: "Review", title: "Check the exact effect before confirming.", detail: "The option is staged, but accepted plan truth has not changed." }
         : validCandidates.length
-          ? { step: "Choose", title: `${validCandidates.length} constraint-valid routes are ready.`, detail: "Finite checked the compiled move space. Choose the trade-off you want; Codex cannot choose for you." }
+          ? { step: "Choose", title: `${validCandidates.length} workable ${validCandidates.length === 1 ? "direction is" : "directions are"} ready.`, detail: "Compare the trade-offs or ask Codex to keep working through them with you." }
           : candidates.length
-            ? { step: "Blocked", title: "No legal route yet.", detail: "Finite kept the plan unchanged because every route broke a protected boundary. Codex can revise the change or explain why." }
+            ? { step: "Blocked", title: "No workable direction yet.", detail: "Every version tested conflicts with a current boundary. Codex can explore another trade-off or work with you on what should change." }
           : kernel.activeEventId
             ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while boundary-respecting combinations are compared." }
-            : { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "Finite is ready; no agent has changed the plan yet." };
+            : { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "The live plan is ready for Codex to work through this change." };
   return `<section class="spotlight-activity" role="status" aria-live="polite" aria-atomic="true" aria-label="Finite and Codex activity">
     <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
   </section>`;
@@ -2222,7 +2222,7 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
       const dialogId = `record_options_${section.sectionId}_${item.itemId}`;
       return `<dialog class="starter-record-options-dialog finite-edit-dialog" id="${escapeHtml(dialogId)}" data-record-options-dialog data-record-options-key="${escapeHtml(`${section.sectionId}:${item.itemId}`)}" aria-labelledby="${escapeHtml(dialogId)}_title">
         <button class="starter-overview-dialog__close finite-edit-dialog__close" type="button" data-action="close-record-options" aria-label="Close options for ${escapeHtml(title)}">×</button>
-        <header><p class="eyebrow">Options for this item</p><h3 id="${escapeHtml(dialogId)}_title">${escapeHtml(title)}</h3><p>Compare researched or manually added alternatives here. Nothing changes in the working plan until you choose Add to plan.</p></header>
+        <header><p class="eyebrow">Options for this item</p><h3 id="${escapeHtml(dialogId)}_title">${escapeHtml(title)}</h3><p>Compare researched or manually added alternatives, then add the one you want to develop in the plan.</p></header>
         <div class="starter-record-options-dialog__body"><div class="starter-option-grid">${attached.length ? attached.map(renderOptionCard).join("") : `<p class="starter-plan__empty">No options saved for this item yet.</p>`}</div>
         <details class="starter-module__option-add"><summary>＋ Add an option for this item</summary><form data-arrival-form="workspace-option-add" data-module-id="${escapeHtml(section.sectionId)}" data-parent-record-id="${escapeHtml(item.itemId)}"><div class="starter-record__fields">${section.fields.map((field) => renderStarterField(field)).join("")}</div>${optionResearchFields()}${renderStarterCertaintyToggle(true)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Save as option</button></form></details></div>
       </dialog>`;
@@ -2400,7 +2400,7 @@ const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; det
   if (order.status === "clarification_required") return { label: "Your answer needed", title: `${agenticName()} needs one decision before it can continue.`, detail: "Only you can answer this. Finite will add your answer to the plan." };
   if (order.status === "proposed_plan_ready") return { label: "Rough plan ready", title: `${agenticName()} has built a first-pass plan.`, detail: `Edit it yourself, comment on a section, or ask ${agenticName()} to research and develop it.` };
   if (order.status === "interpretation_confirmed") return { label: "Rough plan ready", title: "Your editable plan is ready.", detail: `Change it yourself or ask ${agenticName()} to develop any part.` };
-  if (order.status === "awaiting_human_authority") return { label: "Your approval needed", title: "A proposed plan is ready.", detail: "Review it below. Nothing changes until you approve it." };
+  if (order.status === "awaiting_human_authority") return { label: "Ready for your decision", title: "A proposed plan is ready.", detail: "Review it below, keep shaping it with Codex, or save it as your working plan." };
   return { label: "Complete", title: "This request is complete.", detail: "You can return to the finished plan whenever you need it." };
 };
 
@@ -3953,7 +3953,7 @@ const renderOptions = (): string => {
   return `${event ? `<div class="change-context" aria-label="What this decision is about">
     <div><span>What changed</span><strong>${escapeHtml(event.title)}</strong>${pressure ? `<small>${escapeHtml(pressure)}</small>` : ""}</div>
     <div><span>What stays true</span><strong>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</strong></div>
-    <div><span>What you’re choosing</span><strong>Which compromise fits best</strong><small>Nothing changes until you confirm one.</small></div>
+    <div><span>What you’re choosing</span><strong>Which direction fits best</strong><small>Compare the trade-offs or ask Codex to keep working.</small></div>
   </div>` : ""}${search && Number.isFinite(exploredCombinations) ? `<section class="option-search-proof" aria-label="How Finite found these options">
     <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} meaningfully different routes are surfaced so the trade-offs stay understandable.</p></div>
     <dl><div><dt>Legal combinations</dt><dd>${legalCombinations}</dd></div><div><dt>Rejected combinations</dt><dd>${rejectedCombinations}</dd></div><div><dt>Refused before choice</dt><dd>${escapeHtml(lockedMoves.length ? lockedMoves.join(" · ") : "No fixed item was offered as a trade")}</dd></div></dl>
@@ -4244,7 +4244,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     const staged = kernel.stagedCandidate;
     const approved = staged && kernel.approval?.candidateId === staged.candidateId;
     const changes = staged ? candidateTradeoffLines(staged) : [];
-    body = staged ? `<div class="approval-copy"><p id="exact_approval_description">You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates your plan only—it does not book, buy, cancel, or contact anyone.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet" tabindex="-1" data-approval-confirmed>Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve" aria-describedby="exact_approval_description">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to see its exact effect before anything changes.</p>`;
+    body = staged ? `<div class="approval-copy"><p id="exact_approval_description">You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates the plan. Booking, buying, cancelling, and contacting people remain separate real-world actions.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet" tabindex="-1" data-approval-confirmed>Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve" aria-describedby="exact_approval_description">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to review its exact effect on the plan.</p>`;
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
   const timelineSection = stageComponents.has(zone.component);
@@ -4575,7 +4575,7 @@ const addProfileMemoryFromAbout = async (form: HTMLFormElement): Promise<void> =
       profilePageMessage = "Remembered. New plans will show this before using it.";
       announce(profilePageMessage);
     } else profilePageError = result.issues?.join(" ") || result.message || "That could not be remembered.";
-  } catch { profilePageError = "That could not be remembered. Nothing changed."; }
+  } catch { profilePageError = "That could not be remembered. Please try again."; }
   profilePageBusy = false;
   await render();
 };
@@ -4607,7 +4607,7 @@ const changeProfileMemoryFromAbout = async (form: HTMLFormElement, submitter: HT
       if (result.code === "PROFILE_MEMORY_CONFLICT") await refreshProfileContext();
       profilePageError = result.issues?.join(" ") || result.message || "That change could not be saved.";
     }
-  } catch { profilePageError = "That change could not be saved. Nothing changed."; }
+  } catch { profilePageError = "That change could not be saved. Please try again."; }
   profilePageBusy = false;
   await render();
 };
@@ -4707,9 +4707,9 @@ async function render(): Promise<SurfaceManifest> {
       ${renderPlanDraft()}
       <div class="surface-grid">${managingZones.map((zone) => renderZone(manifest, zone)).join("")}</div>
       ${renderLifecycleControl()}
-      ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes in all three plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
+      ${labMode ? `<details class="protocol-lab" open><summary>Protocol lab</summary><p>This acceptance creates synthetic, receipted revision 3 changes across the travel, renovation, and event reference plans. The explicit click is the human test authority.</p><button class="button" data-action="run-handoff-acceptance" ${busy ? "disabled" : ""}>Run authenticated handoff acceptance</button><pre>${escapeHtml(JSON.stringify({ modelContext: typeof document.modelContext, crossOriginIsolated, profileId: kernel.profile.profileId, profileHash: kernel.profile.profileHash, revision: kernel.revision, manifestHash: manifest.manifestHash, tools: adapter?.inventory() ?? [], acceptance: labAcceptanceResult }, null, 2))}</pre></details>` : ""}
     </main>
-    <footer><p>${escapeHtml(agenticName())} works through the plan. You choose and approve every consequential change.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
+    <footer><p>${escapeHtml(agenticName())} works through the plan with you. Finite keeps every connected part in view.</p><span>Finite plan · revision ${kernel.revision}</span></footer>
     ${renderCodexHandoffDialog()}
     ${renderPlanShareDialog()}
     ${renderPlanInputDialog()}
@@ -4929,8 +4929,8 @@ const progressArrivalPlan = async (): Promise<void> => {
     announce(code === "ARRIVAL_NOT_READY" || code === "ARRIVAL_WORKSPACE_NOT_READY"
       ? "This rough plan still needs its current interpretation completed before it can start."
       : code === "PLAN_DRAFT_INVALID"
-        ? "One saved detail does not yet fit the managed plan. Your draft is safe; review the highlighted section or ask Codex to repair it, then try again."
-        : "Finite could not start this plan. Your draft is safe—please try again.");
+        ? "One saved detail does not yet fit the managed plan. Review the highlighted section or ask Codex to repair it, then try again."
+        : "Finite could not start this plan. Your draft remains available; please try again.");
     await render();
     publishClickActivationTiming(activationTimer, "failed");
   }
@@ -4953,7 +4953,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     planActivationTransition = false;
     planActivationError = latestArrival.ok
       ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
-      : "Finite could not check your latest information. Nothing changed—please try again.";
+      : "Finite could not check your latest information. Please try again.";
     announce(planActivationError);
     await render();
     publishClickActivationTiming(activationTimer, "failed");
@@ -4968,7 +4968,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
   if ((confirmationResult && !confirmationResult.ok) || !confirmation) {
     busy = false;
     planActivationTransition = false;
-    planActivationError = "Finite could not record your approval. Nothing changed—please try again.";
+    planActivationError = "Finite could not record your confirmation. Please try again.";
     announce(planActivationError);
     await render();
     publishClickActivationTiming(activationTimer, "failed");
@@ -4988,7 +4988,7 @@ const confirmPlanDraft = async (draftId: string, continuity: ArrivalProgression 
     planActivationTransition = false;
     planActivationError = activation.code === "PLAN_DRAFT_STALE" || activation.code === "PLAN_DRAFT_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.code === "PLAN_ACTIVATION_DRAFT_STALE" || activation.code === "PLAN_ACTIVATION_BASE_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_ARRIVAL_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_DRAFT_STALE" || activation.repositoryCode === "PLAN_ACTIVATION_BASE_STALE"
       ? "This plan is out of date because something changed. Finite will keep you in Planning while a fresh version is prepared."
-      : "Finite could not start the plan. Your approval is still here—please try again.";
+      : "Finite could not start the plan. Your confirmation remains available; please try again.";
     announce(planActivationError);
     await render();
     publishClickActivationTiming(activationTimer, "failed");
@@ -5531,7 +5531,7 @@ function bindInteractions(): void {
   }));
   root?.querySelectorAll<HTMLButtonElement>("[data-action='choose']").forEach((button) => button.addEventListener("click", () => chooseCandidate(String(button.dataset.candidate))));
   root?.querySelector<HTMLButtonElement>("[data-action='approve']")?.addEventListener("click", () => approveCandidate());
-  root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the three viable outcomes. Accepted truth is unchanged."); await render(); });
+  root?.querySelector<HTMLButtonElement>("[data-action='return']")?.addEventListener("click", async () => { runtime.kernel.rejectStagedOption({ reason: "Human returned the staged option from the consumption surface." }); announce("Returned to the available routes."); await render(); });
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
   root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });

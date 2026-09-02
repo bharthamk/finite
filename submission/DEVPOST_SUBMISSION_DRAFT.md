@@ -1,8 +1,37 @@
-# Finite — Devpost submission draft
+# Finite: Devpost submission draft
 
-Status: content-complete draft for accepted public release v242. The final video,
+Status: content-complete draft for accepted public release v245. The final video,
 five images and thumbnail are packaged locally. Only the public YouTube URL and
 entrant/team details remain owner-supplied.
+
+## Devpost paste map
+
+This file is the copy source. Benji enters and saves the draft; Codex reviews
+the saved draft read-only. Do not select the final submission control during
+draft assembly.
+
+- **Project name:** paste `Project name` below.
+- **Tagline:** paste `Tagline` below.
+- **Project story / description:** paste the complete contents of
+  `DEVPOST_PROJECT_STORY_FINAL.md`.
+- **Try it out / live app:** `https://finite.bharthamk.chatgpt.site/`
+- **Source code:** `https://github.com/bharthamk/finite`
+- **Video:** leave blank until the improved final public YouTube film has been
+  accepted and public-playback QC has passed.
+- **Built with:** add the tags under `Built with` below in that order. Do not
+  pad the field to 25.
+- **Testing instructions:** paste the recommended route from
+  `JUDGE_TESTING_INSTRUCTIONS.md`; lead with the no-credential Spotlight URL.
+- **Gallery:** upload the five images below in numeric order:
+  1. `media/images/01_product_thesis.png`
+  2. `media/images/02_one_adaptable_system.png`
+  3. `media/images/03_webmcp_operating_seam.png`
+  4. `media/images/04_bounded_decision_transaction.png`
+  5. `media/images/05_accepted_receipt.png`
+- **Thumbnail:** upload
+  `media/images/finite_devpost_thumbnail_3x2.png` (purpose-built 3:2 asset).
+- **Entrant/team fields:** use Benji's own account details; do not infer or add
+  team members or contributor credits.
 
 ## Project name
 
@@ -10,15 +39,15 @@ Finite
 
 ## Tagline
 
-You state the outcome. Codex operates. You decide what becomes true.
+The agent-native workspace for plans that must survive change.
 
 ## Short description
 
 Finite is the agent-native working layer behind plans that must survive change.
-People state outcomes in ordinary language; Codex operates the same live plan
-through WebMCP; Finite keeps accepted facts, constraints, evidence, revisions
-and receipts coherent; the person chooses and approves. Its adaptive planning
-grammar changes shape across travel, renovations, events, interviews and more.
+People state outcomes in ordinary language, then keep shaping the same live plan
+with Codex through WebMCP. Finite keeps the connected dates, money, commitments,
+evidence and revisions coherent across travel, renovations, events, interviews
+and more.
 
 ## Inspiration
 
@@ -53,7 +82,7 @@ decisions, accepted revisions, completion and reusable learning.
 The human surface adapts to the work. Travel becomes a calendar and route.
 Renovation becomes phases, dependencies and contingency. An event becomes a
 run-of-show, capacity and suppliers. Interview preparation, recurring practice
-and a dinner for eight use different records and measures—not a travel dashboard
+and a dinner for eight use different records and measures, not a travel dashboard
 with renamed labels.
 
 When reality changes, Codex uses page-defined WebMCP tools to:
@@ -144,14 +173,14 @@ separate made Finite both safer and more comprehensible.
 ## Accomplishments
 
 - A complete public revision 1→2 WebMCP transaction with visible human choice.
-- 26 bounded combinations distilled into three distinct, understandable routes
-  that satisfy the current encoded constraints.
+- 26 possible combinations distilled into five distinct workable directions for
+  this plan, with the count allowed to change when another plan has fewer or more.
 - Seven stable document tools instead of an ever-growing browser registry.
 - Complete before/after, authority, search, and replay proof in one receipt.
 - A complete product lifecycle and distinct travel, renovation, event,
   interview-preparation, recurring-practice and general-plan surfaces on one
   adaptive grammar.
-- 367 passing tests, including 20 repeated hostile Spotlight kernel transaction runs.
+- 368 passing tests, including 20 repeated hostile Spotlight kernel transaction runs.
 - Reload-safe accepted truth, isolated public Demo mode, responsive layout, and
   keyboard/screen-reader hardening.
 - A production route completed in three calls to first useful action with zero
@@ -174,4 +203,15 @@ contract.
 
 ## Built with
 
-WebMCP, TypeScript, Vite, Cloudflare Workers, D1, R2, ChatGPT Sites, HTML, CSS.
+1. WebMCP
+2. OpenAI Codex
+3. ChatGPT
+4. ChatGPT Sites
+5. TypeScript
+6. Vite
+7. Cloudflare Workers
+8. Cloudflare D1
+9. Cloudflare R2
+10. Drizzle ORM
+11. HTML5
+12. CSS3

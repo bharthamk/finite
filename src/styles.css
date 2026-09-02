@@ -1693,7 +1693,7 @@ main { width:min(1460px,100%); margin:0 auto; padding:0 clamp(20px,4vw,64px) 80p
 .option-search-proof dt,.option-card__why dt { color:var(--muted); font:700 .62rem/1.2 "DM Mono",monospace; letter-spacing:.06em; text-transform:uppercase; }
 .option-search-proof dd,.option-card__why dd { margin:0; line-height:1.45; }
 
-.option-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:28px; }
+.option-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:14px; margin-top:28px; }
 .option-card { padding:24px; border:1px solid var(--line); background:#f8f6f0; display:flex; flex-direction:column; }
 .option-card.is-staged { outline:3px solid var(--accent); outline-offset:-3px; }
 .option-card__top { display:flex; justify-content:space-between; color:var(--muted); font:500 .65rem/1.2 "DM Mono",monospace; text-transform:uppercase; }
