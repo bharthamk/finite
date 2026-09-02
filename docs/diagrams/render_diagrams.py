@@ -113,7 +113,7 @@ def decision_transaction() -> None:
     draw.rounded_rectangle((270, 625, 1530, 698), radius=18, fill=INK)
     draw.text((370, 648), "COMPARE, QUESTION AND REFINE THE DIRECTIONS WITH CODEX", font=font(21, bold=True), fill=MINT)
     draw.text((420, 738), "One direction if one works. Five here because five work.", font=font(20), fill=GREEN_2)
-    image.save(OUT / "diagram-decision-transaction.png", optimize=True)
+    image.save(OUT / "diagram-change-to-plan.png", optimize=True)
 
 
 def system_architecture() -> None:

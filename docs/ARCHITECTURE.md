@@ -36,7 +36,7 @@ the operating context small.
 
 ## Accepted-state transaction
 
-![Finite accepted-state transaction from revision one through human authority to replay-safe revision two](./media/diagram-decision-transaction.png)
+![A concrete Finite change moving from the current plan through connected checks to the updated plan](./media/diagram-change-to-plan.png)
 
 ## Planning layers
 

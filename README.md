@@ -124,7 +124,7 @@ working vocabulary through the same durable connection.
 
 ## How Finite works through a real change
 
-![The Paris example moving from the current plan through a whole-plan check to a workable updated plan](./docs/media/diagram-decision-transaction.png)
+![The Paris example moving from the current plan through a whole-plan check to a workable updated plan](./docs/media/diagram-change-to-plan.png)
 
 The public Spotlight starts with an 18-day trip. The international flights are
 fixed and at least A$500 must remain spare. You ask to add three Paris nights
