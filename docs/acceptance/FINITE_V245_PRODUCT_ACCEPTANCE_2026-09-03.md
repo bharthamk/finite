@@ -7,6 +7,8 @@ Accepted: 2026-09-03
 - Live product: https://finite.bharthamk.chatgpt.site/
 - Sites version: v245
 - Product and deployed source: `b196755208028262ebbcbb17d6eca8467477d596`
+- Matching public source snapshot:
+  [`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c)
 - Marker: `hosted-release-marker-v245`
 - Sites version ID:
   `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_4fbc588556f88191a28c0aa61f6a9a57`

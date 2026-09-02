@@ -58,6 +58,10 @@ records both the commit and archive SHA-256 before a deployment is promoted.
 The accepted product and deployed source is
 `b196755208028262ebbcbb17d6eca8467477d596`, with release marker
 `hosted-release-marker-v245`, at `https://finite.bharthamk.chatgpt.site`.
+The matching public source snapshot is
+[`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c).
+The application, Worker, schema, migrations, tests, static assets, lockfile and
+build configuration have identical Git object IDs in both commits.
 Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_4fbc588556f88191a28c0aa61f6a9a57`
 was promoted by deployment `appgdep_6a987bd798988191809ea739020a56ab`.
 The local release archive SHA-256 is

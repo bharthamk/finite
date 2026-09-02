@@ -46,8 +46,6 @@ becomes 21 days, the flights stay fixed, and A$910 remains spare.
 Instead of rebuilding the plan, you keep shaping it with Codex from the same
 live picture.
 
-![The workable directions for adding Paris nights while protecting the rest of the trip](./docs/media/04-bounded-decision.png)
-
 ## You should be the diner, not the kitchen staff
 
 Most planning software makes you run the kitchen. It gives you forms, tables
@@ -240,8 +238,8 @@ Production uses the Sites-managed `DB` and `FILES` bindings declared in
 ## Reproduced release evidence
 
 The deployed product is **v245**. Live responses identify it with
-`hosted-release-marker-v245`; its accepted application source is commit
-[`b196755`](https://github.com/bharthamk/finite/commit/b196755208028262ebbcbb17d6eca8467477d596).
+`hosted-release-marker-v245`; its public application source snapshot is commit
+[`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c).
 Later commits on `main` improve the public documentation without changing that
 deployed application build.
 
