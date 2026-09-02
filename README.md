@@ -202,38 +202,62 @@ surfaces are:
 
 Requirements: Node.js 22.13 or newer.
 
+Start the product:
+
 ```bash
 npm ci
 npm run db:local:migrate
-npm run typecheck
-npm test
-npm run build
 npm run dev
 ```
 
-Open the local URL printed by Vite. Native Chrome WebMCP testing currently
-requires `chrome://flags/#enable-webmcp-testing`. A supported host will show
-that Codex is connected.
+Open the local URL printed by Vite. Choose **Watch the live demo**, then
+**See Finite adapt**, for the shortest credential-free route. Its plan stays in
+that browser.
+
+To verify the complete release from the same checkout:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run check:submission
+```
+
+For native WebMCP testing in Chrome, enable
+`chrome://flags/#enable-webmcp-testing` before opening Finite. A supported host
+shows that Codex is connected.
+
+<details>
+<summary><strong>How local storage is isolated</strong></summary>
 
 Local development uses an isolated D1 database named `finite-local` and an
 isolated R2 bucket. The identifiers in `wrangler.local.jsonc` are local-only.
 Production uses the Sites-managed `DB` and `FILES` bindings declared in
 `.openai/hosting.json`.
 
-## Release proof
+</details>
 
-The accepted public release is **v245** with marker
-`hosted-release-marker-v245`.
+## Reproduced release evidence
 
-- **368/368** automated tests pass
-- **20/20** independent hostile Spotlight kernel transactions pass
-- TypeScript, production client and Worker builds pass
-- Client chunk budget and submission working gate pass
-- Public root, WebMCP readiness and canonical kitchen entry are verified
+The deployed product is **v245**. Live responses identify it with
+`hosted-release-marker-v245`; its accepted application source is commit
+[`b196755`](https://github.com/bharthamk/finite/commit/b196755208028262ebbcbb17d6eca8467477d596).
+Later commits on `main` improve the public documentation without changing that
+deployed application build.
 
-Read the [v245 acceptance record](./docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md),
-[reproducible release instructions](./REPRODUCIBLE_RELEASE.md) and
-[judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md).
+| Evidence | Result |
+|---|---|
+| **Clean checkout** | All 22 local migrations, TypeScript checks, the production client build and the Worker build pass. |
+| **Automated coverage** | **368/368 tests** pass across planning, change handling, persistence, collaboration, WebMCP and complete user journeys. |
+| **Repeated change stress** | **20/20** separate Spotlight transaction runs preserve the plan, survive reload and return the same result when safely retried. |
+| **Live WebMCP route** | The public Spotlight advertised all seven stable tools, opened the current plan and tested the Paris change across 26 connected combinations. |
+| **Production experience** | The public root returns the v245 marker; the browser-local demo survives reload; the 390-pixel layout has no horizontal overflow or console errors. |
+
+Read the [v245 acceptance record](./docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md)
+for the exact result, the [reproducible release contract](./REPRODUCIBLE_RELEASE.md)
+for build and deployment provenance, or the
+[judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md) for a
+short independent product check.
 
 ## Product principles
 
