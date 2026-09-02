@@ -323,10 +323,73 @@ def restaurant_model() -> None:
     image.save(OUT / "diagram-restaurant-model.png", optimize=True)
 
 
+def adaptive_plan_shapes() -> None:
+    image = Image.new("RGB", (1800, 1060), PAPER)
+    draw = ImageDraw.Draw(image)
+    draw.text((72, 50), "ADAPTIVE PLAN SHAPES", font=font(22, mono=True), fill=CORAL)
+    draw.text((72, 94), "One system. Each plan takes the shape of the work.", font=font(44, bold=True), fill=INK)
+    draw.text((74, 158), "Five examples of different facts, sequences and decisions.", font=font(24), fill=GREEN_2)
+
+    def card(x0: int, y0: int, x1: int, y1: int, label: str, title: str, accent: str) -> None:
+        draw.rounded_rectangle((x0, y0, x1, y1), radius=22, fill=WHITE, outline=GREEN, width=3)
+        draw.rounded_rectangle((x0 + 22, y0 + 22, x0 + 36, y1 - 22), radius=7, fill=accent)
+        draw.text((x0 + 58, y0 + 28), label, font=font(17, mono=True), fill=CORAL)
+        draw.text((x0 + 58, y0 + 67), title, font=font(24, bold=True), fill=INK)
+
+    card(70, 245, 570, 555, "TRAVEL", "Route, dates and bookings", CORAL)
+    draw.line((138, 405, 500, 405), fill=GREEN_2, width=5)
+    for x, place, colour in [(145, "LON", GREEN), (260, "PAR", CORAL), (380, "AMS", GREEN), (495, "BCN", GREEN)]:
+        draw.ellipse((x - 9, 396, x + 9, 414), fill=colour)
+        draw.text((x - 17, 430), place, font=font(14, mono=True), fill=MUTED)
+    draw.text((138, 482), "Flights fixed · 21 days · A$910 spare", font=font(18), fill=GREEN_2)
+
+    card(650, 245, 1150, 555, "RENOVATION", "Phases, dependencies and handover", TEAL)
+    phase_rows = [("STRIP-OUT", "DONE", GREEN_2), ("CABINETRY", "FIXED", GREEN_2), ("SURFACES", "REPLAN", CORAL), ("HANDOVER", "PROTECTED", GREEN_2)]
+    for index, (phase, state, colour) in enumerate(phase_rows):
+        y = 350 + index * 43
+        draw.text((718, y), phase, font=font(15, mono=True), fill=GREEN_2)
+        draw.text((1040, y), state, font=font(15, mono=True), fill=colour)
+        draw.line((718, y + 28, 1082, y + 28), fill="#d8dfda", width=2)
+
+    card(1230, 245, 1730, 555, "EVENT", "Schedule, capacity and commitments", MINT)
+    event_rows = [("15:00", "LOAD-IN"), ("18:30", "DOORS"), ("19:30", "PROGRAMME"), ("22:45", "CLOSE")]
+    for index, (time, activity) in enumerate(event_rows):
+        y = 350 + index * 43
+        draw.text((1298, y), time, font=font(15, mono=True), fill=TEAL)
+        draw.text((1395, y), activity, font=font(16, mono=True), fill=GREEN_2)
+    draw.text((1298, 505), "115 / 120 guests", font=font(18, bold=True), fill=INK)
+
+    card(210, 620, 860, 955, "INTERVIEW", "Role evidence, questions and rehearsal", TEAL)
+    draw.text((278, 730), "ROLE NEEDS", font=font(15, mono=True), fill=MUTED)
+    draw.text((565, 730), "YOUR EVIDENCE", font=font(15, mono=True), fill=MUTED)
+    interview_rows = [("Lead change", "Launch result"), ("Build trust", "Team example"), ("Make decisions", "Trade-off story")]
+    for index, (need, evidence) in enumerate(interview_rows):
+        y = 774 + index * 46
+        draw.text((278, y), need, font=font(18), fill=GREEN_2)
+        draw.text((565, y), evidence, font=font(18), fill=GREEN_2)
+    draw.rounded_rectangle((278, 902, 790, 932), radius=10, fill="#e6eee9")
+    draw.text((440, 908), "REHEARSAL READY", font=font(14, bold=True), fill=GREEN)
+
+    card(940, 620, 1590, 955, "DINNER", "Guests, dietary needs, courses and timing", CORAL)
+    dinner_pills = [(1008, 730, 1180, "8 GUESTS"), (1200, 730, 1515, "2 DIETARY NEEDS")]
+    for x0, y0, x1, label in dinner_pills:
+        draw.rounded_rectangle((x0, y0, x1, y0 + 42), radius=14, fill="#e6eee9")
+        draw.text((x0 + 18, y0 + 12), label, font=font(14, bold=True), fill=GREEN)
+    dinner_rows = [("18:00", "PREP"), ("19:15", "STARTER"), ("19:45", "MAIN"), ("20:45", "DESSERT")]
+    for index, (time, course) in enumerate(dinner_rows):
+        y = 805 + index * 35
+        draw.text((1008, y), time, font=font(15, mono=True), fill=CORAL)
+        draw.text((1110, y), course, font=font(16, mono=True), fill=GREEN_2)
+
+    draw.text((72, 1010), "SAME PLANNING MODEL · DIFFERENT WORKING SHAPE", font=font(18, mono=True), fill=MUTED)
+    image.save(OUT / "02-adaptive-system.png", optimize=True)
+
+
 if __name__ == "__main__":
     dark_mode_wordmark()
     github_hero()
     restaurant_model()
+    adaptive_plan_shapes()
     decision_transaction()
     system_architecture()
     webmcp_surface()

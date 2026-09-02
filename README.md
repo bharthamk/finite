@@ -67,18 +67,19 @@ become one workflow.
 
 ![The Finite restaurant model showing the person and Codex planning together while WebMCP connects Codex to the live plan](./docs/media/diagram-restaurant-model.png)
 
-## One system, many kinds of plan
+## One system, shaped around the work
 
-Finite uses the same planning engine across many kinds of work. A trip needs
-dates, places and transport. A renovation needs phases, dependencies and
-handover. An event needs a run of show, capacity
-and commitments. Interview preparation and dinner planning need different
-information again.
+Finite changes shape around the work. A trip becomes a route, calendar,
+bookings and budget. A renovation becomes phases,
+dependencies, costs and handover. An event becomes a run of show, capacity and
+commitments. An interview becomes evidence, questions and rehearsal. A dinner
+becomes guests, dietary needs, courses and timing.
 
 ![Finite adapting into travel, renovation, event, interview and dinner plan shapes](./docs/media/02-adaptive-system.png)
 
-These are not renamed copies of one dashboard. Each plan gets the timeline,
-measures, records and choices that fit the work.
+Underneath, Finite uses one planning model for connected facts, constraints,
+choices and revisions. On screen, each plan gets the structure and language
+the work actually needs.
 
 ## Why this needs WebMCP
 
