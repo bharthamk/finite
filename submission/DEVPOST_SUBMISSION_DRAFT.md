@@ -54,16 +54,26 @@ a second copy here.
 
 ## Judge-only testing instructions
 
-Paste the concise testing route from `JUDGE_TESTING_INSTRUCTIONS.md`. No
-credentials are required for the public Spotlight.
+No credentials are required. The URL opens a prepared, browser-local Spotlight
+plan in Demo mode. In ChatGPT's in-app browser, keep the Finite tab open while
+working with Codex so WebMCP remains connected. The page provides its own
+handoff and walkthrough controls. You can explore the plan naturally, ask Codex
+about it, introduce or refine a change, compare whatever directions are
+available, or create a different kind of plan. Reload the current tab to inspect
+persistence. The `fresh=1` URL restarts the prepared example. For Chrome, use
+version 149 or later, enable `chrome://flags/#enable-webmcp-testing`, restart
+Chrome and reopen the URL.
 
 ## Agents or clients tested
 
-OpenAI Codex with Chrome WebMCP enabled.
+OpenAI Codex using ChatGPT's in-app browser, and Google Chrome 149 with WebMCP
+testing enabled.
 
 ## AI tools used
 
-OpenAI Codex and ChatGPT.
+OpenAI Codex for product design, implementation, testing, documentation and
+WebMCP operation; ChatGPT's in-app browser for live WebMCP testing; and Qwen3-TTS
+1.7B CustomVoice running locally through MLX Audio for the video narration.
 
 ## Built with
 
