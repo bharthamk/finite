@@ -259,25 +259,34 @@ for build and deployment provenance, or the
 [judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md) for a
 short independent product check.
 
-## Product principles
+## How Finite is meant to work
 
-Finite is built around a small set of non-negotiable rules:
+1. **Start with the outcome.** The workspace should take the shape of the work,
+   instead of forcing every plan into the same template.
+2. **Keep one live picture.** You, Codex and the product should work from the
+   same dates, costs, constraints, evidence and decisions.
+3. **Treat change as part of planning.** When one thing moves, Finite should
+   check the connected plan rather than patching one isolated row.
+4. **Make trade-offs understandable.** Finite handles the calculations and
+   shows the workable directions. You decide what makes sense.
+5. **Continue from the result.** A chosen direction should become the next
+   working plan, with a clear history of how it got there.
+6. **Learn deliberately.** Completed plans should improve future work only
+   through lessons you choose to keep.
 
-1. Planning stays collaborative from the first request through the accepted revision.
-2. Proposed and accepted work remain easy to distinguish.
-3. Decisions that require human judgment stay with the person.
-4. Every accepted transition produces a durable, inspectable receipt.
-5. The plan must remain coherent when reality changes, not only when it is created.
-
-The full product direction lives in
+The deeper product model is documented in
 [PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md) and
 [ARRIVAL_AND_SURFACE_CONTINUITY.md](./ARRIVAL_AND_SURFACE_CONTINUITY.md).
 
-## Ownership and licence
+## Project and licence
 
-Finite is a project by [Benji Hart](https://github.com/bharthamk), created for
+Finite was designed and built by [Benji Hart](https://github.com/bharthamk) for
 the WebMCP Challenge.
 
 The source and documentation are available under the [MIT License](./LICENSE).
-The Finite name, wordmark and logo identify this project. The licence grants no
-trademark rights in that branding.
+The Finite name, wordmark and logo remain project marks and are not licensed as
+trademarks.
+
+[Run Finite](https://finite.bharthamk.chatgpt.site/) or follow the
+[short judge route](./submission/JUDGE_TESTING_INSTRUCTIONS.md) to see the live
+plan and WebMCP working together.
