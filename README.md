@@ -83,33 +83,44 @@ the work actually needs.
 
 ## Why this needs WebMCP
 
-Without WebMCP, Codex can give advice in a chat or try to click through software
-designed for a person with a mouse. You still have to transfer its answer into
-the real plan, and it can miss connected details along the way.
+Without WebMCP, Codex sits outside the plan. It can suggest what to do, but you
+still have to copy the answer into the planner, recheck every dependency and
+keep the conversation aligned with whatever changed next.
 
-With WebMCP, Codex can work on the same live plan you are looking at. Finite
-gives it exact actions to read the current plan, record what changed, compare
-possible revisions and carry the selected direction into the plan. Finite
-handles the exact state and calculations while you and Codex keep shaping what
-comes next.
+With WebMCP, the planning conversation reaches the product itself. Codex can
+read the current plan, tell Finite what changed, ask it to test the connected
+consequences, compare every distinct workable direction and continue from the
+chosen revision. Finite handles the calculations and connected state while you
+and Codex keep working through what comes next.
 
-![Finite WebMCP operating seam showing typed entry, bounded actions, revalidation and receipts](./docs/media/03-webmcp-operating-seam.png)
+![A real Finite WebMCP exchange turning one request into direct plan actions and a live, reusable result](./docs/media/03-webmcp-operating-seam.png)
 
-Finite keeps seven stable page tools discoverable for the document lifetime:
+The result is not just an answer at the end of a chat. It becomes the next
+working state for the conversation and the product. When a direction is ready,
+the person confirms it in Finite and both Codex and Finite continue from that
+revision.
 
-| Stable tool | Responsibility |
+<details>
+<summary><strong>How the WebMCP surface is built</strong></summary>
+
+Finite keeps seven stable page tools available while the actions inside them
+adapt to the current plan:
+
+| Stable tool | What it gives Codex |
 |---|---|
-| `finite_webmcp_status` | Report bootstrap readiness without exposing plan state |
-| `finite_enter_kitchen` | Return canonical identity, accepted state and one grounded next action |
-| `finite_get_capabilities` | Describe the active contract, vocabulary and authority law |
-| `finite_open_toolset` | Open one bounded semantic action manifest |
-| `finite_invoke` | Execute one exact action after revalidating revision, evidence and authority |
-| `finite_read_result` | Recover exact fields from a content-addressed result when needed |
-| `finite_get_effort_receipt` | Report tool effort, failures, boundaries and accepted mutations |
+| `finite_webmcp_status` | Check whether the WebMCP connection is ready |
+| `finite_enter_kitchen` | Read the active plan and receive the next useful planning step |
+| `finite_get_capabilities` | Learn the plan's language and available work |
+| `finite_open_toolset` | Open the relevant set of typed planning actions |
+| `finite_invoke` | Run one selected action against the current revision |
+| `finite_read_result` | Retrieve larger exact results only when they are needed |
+| `finite_get_effort_receipt` | Report the work performed, failures and accepted changes |
 
-The tool surface covers the planning work. When a direction is ready to become
-part of the plan, the person confirms it in the visible product and Codex
-continues from that exact decision.
+The wrappers remain predictable for Codex while their planning actions change
+with the compiled plan. A trip, renovation and event therefore expose different
+working vocabulary through the same durable connection.
+
+</details>
 
 ## How one change becomes a working plan
 

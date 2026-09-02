@@ -385,11 +385,68 @@ def adaptive_plan_shapes() -> None:
     image.save(OUT / "02-adaptive-system.png", optimize=True)
 
 
+def webmcp_value() -> None:
+    image = Image.new("RGB", (1800, 980), GREEN)
+    draw = ImageDraw.Draw(image)
+    draw.text((76, 52), "WHY WEBMCP MATTERS", font=font(22, mono=True), fill=CORAL)
+    draw.text((76, 96), "The conversation can work on the real plan.", font=font(46, bold=True), fill=WHITE)
+    draw.text((78, 160), "Codex can read, compare and continue through Finite instead of stopping at advice.", font=font(24), fill="#d9e5df")
+
+    def panel(x0: int, x1: int, label: str, title: str, accent: str) -> None:
+        draw.rounded_rectangle((x0, 245, x1, 820), radius=26, fill=WHITE, outline=GREEN_2, width=3)
+        draw.rounded_rectangle((x0 + 24, 270, x0 + 40, 795), radius=8, fill=accent)
+        draw.text((x0 + 68, 278), label, font=font(18, mono=True), fill=CORAL)
+        draw.text((x0 + 68, 320), title, font=font(28, bold=True), fill=INK)
+
+    panel(70, 525, "YOU + CODEX", "One planning request", CORAL)
+    draw.rounded_rectangle((138, 410, 470, 555), radius=18, fill=PAPER, outline=CORAL, width=3)
+    draw.multiline_text((164, 430), '"Add three nights in Paris.\nKeep the flights fixed.\nKeep A$500 spare."', font=font(19, bold=True), fill=INK, spacing=9)
+    draw.text((138, 625), "Keep questioning, comparing", font=font(20), fill=GREEN_2)
+    draw.text((138, 660), "and refining in conversation.", font=font(20), fill=GREEN_2)
+
+    panel(675, 1125, "WEBMCP", "Direct plan actions", TEAL)
+    steps = [
+        "Read the current plan",
+        "Record what changed",
+        "Test connected consequences",
+        "Return each distinct direction",
+        "Continue from the chosen revision",
+    ]
+    for index, step in enumerate(steps, start=1):
+        y = 405 + (index - 1) * 68
+        draw.ellipse((742, y, 778, y + 36), fill=TEAL)
+        draw.text((754, y + 7), str(index), font=font(15, bold=True), fill=WHITE)
+        draw.text((800, y + 5), step, font=font(19), fill=GREEN_2)
+
+    panel(1275, 1730, "FINITE", "A live result", MINT)
+    draw.text((1343, 402), "THIS PARIS CHANGE", font=font(16, mono=True), fill=MUTED)
+    metrics = [("26", "possibilities tested"), ("18", "fit the plan"), ("8", "ruled out"), ("5", "distinct directions")]
+    for index, (number, label) in enumerate(metrics):
+        y = 447 + index * 62
+        draw.text((1343, y), number, font=font(27, bold=True), fill=INK)
+        draw.text((1407, y + 5), label, font=font(18), fill=GREEN_2)
+    draw.line((1343, 708, 1660, 708), fill=LINE, width=2)
+    draw.text((1343, 740), "21 days · flights fixed · A$910 spare", font=font(18, bold=True), fill=GREEN)
+
+    double_y = 520
+    draw.line((535, double_y, 665, double_y), fill=MINT, width=5)
+    draw.polygon([(535, double_y), (553, double_y - 11), (553, double_y + 11)], fill=MINT)
+    draw.polygon([(665, double_y), (647, double_y - 11), (647, double_y + 11)], fill=MINT)
+    draw.line((1135, double_y, 1265, double_y), fill=MINT, width=5)
+    draw.polygon([(1135, double_y), (1153, double_y - 11), (1153, double_y + 11)], fill=MINT)
+    draw.polygon([(1265, double_y), (1247, double_y - 11), (1247, double_y + 11)], fill=MINT)
+
+    draw.rounded_rectangle((250, 875, 1550, 940), radius=18, fill=INK)
+    draw.text((405, 896), "EACH RESULT BECOMES THE NEXT STARTING POINT", font=font(21, bold=True), fill=MINT)
+    image.save(OUT / "03-webmcp-operating-seam.png", optimize=True)
+
+
 if __name__ == "__main__":
     dark_mode_wordmark()
     github_hero()
     restaurant_model()
     adaptive_plan_shapes()
+    webmcp_value()
     decision_transaction()
     system_architecture()
     webmcp_surface()
