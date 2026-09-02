@@ -94,25 +94,25 @@ def footer(draw: ImageDraw.ImageDraw, width: int, height: int, text: str) -> Non
 
 
 def decision_transaction() -> None:
-    image, draw = canvas(1800, 760, "Versioned decision transaction", "One change becomes one coherent new revision.", "Codex works through the options with you from the same live plan.")
+    image, draw = canvas(1800, 800, "A real Finite change", "One request becomes a plan that still works.", "Dates, bookings, budget and priorities are checked together.")
     labels = [
-        ("ACCEPTED V1", "Canonical plan\nrevision 1", GREEN),
-        ("NEW PRESSURE", "Change recorded\ntruth unchanged", CORAL),
-        ("BOUNDED SEARCH", "26 tested\n18 fit · 8 fail", TEAL),
-        ("WAYS FORWARD", "Distinct directions\ntrade-offs visible", GREEN_2),
-        ("CONFIRMATION", "Chosen direction\nexact revision", MINT),
-        ("ACCEPTED V2", "Apply once\nreceipt + replay", GREEN),
+        ("CURRENT PLAN", "18 days\nFlights fixed\nA$500 kept spare", GREEN),
+        ("YOUR CHANGE", "3 more Paris nights\nKeep the rest working", CORAL),
+        ("PLAN CHECK", "26 possibilities\n18 fit · 8 ruled out", TEAL),
+        ("WAYS FORWARD", "5 distinct routes\nfor this change", GREEN_2),
+        ("YOUR DIRECTION", "Protect breathing room", MINT),
+        ("UPDATED PLAN", "21 days\nFlights fixed\nA$910 spare", GREEN),
     ]
     x_positions = [70, 365, 660, 955, 1250, 1515]
     widths = [240, 240, 240, 240, 240, 215]
-    y0, y1 = 285, 540
+    y0, y1 = 285, 555
     for index, ((title, body, accent), x0, w) in enumerate(zip(labels, x_positions, widths)):
-        box(draw, (x0, y0, x0 + w, y1), title, body, accent=accent, title_size=20, body_size=18)
+        box(draw, (x0, y0, x0 + w, y1), title, body, accent=accent, title_size=19, body_size=16)
         if index < len(labels) - 1:
-            arrow(draw, (x0 + w + 8, 412), (x_positions[index + 1] - 10, 412), colour=GREEN_2)
-    draw.rounded_rectangle((1240, 582, 1740, 646), radius=16, fill=INK)
-    draw.text((1274, 602), "Confirmation happens in the product", font=font(21, bold=True), fill=MINT)
-    footer(draw, 1800, 760, "REVISION-BOUND · EXACT · REPLAY-SAFE")
+            arrow(draw, (x0 + w + 8, 420), (x_positions[index + 1] - 10, 420), colour=GREEN_2)
+    draw.rounded_rectangle((270, 625, 1530, 698), radius=18, fill=INK)
+    draw.text((370, 648), "COMPARE, QUESTION AND REFINE THE DIRECTIONS WITH CODEX", font=font(21, bold=True), fill=MINT)
+    draw.text((420, 738), "One direction if one works. Five here because five work.", font=font(20), fill=GREEN_2)
     image.save(OUT / "diagram-decision-transaction.png", optimize=True)
 
 

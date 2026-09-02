@@ -122,20 +122,32 @@ working vocabulary through the same durable connection.
 
 </details>
 
-## How one change becomes a working plan
+## How Finite works through a real change
 
-![Finite decision transaction from accepted revision through pressure, bounded search, human authority and durable receipt](./docs/media/diagram-decision-transaction.png)
+![The Paris example moving from the current plan through a whole-plan check to a workable updated plan](./docs/media/diagram-decision-transaction.png)
 
-The public Spotlight makes that flow concrete. An 18-day trip has fixed flights
-and must retain at least A$500. Reality adds three Paris nights. Finite checks 26
-possible combinations, finds 18 that fit and brings back the meaningfully
-different routes. The person and Codex can compare or refine them before one is
-carried into the plan. In the demonstrated route, the trip becomes 21 days,
-Paris moves from 4 to 7 nights, and A$910 remains free.
+The public Spotlight starts with an 18-day trip. The international flights are
+fixed and at least A$500 must remain spare. You ask to add three Paris nights
+without losing either condition.
+
+Finite checks more than the Paris row. It tests 26 connected combinations
+across dates, stays, transport and budget. Eighteen still fit, eight break the
+plan, and five meaningfully different directions remain. You and Codex can
+compare, question and refine them before carrying **Protect breathing room**
+into the plan. The result is a 21-day trip with the flights fixed and A$910
+spare.
 
 ![Distinct workable directions produced from one real-world change](./docs/media/04-bounded-decision.png)
 
-![Accepted revision and replay-safe receipt surviving reload](./docs/media/05-durable-receipt.png)
+The five directions exist because five genuinely different routes work for
+this change. If only one direction works, Finite returns one.
+
+<details>
+<summary><strong>Engineering proof: the updated plan survives reload</strong></summary>
+
+![The accepted updated plan and its receipt surviving reload](./docs/media/05-durable-receipt.png)
+
+</details>
 
 ## System architecture
 
