@@ -84,17 +84,7 @@ authority required for a consequential transition.
 
 ## The decision transaction
 
-```mermaid
-stateDiagram-v2
-    [*] --> Accepted_v1
-    Accepted_v1 --> Pressure_recorded: Reality changes
-    Pressure_recorded --> Options_compared: Deterministic bounded search
-    Options_compared --> Option_staged: Person chooses one route
-    Option_staged --> Exact_authority: Person confirms exact option and revision
-    Exact_authority --> Accepted_v2: Codex applies once through WebMCP
-    Accepted_v2 --> Durable_receipt: Revision and before-after values recorded
-    Durable_receipt --> Accepted_v2: Reload or idempotent replay
-```
+![Finite decision transaction from accepted revision through pressure, bounded search, human authority and durable receipt](./docs/media/diagram-decision-transaction.png)
 
 The public Spotlight makes that flow concrete. An 18-day trip has fixed flights
 and must retain at least A$500. Reality adds three Paris nights. Finite tests 26
@@ -112,21 +102,7 @@ remains free.
 Finite has no backend language model and no application-owned agent. Codex is
 the operator. Finite is the deterministic product and persistence layer.
 
-```mermaid
-flowchart LR
-    Person[Person] -->|Outcome and visible edits| UI[Finite human interface]
-    Person -->|Exact confirmation| UI
-    Codex[Codex] -->|Typed page tools| MCP[WebMCP adapter]
-    UI --> Runtime[Browser planning runtime]
-    MCP --> Runtime
-    Runtime --> Kernel[Deterministic planning kernel]
-    Kernel -->|Versioned operations| Worker[Cloudflare Worker]
-    Worker --> D1[(D1 accepted truth)]
-    Worker --> R2[(R2 files and evidence)]
-    Kernel --> Receipt[Revision and receipt]
-    Receipt --> UI
-    Receipt --> MCP
-```
+![Finite system architecture showing the human authority boundary, browser document and durable Cloudflare layer](./docs/media/diagram-system-architecture.png)
 
 The browser runtime compiles adaptive surfaces, validates typed actions and
 keeps proposed work separate from accepted state. The Worker owns authenticated
