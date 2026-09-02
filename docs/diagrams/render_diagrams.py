@@ -214,10 +214,26 @@ def adaptive_compiler() -> None:
     image.save(OUT / "diagram-adaptive-compiler.png", optimize=True)
 
 
+def dark_mode_wordmark() -> None:
+    source = Image.open(ROOT / "public" / "finite-wordmark.png").convert("RGBA")
+    pixels = source.load()
+    for y in range(source.height):
+        for x in range(source.width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha == 0:
+                continue
+            if red > 180 and green < 130:
+                pixels[x, y] = (red, green, blue, alpha)
+            else:
+                pixels[x, y] = (255, 253, 248, alpha)
+    source.save(OUT / "finite-wordmark-dark.png", optimize=True)
+
+
 if __name__ == "__main__":
     decision_transaction()
     system_architecture()
     webmcp_surface()
     planning_layers()
     adaptive_compiler()
+    dark_mode_wordmark()
     print(OUT)

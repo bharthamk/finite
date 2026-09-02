@@ -1,7 +1,8 @@
 # Finite
 
 <p align="center">
-  <img src="./public/finite-wordmark.png" width="260" alt="Finite">
+  <img src="./public/finite-wordmark.png#gh-light-mode-only" width="260" alt="Finite">
+  <img src="./docs/media/finite-wordmark-dark.png#gh-dark-mode-only" width="260" alt="Finite">
 </p>
 
 <p align="center"><strong>Plans that survive change.</strong></p>
