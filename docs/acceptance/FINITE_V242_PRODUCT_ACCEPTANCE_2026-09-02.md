@@ -6,7 +6,7 @@ Accepted: 2026-09-02
 
 - Live product: https://finite.bharthamk.chatgpt.site/
 - Sites version: v242
-- Product source: `11558d2346b404cc13312f9d5cd7f1daf9a051e7`
+- Public-history product source: `b7e112486f2a56dc68f131cac76dc8a3d8796994`
 - Deployed source: `c9640daf01e78b18084edf87eaec4d1e1bf6b4aa`
 - Marker: `hosted-release-marker-v242`
 - Sites version ID:

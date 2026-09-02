@@ -37,7 +37,7 @@ must communicate the product without relying on a live test.
 
 Projects may be new during the submission period or meaningfully extended with
 WebMCP after it began. Finite is a new project: the repository begins at commit
-`1b03f6e` on 2026-08-26 at 09:30 AEST, after the submission period opened at
+`1e3b3c8` on 2026-08-26 at 09:30 AEST, after the submission period opened at
 2026-08-26 04:00 AEST.
 
 The entrant must also confirm age, residence, ownership, absence of conflicting

@@ -2,118 +2,105 @@
 
 **You state the outcome. Codex operates. You decide what becomes true.**
 
-Finite is the agent-native working layer behind plans that must survive change. People describe what needs to happen in ordinary language. Codex operates the same live plan they can see. Finite keeps accepted facts, constraints, evidence, revisions and receipts coherent. The person consumes the result, chooses between meaningful trade-offs and approves what becomes true.
+Finite is the agent-native working layer behind plans that must survive change.
+People describe what needs to happen in ordinary language. Codex operates the
+same live plan they can see. Finite keeps accepted facts, constraints, evidence,
+revisions, trade-offs and receipts coherent while the person retains every
+consequential decision.
 
-Most software gives the person the kitchen—forms, dashboards and workflows—and still expects them to do the cooking. Finite inverts that relationship. The person is the diner, Codex is the chef, and Finite is the kitchen and service system built for Codex to operate without taking judgment or authority away from the person.
+[Open Finite](https://finite.bharthamk.chatgpt.site/) ·
+[Run the judge Spotlight](https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1)
 
-[Open the live product](https://finite.bharthamk.chatgpt.site)
+## Why Finite exists
 
-Start with an ordinary sentence. Finite turns it into a visible, editable planning surface whose time model, measures, records and decisions fit the outcome. Build manually, adapt a template, work with Codex, or watch Codex run a guided live demonstration.
+Most planning software hands the person forms, dashboards and workflows and
+still expects them to do the operational work. Finite inverts that relationship:
 
-From there you can:
+- the person states the outcome, supplies judgment and grants authority;
+- Codex interprets, researches, compares and operates;
+- Finite owns coherent state, arithmetic, constraints, persistence and receipts.
 
-- edit any part of the draft directly and see dependent views update together;
-- move deliberately from Planning into Managing, then attach real-world changes to the stage they affect;
-- publish a live or frozen view, or invite someone to view, suggest or edit draft work;
-- complete, pause, learn from and reopen a plan; and
-- turn on browser-local Demo mode so exploration never writes to the signed-in account.
+The person is the diner, Codex is the chef, and Finite is the kitchen and
+service system. Travel, renovation, events, interview preparation and general
+outcomes are projections of one planning grammar—not renamed copies of one
+generic dashboard.
 
-Travel becomes a calendar and route. Renovation becomes phases, dependencies and contingency. An event becomes a run-of-show, suppliers and capacity. Finite also composes bounded workspaces for interview preparation, recurring practice and general outcomes. These are projections of one planning grammar, not one generic dashboard with renamed labels.
+## Why WebMCP matters
 
-## The WebMCP difference
+WebMCP makes the visible page the operating environment. Codex discovers typed,
+page-scoped capabilities against the exact plan the person is viewing. There is
+no copied chat replica, pixel guessing or hidden application-owned model.
 
-WebMCP is what lets the chef work inside the kitchen. The page is simultaneously the calm surface where a person understands and changes the plan and the page-scoped operating environment where Codex discovers accepted state, current evidence, bounded typed actions and the exact next safe step.
+Finite exposes seven stable native tools for the document lifetime:
 
-The plan the person sees is the plan Codex operates. There is no copied chat context, hidden agent replica or pixel guessing.
+1. page readiness;
+2. canonical kitchen entry;
+3. capability inspection;
+4. bounded semantic toolset selection;
+5. exact content-addressed result reading;
+6. effort receipts; and
+7. guarded semantic invocation.
 
-The document exposes seven stable native tools for its lifetime. Codex selects a route-specific semantic manifest rather than accumulating hundreds of registered controls. Large results stay in a short-lived content-addressed vault and can be read by exact JSON Pointer. Every state-changing operation is checked again against current revision, evidence and authority.
+Each route advertises a bounded typed manifest. Every mutation is revalidated
+against current revision, evidence and authority. Large results remain in an
+ephemeral content-addressed vault and are retrieved only by exact semantic path.
 
-Human confirmation creators are structurally absent from WebMCP. Codex may interpret, research, compare and prepare; Finite owns accepted state, arithmetic, constraints, persistence and receipts; the person owns consequential authority. There is no application-owned model or hidden agent backend.
+Human confirmation creators are structurally absent from WebMCP. Codex can
+prepare and recommend; the person alone can create consequential authority.
 
-The governing product direction is in [`PRODUCT_NORTH_STAR.md`](./PRODUCT_NORTH_STAR.md). The defining question is: **Reality changed. What should the plan become now?**
+## The core transaction
 
-[`ARRIVAL_AND_SURFACE_CONTINUITY.md`](./ARRIVAL_AND_SURFACE_CONTINUITY.md) governs the Site, Codex, and inline-browser relationship: useful input can begin on either primary surface, presence is optional, delays are normal, and every handoff resumes from one durable versioned state.
+1. Codex enters one checksum-bound service ticket with canonical identity and
+   one authoritative next action.
+2. A real-world change is recorded against the current accepted revision.
+3. Finite enumerates permitted moves and produces distinct bounded options.
+4. The person sees the trade-offs and approves one exact result.
+5. Finite atomically applies that approved option and emits a receipt.
+6. Accepted truth and replay protection survive a browser-empty reload from D1.
 
-## What is implemented
+The Spotlight demonstrates this complete transaction, including visible human
+authority, accepted apply, receipt, reload and idempotent replay.
 
-- TypeScript finite-plan kernel with exact integer-money conservation.
-- Immutable, SHA-256-bound travel, renovation, and event profiles.
-- A validated adaptive-surface compiler with a closed safe component grammar, revision-bound intent, mandatory control laws, field bindings, and manifest hashes.
-- Three distinct projections: calendar travel timeline, renovation phase lane, and event run-of-show.
-- Typed entities, executable relationships, locks, constraint-valid moves, evidence materiality/freshness, and preference weights.
-- Compiled bounded option search that enumerates permitted move combinations, scores explicit preference impacts, returns three distinct objective-shaped options, and exposes its search proof to Codex.
-- Compact state selectors, deterministic option simulation, immutable staging, revision-bound approval, atomic apply, and receipts.
-- One-call operator orientation: `finite_enter_kitchen` arbitrates arrival-versus-plan work and returns a compact content-addressed service ticket containing canonical identity, one authoritative `nextAction`, known and missing inputs, authority state, and a state-grounded chef menu without asking the human to explain the application.
-- A document-lifetime-safe native registry: the browser permanently exposes seven tools—status, entry, capabilities, bounded toolset selection, exact result reading, effort receipt, and semantic invocation. `finite_open_toolset` returns one typed action manifest without registering more browser tools; `finite_invoke` revalidates the selected group, plan revision, evidence, and human authority before dispatch. Long route churn can no longer exhaust Chrome's experimental WebMCP registration budget.
-- Production WebMCP output is capped at 1,500 characters. Larger deterministic results are retained in a 24-entry ephemeral content-addressed vault; Codex first reads a bounded manifest, then requests only exact JSON Pointer fields. Oversized semantic values are refused with narrower descendants rather than truncated.
-- Every advertised tool and parameter is regression-tested against current discovery guidance: tool/parameter names stay within 30 characters, tool descriptions within 500, parameter descriptions within 150, every parameter has semantic metadata, and every route exposes at most 20 tools.
-- WebMCP execution accepts the host cancellation signal through arrival, construction, operator-session, authority, and accepted-truth HTTP rails. Pre-cancelled work never starts; interrupted accepted commits roll back the exact local checkpoint and report the remote outcome as unknown so Codex must re-read canonical truth before idempotent replay.
-- Discovery replacement happens only after the triggering response has landed, preventing older hosts from cancelling a tool while unregistering its route. Explicit route choices invalidate queued automatic refreshes, and canonical arrival ownership wins over generic stage labels.
-- `finite_get_effort_receipt` exposes a hash-verifiable adapter-session benchmark for discovery width, calls to first useful action, semantic recovery, unique human boundaries, stale/authority refusals, cancellation outcomes, route changes, failures, and accepted mutations; host-owned token usage remains explicitly unavailable.
-- A deterministic chef-menu contract distinguishes untested suggestions, research routes, constraint-validated options, and human-authority decisions. Codex may recommend and serve the menu; Finite alone decides when an option is proven viable, and the human alone chooses or authorizes it.
-- Content-addressed operation proofs on every stable and contextual WebMCP result, including canonical input/result hashes and exact plan/profile/revision context before and after execution.
-- Independent candidate re-derivation at stage, human approval, and apply so mutated numbers, context, hashes, approvals, locked moves, stale events, and impossible plans fail closed.
-- One active change-order lifecycle: a replacement order explicitly supersedes and invalidates every volatile candidate, staged packet, and approval from the prior order.
-- Immediate WebMCP-to-surface synchronization after tool completion, with revision, active-event, and manifest proof returned to Codex; renderer failure is reported without rewriting the deterministic tool outcome.
-- Provenance-bound evidence registration for Codex research: SHA-256 content and record hashes, deterministic identifiers, content deduplication, forced untrusted classification, freshness/materiality assessment, candidate binding, integrity refusal, and accepted-lineage-only persistence.
-- Bounded staged plan intake: Codex can submit a complete travel, renovation, or event operating profile; the compiler closes its schema, finite-total arithmetic, actual ledger, entities, relationships, moves, search policy, evidence policy, surface grammar, and implemented contextual-tool contract before the draft exists.
-- A clean compiler-valid blueprint plus typed partial-intake assessment: Codex can discover the family contract, translate an incomplete human brief into bounded facts, receive exact missing/conflicting paths, and let code derive one residual allocation without adding an application-owned language model.
-- An adaptive-shell compiler that can start useful planning from exact finite limits plus source-labelled working assumptions and typed operator-research, human-coordination, external-evidence, and human-decision dependencies without inventing complete costs, dates, moves, or a seeded vertical plan.
-- A no-model starter-plan surface with a four-card Plan at a glance report: Dates, Total budget, Budget split, and Available/over lead into the full family-appropriate workspace. Each pencil opens one focused editor; the Dates editor contains dates only. Human-supplied duration is resolved before generated route timing, and placeholder values are italic throughout with a per-editor Placeholder toggle that does not change arithmetic. The human can add, edit, remove, reorder, tick off, and comment on plan records directly. Codex develops the draft when requested; it is no longer the gate to viewing or shaping the plan.
-- Authenticated cross-surface construction packets: incomplete intake or an exact staged draft survives reload and follows the signed-in consumer between the Site and Codex behind checksum, seven-day expiry, evidence integrity, source-plan/revision guards, and—when built from arrival—an exact order id/version/checksum; resuming never restores human confirmation. Server tombstones prevent a stale browser from resurrecting discarded work.
-- First-class draft revision: **Request changes** preserves the exact rejected draft, captures a bounded human reason and free-text instruction, routes Codex to `finite_get_returned_plan_draft`, and keeps that immutable review active until a materially different draft resolves it. **Start over** is a separate destructive discard, not an accidental consequence of asking for changes.
-- Arrival-first invalidation: newer human input outranks draft review, marks older construction `stale_arrival`, removes its pending authority and activation tool, and forces Codex to reconcile and compile from the current order before anything can be confirmed.
-- Exact plan activation authority: a draft remains inert until the human confirms its profile and draft hashes outside WebMCP; the final D1 write reasserts the source plan head, arrival version/checksum, live challenge, and exact current draft before any target truth can land, while persistent idempotency preserves exact replay.
-- Explicit accepted plan lifecycle: active plans can be completed, paused, or abandoned only through exact human confirmation; the receipt survives reload, ordinary change tools fail closed afterward, and reopening is an equally explicit human act.
-- Terminal arrival closure: successful plan activation accepts the exact source arrival version/checksum only while the named accepted plan head remains current in the same conditional write, so the same order cannot route Codex back into construction forever or close against a stale plan revision; activation replay also repairs closure after a lost response.
-- Arrival-bound plan-specific recovery menus: typed construction may compile up to twelve bounded moves and a search policy supplied for this plan, while seeded example moves remain forbidden from leaking through a family blueprint.
-- Immutable linear plan amendments: Codex derives a successor from live accepted truth, stages a deterministic semantic diff, and activates only the exact human-confirmed supersession while both versions remain independently switchable and replayable.
-- A persistent multi-plan catalog keyed by actual `planId`, including compiled custom plans, bound actual evidence, legacy snapshot fallback, switching, contextual-tool replacement, and reload-safe activation receipts.
-- Human-only approval and confirmation creators, structurally excluded from WebMCP.
-- Failure-atomic accepted-state persistence: option, actual-correction, and preference commits restore memory, pending work, authority, receipts, and idempotency maps if the authoritative write fails, then permit exact retry. After a successful hosted activation, D1 remains authoritative even when browser cache persistence fails; the active session reports the cache degradation without falsely claiming accepted truth rolled back.
-- Transactional D1 accepted truth: plan heads, immutable revision snapshots, receipts, domain events, and accepted evidence commit behind an async repository boundary with optimistic concurrency and deterministic retry identity.
-- Cross-browser restore from D1 with client-side profile, finite-total, receipt, evidence, lineage, and snapshot-hash verification; browser snapshots are now only a best-effort cache when the remote repository is present.
-- Server-derived authenticated tenancy: Sites identity is hashed into a private D1 scope, raw identity is not stored, and every new account/demo starts empty. Automatic “first account wins” legacy adoption has been removed; any future legacy transfer must be an explicit audited owner operation.
-- Account-scoped browser persistence: snapshots, custom-plan catalog, construction work, activation receipts, and active selection are namespaced by a server-derived opaque scope, so two identities sharing one browser origin cannot see or initialize from one another's cache.
-- Durable custom-plan catalog truth: D1 persists the complete validated compiler definition, evidence bundle, activation lineage, and receipt needed to reconstruct a custom adaptive plan on a browser-empty device.
-- Zero-credential entry: Sites owns ChatGPT sign-in and first use automatically provisions a private workspace; signed-out visitors may instead create a 24-hour isolated demo whose HTTP-only bearer, complete D1 tenant data, uploaded R2 objects, and authority traces are purged on end or expiry through a retry-safe cleanup record.
-- Browser-local Demo mode: a visible settings switch moves Finite into an isolated local namespace, replaces remote repositories with browser-backed equivalents, disables sharing/invitations/uploads, and installs a same-origin API mutation guard so judging and product exploration cannot write into the signed-in account. Turning it off never uploads local work.
-- Authenticated plan invitations: an owner can separately publish a bounded read-only page or issue one-account, expiring, revocable access with server-enforced `view`, `suggest`, or `edit draft` capability. Collaborator contributions remain provisional; accepted truth, activation, access administration, and real-world action stay owner-only.
-- Any-plan guided orientation: “Guide me through this plan” gives Codex a lifecycle-aware walkthrough contract across the person’s current visible plan, with explicit Next, Pause/resume and in-context question gates. The copied route tells Codex to leave plan values unchanged; Finite’s ordinary mutation tools retain their existing authority checks.
-- Visible causal feedback: successful Planning and Managing edits reveal a “What changed” summary naming the saved result, connected consequence and important untouched boundary instead of making adaptation feel magical.
-- Recoverable D1/R2 plan work: uploads and file removals record a deterministic pending operation before object storage changes, then commit metadata and the idempotent user receipt in one D1 transaction. Retrying the same action finishes an interrupted cross-store operation without duplicate records or untracked objects.
-- Expiring cross-device operator sessions preserve bounded work but never accepted truth or human authority; stale, closed, expired, and foreign-tenant packets fail closed.
-- Five-minute exact-command human challenges now bind every accepted mutation—options, corrections, preference changes, lifecycle, group decisions, external-action truth, and plan activation—and are consumed in the same D1 transaction as the accepted commit.
-- Production responses carry a consistent CSP, opener/resource isolation, permissions policy, no-referrer, and MIME-sniffing protections; production source maps are not published.
-- Hosted three-family proof: the signed-in owner namespace holds travel, renovation, and event at revision 3 with three stale-base decision sessions, three atomically consumed challenges, and three matching receipts; session transport restored no authority.
-- Fixed-width WebMCP discovery: the live page advertises seven native tools for the whole document lifetime. The current semantic route is selected through one bounded action manifest rather than browser re-registration. One content-free page-start readiness tool prevents an empty-registry race; `finite_enter_kitchen` is the deterministic first Finite call from a copied handoff, and all human authority creators remain absent.
-- A responsive, keyboard-operable consumption surface with no mobile horizontal overflow. Every draggable plan record also has labelled earlier/later buttons, so ordering never depends on pointer drag.
-- Cloudflare Worker APIs for accepted plan truth and durable asynchronous arrival orders, with inspected Drizzle/D1 migrations and a reconciled current-schema snapshot that makes clean generation a no-op; there is no backend model or application-owned agent.
-- Append-only, human-confirmed ledgers for named group decisions and real-world action status, so disagreement is not averaged away and researched/quoted/held/booked/paid/verified/cancelled cannot collapse into one fluent claim.
-- Executable chef-effort and dropped-response benchmarks covering exact retry after a durable commit response is lost.
+## Product capabilities
 
-## Current acceptance
+- Adaptive travel, renovation, event and general-plan surfaces compiled from a
+  closed safe component grammar.
+- Exact integer-money conservation, locks, constraints, typed relationships and
+  deterministic option search.
+- Immutable plan revisions, SHA-256-bound profiles, atomic apply and durable
+  receipts.
+- Arrival-first planning from ordinary language, with source-labelled known,
+  inferred and missing information.
+- Manual editing, Planning-to-Managing progression, real-world changes,
+  attachments, evidence and completion learning.
+- Multi-plan catalogues, cross-device restore, role-bounded collaboration and
+  published read-only views.
+- Browser-local Demo mode that cannot write into the signed-in workspace.
+- Account-isolated D1 truth, R2 file storage and retry-safe cross-store work.
+- Responsive and keyboard-operable human surfaces.
 
-Sites v242 is the accepted live release. The public Spotlight completes the
-native WebMCP transaction from revision 1 to 2, exposed 26 checked combinations
-and three distinct routes that satisfy the current constraints, stopped at visible human choice and exact confirmation,
-applied only the returned authority, projected the accepted Paris extension
-consistently, and retained the complete before/after receipt after reload.
+The product direction and operating law are documented in
+[PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md) and
+[ARRIVAL_AND_SURFACE_CONTINUITY.md](./ARRIVAL_AND_SURFACE_CONTINUITY.md).
 
-The release passes 367/367 tests, including 20 independent hostile Spotlight
-runs, plus TypeScript, the production Vite client and Worker builds, the client
-chunk budget, and diff integrity. A live 390 by 844 viewport has no horizontal
-overflow and a 44-pixel minimum target height for visible controls. See
-[`FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`](./FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md)
-and [`REPRODUCIBLE_RELEASE.md`](./REPRODUCIBLE_RELEASE.md).
+## Architecture
 
-The WebMCP Challenge working set is in [`submission/`](./submission/). It keeps
-the product release fixed and now includes the certified 2:38 video master,
-standalone captions, five final images and a YouTube thumbnail. The public
-repository, owner-selected open-source license, YouTube publication and final
-Devpost entry remain owner-controlled.
+Finite has no backend language model and no application-owned agent.
 
-## Run
+- `src/` contains the deterministic planning kernel, adaptive compiler, browser
+  product, persistence adapters and WebMCP registry.
+- `worker/` contains authenticated D1/R2 APIs and the production asset shell.
+- `db/` and `drizzle/` define the durable schema and migrations.
+- `tests/` contains kernel, authority, persistence, WebMCP, product-route and
+  full-journey regression coverage.
+- `submission/` contains the hackathon narrative, judge route, script,
+  storyboard and evidence map.
+- `docs/acceptance/` contains dated engineering acceptance records.
+- `docs/engineering/` contains the deeper architecture and endurance reports.
+
+## Run locally
+
+Requirements: Node.js 22.13 or newer.
 
 ```bash
 npm ci
@@ -124,108 +111,31 @@ npm run build
 npm run dev
 ```
 
-Local development binds an isolated D1 named `finite-local`;
-`db:local:migrate` applies the same inspected migrations used by the hosted
-product. Production continues to use the Sites-managed `DB` binding from
-`.openai/hosting.json`.
+Local development uses an isolated D1 database named `finite-local` and an
+isolated R2 bucket. The placeholder identifiers in `wrangler.local.jsonc` are
+local-only. Production uses the Sites-managed `DB` and `FILES` bindings declared
+in `.openai/hosting.json`.
 
-The native Chrome path currently requires `chrome://flags/#enable-webmcp-testing`. A supported host shows that Codex is connected. The write-capable protocol lab is development-only; production ignores `?lab=1` and ships none of its synthetic acceptance code.
+Native Chrome WebMCP testing currently requires
+`chrome://flags/#enable-webmcp-testing`. A supported host shows that Codex is
+connected.
 
-The deployed build is [Finite](https://finite.bharthamk.chatgpt.site). For the
-shortest public judge route, open the
-[Spotlight](https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1)
-in ChatGPT's in-app browser.
+## Release proof
 
-## Product transaction
+The accepted live release is v242 with marker
+`hosted-release-marker-v242`.
 
-1. Codex opens one checksum-bound service ticket containing canonical identity, authority state, the exact next route, and a compact menu. Full deterministic detail is content-addressed and selected by exact semantic path only if the route actually needs it.
-2. Codex records a change, explores the bounded option space, and composes deterministic options.
-3. The application validates and stages one exact option.
-4. The human sees the decision packet and approves that exact result.
-5. The application atomically applies the approved option and emits a receipt.
-6. Accepted truth and replay protection survive browser-empty reload from D1. A bounded operator packet may cross devices, but authority crosses only as an unexpired exact challenge consumed with the accepted write.
+- 367/367 automated tests pass.
+- 20/20 independent hostile Spotlight kernel transactions pass.
+- TypeScript, production client and Worker builds pass.
+- The client chunk budget and submission working gate pass.
+- The deployed public root and WebMCP readiness/entry path have been verified.
 
-Plan creation uses the same authority law: Codex stages a complete compiled plan,
-the human confirms the exact hashes on the consumption surface, and Codex invokes
-the guarded activation tool. The human-confirmation creator is never registered
-with WebMCP. Later structural change derives a new immutable version from current
-accepted truth; the human confirms its semantic diff, and the prior version stays
-available rather than being silently overwritten.
+See [the v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md),
+[reproducible release instructions](./REPRODUCIBLE_RELEASE.md), and
+[judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md).
 
-Construction work has a separate persistence law. The latest typed intake or
-compiled draft is saved in the authenticated tenant as an expiring,
-checksum-bound packet so Codex can safely resume after reload or on another
-browser surface. Browser storage is only an account-scoped cache. An already-adopted historical owner may copy its own inert pre-scope browser cache once; no new account receives legacy server data automatically.
-The consumer's confirmation is never part of that packet and must be recreated
-on the restored exact hashes. Arrival-built construction also binds the exact
-human-order id, version, and checksum. If the order advances, arrival
-reconciliation takes priority and the old draft cannot be reviewed or activated.
-Returning a draft for revision is not discard. The exact packet and human
-feedback remain durable revision context across the Site and Codex until a
-materially different compiled draft resolves the return. An explicit **Start
-over** action is the only route that discards the packet and leaves a server
-tombstone so an older browser cache cannot restore it.
+## Project ownership
 
-## Architecture boundary
-
-There is no backend model and no application-owned agent. Natural-language interpretation, research, and orchestration belong to Codex. The application owns state, arithmetic, validation, transaction laws, persistence, rendering, and receipts. WebMCP exposes those capabilities; it does not supply reasoning or persistence.
-
-Chrome-native self-invocation proves the browser protocol independently. A
-fresh Codex task has also completed authenticated live page-tool discovery,
-canonical kitchen entry, bounded state reading, delayed human-input
-reconciliation, and correct refusal at the human-preference boundary. The v242
-public Spotlight now closes the same-page change, search, human-authority,
-accepted-apply, receipt, and reload path. Remaining work is submission packaging
-and fresh-user evidence, not basic WebMCP availability or an unfinished product
-transaction.
-
-## Source map
-
-- `src/profiles.ts` — profile and surface definitions plus compiler validation.
-- `src/surface.ts` — safe surface grammar, manifest compiler, bindings, and hashes.
-- `src/kernel.ts` — deterministic state machine and authority-gated transactions.
-- `src/accepted-truth.ts` — async accepted-truth repository contract, integrity verification, HTTP adapter, and in-memory concurrency test adapter.
-- `src/arrival.ts` — arrival-order contract, orientation packet, HTTP client, and in-memory delayed-surface acceptance adapter.
-- `worker/accepted-truth.ts` — same-origin D1 API, optimistic-concurrency commit, deterministic replay, and transactional revision/event/receipt/evidence persistence.
-- `worker/arrival.ts` — same-origin D1 arrival API with append-only human input, labelled Codex interpretation, operator checkpoints, and fail-closed order-version guards.
-- `src/construction-packet.ts` and `worker/construction-packet.ts` — authenticated cross-surface construction repository, server integrity and source guards, authority exclusion, and discard tombstones.
-- `db/schema.ts` and `drizzle/` — accepted-truth schema and inspected migration.
-- `src/persistence.ts` — account-scoped accepted snapshot, plan catalog, evidence bundle, construction, and activation-receipt cache storage.
-- `src/runtime.ts` — staged plan intake, immutable amendment/version lineage, exact activation, switching, rollback, and reload.
-- `src/operator-policy.ts` — explicit AUD ledger law, external execution-state ladder, 24-rule human-reality contract, and named group decision protocols.
-- `src/release.ts` — single release marker consumed by both the client and Worker shell.
-- `src/webmcp.ts` — native host adapter and tool registry.
-- `src/experience-route.ts` and `src/surface-message.ts` — cross-surface routing plus state-scoped consumer messages that cannot survive into a different accepted or pending state.
-- `src/main.ts` — adaptive product renderer and human authority surface.
-- `PRODUCT_NORTH_STAR.md` — canonical category, operating model, plan grammar, adaptive-surface promise, moat, boundaries, and public narrative.
-- `ARRIVAL_AND_SURFACE_CONTINUITY.md` — zero-plan arrival, asynchronous Site/Codex continuity, wrong-surface recovery, lifecycle truth, and version-conflict law.
-- `PUBLIC_SURFACE_HANDOFF_2026-08-26.md` — bounded workstream brief for the public product surface; explicitly excludes submission preparation.
-- `worker/auth.ts` and `AUTHENTICATION.md` — provider-owned identity, automatic tenant provisioning, isolated demo lifecycle, and the portable self-hosting boundary.
-- `src/local-demo.ts`, `src/plan-collaboration.ts`, and `worker/plan-collaboration.ts` — zero-remote-write local Demo mode plus authenticated, role-enforced plan invitations and provisional collaboration work.
-- `src/styles.css` — profile-aware responsive presentation.
-- `worker/index.ts` — deployment-only static asset pass-through.
-- `tests/` — profile, surface, kernel, persistence, authority, and adapter contracts.
-- `SURFACE_ACCEPTANCE_2026-08-26.md` — cross-profile, transaction, reload, responsive, and deployment receipt.
-- `SEARCH_ACCEPTANCE_2026-08-26.md` — bounded enumeration, deterministic ranking, mutation/refusal, and three-profile transaction receipt.
-- `LIVE_ORDER_ACCEPTANCE_2026-08-26.md` — active-order isolation, lifecycle recovery state, WebMCP-to-surface synchronization, and fail-contained rendering receipt.
-- `EVIDENCE_ACCEPTANCE_2026-08-26.md` — researched-evidence admission, quarantine, hashing, deduplication, integrity, event binding, and accepted-lineage persistence receipt.
-- `PLAN_INTAKE_ACCEPTANCE_2026-08-26.md` — complete profile compilation, human-confirmed activation, multi-plan persistence/switching, WebMCP authority separation, and refusal receipt.
-- `PLAN_CREATION_STORY_LAB_2026-08-26.md` — 12 human and 12 Codex creation stories, results, WebMCP superpowers, friction, blockers, and next engineering ruling.
-- `PLAN_AMENDMENT_ACCEPTANCE_2026-08-26.md` — live-state successor derivation, semantic diff, human authority, atomic rollback, immutable switching, lineage integrity, and replay receipt.
-- `CONSTRUCTION_PACKET_ACCEPTANCE_2026-08-26.md` — incomplete-intake and staged-draft continuity, checksum/expiry/source guards, evidence restoration, authority loss, explicit discard, and refusal receipt.
-- `ARRIVAL_BOUND_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — exact arrival-source binding, delayed-input invalidation, stale activation refusal, live v24→v26 journey, and deployment proof.
-- `CROSS_SURFACE_CONSTRUCTION_ACCEPTANCE_2026-08-27.md` — live v27 Codex-to-Site draft continuity, authenticated D1 packet law, authority exclusion, stale-browser tombstones, and deployment proof.
-- `DRAFT_RETURN_REVISION_ACCEPTANCE_2026-08-27.md` — returned-draft preservation, exact human revision feedback, Codex route arbitration, materially different replacement, and explicit-discard separation.
-- `FULL_JOURNEY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — twelve arrival-to-conclusion journeys, late shocks, stale-work invalidation, impossible-request refusal, lifecycle closure, reload, and repair receipt.
-- `CHEF_AND_HUMAN_FAILURE_AUDIT_2026-08-27.md` — all 54 operational and human failure points, their closed/controlled disposition, regression proof, and remaining external research boundaries.
-- `PRIZE_ENGINEERING_SCORECARD_2026-08-27.md` — current challenge criteria translated into executable product gates, measured WebMCP context budgets, proof status, and the remaining competition-grade engineering queue.
-- `NATIVE_THREE_FAMILY_ENDURANCE_ACCEPTANCE_2026-08-27.md` — native travel, renovation, and event pressure journeys; fixed-registry endurance; authority boundaries; truthful external-state handling; and the defects repaired during the run.
-- `REPRODUCIBLE_RELEASE.md` and `THIRD_PARTY_LICENSES.md` — clean-checkout build boundary, source/data exclusions, deployment provenance, and direct dependency licenses without pre-empting the owner's license or publication decision.
-- `WEBMCP_OPERATOR_CONTEXT_ACCEPTANCE_2026-08-27.md` — bounded service-ticket orientation, content-addressed detail recovery, metadata and cancellation budgets, fresh inline-Codex receipt, and remaining live-journey boundary.
-- `WEBMCP_SEMANTIC_RECOVERY_ACCEPTANCE_2026-08-27.md` — exact JSON Pointer recovery, refusal of semantic truncation, end-to-end HTTP cancellation, interrupted-commit rollback law, deterministic clocks, and complete regression receipt.
-- `WEBMCP_ROUTE_AND_EFFORT_ACCEPTANCE_2026-08-27.md` — post-response route replacement, legacy unregister-cancellation proof, arrival route arbitration, and hash-verifiable operator-effort evaluation.
-- `BACKEND_ENGINEERING_PLAN_2026-08-26.md` — six paired human/Codex journeys, target backend architecture, persistence split, engineering phases, and quality gates.
-- `OPERATOR_BACKEND_ACCEPTANCE_2026-08-26.md` — one-call kitchen orientation, per-operation proofs, failure-atomic writes, and paired travel/renovation/event journey receipt.
-- `AUTHENTICATED_HANDOFF_ACCEPTANCE_2026-08-26.md` — historical authenticated-tenancy and cross-device proof; its automatic legacy-adoption rule is explicitly superseded by the fresh-eyes release.
-- `FRESH_EYES_INTEGRITY_ACCEPTANCE_2026-08-27.md` — whole-codebase review, account isolation, durable custom-plan portability, generalized authority, arrival integrity, cleanup, security headers, deterministic endurance, and release proof.
-- `AUTH_ENTRY_ACCEPTANCE_2026-08-26.md` — provider-owned login, first-use kitchen provisioning, isolated demo lifecycle, signed-out WebMCP boundary, and portable OIDC release contract.
+Finite is a project by [Benji Hart](https://github.com/bharthamk), created during
+the WebMCP Challenge submission period.

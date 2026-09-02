@@ -55,13 +55,13 @@ The Sites release archive must be created only after the committed source passes
 the clean gate. `commit_sha` must equal that exact HEAD; the archive must contain
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
-The currently deployed product is Sites v242 from source
-`11558d2346b404cc13312f9d5cd7f1daf9a051e7`, with release marker
+The public-history release source for the currently deployed v242 product is
+`b7e112486f2a56dc68f131cac76dc8a3d8796994`, with release marker
 `hosted-release-marker-v242`, at `https://finite.bharthamk.chatgpt.site`.
-Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_c182c9054e688191827769b2d55ce963`
-was promoted by deployment `appgdep_6a96603e3bc48191990deb69c842c235`.
+Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_27b5872b1df48191a3a7a0d280f573cc`
+was promoted by deployment `appgdep_6a9736c4d91c8191bcef1024ecce1598`.
 The local release archive SHA-256 is
-`89cd2224c38d51c292b27fcc2708574e26f71822e07cc48fd10028b96676fa37`.
+`dedba0a84e007c2a7e2f2f5cc25073be74d451e7f126f721b3e935ea014bfa2e`.
 Production acceptance covered the public marker, signed-out prerequisite copy,
 canonical Spotlight WebMCP entry, browser-local reload continuity, honest
 pre-connection activity, disabled-share explanation, and a 390-pixel-wide

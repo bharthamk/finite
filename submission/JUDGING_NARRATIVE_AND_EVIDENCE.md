@@ -106,7 +106,7 @@ an application-owned agent.
 | 367 tests and 20 hostile kernel runs | Repository test gate and v242 acceptance | README + repository |
 | Complete product, not a demo | Ten-section v242 acceptance | Video montage + Devpost |
 | No credential required | Browser-local Spotlight and public Site | Testing instructions |
-| New during submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |
+| New during submission period | First commit `1e3b3c8`, 2026-08-26 09:30 AEST | Provenance file |
 
 ## Claims to avoid
 

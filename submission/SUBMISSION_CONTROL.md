@@ -2,7 +2,7 @@
 
 Updated: 2026-09-02
 
-Product source is frozen at `11558d2346b404cc13312f9d5cd7f1daf9a051e7`.
+Product source is frozen at `b7e112486f2a56dc68f131cac76dc8a3d8796994`.
 Submission closes 2026-09-04 at 06:00 AEST.
 
 ## Ready now
