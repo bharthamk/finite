@@ -10,11 +10,11 @@ The goal was to build a planning system that stays useful when the original plan
 
 ## What it does
 
-Finite is an adaptive planning system for plans that need to survive change.
+Finite is a planning partner for plans that need to survive change.
 
 You can start with an outcome in ordinary language. Finite turns it into a working plan with the right structure for the job. A trip needs dates, routes, bookings and a budget. A renovation needs phases, dependencies, suppliers and contingency. An event needs capacity, commitments and a run of show. Interview preparation and recurring practice need different records again.
 
-These are different product surfaces built from the same planning grammar. Travel is one example, not the product.
+These are different product surfaces built from the same planning model. The same system can support all of them because it understands the connected facts, constraints, choices and revisions underneath each plan.
 
 Codex can enter the live plan through WebMCP and read its current facts, limits, evidence and open work. When something changes, Codex can explore what is movable, test the available combinations and bring back the distinct directions that fit the plan.
 
@@ -32,7 +32,7 @@ The page that the person sees also exposes typed, page-scoped tools to Codex. Th
 
 Finite registers seven stable document tools. Codex uses them to enter the current work, discover the available capability group, invoke the relevant planning action and read exact parts of a larger result when needed. The available actions are checked again against the active plan and revision before they run.
 
-Codex handles language, research and orchestration. Finite handles the calculations, constraints, saved state and receipts. The person handles consequential choices.
+Codex handles language, research and orchestration. Finite handles the calculations, constraints, saved state and receipts. You decide which direction becomes part of the plan.
 
 The person makes the final choice on the visible planning surface. WebMCP lets Codex prepare the alternatives and carry the selected direction into the same live plan.
 
@@ -54,7 +54,7 @@ An adaptive surface compiler builds each type of plan from a limited set of vali
 
 Large results are stored temporarily by content hash. Codex receives a compact summary and can request the exact section it needs. This keeps the tool responses small without cutting important values in half.
 
-Finite does not run its own model. Codex provides the reasoning. Finite provides the state and transaction system that makes the reasoning usable inside a real product.
+Codex provides the reasoning. Finite provides the connected state, calculations and persistence that make that reasoning useful inside a real product.
 
 ## Challenges
 
@@ -83,7 +83,7 @@ More tools do not automatically make an agent more capable. A small toolset with
 
 We also learned that honest status matters. Research is not verification. A valid route is not approval. An updated plan is not a booking. Showing those differences makes the product easier to trust and easier to understand.
 
-The best human control is built into the workflow. The person should not have to do the repetitive planning work, but they should be the one who decides what becomes part of the plan.
+The best division of work is built into the workflow. Codex can do the repetitive planning work while the person decides what becomes part of the plan.
 
 ## What's next
 

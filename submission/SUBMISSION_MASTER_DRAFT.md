@@ -1,7 +1,8 @@
 # Finite submission master draft
 
-This is the assembly surface for the final Devpost entry. It is complete enough
-to paste after the remaining entrant and video fields are resolved.
+This is the control surface for the final Devpost entry. It is complete enough
+to assemble after the remaining entrant and video fields are resolved. It does
+not authorize submission.
 
 ## Release lock
 
@@ -9,55 +10,53 @@ to paste after the remaining entrant and video fields are resolved.
 - Product source: `b196755208028262ebbcbb17d6eca8467477d596`
 - Live URL: https://finite.bharthamk.chatgpt.site/
 - Judge route: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Gate: 368/368 tests, 20/20 hostile Spotlight kernel runs, production builds,
+- Gate: 368/368 tests, 20/20 repeated Spotlight transaction runs, production builds,
   revision 1→2 production receipt, replay/reload continuity, responsive proof
 - Submission deadline: 2026-09-04 06:00 AEST
 
-## Owner-controlled fields
+## Remaining external field
 
-- Entrant: `[OWNER: individual, team, or organization]`
+- Entrant details: already supplied in the saved Devpost draft
 - Public repository: https://github.com/bharthamk/finite
 - Detected open-source license: MIT
 - Public YouTube demo: `[OWNER: URL]`
 
 ## Primary copy
 
-Use `DEVPOST_SUBMISSION_DRAFT.md` verbatim as the current content baseline. Its
-tagline is:
+Use `DEVPOST_SUBMISSION_DRAFT.md` for the field map and
+`DEVPOST_PROJECT_STORY_FINAL.md` as the only project-story source. The tagline
+is:
 
-> You state the outcome. Codex operates. You decide what becomes true.
+> Change your plans without rebuilding them.
 
 ## Judge package
 
 - Testing: `JUDGE_TESTING_INSTRUCTIONS.md`
 - Criteria and evidence: `JUDGING_NARRATIVE_AND_EVIDENCE.md`
 - Provenance: `HACKATHON_PROVENANCE.md`
-- Public product acceptance: `../FINITE_V241_PRODUCT_A_PLUS_ACCEPTANCE_2026-09-01.md`
+- Public product acceptance: `../docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md`
 
 ## Media package
 
-- Site-grounded operating-inversion storyboard: `DEMO_VIDEO_STORYBOARD.md`
-- Site-grounded narration: `DEMO_VIDEO_SCRIPT.md`
-- Final 1:56.5 local master: `media/video/finite_v243_hackathon_film.mp4`
-- Standalone English captions: `media/video/finite_v243_hackathon_film.en.srt`
-- Five final 16:9 images and YouTube thumbnail: `media/images/`
+- Final storyboard: `DEMO_VIDEO_STORYBOARD.md`
+- Final narration: `DEMO_VIDEO_SCRIPT.md`
+- Local upload package: `finite_submission_package_v245/`
+- Accepted master: `video/finite_v245_hackathon_film_v10.mp4`
+- Standalone captions: `video/finite_v245_hackathon_film_v10.en.srt`
+- Five gallery images and both thumbnails: `images/`
 - Screenshot intent, captions and alt text: `SCREENSHOT_AND_CAPTURE_PLAN.md`
 - Technical and judge-facing film certification: `VIDEO_QC_2026-09-01.md`
 
-The previous travel-first v3 film is withdrawn. It remains a technical proof
-source only; it is not the submission video. The v4 operating-inversion master
-is the only approved local upload candidate.
+Earlier film renders are working history, not upload candidates. Only the film
+named as the accepted master in `VIDEO_QC_2026-09-01.md` may be uploaded.
 
 ## Final assembly order
 
-1. Resolve entrant/team and license decisions.
-2. Publish the exact sanitized source and verify the repository host detects the
-   license at the top of the repository page.
-3. Run the public repository from a clean clone.
-4. Upload `media/video/finite_v243_hackathon_film.mp4` and use
-   `media/images/finite_devpost_thumbnail_3x2.png` as the thumbnail.
-5. Verify the public YouTube playback with audio, burned captions and the
+1. Confirm the current clean-clone release checks.
+2. Upload the accepted film and 3:2 thumbnail named in the final QC record.
+3. Verify public video playback with audio, burned captions and the
    selectable English subtitle track.
-6. Replace every remaining owner placeholder and run the submission consistency check.
-7. Save the Devpost draft, rehearse from an unprimed browser, and submit.
-8. Freeze the Devpost entry, repository, live Site, and video through judging.
+4. Replace the remaining video placeholder and run the submission consistency check.
+5. Save the Devpost draft and rehearse from an unprimed browser.
+6. Submit only after Benji gives an explicit submission instruction.
+7. Freeze the Devpost entry, repository, live Site and video through judging.

@@ -1,61 +1,53 @@
 # Finite submission control
 
-Updated: 2026-09-02
+Updated: 2026-09-03
 
 Product source is frozen at `b196755208028262ebbcbb17d6eca8467477d596`.
-Submission closes 2026-09-04 at 06:00 AEST.
+Submission closes 2026-09-04 at 06:00 AEST. This file does not authorize
+submission.
 
-## Ready now
+## Ready
 
-- [x] Public working v245 URL and matching release marker.
-- [x] No-credential browser-local judge route.
-- [x] Native imperative WebMCP registration in source.
-- [x] Reproducible build and complete source/assets/instructions.
-- [x] Verified new-project provenance inside the submission period.
-- [x] Draft text aligned to all four required explanation prompts.
+- [x] Public Finite v245 URL and matching release marker.
+- [x] Public GitHub repository with detected MIT licence.
+- [x] No-credential Spotlight route.
+- [x] Native WebMCP registration and complete public source.
+- [x] Single Devpost field map and final project story.
 - [x] Exact judge testing instructions.
-- [x] Under-three-minute operating-inversion video script and storyboard.
-- [x] 368/368 tests, 20/20 hostile Spotlight kernel runs, build, mobile, accessibility,
-  reload, and public transaction proof.
-- [x] Criterion-by-criterion judging narrative and claim/evidence matrix.
-- [x] Timed site-grounded storyboard, full narration draft, and a screenshot
-  plan that establishes product breadth before the Paris proof.
-- [x] Final 1:56.5 full-HD operating-inversion master with burned captions,
-  selectable English subtitle track and original procedural score.
-- [x] Five final submission images plus a purpose-built YouTube thumbnail.
-- [x] Full decode, frame sampling, black-frame scan, loudness measurement and
-  mixed-master intelligibility check.
+- [x] Criterion-by-criterion evidence map.
+- [x] 368 passing tests and 20/20 repeated Spotlight transaction runs.
+- [x] Final 1:56.5 full-HD film v10 with 1.5x narration, original score, burned
+  captions and selectable English subtitles.
+- [x] Final film decode, black-frame scan, loudness measurement, contact-sheet
+  review and encoded-master Whisper transcription.
+- [x] Five gallery images, 3:2 Devpost thumbnail and 16:9 video thumbnail.
+- [x] Public project provenance and release evidence.
 
-## Decisions to make together
+## Resolved presentation decisions
 
-- [ ] Confirm entrant identity, residence eligibility, individual/team status,
-  and Devpost registration.
-- [x] Select Finite's open-source license: MIT.
-- [x] Publish the sanitized source at `https://github.com/bharthamk/finite`.
-- [x] Confirm the repository host detects and displays the MIT license.
-- [ ] Approve the final continuous voice performance and whether the entrant
-  appears on camera.
-- [x] Select the strongest five submission images from the prepared v241 capture set.
-- [ ] Decide whether to add team members and contributor credits.
+- License: MIT.
+- Repository: https://github.com/bharthamk/finite
+- Tagline: **Change your plans without rebuilding them.**
+- Story source: `DEVPOST_PROJECT_STORY_FINAL.md`.
+- Product film: no on-camera footage; use the accepted product-led v10 master.
+- Gallery: five images in the order recorded in
+  `SCREENSHOT_AND_CAPTURE_PLAN.md`.
+- Contributor and entrant fields: use the details already entered by Benji in
+  the saved Devpost draft.
 
-## Production tasks
+## Remaining before submission
 
-- [x] Capture the public operating inversion, adaptive product families and the
-  captured Spotlight transaction using the prepared narration and shot sequence.
-- [x] Replace the withdrawn travel-first v3 film with the current site-grounded
-  cut and export below three minutes.
-- [ ] Upload publicly to YouTube and verify the public playback with audio.
-- [ ] Replace the pending repository and video links in the Devpost draft.
-- [ ] Create/save the Devpost draft and paste the final text.
-- [ ] Add live URL, public repository, public YouTube video, screenshots, built-
-  with tags, and exact testing instructions.
-- [x] Perform final English, IP, privacy, accessibility, and claim review on the
-  local package; repeat only the public playback check after upload.
-- [ ] Rehearse once from an unprimed ChatGPT in-app browser task.
-- [ ] Submit before the deadline and preserve a timestamped receipt.
+- [ ] Upload the accepted film publicly and apply its accepted thumbnail.
+- [ ] Verify public playback once for picture, voice, music and captions.
+- [ ] Replace the temporary Devpost video URL with the verified final URL.
+- [ ] Reconcile the saved Devpost fields with the final local copy.
+- [ ] Rehearse the no-credential Spotlight once from an unprimed supported
+  browser.
+- [ ] Run `npm run check:submission -- --final` after every placeholder is gone.
+- [ ] Submit only after Benji gives an explicit instruction to submit.
+- [ ] Preserve the final submission receipt.
 
-## Freeze after submission
+## After submission
 
-Keep the submitted live app, source repository, video, and instructions freely
-available and substantively unchanged through the judging period. Do not rely on
-post-deadline Devpost portfolio edits to correct the competition submission.
+Keep the submitted live app, source repository, video and instructions freely
+available and substantively unchanged through judging.

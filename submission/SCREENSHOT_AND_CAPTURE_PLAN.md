@@ -1,81 +1,62 @@
-# Finite screenshot and capture plan
+# Finite gallery and thumbnail plan
 
-Five 16:9 images are prepared from the public v241 product and synthetic Spotlight.
-Together they must explain the product before they explain the travel proof.
-Keep browser chrome minimal, text readable at Devpost width, and no personal
-account information visible.
+Five 16:9 images are prepared from the public v245 product and Spotlight. In
+order, they explain the promise, breadth, WebMCP connection, concrete comparison
+and durable result.
 
-## 1. Product thesis: plans that survive change
+## 1. Product promise
 
-- Show the public **Plans that survive contact with reality** hero and its
-  question: **Reality changed. What should the plan become now?**
-- Keep the Codex-operates / person-chooses promise visible.
-- Caption: **Finite is the working layer behind plans that must survive change.**
+- File: `images/01_product_thesis.png`
+- Caption: **Change your plans without rebuilding them. Finite keeps you and
+  Codex working from the same live plan.**
+- Alt text: **Finite product overview showing different ways to begin planning
+  and the shared live-plan connection between Codex and the product.**
 
-## 2. One adaptable system
+## 2. One system shaped around the work
 
-- Show the real travel calendar, renovation phase lane and event run-of-show in
-  one clean composite or adjacent crop from the public product page.
-- Caption: **The plan changes shape with the work, not just the labels.**
+- File: `images/02_one_adaptable_system.png`
+- Caption: **A trip, renovation and event get different structures from the
+  same connected planning model.**
+- Alt text: **Three Finite plan surfaces shown side by side: a travel route,
+  renovation phases and an event run of show.**
 
-## 3. The WebMCP operating inversion
+## 3. Why WebMCP matters
 
-- Show the public Order → Operate → Connect → Authority sequence and the live
-  page/WebMCP/Codex seam, or Finite beside Codex after canonical entry.
-- Caption: **The same live page serves the person and exposes typed operating
-  capabilities to Codex.**
+- File: `images/03_webmcp_operating_seam.png`
+- Caption: **WebMCP connects Codex to the same live plan on screen, so the
+  conversation and the product become one workflow.**
+- Alt text: **A Finite plan beside the WebMCP actions Codex uses to enter the
+  current plan, work through a change and continue from the result.**
 
-## 4. Bounded decision transaction
+## 4. Compare every distinct way forward
 
-- Show all three decision routes plus 26 checked / 18 meet current constraints /
-  8 rejected.
-- Keep protection and trade-off copy readable.
-- Include the staged **Protect breathing room** before confirmation when it can
-  remain legible without crowding.
-- Caption: **Codex evaluates the whole plan and returns distinct trade-offs; the
-  person chooses what the plan becomes.**
+- File: `images/04_connected_plan_comparison.png`
+- Caption: **Finite checks the connected plan, rules out what no longer fits
+  and returns every meaningfully different workable direction.**
+- Alt text: **The Paris change in Finite with 26 combinations tested, 18
+  fitting the plan, eight rejected and five distinct directions available.**
 
-## 5. Accepted receipt
+## 5. Keep working from the result
 
-- Show revision 2, 18→21-day changes, AUD 910 freedom, and receipt detail.
-- Caption: **One human-approved revision with before/after, authority, search,
-  reload and replay proof.**
+- File: `images/05_accepted_receipt.png`
+- Caption: **The chosen direction becomes revision 2 with the complete before
+  and after result saved for the next planning conversation.**
+- Alt text: **Finite revision 2 showing Paris extended from four nights to
+  seven, the trip extended from 18 days to 21 and A$910 remaining spare.**
+
+## Thumbnail
+
+- Devpost 3:2 thumbnail: `images/finite_devpost_thumbnail_3x2.png`
+- 16:9 video thumbnail: `images/finite_v245_submission_thumbnail.png`
+- Thumbnail promise: **Change your plans without rebuilding.**
+- Supporting line: **WebMCP connects Codex to the live plan.**
 
 ## Capture acceptance
 
-- [x] v241 marker confirmed before recording.
-- [x] 1920×1080 source frame.
-- [x] No browser notifications, task titles, email addresses, or personal data.
-- [x] Text remains readable when displayed at 960px wide.
-- [x] No cropped surface labels, route labels, receipt values, or confirmation
-  copy.
-- [x] Each image has descriptive alt text below, ready to paste into Devpost.
-- [x] Final selection tells product → breadth → WebMCP → decision → durable
-  result without needing the live app.
-
-## Final files and alt text
-
-1. `media/images/01_product_thesis.png`
-
-   **Alt:** Finite's public product surface beneath the statement “Finite flips
-   the relationship,” separating the person's outcome and approval from
-   Codex's operating role.
-2. `media/images/02_one_adaptable_system.png`
-
-   **Alt:** An editorial comparison of three Finite surface families: a travel
-   calendar, renovation phases, and an event run-of-show, each grounded in the
-   product's domain-specific time model, measures, entities and actions.
-3. `media/images/03_webmcp_operating_seam.png`
-
-   **Alt:** Finite's live plan beside its typed WebMCP operations for entering,
-   opening, invoking, reading and receiving receipts; human approval is absent.
-4. `media/images/04_bounded_decision_transaction.png`
-
-   **Alt:** Three readable revision routes with distinct protections and
-   trade-offs, plus the 26 tested, 18 meeting constraints and 8 rejected proof.
-5. `media/images/05_accepted_receipt.png`
-
-   **Alt:** Reloaded Finite revision 2 showing the accepted Paris change,
-   18-to-21-day duration and AUD 910 remaining freedom.
-
-YouTube thumbnail: `media/images/finite_v241_submission_thumbnail.png`.
+- [x] v245 product and evidence used.
+- [x] Five 1920x1080 gallery images.
+- [x] Purpose-built 1800x1200 Devpost thumbnail.
+- [x] No personal account information or browser notifications.
+- [x] Text remains readable at Devpost gallery width.
+- [x] The sequence explains the product before the Paris proof.
+- [x] Captions and alt text match visible evidence.

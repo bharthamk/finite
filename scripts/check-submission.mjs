@@ -15,6 +15,7 @@ const requiredFiles = [
   "THIRD_PARTY_LICENSES.md",
   "submission/HACKATHON_REQUIREMENTS_2026-09-01.md",
   "submission/DEVPOST_SUBMISSION_DRAFT.md",
+  "submission/DEVPOST_PROJECT_STORY_FINAL.md",
   "submission/JUDGE_TESTING_INSTRUCTIONS.md",
   "submission/DEMO_VIDEO_STORYBOARD.md",
   "submission/DEMO_VIDEO_SCRIPT.md",
@@ -90,6 +91,28 @@ const legacyClaimPatterns = [
   /Product source is frozen at `9ad3dc/,
   /Record the accepted v237/,
 ];
+
+const publicNarrativePatterns = [
+  /—/,
+  /agent-native/i,
+  /not a travel app/i,
+  /travel is one proof/i,
+  /travel is evidence/i,
+];
+
+for (const file of [
+  "README.md",
+  "submission/DEVPOST_SUBMISSION_DRAFT.md",
+  "submission/DEVPOST_PROJECT_STORY_FINAL.md",
+  "submission/DEMO_VIDEO_SCRIPT.md",
+  "submission/DEMO_VIDEO_STORYBOARD.md",
+  "submission/SCREENSHOT_AND_CAPTURE_PLAN.md",
+]) {
+  const contents = files.get(file);
+  for (const pattern of publicNarrativePatterns) {
+    if (pattern.test(contents)) failures.push(`${file}: stale public narrative ${pattern}`);
+  }
+}
 
 for (const file of [
   "README.md",

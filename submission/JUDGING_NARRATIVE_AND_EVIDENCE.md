@@ -1,118 +1,119 @@
 # Finite judging narrative and evidence
 
 Use this as the claim-control layer for the Devpost text, video, screenshots,
-README, and live demo. Do not add a stronger claim unless it has a source below.
+README and live demo. Do not add a stronger claim unless it has evidence below.
 
 ## One-sentence thesis
 
-Finite is the agent-native working layer behind plans that must survive change:
-WebMCP lets Codex operate the same live canonical plan the person sees, while
-Finite keeps truth coherent and the person keeps consequential judgment and
-authority.
+Finite is a planning partner where you and Codex work through change on the
+same live plan, with WebMCP connecting the conversation to a product that keeps
+every affected date, cost, constraint and commitment aligned.
 
-## Stage-one viability
+## Why it matters
 
-- **Theme fit:** Finite inverts conventional software operation. The person
-  states the outcome and judges the result; Codex operates the same visible plan
-  through WebMCP; Finite keeps the working layer exact.
-- **Non-trivial WebMCP:** seven imperative document tools provide canonical
-  entry, bounded semantic routing, exact detail recovery, staged decisions,
-  authority-bound apply, receipts, and guided view.
-- **Working product:** public v245 runs without judge credentials through the
-  synthetic Spotlight and preserves revision 2 across reload.
-- **Public proof:** source, build instructions, live URL and MIT licence are
-  public and verified; only video publication and entrant fields remain.
+Planning software is good at recording a first plan. The expensive work begins
+when one assumption changes and every connected part has to be reconsidered.
+Finite lets Codex do that work with the current plan instead of asking the
+person to explain it again, copy an answer back and check every consequence by
+hand.
 
-## 1. WebMCP leverage
+## Why WebMCP is essential
 
-**Judge takeaway:** WebMCP is the product-enabling operating surface, not an
-integration flourish. It lets Codex work inside the same live, revision-aware
-plan the person can see and control.
+**Judge takeaway:** WebMCP turns Codex from an adviser outside the product into
+a planning partner working with the same live plan the person sees.
 
 Proof to show:
 
-- The live page exposes accepted facts, current evidence, bounded action groups
-  and the exact next safe step without copied chat context or pixel guessing.
-- `document.modelContext.registerTool(...)` registrations in
-  `src/webmcp-bootstrap.ts` and dispatch in `src/webmcp.ts`.
-- Seven stable document tools instead of route-by-route registry growth.
-- Three calls to first useful action and zero failed calls in the accepted run.
-- Exact candidate, revision, evidence, and five-minute human authority checks.
-- Idempotent replay and content-addressed exact-detail recovery.
+- Codex enters the current plan in one call and receives the next useful action.
+- The page exposes seven stable tools whose available planning actions adapt to
+  the current plan and revision.
+- Codex can record a change, ask Finite to test the connected consequences,
+  compare the distinct workable directions and continue from the chosen result.
+- The accepted run reached its first useful action in three calls with no failed
+  calls.
+- Larger results can be read in exact sections instead of flooding the model
+  context.
 
-## 2. Execution
+The implementation is in `src/webmcp-bootstrap.ts` and `src/webmcp.ts`.
 
-**Judge takeaway:** Finite is a complete, coherent product from rough outcome to
-editable plan, active management, disruption, decision, accepted revision,
-completion and learning, not a protocol demo.
+## Product execution
+
+**Judge takeaway:** Finite is a complete planning product, not a tool-call demo.
 
 Proof to show:
 
-- A public responsive application spanning plan creation, editing, activation,
-  management, replanning, evidence, collaboration, completion and recovery.
-- The same planning grammar produces structurally different travel, renovation,
-  event, interview, practice and general-plan surfaces.
-- 368/368 tests, 20 hostile Spotlight kernel runs, production builds, chunk budget,
-  keyboard operation, mobile target floor, and reload continuity.
-- Cloudflare D1 accepted truth, R2 attachments, optimistic concurrency, atomic
-  receipts, isolated browser-local Demo mode, and account-scoped persistence.
-- Production receipt and visible before/after revision.
+- The public release covers creating, editing, activating, managing, changing,
+  completing and learning from a plan.
+- One planning model produces genuinely different travel, renovation, event,
+  interview, practice and general planning surfaces.
+- The updated plan persists through reload and safely returns the same result
+  when the accepted action is repeated.
+- D1 stores plan history and R2 stores files and evidence.
+- The release passes 368 tests and 20 repeated Spotlight transaction runs.
 
-## 3. Potential impact
+## Concrete proof story
 
-**Judge takeaway:** People already plan across chats, spreadsheets, and task
-lists; the expensive failure is what happens when a real assumption changes.
+The public Spotlight begins with an 18-day trip. International flights are
+fixed and at least A$500 must remain spare. The person asks to add three Paris
+nights.
 
-The audience is the person still accountable after that change: travellers with
-fixed bookings, households coordinating trades, event producers balancing
-capacity and suppliers, and people managing other consequential outcomes across
-moving dates, money, evidence and commitments.
+Finite checks 26 connected combinations across dates, accommodation, transport,
+commitments and budget. Eighteen fit the current constraints, eight do not, and
+five meaningfully different directions remain. Five is the result for this
+plan, not a fixed menu.
 
-Finite reduces the coordination cost when reality changes without giving an
-agent uncontrolled authority. It is useful anywhere dates, money, commitments,
-evidence and trade-offs must move together: travel, renovation, events,
-interview preparation, recurring practice and general projects are already
-represented by one adaptive grammar.
+The person chooses **Protect breathing room**. Paris grows from four nights to
+seven, the trip becomes 21 days, the flights remain fixed and A$910 remains
+spare. The live plan moves from revision 1 to revision 2 once, retains a full
+before-and-after receipt and survives reload.
 
-Do not claim measured market adoption or time savings. No fresh external user
-cohort exists yet.
+## Potential impact
 
-## 4. Creativity and ambition
+The audience is anyone still responsible for an outcome after the first plan
+stops being correct. That includes travellers with fixed bookings, households
+coordinating trades, event producers balancing capacity and suppliers, people
+preparing for interviews and teams managing other connected work.
 
-**Judge takeaway:** Finite changes who software is designed for. The person is
-the diner, Codex is the chef, and the application is the kitchen and service
-system. The person consumes, chooses and approves rather than operating every
-control.
+Finite reduces the manual coordination between chats, spreadsheets and task
+lists. The same approach can help wherever dates, money, dependencies, evidence
+and trade-offs need to move together.
 
-The restaurant model is implemented as architecture, not decoration: WebMCP is
-the chef's semantic operating surface; the adaptive page is the plating and
-service surface; the deterministic kernel keeps the kitchen's accepted truth
-coherent. Pressure, bounded option search, human choice, exact authority,
-accepted revision and real-world execution state stay separate. Research,
-quote, hold, book, pay, verify and cancel remain different truth states. The
-architecture generalizes beyond travel without introducing a backend model or
-an application-owned agent.
+Do not claim measured adoption or time savings. No external user cohort has
+been completed yet.
 
-## Claim/evidence matrix
+## Creative idea
+
+The restaurant model explains the product clearly. The person is the diner,
+Codex is the chef, and Finite is the kitchen and service system. The diner
+describes what they want and judges what comes back. The chef does the work.
+WebMCP lets the chef use the kitchen.
+
+This metaphor is implemented in the product. Codex supplies reasoning and
+orchestration. Finite supplies connected state, calculations, constraints and
+persistence. The visible product is where the person and Codex compare and
+refine the plan together.
+
+## Claim and evidence matrix
 
 | Public claim | Evidence | Best surface |
 |---|---|---|
-| 26 combinations, 18 satisfy current constraints, 8 rejected, five distinct workable directions | Production Spotlight receipt and kernel tests | Video + screenshot 4 |
-| Human alone chooses and confirms | Confirmation creators absent from WebMCP; visible two-step UI | Video + screenshot 4 |
-| One revision, replay-safe | Revision 1→2 receipt retained after replay/reload | Video + screenshot 5 |
-| Same visible plan serves person and Codex | Public operating seam, canonical entry and page-tool registry | Video + screenshot 3 |
-| Three calls to first useful action, zero failures | Accepted effort receipt | Devpost + README |
-| 368 tests and 20 hostile kernel runs | Repository test gate and v245 acceptance | README + repository |
-| Complete product, not a demo | Ten-section v245 acceptance | Video montage + Devpost |
-| No credential required | Browser-local Spotlight and public Site | Testing instructions |
-| New during submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |
+| 26 combinations, 18 fit, 8 do not, five distinct directions | Production Spotlight receipt and kernel tests | Video + gallery image 4 |
+| The result count adapts to the situation | Search implementation and test coverage | Story + README |
+| One update, safe repeat | Revision 1 to 2 receipt retained after repeat and reload | Video + gallery image 5 |
+| The person and Codex use the same live plan | Public WebMCP exchange and page tool registry | Video + gallery image 3 |
+| Three calls to the first useful action, no failures | Accepted effort receipt | Devpost + README |
+| 368 tests and 20 repeated transaction runs | Repository test gate and v245 acceptance | README + repository |
+| Multiple plan types use one adaptable system | Live product templates and adaptive compiler | Video montage + README |
+| No credentials required | Browser-local Spotlight and public Site | Testing instructions |
+| Built during the submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |
 
 ## Claims to avoid
 
-- Do not say Finite booked, bought, paid, contacted, cancelled, or verified.
+- Do not say Finite booked, bought, paid, contacted, cancelled or verified
+  something unless the product has evidence of that completed action.
 - Do not say an external user study was completed.
-- Do not imply that every proposed option is universally safe; say it satisfies
-  the currently encoded plan constraints and still requires human judgment.
-- Do not say v238 was a release; it was a rejected marker-mismatch intermediate.
+- Do not imply that a workable direction is universally correct. It fits the
+  current plan and its recorded constraints; the person still judges the choice.
+- Do not say v238 was a release. It was a rejected intermediate build.
 - The public repository and MIT licence are verified. Do not claim a public
-  video exists until the owner has completed and verified that action.
+  final video exists until it has been uploaded and checked.
