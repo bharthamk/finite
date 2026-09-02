@@ -1,102 +1,165 @@
 # Finite
 
-**You state the outcome. Codex operates. You decide what becomes true.**
+<p align="center">
+  <img src="./public/finite-wordmark.png" width="260" alt="Finite">
+</p>
 
-Finite is the agent-native working layer behind plans that must survive change.
-People describe what needs to happen in ordinary language. Codex operates the
-same live plan they can see. Finite keeps accepted facts, constraints, evidence,
-revisions, trade-offs and receipts coherent while the person retains every
-consequential decision.
+<p align="center"><strong>Plans that survive change.</strong></p>
 
-[Open Finite](https://finite.bharthamk.chatgpt.site/) ·
-[Run the judge Spotlight](https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1)
+<p align="center">
+  Finite is the agent-native working layer behind a plan. You state the outcome, Codex operates the live plan through WebMCP, and you decide what becomes true.
+</p>
 
-## Why Finite exists
+<p align="center">
+  <a href="https://finite.bharthamk.chatgpt.site/"><strong>Open Finite</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1"><strong>Run the two-minute judge Spotlight</strong></a>
+  &nbsp;·&nbsp;
+  <a href="./submission/JUDGE_TESTING_INSTRUCTIONS.md"><strong>Testing guide</strong></a>
+</p>
 
-Most planning software hands the person forms, dashboards and workflows and
-still expects them to do the operational work. Finite inverts that relationship:
+<p align="center">
+  <a href="https://github.com/bharthamk/finite/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/bharthamk/finite/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Release v242" src="https://img.shields.io/badge/live_release-v242-d9f45f?labelColor=123d34">
+  <img alt="367 tests passing" src="https://img.shields.io/badge/tests-367%20passing-d9f45f?labelColor=123d34">
+  <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f3eee5?labelColor=123d34"></a>
+</p>
 
-- the person states the outcome, supplies judgment and grants authority;
-- Codex interprets, researches, compares and operates;
-- Finite owns coherent state, arithmetic, constraints, persistence and receipts.
+![Finite overview: plans that survive change, operated through one live plan for people and Codex](./docs/media/finite-overview.png)
 
-The person is the diner, Codex is the chef, and Finite is the kitchen and
-service system. Travel, renovation, events, interview preparation and general
-outcomes are projections of one planning grammar—not renamed copies of one
-generic dashboard.
+## The product in one minute
 
-## Why WebMCP matters
+Most planning software gives people forms, dashboards and workflows, then asks
+them to do the operational work. Finite changes the division of labour:
 
-WebMCP makes the visible page the operating environment. Codex discovers typed,
-page-scoped capabilities against the exact plan the person is viewing. There is
-no copied chat replica, pixel guessing or hidden application-owned model.
+| Role | Restaurant model | What happens in Finite |
+|---|---|---|
+| **You** | The diner | State the outcome, add judgment, choose trade-offs and grant exact authority |
+| **Codex** | The chef | Interpret, research, compare, prepare and operate the plan |
+| **Finite** | The kitchen and service | Keep facts, constraints, arithmetic, evidence, revisions and receipts coherent |
+| **WebMCP** | The operating seam | Let Codex work inside the same live plan that you can see |
 
-Finite exposes seven stable native tools for the document lifetime:
+The result is neither a chat-generated itinerary nor a generic task dashboard.
+It is a versioned planning system where new information can create pressure
+without silently becoming accepted truth.
 
-1. page readiness;
-2. canonical kitchen entry;
-3. capability inspection;
-4. bounded semantic toolset selection;
-5. exact content-addressed result reading;
-6. effort receipts; and
-7. guarded semantic invocation.
+![Finite product thesis showing the person as decision maker and Codex as operator](./docs/media/01-product-thesis.png)
 
-Each route advertises a bounded typed manifest. Every mutation is revalidated
-against current revision, evidence and authority. Large results remain in an
-ephemeral content-addressed vault and are retrieved only by exact semantic path.
+## One system, many kinds of plan
 
-Human confirmation creators are structurally absent from WebMCP. Codex can
-prepare and recommend; the person alone can create consequential authority.
+Finite compiles one planning grammar into surfaces that fit the work. A trip
+uses dates, places and transport. A renovation uses phases, dependencies and
+handover. An event uses a run of show, capacity and commitments. Interview
+preparation and dinner planning use different measures again.
 
-## The core transaction
+![Finite adapting into travel, renovation, event, interview and dinner plan shapes](./docs/media/02-adaptive-system.png)
 
-1. Codex enters one checksum-bound service ticket with canonical identity and
-   one authoritative next action.
-2. A real-world change is recorded against the current accepted revision.
-3. Finite enumerates permitted moves and produces distinct bounded options.
-4. The person sees the trade-offs and approves one exact result.
-5. Finite atomically applies that approved option and emits a receipt.
-6. Accepted truth and replay protection survive a browser-empty reload from D1.
+These are not renamed copies of a single dashboard. The time model, measures,
+entities, actions and decision surface change with the planning contract.
 
-The Spotlight demonstrates this complete transaction, including visible human
-authority, accepted apply, receipt, reload and idempotent replay.
+## Why WebMCP is essential
 
-## Product capabilities
+WebMCP turns the visible page into a typed operating environment. Codex reads
+the accepted plan, opens a bounded action group, invokes exact semantic actions
+and receives compact, durable results. It does not need a copied chat replica or
+pixel-level automation.
 
-- Adaptive travel, renovation, event and general-plan surfaces compiled from a
-  closed safe component grammar.
-- Exact integer-money conservation, locks, constraints, typed relationships and
-  deterministic option search.
-- Immutable plan revisions, SHA-256-bound profiles, atomic apply and durable
-  receipts.
-- Arrival-first planning from ordinary language, with source-labelled known,
-  inferred and missing information.
-- Manual editing, Planning-to-Managing progression, real-world changes,
-  attachments, evidence and completion learning.
-- Multi-plan catalogues, cross-device restore, role-bounded collaboration and
-  published read-only views.
-- Browser-local Demo mode that cannot write into the signed-in workspace.
-- Account-isolated D1 truth, R2 file storage and retry-safe cross-store work.
-- Responsive and keyboard-operable human surfaces.
+![Finite WebMCP operating seam showing typed entry, bounded actions, revalidation and receipts](./docs/media/03-webmcp-operating-seam.png)
 
-The product direction and operating law are documented in
-[PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md) and
-[ARRIVAL_AND_SURFACE_CONTINUITY.md](./ARRIVAL_AND_SURFACE_CONTINUITY.md).
+Finite keeps seven stable page tools discoverable for the document lifetime:
 
-## Architecture
+| Stable tool | Responsibility |
+|---|---|
+| `finite_webmcp_status` | Report bootstrap readiness without exposing plan state |
+| `finite_enter_kitchen` | Return canonical identity, accepted state and one grounded next action |
+| `finite_get_capabilities` | Describe the active contract, vocabulary and authority law |
+| `finite_open_toolset` | Open one bounded semantic action manifest |
+| `finite_invoke` | Execute one exact action after revalidating revision, evidence and authority |
+| `finite_read_result` | Recover exact fields from a content-addressed result when needed |
+| `finite_get_effort_receipt` | Report tool effort, failures, boundaries and accepted mutations |
 
-Finite has no backend language model and no application-owned agent.
+Human confirmation creators are deliberately absent from that tool surface.
+Codex can do the work and prepare a choice. Only the person can create the
+authority required for a consequential transition.
 
-- `src/` contains the deterministic planning kernel, adaptive compiler, browser
-  product, persistence adapters and WebMCP registry.
-- `worker/` contains authenticated D1/R2 APIs and the production asset shell.
-- `db/` and `drizzle/` define the durable schema and migrations.
-- `tests/` contains kernel, authority, persistence, WebMCP, product-route and
-  full-journey regression coverage.
-- `submission/` contains the hackathon narrative, judge route, script,
-  storyboard and evidence map.
-- `docs/acceptance/` contains dated engineering acceptance records.
-- `docs/engineering/` contains the deeper architecture and endurance reports.
+## The decision transaction
+
+```mermaid
+stateDiagram-v2
+    [*] --> Accepted_v1
+    Accepted_v1 --> Pressure_recorded: Reality changes
+    Pressure_recorded --> Options_compared: Deterministic bounded search
+    Options_compared --> Option_staged: Person chooses one route
+    Option_staged --> Exact_authority: Person confirms exact option and revision
+    Exact_authority --> Accepted_v2: Codex applies once through WebMCP
+    Accepted_v2 --> Durable_receipt: Revision and before-after values recorded
+    Durable_receipt --> Accepted_v2: Reload or idempotent replay
+```
+
+The public Spotlight makes that flow concrete. An 18-day trip has fixed flights
+and must retain at least A$500. Reality adds three Paris nights. Finite tests 26
+bounded combinations, keeps 18 that fit, rejects 8 and returns 3 meaningfully
+different routes. The person selects one. Codex applies only that exact approved
+route. Revision 1 becomes revision 2, Paris moves from 4 to 7 nights, and A$910
+remains free.
+
+![Three distinct bounded options produced from one real-world change](./docs/media/04-bounded-decision.png)
+
+![Accepted revision and replay-safe receipt surviving reload](./docs/media/05-durable-receipt.png)
+
+## System architecture
+
+Finite has no backend language model and no application-owned agent. Codex is
+the operator. Finite is the deterministic product and persistence layer.
+
+```mermaid
+flowchart LR
+    Person[Person] -->|Outcome and visible edits| UI[Finite human interface]
+    Person -->|Exact confirmation| UI
+    Codex[Codex] -->|Typed page tools| MCP[WebMCP adapter]
+    UI --> Runtime[Browser planning runtime]
+    MCP --> Runtime
+    Runtime --> Kernel[Deterministic planning kernel]
+    Kernel -->|Versioned operations| Worker[Cloudflare Worker]
+    Worker --> D1[(D1 accepted truth)]
+    Worker --> R2[(R2 files and evidence)]
+    Kernel --> Receipt[Revision and receipt]
+    Receipt --> UI
+    Receipt --> MCP
+```
+
+The browser runtime compiles adaptive surfaces, validates typed actions and
+keeps proposed work separate from accepted state. The Worker owns authenticated
+durability across D1 and R2. Every accepted mutation is revision-bound,
+authority-bound and idempotent.
+
+[Read the complete engineering architecture](./docs/ARCHITECTURE.md)
+
+## What is implemented
+
+- Arrival-first planning from ordinary language or structured manual input
+- Adaptive travel, renovation, event and general-plan workspaces
+- Exact integer-money conservation, locks, constraints and typed relationships
+- Deterministic option search with visible rejected and accepted combinations
+- Human-bound approval, immutable revisions and replay-safe receipts
+- Planning-to-Managing progression with real-world change handling
+- Evidence, attachments, tasks, files, decisions and completion learning
+- Multi-plan catalogues, cross-device restore and role-bounded collaboration
+- Published read-only views and isolated browser-local demonstrations
+- Responsive, keyboard-operable human surfaces
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| [`src/`](./src) | Browser product, adaptive compiler, planning kernel and WebMCP registry |
+| [`worker/`](./worker) | Cloudflare Worker, authenticated APIs and D1/R2 coordination |
+| [`db/`](./db) and [`drizzle/`](./drizzle) | Durable schema and ordered migrations |
+| [`tests/`](./tests) | Kernel, authority, persistence, WebMCP and full-journey regression coverage |
+| [`docs/architecture`](./docs/ARCHITECTURE.md) | System boundaries, state transitions and data flow |
+| [`docs/acceptance/`](./docs/acceptance) | Dated product and engineering acceptance records |
+| [`docs/engineering/`](./docs/engineering) | Deeper design and endurance reports |
+| [`submission/`](./submission) | Judge route, project story, evidence map, film script and storyboard |
 
 ## Run locally
 
@@ -111,37 +174,49 @@ npm run build
 npm run dev
 ```
 
-Local development uses an isolated D1 database named `finite-local` and an
-isolated R2 bucket. The placeholder identifiers in `wrangler.local.jsonc` are
-local-only. Production uses the Sites-managed `DB` and `FILES` bindings declared
-in `.openai/hosting.json`.
+Open the local URL printed by Vite. Native Chrome WebMCP testing currently
+requires `chrome://flags/#enable-webmcp-testing`. A supported host will show
+that Codex is connected.
 
-Native Chrome WebMCP testing currently requires
-`chrome://flags/#enable-webmcp-testing`. A supported host shows that Codex is
-connected.
+Local development uses an isolated D1 database named `finite-local` and an
+isolated R2 bucket. The identifiers in `wrangler.local.jsonc` are local-only.
+Production uses the Sites-managed `DB` and `FILES` bindings declared in
+`.openai/hosting.json`.
 
 ## Release proof
 
-The accepted live release is v242 with marker
+The accepted public release is **v242** with marker
 `hosted-release-marker-v242`.
 
-- 367/367 automated tests pass.
-- 20/20 independent hostile Spotlight kernel transactions pass.
-- TypeScript, production client and Worker builds pass.
-- The client chunk budget and submission working gate pass.
-- The deployed public root and WebMCP readiness/entry path have been verified.
+- **367/367** automated tests pass
+- **20/20** independent hostile Spotlight kernel transactions pass
+- TypeScript, production client and Worker builds pass
+- Client chunk budget and submission working gate pass
+- Public root, WebMCP readiness and canonical kitchen entry are verified
 
-See [the v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md),
-[reproducible release instructions](./REPRODUCIBLE_RELEASE.md), and
+Read the [v242 acceptance record](./docs/acceptance/FINITE_V242_PRODUCT_ACCEPTANCE_2026-09-02.md),
+[reproducible release instructions](./REPRODUCIBLE_RELEASE.md) and
 [judge testing instructions](./submission/JUDGE_TESTING_INSTRUCTIONS.md).
 
-## Project ownership
+## Product principles
 
-Finite is a project by [Benji Hart](https://github.com/bharthamk), created during
-the WebMCP Challenge submission period.
+Finite is built around a small set of non-negotiable rules:
 
-## License
+1. A request for change is not permission to rewrite accepted truth.
+2. Proposed work remains visibly different from accepted work.
+3. Consequential authority comes from the person, never from agent inference.
+4. Every accepted transition produces a durable, inspectable receipt.
+5. The plan must remain coherent when reality changes, not only when it is created.
+
+The full product direction lives in
+[PRODUCT_NORTH_STAR.md](./PRODUCT_NORTH_STAR.md) and
+[ARRIVAL_AND_SURFACE_CONTINUITY.md](./ARRIVAL_AND_SURFACE_CONTINUITY.md).
+
+## Ownership and licence
+
+Finite is a project by [Benji Hart](https://github.com/bharthamk), created for
+the WebMCP Challenge.
 
 The source and documentation are available under the [MIT License](./LICENSE).
-The Finite name, wordmark and logo identify this project; the licence grants no
+The Finite name, wordmark and logo identify this project. The licence grants no
 trademark rights in that branding.
