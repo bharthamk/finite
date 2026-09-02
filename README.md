@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1"><strong>Try the two-minute demo</strong></a>
+  <a href="https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1"><strong>Try the live demo</strong></a>
   &nbsp;·&nbsp;
   <a href="https://finite.bharthamk.chatgpt.site/"><strong>Open Finite</strong></a>
 </p>
