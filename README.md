@@ -5,10 +5,10 @@
   <img src="./docs/media/finite-wordmark-dark.png#gh-dark-mode-only" width="260" alt="Finite">
 </p>
 
-<p align="center"><strong>Plans that survive change.</strong></p>
+<p align="center"><strong>Change your plans without rebuilding them.</strong></p>
 
 <p align="center">
-  Finite is planning software built for a person and Codex to share. You describe the outcome and set the boundaries. Codex works inside the plan through WebMCP. Finite tests every change against the whole plan and records only the exact option you approve.
+  Finite is for plans with too many connected parts to safely update one by one. Tell Codex what changed. Finite checks the knock-on effects across dates, money, bookings, people and commitments, then gives you a few complete ways forward. Nothing changes until you choose.
 </p>
 
 <p align="center">
@@ -26,44 +26,65 @@
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f3eee5?labelColor=123d34"></a>
 </p>
 
-![Finite operating model: the person sets the outcome and authority, Codex operates, Finite keeps the plan coherent, and WebMCP connects them](./docs/media/finite-overview.png)
+![A concrete example of Finite keeping an entire trip working after three extra nights are added in Paris](./docs/media/finite-overview.png)
 
-## The product in one minute
+## One request. Every knock-on effect handled.
 
-Most planning software gives people forms, dashboards and workflows, then asks
-them to do the operational work. Finite changes the division of labour:
+Your 18-day trip is planned. The international flights cannot move, and you
+want to keep at least A$500 spare. Then you decide to stay three more nights in
+Paris.
 
-| Role | Restaurant model | What happens in Finite |
-|---|---|---|
-| **You** | The diner | State the outcome, add judgment, choose trade-offs and grant exact authority |
-| **Codex** | The chef | Interpret, research, compare, prepare and operate the plan |
-| **Finite** | The kitchen and service | Keep facts, constraints, arithmetic, evidence, revisions and receipts coherent |
-| **WebMCP** | The operating seam | Let Codex work inside the same live plan that you can see |
+In an ordinary planner, you now have to revisit every date, stay, journey and
+budget line yourself. A general AI can suggest an answer, but it does not own
+the live plan and cannot prove the rest of it still works.
 
-The result is neither a chat-generated itinerary nor a generic task dashboard.
-It is a versioned planning system where new information can create pressure
-without silently becoming accepted truth.
+Finite checks the whole trip together. It rules out changes that break the
+flights or the spending floor, then shows three complete alternatives with
+different trade-offs. You choose **Protect breathing room**. The trip becomes
+21 days, the flights stay fixed, and A$910 remains spare.
 
-![Finite product thesis showing the person as decision maker and Codex as operator](./docs/media/01-product-thesis.png)
+No rebuilding a spreadsheet. No forgotten knock-on effects. No AI quietly
+rewriting the plan.
+
+![Three complete alternatives for adding Paris nights while protecting the rest of the trip](./docs/media/04-bounded-decision.png)
+
+## You should be the diner, not the kitchen staff
+
+Most planning software hands you the kitchen. It gives you forms, tables and
+controls, then leaves you to research, recalculate and keep everything in sync.
+
+Finite works more like a restaurant. You say what you want, explain what
+matters and choose between the trade-offs. Codex is the chef: it interprets,
+researches, compares and prepares the change. Finite is the kitchen: it keeps
+the dates, costs, commitments and rules working together.
+
+WebMCP is what lets Codex work inside that kitchen directly. It can use the
+same live plan you see instead of guessing from pixels, copying the plan into a
+separate chat or returning advice that you still have to implement yourself.
 
 ## One system, many kinds of plan
 
-Finite compiles one planning grammar into surfaces that fit the work. A trip
-uses dates, places and transport. A renovation uses phases, dependencies and
-handover. An event uses a run of show, capacity and commitments. Interview
-preparation and dinner planning use different measures again.
+Finite is not a travel app. The same planning engine adapts to what you are
+trying to accomplish. A trip needs dates, places and transport. A renovation
+needs phases, dependencies and handover. An event needs a run of show, capacity
+and commitments. Interview preparation and dinner planning need different
+information again.
 
 ![Finite adapting into travel, renovation, event, interview and dinner plan shapes](./docs/media/02-adaptive-system.png)
 
-These are not renamed copies of a single dashboard. The time model, measures,
-entities, actions and decision surface change with the planning contract.
+These are not renamed copies of one dashboard. Each plan gets the timeline,
+measures, records and choices that fit the work.
 
-## Why WebMCP is essential
+## Why this needs WebMCP
 
-WebMCP turns the visible page into a typed operating environment. Codex reads
-the accepted plan, opens a bounded action group, invokes exact semantic actions
-and receives compact, durable results. It does not need a copied chat replica or
-pixel-level automation.
+Without WebMCP, Codex can give advice in a chat or try to click through software
+designed for a person with a mouse. You still have to transfer its answer into
+the real plan, and it can miss connected details along the way.
+
+With WebMCP, Codex can work on the same live plan you are looking at. Finite
+gives it exact actions to read the current plan, record what changed, compare
+possible revisions and apply the option you approved. Finite handles the exact
+state and calculations. You retain the final decision.
 
 ![Finite WebMCP operating seam showing typed entry, bounded actions, revalidation and receipts](./docs/media/03-webmcp-operating-seam.png)
 
@@ -83,7 +104,7 @@ Human confirmation creators are deliberately absent from that tool surface.
 Codex can do the work and prepare a choice. Only the person can create the
 authority required for a consequential transition.
 
-## The decision transaction
+## How one change becomes a safe update
 
 ![Finite decision transaction from accepted revision through pressure, bounded search, human authority and durable receipt](./docs/media/diagram-decision-transaction.png)
 

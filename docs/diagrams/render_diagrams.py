@@ -230,42 +230,60 @@ def dark_mode_wordmark() -> None:
 
 
 def github_hero() -> None:
-    image = Image.new("RGB", (1800, 1200), GREEN)
+    image = Image.new("RGB", (1800, 1060), GREEN)
     draw = ImageDraw.Draw(image)
 
     mark = Image.open(OUT / "finite-wordmark-dark.png").convert("RGBA")
-    mark.thumbnail((540, 190), Image.Resampling.LANCZOS)
-    image.paste(mark, (88, 70), mark)
+    mark.thumbnail((430, 150), Image.Resampling.LANCZOS)
+    image.paste(mark, (86, 55), mark)
 
-    draw.text((92, 300), "AGENT-NATIVE PLANNING", font=font(24, mono=True), fill=CORAL)
-    draw.text((88, 360), "PLANS THAT", font=font(74, bold=True), fill=WHITE)
-    draw.text((88, 448), "SURVIVE CHANGE.", font=font(74, bold=True), fill=MINT)
-    draw.text((92, 585), "Codex operates the plan.", font=font(34, bold=True), fill=WHITE)
-    draw.text((92, 640), "You decide what becomes true.", font=font(34, bold=True), fill=WHITE)
+    draw.text((90, 245), "WHEN PLANS CHANGE,", font=font(56, bold=True), fill=WHITE)
+    draw.text((90, 317), "DON'T START OVER.", font=font(56, bold=True), fill=MINT)
+    draw.multiline_text(
+        (94, 430),
+        "Ask for a change in plain English. Finite checks\nevery affected date, cost and commitment, then\ngives you a few plans that still work.",
+        font=font(26), fill=WHITE, spacing=12,
+    )
 
-    panel = (875, 74, 1710, 905)
-    draw.rounded_rectangle(panel, radius=38, fill=PAPER, outline=LINE, width=3)
-    draw.text((935, 128), "THE OPERATING MODEL", font=font(21, mono=True), fill=CORAL)
-
-    roles = [
-        ("YOU", "State the outcome · set boundaries\nchoose trade-offs · approve changes", MINT),
-        ("CODEX", "Interpret · research · compare\noperate the live plan", CORAL),
-        ("FINITE", "Keep state coherent · enforce constraints\nversion accepted changes · issue receipts", TEAL),
+    draw.rounded_rectangle((90, 625, 770, 920), radius=30, fill=INK, outline=GREEN_2, width=2)
+    draw.text((132, 670), "WHY USE IT?", font=font(20, mono=True), fill=CORAL)
+    benefits = [
+        "No rebuilding spreadsheets",
+        "No missed knock-on effects",
+        "No changes you didn't approve",
     ]
-    for index, (title, body, accent) in enumerate(roles):
-        y = 210 + index * 205
-        draw.rounded_rectangle((930, y, 1655, y + 160), radius=22, fill=WHITE, outline=GREEN, width=2)
-        draw.rounded_rectangle((956, y + 24, 970, y + 136), radius=7, fill=accent)
-        draw.text((1000, y + 28), title, font=font(29, bold=True), fill=INK)
-        draw.multiline_text((1002, y + 78), body, font=font(20), fill=GREEN_2, spacing=8)
+    for index, benefit in enumerate(benefits):
+        y = 738 + index * 62
+        draw.ellipse((134, y + 5, 150, y + 21), fill=MINT)
+        draw.text((172, y), benefit, font=font(25, bold=True), fill=WHITE)
 
-    draw.rounded_rectangle((930, 820, 1655, 875), radius=14, fill=INK)
-    draw.text((1078, 837), "CONNECTED THROUGH WEBMCP", font=font(19, bold=True), fill=MINT)
+    panel = (855, 60, 1710, 970)
+    draw.rounded_rectangle(panel, radius=38, fill=PAPER, outline=LINE, width=3)
+    draw.text((915, 112), "A REAL EXAMPLE", font=font(20, mono=True), fill=CORAL)
 
-    draw.rounded_rectangle((88, 960, 1710, 1118), radius=28, fill=INK, outline=GREEN_2, width=2)
-    draw.text((130, 997), "WHEN REALITY CHANGES", font=font(20, mono=True), fill=CORAL)
-    draw.text((130, 1045), "Codex asks Finite to compare the whole plan. Finite returns bounded options. You choose. Codex applies that exact choice.", font=font(24, bold=True), fill=WHITE)
-    draw.text((130, 1082), "Finite records the new accepted revision and its receipt.", font=font(22), fill=MINT)
+    draw.text((915, 170), "Your trip is already planned.", font=font(34, bold=True), fill=INK)
+    facts = ["18 days", "Flights cannot move", "Keep at least A$500 spare"]
+    for index, fact in enumerate(facts):
+        x = 915 + (index % 2) * 350
+        y = 235 + (index // 2) * 64
+        draw.rounded_rectangle((x, y, x + (315 if index < 2 else 665), y + 46), radius=13, fill="#e1e9e5")
+        draw.text((x + 18, y + 11), fact, font=font(19, bold=True), fill=GREEN)
+
+    draw.text((915, 373), "Then you ask:", font=font(21, mono=True), fill=GREEN_2)
+    draw.rounded_rectangle((915, 418, 1650, 540), radius=24, fill=WHITE, outline=CORAL, width=3)
+    draw.multiline_text((950, 450), '"Add three nights in Paris.\nKeep everything else working."', font=font(29, bold=True), fill=INK, spacing=10)
+
+    draw.text((915, 590), "FINITE CHECKS", font=font(19, mono=True), fill=CORAL)
+    draw.text((915, 628), "Dates · stays · transport · budget", font=font(24, bold=True), fill=INK)
+    draw.line((915, 682, 1650, 682), fill=LINE, width=2)
+
+    draw.text((915, 724), "YOU GET", font=font(19, mono=True), fill=CORAL)
+    draw.text((915, 762), "3 complete plans that work.", font=font(32, bold=True), fill=INK)
+    draw.text((915, 814), "Choose one. The whole trip updates.", font=font(24), fill=GREEN_2)
+    draw.rounded_rectangle((915, 875, 1650, 925), radius=14, fill=INK)
+    draw.text((1086, 889), "NOTHING CHANGES UNTIL YOU CHOOSE", font=font(18, bold=True), fill=MINT)
+
+    draw.text((90, 990), "Trips · renovations · events · any plan where one change affects everything else", font=font(20, mono=True), fill="#bcd0c8")
     image.save(OUT / "finite-overview.png", optimize=True)
 
 
