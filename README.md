@@ -8,7 +8,7 @@
 <p align="center"><strong>Plans that survive change.</strong></p>
 
 <p align="center">
-  Finite is the agent-native working layer behind a plan. You state the outcome, Codex operates the live plan through WebMCP, and you decide what becomes true.
+  Finite is planning software built for a person and Codex to share. You describe the outcome and set the boundaries. Codex works inside the plan through WebMCP. Finite tests every change against the whole plan and records only the exact option you approve.
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f3eee5?labelColor=123d34"></a>
 </p>
 
-![Finite overview: plans that survive change, operated through one live plan for people and Codex](./docs/media/finite-overview.png)
+![Finite operating model: the person sets the outcome and authority, Codex operates, Finite keeps the plan coherent, and WebMCP connects them](./docs/media/finite-overview.png)
 
 ## The product in one minute
 
