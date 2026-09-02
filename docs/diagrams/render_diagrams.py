@@ -284,9 +284,49 @@ def github_hero() -> None:
     image.save(OUT / "finite-overview.png", optimize=True)
 
 
+def restaurant_model() -> None:
+    image, draw = canvas(
+        1800,
+        800,
+        "The restaurant model",
+        "You shape the outcome. Codex works through it. Finite keeps it together.",
+        "WebMCP connects the planning conversation to the same live plan you see.",
+    )
+
+    roles = [
+        (80, 280, 540, 610, "YOU", "Describe the outcome\nExplain what matters\nKeep refining the plan", CORAL, "DINER"),
+        (670, 280, 1130, 610, "CODEX", "Ask questions\nResearch and compare\nWork through changes", TEAL, "CHEF"),
+        (1260, 280, 1720, 610, "FINITE", "Hold the live plan\nCheck connected parts\nRecord each revision", MINT, "KITCHEN"),
+    ]
+    for x0, y0, x1, y1, title, body, accent, role in roles:
+        draw.rounded_rectangle((x0, y0, x1, y1), radius=24, fill=WHITE, outline=GREEN, width=3)
+        draw.rounded_rectangle((x0 + 24, y0 + 24, x0 + 40, y1 - 24), radius=8, fill=accent)
+        draw.text((x0 + 70, y0 + 36), role, font=font(18, mono=True), fill=CORAL)
+        draw.text((x0 + 70, y0 + 78), title, font=font(36, bold=True), fill=INK)
+        draw.multiline_text((x0 + 70, y0 + 150), body, font=font(23), fill=GREEN_2, spacing=18)
+
+    def double_arrow(x0: int, x1: int, y: int, label: str) -> None:
+        draw.line((x0, y, x1, y), fill=GREEN_2, width=5)
+        draw.polygon([(x0, y), (x0 + 18, y - 11), (x0 + 18, y + 11)], fill=GREEN_2)
+        draw.polygon([(x1, y), (x1 - 18, y - 11), (x1 - 18, y + 11)], fill=GREEN_2)
+        bbox = draw.textbbox((0, 0), label, font=font(16, mono=True))
+        text_width = bbox[2] - bbox[0]
+        tx = (x0 + x1 - text_width) / 2
+        draw.rounded_rectangle((tx - 10, y - 46, tx + text_width + 10, y - 16), radius=8, fill=PAPER)
+        draw.text((tx, y - 43), label, font=font(16, mono=True), fill=GREEN_2)
+
+    double_arrow(548, 662, 445, "CONVERSATION")
+    double_arrow(1138, 1252, 445, "WEBMCP")
+
+    draw.rounded_rectangle((330, 675, 1470, 742), radius=18, fill=INK)
+    draw.text((414, 696), "YOU KEEP SHAPING IT · CODEX KEEPS WORKING · FINITE KEEPS IT TOGETHER", font=font(20, bold=True), fill=MINT)
+    image.save(OUT / "diagram-restaurant-model.png", optimize=True)
+
+
 if __name__ == "__main__":
     dark_mode_wordmark()
     github_hero()
+    restaurant_model()
     decision_transaction()
     system_architecture()
     webmcp_surface()

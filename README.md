@@ -50,17 +50,22 @@ live picture.
 
 ## You should be the diner, not the kitchen staff
 
-Most planning software hands you the kitchen. It gives you forms, tables and
-controls, then leaves you to research, recalculate and keep everything in sync.
+Most planning software makes you run the kitchen. It gives you forms, tables
+and controls, then leaves you to research, recalculate and keep every connected
+part in sync.
 
-Finite works more like a restaurant. You say what you want, explain what
-matters and choose between the trade-offs. Codex is the chef: it interprets,
-researches, compares and prepares the change. Finite is the kitchen: it keeps
-the dates, costs, commitments and rules working together.
+Finite lets you stay focused on the outcome. You tell Codex what you want, what
+matters and what has changed. Codex works through the plan with you: asking
+questions, researching, comparing possibilities and adapting as you refine the
+brief. Finite is the kitchen behind that collaboration, keeping the dates,
+costs, dependencies, commitments and constraints working together.
 
-WebMCP is what lets Codex work inside that kitchen directly. It can use the
-same live plan you see instead of guessing from pixels, copying the plan into a
-separate chat or returning advice that you still have to implement yourself.
+WebMCP is the direct connection between Codex and that kitchen. It lets Codex
+work with the same live plan you see, use Finite to evaluate real changes and
+continue from the exact result. The conversation and the planning software
+become one workflow.
+
+![The Finite restaurant model showing the person and Codex planning together while WebMCP connects Codex to the live plan](./docs/media/diagram-restaurant-model.png)
 
 ## One system, many kinds of plan
 
