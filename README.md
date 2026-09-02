@@ -165,31 +165,38 @@ survives reloads and can continue across devices.
 
 [Read the complete engineering architecture](./docs/ARCHITECTURE.md)
 
-## What is implemented
+## What you can do today
 
-- Arrival-first planning from ordinary language or structured manual input
-- Adaptive travel, renovation, event and general-plan workspaces
-- Exact integer-money conservation, locks, constraints and typed relationships
-- Deterministic option search with visible rejected and accepted combinations
-- Human-bound approval, immutable revisions and replay-safe receipts
-- Planning-to-Managing progression with real-world change handling
-- Evidence, attachments, tasks, files, decisions and completion learning
-- Multi-plan catalogues, cross-device restore and role-bounded collaboration
-- Published read-only views and isolated browser-local demonstrations
-- Responsive, keyboard-operable human surfaces
+The public release covers the full life of a plan, from the first outcome to
+day-to-day work, real-world change and wrap-up.
 
-## Repository map
+| When you need to... | Finite lets you... |
+|---|---|
+| **Turn an outcome into a working plan** | Describe what you want in ordinary language or enter it yourself. Finite builds the workspace around the work, whether it is a trip, renovation, event or something custom. |
+| **Plan with Codex inside the product** | Let Codex read the current plan through WebMCP, work with its exact dates, costs and constraints, add researched evidence and continue from the live result. |
+| **Respond when reality changes** | Bring in a new cost, delay or change of intent. Finite checks the connected plan and returns however many meaningfully different workable directions exist, with rejected routes and trade-offs visible. |
+| **Carry the plan into execution** | Keep tasks, checklists, files, references, decisions and actual costs beside the plan instead of rebuilding the work in another tool. |
+| **Continue and collaborate** | Return to the same plan across devices, manage multiple plans, invite others to view, suggest or edit, and publish a selected read-only view. |
+| **Keep useful history** | Move through revisions with clear receipts, wrap up completed work and carry forward only the lessons you choose to retain. |
+
+Every surface is responsive and keyboard-operable, including the browser-local
+demo used in the public judge route.
+
+## Where the engineering lives
+
+For technical judges and contributors, the main implementation and proof
+surfaces are:
 
 | Path | Purpose |
 |---|---|
-| [`src/`](./src) | Browser product, adaptive compiler, planning kernel and WebMCP registry |
-| [`worker/`](./worker) | Cloudflare Worker, authenticated APIs and D1/R2 coordination |
-| [`db/`](./db) and [`drizzle/`](./drizzle) | Durable schema and ordered migrations |
-| [`tests/`](./tests) | Kernel, authority, persistence, WebMCP and full-journey regression coverage |
-| [`docs/architecture`](./docs/ARCHITECTURE.md) | System boundaries, state transitions and data flow |
+| [`src/`](./src) | Visible product, adaptive workspaces, shared planning engine and WebMCP actions |
+| [`worker/`](./worker) | Cloudflare APIs for plan history, collaboration, publishing and D1/R2 persistence |
+| [`db/`](./db) and [`drizzle/`](./drizzle) | Durable data model and ordered migrations |
+| [`tests/`](./tests) | 368 tests covering calculations, plan changes, persistence, collaboration, WebMCP and complete journeys |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | End-to-end design, state transitions and data flow |
 | [`docs/acceptance/`](./docs/acceptance) | Dated product and engineering acceptance records |
-| [`docs/engineering/`](./docs/engineering) | Deeper design and endurance reports |
-| [`submission/`](./submission) | Judge route, project story, evidence map, film script and storyboard |
+| [`docs/engineering/`](./docs/engineering) | Deeper technical and endurance reports |
+| [`submission/`](./submission) | Judge route, project story, evidence map, screenshots, film script and storyboard |
 
 ## Run locally
 
