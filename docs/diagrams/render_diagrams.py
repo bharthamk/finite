@@ -233,14 +233,11 @@ def github_hero() -> None:
     image = Image.new("RGB", (1800, 1060), GREEN)
     draw = ImageDraw.Draw(image)
 
-    mark = Image.open(OUT / "finite-wordmark-dark.png").convert("RGBA")
-    mark.thumbnail((430, 150), Image.Resampling.LANCZOS)
-    image.paste(mark, (86, 55), mark)
-
-    draw.text((90, 245), "WHEN PLANS CHANGE,", font=font(56, bold=True), fill=WHITE)
-    draw.text((90, 317), "DON'T START OVER.", font=font(56, bold=True), fill=MINT)
+    draw.text((94, 82), "TRIPS · RENOVATIONS · EVENTS · WORK · CUSTOM PLANS", font=font(19, mono=True), fill=CORAL)
+    draw.text((90, 140), "ONE CHANGE.", font=font(56, bold=True), fill=WHITE)
+    draw.text((90, 212), "THE WHOLE PLAN CHECKED.", font=font(48, bold=True), fill=MINT)
     draw.multiline_text(
-        (94, 430),
+        (94, 342),
         "Ask for a change in plain English. Finite checks\nevery affected date, cost and commitment, then\nbrings back the distinct ways forward that work.",
         font=font(26), fill=WHITE, spacing=12,
     )
@@ -248,9 +245,9 @@ def github_hero() -> None:
     draw.rounded_rectangle((90, 625, 770, 920), radius=30, fill=INK, outline=GREEN_2, width=2)
     draw.text((132, 670), "WHY USE IT?", font=font(20, mono=True), fill=CORAL)
     benefits = [
-        "Stop rebuilding spreadsheets",
-        "See the knock-on effects",
-        "Keep shaping the plan with Codex",
+        "Stop rebuilding the plan",
+        "See what else has to move",
+        "Keep shaping it with Codex",
     ]
     for index, benefit in enumerate(benefits):
         y = 738 + index * 62
@@ -283,7 +280,7 @@ def github_hero() -> None:
     draw.rounded_rectangle((915, 875, 1650, 925), radius=14, fill=INK)
     draw.text((1040, 889), "WORK FROM ONE LIVE PLAN WITH CODEX", font=font(18, bold=True), fill=MINT)
 
-    draw.text((90, 990), "Trips · renovations · events · any plan where one change affects everything else", font=font(20, mono=True), fill="#bcd0c8")
+    draw.text((90, 990), "ONE PLANNING PARTNER FOR ALL THE CONNECTED PARTS", font=font(20, mono=True), fill="#bcd0c8")
     image.save(OUT / "finite-overview.png", optimize=True)
 
 

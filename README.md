@@ -1,22 +1,22 @@
-# Finite
-
-<p align="center">
+<h1 align="center">
   <img src="./public/finite-wordmark.png#gh-light-mode-only" width="260" alt="Finite">
   <img src="./docs/media/finite-wordmark-dark.png#gh-dark-mode-only" width="260" alt="Finite">
-</p>
+</h1>
 
 <p align="center"><strong>Change your plans without rebuilding them.</strong></p>
 
 <p align="center">
-  Finite is for plans with too many connected parts to update one by one. Tell Codex what changed. Codex and Finite work through the knock-on effects across dates, money, bookings, people and commitments, then bring back the distinct ways forward that fit your plan.
+  Finite is a planning partner for trips, renovations, events, work and anything else with connected parts. Tell Codex what changed. Finite works through the affected dates, costs, commitments and dependencies, then brings back the distinct ways forward that still fit.
 </p>
 
 <p align="center">
+  <a href="https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1"><strong>Try the two-minute demo</strong></a>
+  &nbsp;·&nbsp;
   <a href="https://finite.bharthamk.chatgpt.site/"><strong>Open Finite</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1"><strong>Run the two-minute judge Spotlight</strong></a>
-  &nbsp;·&nbsp;
-  <a href="./submission/JUDGE_TESTING_INSTRUCTIONS.md"><strong>Testing guide</strong></a>
+</p>
+
+<p align="center">
+  <sub>Judging Finite? <a href="./submission/JUDGE_TESTING_INSTRUCTIONS.md">Read the testing guide</a>.</sub>
 </p>
 
 <p align="center">
@@ -28,15 +28,15 @@
 
 ![A concrete example of Finite keeping an entire trip working after three extra nights are added in Paris](./docs/media/finite-overview.png)
 
-## One request. Every knock-on effect handled.
+## See one change worked through across the whole plan
 
 Your 18-day trip is planned. The international flights cannot move, and you
 want to keep at least A$500 spare. Then you decide to stay three more nights in
 Paris.
 
 In an ordinary planner, you now have to revisit every date, stay, journey and
-budget line yourself. A general AI can suggest an answer, but it does not own
-the live plan and cannot prove the rest of it still works.
+budget line yourself. A chat assistant can suggest an answer, but you still
+have to transfer it into the plan and check what else broke.
 
 Finite checks the whole trip together. It rules out changes that break the
 flights or the spending floor, then brings back each distinct way forward that
@@ -64,9 +64,9 @@ separate chat or returning advice that you still have to implement yourself.
 
 ## One system, many kinds of plan
 
-Finite is not a travel app. The same planning engine adapts to what you are
-trying to accomplish. A trip needs dates, places and transport. A renovation
-needs phases, dependencies and handover. An event needs a run of show, capacity
+Finite uses the same planning engine across many kinds of work. A trip needs
+dates, places and transport. A renovation needs phases, dependencies and
+handover. An event needs a run of show, capacity
 and commitments. Interview preparation and dinner planning need different
 information again.
 
