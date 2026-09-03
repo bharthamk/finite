@@ -26,6 +26,16 @@ export const arrivalContinuityTasks = (progression: ArrivalProgression, stageLab
   return progression.tasks.filter((task) => !acceptedStages.has(comparableTaskLabel(task.label)));
 };
 
+export const arrivalBudgetOverageMinor = (starter: StarterPlanPresentation): number => {
+  if (starter.overview.moneyState !== "positive") return 0;
+  const totalBudgetMinor = amountMinor(starter.overview.totalBudget);
+  if (totalBudgetMinor <= 0) return 0;
+  const categoryForecastMinor = starter.overview.categories
+    .filter((item) => item.fields.moneyRole === "cost")
+    .reduce((total, item) => total + amountMinor(item.fields.amount), 0);
+  return Math.max(0, categoryForecastMinor - totalBudgetMinor);
+};
+
 const boundedSlug = (value: string): string => value.toLowerCase()
   .normalize("NFKD")
   .replace(/[^a-z0-9]+/g, "_")
@@ -104,7 +114,8 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     .reduce((total, item) => total + amountMinor(item.fields.amount), 0);
   const hasKnownBudgetLimit = totalBudgetMinor > 0;
   const accountingTotalMinor = hasKnownBudgetLimit ? totalBudgetMinor : categoryForecastMinor;
-  const forecastMinor = Math.min(accountingTotalMinor, categoryForecastMinor);
+  const budgetOverageMinor = arrivalBudgetOverageMinor(starter);
+  const forecastMinor = budgetOverageMinor > 0 ? categoryForecastMinor : Math.min(accountingTotalMinor, categoryForecastMinor);
   const schedule = starter.sections.find((section) => section.variant === "calendar")?.items ?? [];
   const taskItems = starter.sections.find((section) => section.sectionId === "tasks")?.items ?? [];
   const stageSource = profileId === "general" && taskItems.length ? taskItems : schedule.length ? schedule : taskItems;
@@ -129,12 +140,12 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
     blocking: false,
     sourcePaths: [`workspace.${section.sectionId}.openQuestions.${question.questionId}`],
   }));
-  if (hasKnownBudgetLimit && categoryForecastMinor > totalBudgetMinor) dependencies.push({
+  if (budgetOverageMinor > 0) dependencies.push({
     dependencyId: "budget_overallocated",
     kind: "human_decision",
     title: `Current category budgets exceed the total by ${((categoryForecastMinor - totalBudgetMinor) / 100).toFixed(2)} ${starter.overview.currency}.`,
     status: "open",
-    blocking: false,
+    blocking: true,
     sourcePaths: ["workspace.money.categories", "workspace.overview.totalBudget"],
   });
 
@@ -172,7 +183,7 @@ export const arrivalProgressionFromStarter = (order: ArrivalOrder, starter: Star
       location: starter.sections.some((section) => section.items.some((item) => String(item.fields.location ?? "").trim())) ? "positive" : "unknown",
       capacity: profileId === "event" ? "positive" : "not_applicable",
     },
-    allocation: { totalBudgetMinor: accountingTotalMinor, spentMinor: 0, committedMinor: 0, forecastMinor, bufferMinor: accountingTotalMinor - forecastMinor },
+    allocation: { totalBudgetMinor: accountingTotalMinor, spentMinor: 0, committedMinor: 0, forecastMinor, bufferMinor: Math.max(0, accountingTotalMinor - forecastMinor) },
     actuals: [],
     locks,
     preferenceLabels: ["preserve_human_set_details", "keep_working_assumptions_visible"],

@@ -185,6 +185,25 @@ const isRecurringPracticePlan = (value: string): boolean =>
   && /\b(?:day|week|month|session|evening|lesson|practice|study|listening|speaking)\b/i.test(value);
 const hasExplicitZeroSpendIntent = (value: string): boolean =>
   /\b(?:no|zero)\s+(?:paid\s+)?budget\b|\bbudget\s*(?:(?:is|of)\s*|:)\s*(?:aud|a\$|\$)?\s*0\b|\b(?:do not|don['’]t)\s+(?:want\s+)?to\s+buy\s+anything\b|\bwithout\s+spending\b/i.test(value);
+const isDinnerPlan = (value: string): boolean => /\b(?:dinner party|dinner at home|host(?:ing)? (?:a )?dinner)\b|\bdinner\s+for\s+(?:\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:people|friends|guests|attendees)\b/i.test(value);
+
+type WeightedPlanItem = readonly [id: string, title: string, weight: number];
+
+export const allocateWholePlanUnits = (total: number, items: readonly WeightedPlanItem[]): Array<[string, string, number, number]> => {
+  const safeTotal = Number.isFinite(total) ? Math.max(0, Math.round(total)) : 0;
+  const safeWeights = items.map(([, , weight]) => Number.isFinite(weight) ? Math.max(0, weight) : 0);
+  const weightTotal = safeWeights.reduce((sum, weight) => sum + weight, 0);
+  if (!items.length) return [];
+  if (weightTotal === 0) return items.map(([id, title, weight]) => [id, title, weight, 0]);
+  const exact = safeWeights.map((weight) => safeTotal * weight / weightTotal);
+  const allocated = exact.map(Math.floor);
+  let remaining = safeTotal - allocated.reduce((sum, amount) => sum + amount, 0);
+  const remainderOrder = exact
+    .map((amount, index) => ({ index, remainder: amount - allocated[index]! }))
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
+  for (let index = 0; index < remaining; index += 1) allocated[remainderOrder[index % remainderOrder.length]!.index]! += 1;
+  return items.map(([id, title, weight], index) => [id, title, weight, allocated[index]!]);
+};
 
 type StarterSectionDefinition = Omit<StarterPlanSection, "items" | "options" | "comments" | "openQuestions" | "answers"> & { keywords: string[] };
 
@@ -289,15 +308,17 @@ const domesticAustralianTravel = (value: string): boolean => {
 };
 
 const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], order: ArrivalOrder): Record<string, string[]> => {
-  const dinner = /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(order.rawOutcome);
+  const dinner = isDinnerPlan(order.rawOutcome);
   const eventSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
   const headcount = statedEventHeadcount(eventSource) ?? 10;
+  const eventBudget = moneyAmount(eventSource);
+  const eventCurrency = moneyCurrency(eventSource, order.structured as Record<string, unknown>);
   if (family === "event" && dinner) return {
     schedule: ["What time should guests arrive, and roughly when should the evening finish?"],
     scope: [`Which guests are confirmed, and does the table and seating comfortably fit all ${headcount} people?`],
     custom_menu_dietary: ["Do the vegetarian guests eat dairy and eggs, and are there any dislikes the menu should avoid?"],
     resources: ["Will you cook everything yourself, buy any prepared dishes, or have someone help?"],
-    money: ["Should the AUD 500 budget include alcohol, or only food and non-alcoholic drinks?"],
+    money: [eventBudget ? `Should the ${eventCurrency} ${Number(eventBudget).toLocaleString("en-AU")} budget include alcohol, or only food and non-alcoholic drinks?` : "Should the budget include alcohol, or only food and non-alcoholic drinks?"],
     requirements: ["How severe is the nut allergy, including whether trace cross-contact or ‘may contain’ ingredients must be avoided?"],
     tasks: ["Who, if anyone, can help with setup, serving, or cleanup on the day?"],
   };
@@ -337,12 +358,14 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     requirements: ["Are the 30-minute sessions and 90-minute weekly cap fixed or flexible?"],
     tasks: ["Do you want to choose the exact session days yourself or use the provisional weekly rhythm?"],
   };
-  const noPaidBudget = hasExplicitZeroSpendIntent(`${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`);
+  const moneySource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${JSON.stringify(order.interpretation?.known ?? {})}`;
+  const noPaidBudget = hasExplicitZeroSpendIntent(moneySource);
+  const moneyLimitKnown = noPaidBudget || moneyAmount(moneySource) !== "";
   return {
     schedule: ["Which date or sequence is fixed, and what can move?"],
     scope: ["What would make this plan complete enough to use?"],
     resources: ["Which people, tools, or providers are already available?"],
-    money: noPaidBudget ? [] : ["Is money relevant to this plan, and if so what limit should it respect?"],
+    money: moneyLimitKnown ? [] : ["Is money relevant to this plan, and if so what limit should it respect?"],
     requirements: ["Which requirement or approval still needs a human decision?"],
     tasks: ["Which next action do you want to own yourself?"],
   };
@@ -827,10 +850,11 @@ const seedRoughPlan = (
 
     const moneyItems = sectionItems.get("money") ?? [];
     if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
-      [["trades", "Licensed trades & lighting", 25], ["furniture", "Desk & storage", 45], ["paint", "Paint & preparation", 15], ["contingency", "Contingency", 15]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+      allocateWholePlanUnits(budget, [["trades", "Licensed trades & lighting", 25], ["furniture", "Desk & storage", 45], ["paint", "Paint & preparation", 15], ["contingency", "Contingency", 15]])
+        .forEach(([id, title, percent, amount]) => seed("money", `category_${id}`, title, { title, amount: String(amount), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
     }
   }
-  if (family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(sourceText)) {
+  if (family === "event" && isDinnerPlan(sourceText)) {
     const year = Number(sourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear());
     const dinnerDate = dateIso(sourceText, year);
     const budgetText = sourceText.match(/(?:\baud|\ba\$|\$)\s*(\d[\d,]*(?:\.\d+)?)\s+budget\b/i)?.[1]
@@ -871,7 +895,8 @@ const seedRoughPlan = (
     const moneyItems = sectionItems.get("money") ?? [];
     if (budget && !moneyItems.some((item) => item.fields.moneyRole === "limit")) seed("money", "limit", "Total budget", { title: "Total budget", amount: String(budget), currency: seedCurrency, moneyRole: "limit", notes: "Human-supplied event budget." });
     if (!moneyItems.some((item) => item.fields.moneyRole === "cost")) {
-      [["food", "Food and ingredients", 50], ["drinks", "Drinks and ice", 24], ["table", "Table and atmosphere", 8], ["buffer", "Contingency", 18]].forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(budget * Number(percent) / 100)), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
+      allocateWholePlanUnits(budget, [["food", "Food and ingredients", 50], ["drinks", "Drinks and ice", 24], ["table", "Table and atmosphere", 8], ["buffer", "Contingency", 18]])
+        .forEach(([id, title, percent, amount]) => seed("money", `category_${id}`, title, { title, amount: String(amount), currency: seedCurrency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change it freely.` }));
     }
     if (!requirements.length) {
       seed("requirements", "nut_safety", "Nut-allergy safety", { title: "Nut-allergy safety", status: "open", due: addDays(dinnerDate, -4), notes: "Confirm severity and cross-contact threshold; check every packaged ingredient and keep preparation surfaces and utensils safe." });
@@ -912,12 +937,13 @@ const seedRoughPlan = (
     const limitItem = moneyItems.filter((item) => item.fields.moneyRole === "limit").at(-1);
     const limit = Number(limitItem?.fields.amount || 0);
     const currency = String(limitItem?.fields.currency || "AUD");
-    const splits = family === "renovation"
+    const splits: WeightedPlanItem[] = family === "renovation"
       ? [["labour", "Labour & trades", 40], ["materials", "Materials & fixtures", 35], ["professional", "Approvals & professional fees", 10], ["contingency", "Contingency", 15]]
       : family === "event"
         ? [["venue", "Venue", 25], ["food", "Food & drink", 35], ["production", "Suppliers & production", 25], ["contingency", "Contingency", 15]]
         : [["delivery", "Core delivery", 50], ["people", "People & resources", 25], ["tools", "Tools & logistics", 15], ["buffer", "Flexible buffer", 10]];
-    if (family !== "general" || limit > 0) splits.forEach(([id, title, percent]) => seed("money", `category_${id}`, String(title), { title: String(title), amount: String(Math.round(limit * Number(percent) / 100)), currency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change the category or amount freely.` }));
+    if (family !== "general" || limit > 0) allocateWholePlanUnits(limit, splits)
+      .forEach(([id, title, percent, amount]) => seed("money", `category_${id}`, title, { title, amount: String(amount), currency, moneyRole: "cost", notes: `${percent}% first-pass allocation; change the category or amount freely.` }));
   }
 };
 
@@ -1244,7 +1270,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const categories = visibleMoneyItems.filter((item) => item.fields.moneyRole === "cost");
   const categoryAllocated = categories.reduce((sum, item) => sum + Number(item.fields.amount || 0), 0);
   const eventSourceText = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
-  const anchoredEventDate = family === "event" && /\b(?:dinner party|dinner at home|host(?:ing)? dinner)\b/i.test(eventSourceText)
+  const anchoredEventDate = family === "event" && isDinnerPlan(eventSourceText)
     ? dateIso(eventSourceText, Number(eventSourceText.match(/\b(20\d{2})\b/)?.[1] ?? new Date().getUTCFullYear()))
     : "";
   const requestDateText = `${order.rawOutcome} ${String(order.structured.deadline ?? "")}`;

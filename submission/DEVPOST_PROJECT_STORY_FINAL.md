@@ -74,7 +74,7 @@ Testing also found small wording problems that could cause large mistakes. For e
 - Human choice kept inside the visible planning conversation
 - Persistent receipts with the exact before and after state
 - Distinct travel, renovation, event, interview, practice and general planning surfaces
-- 368 passing tests, including 20 repeated Spotlight transaction runs
+- 373 passing tests, including 20 repeated Spotlight transaction runs
 - Three calls to the first useful action in the measured production route
 
 ## What we learned

@@ -49,7 +49,7 @@ Proof to show:
 - The updated plan persists through reload and safely returns the same result
   when the accepted action is repeated.
 - D1 stores plan history and R2 stores files and evidence.
-- The release passes 368 tests and 20 repeated Spotlight transaction runs.
+- The release passes 373 tests and 20 repeated Spotlight transaction runs.
 
 ## Concrete proof story
 
@@ -102,7 +102,7 @@ refine the plan together.
 | One update, safe repeat | Revision 1 to 2 receipt retained after repeat and reload | Video + gallery image 5 |
 | The person and Codex use the same live plan | Public WebMCP exchange and page tool registry | Video + gallery image 3 |
 | Three calls to the first useful action, no failures | Accepted effort receipt | Devpost + README |
-| 368 tests and 20 repeated transaction runs | Repository test gate and v245 acceptance | README + repository |
+| 373 tests and 20 repeated transaction runs | Repository test gate and v245 acceptance | README + repository |
 | Multiple plan types use one adaptable system | Live product templates and adaptive compiler | Video montage + README |
 | No credentials required | Browser-local Spotlight and public Site | Testing instructions |
 | Built during the submission period | First commit `1b03f6e`, 2026-08-26 09:30 AEST | Provenance file |

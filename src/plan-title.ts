@@ -1,5 +1,14 @@
 const genericRoughPlan = /^(?:travel|renovation|event|adaptive|general)\s+rough plan$/i;
 
+const collapseRepeatedBrief = (value: string): string => {
+  const words = value.trim().split(/\s+/);
+  if (words.length < 4 || words.length % 2 !== 0) return value.trim();
+  const midpoint = words.length / 2;
+  const first = words.slice(0, midpoint).join(" ");
+  const second = words.slice(midpoint).join(" ");
+  return first.localeCompare(second, undefined, { sensitivity: "base" }) === 0 ? first : value.trim();
+};
+
 const humanDate = (value: string): string => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
   const date = new Date(`${value}T12:00:00Z`);
@@ -53,7 +62,7 @@ export const resolvePlanTitle = (input: {
 }): string => {
   const proposed = input.proposed.trim();
   if (proposed && !genericRoughPlan.test(proposed)) return proposed;
-  const title = coreTitle(input.brief || proposed || "My plan");
+  const title = coreTitle(collapseRepeatedBrief(input.brief || proposed || "My plan"));
   const date = humanDate(input.start ?? "");
   return `${title}${date ? ` · ${date}` : ""}`.slice(0, 120);
 };

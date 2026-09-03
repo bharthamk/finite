@@ -10,7 +10,7 @@ not authorize submission.
 - Product source: `b196755208028262ebbcbb17d6eca8467477d596`
 - Live URL: https://finite.bharthamk.chatgpt.site/
 - Judge route: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
-- Gate: 368/368 tests, 20/20 repeated Spotlight transaction runs, production builds,
+- Gate: 373/373 tests, 20/20 repeated Spotlight transaction runs, production builds,
   revision 1→2 production receipt, replay/reload continuity, responsive proof
 - Submission deadline: 2026-09-04 06:00 AEST
 
@@ -41,8 +41,8 @@ is:
 - Final storyboard: `DEMO_VIDEO_STORYBOARD.md`
 - Final narration: `DEMO_VIDEO_SCRIPT.md`
 - Local upload package: `finite_submission_package_v245/`
-- Accepted master: `video/finite_v245_hackathon_film_v10.mp4`
-- Standalone captions: `video/finite_v245_hackathon_film_v10.en.srt`
+- Accepted master: `video/finite_v245_hackathon_film_v14.mp4`
+- Standalone captions: `video/finite_v245_hackathon_film_v14.en.srt`
 - Five gallery images and both thumbnails: `images/`
 - Screenshot intent, captions and alt text: `SCREENSHOT_AND_CAPTURE_PLAN.md`
 - Technical and judge-facing film certification: `VIDEO_QC_2026-09-01.md`

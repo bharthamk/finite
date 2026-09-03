@@ -101,9 +101,10 @@ if a later optional route refresh or presentation step fails.
 
 ## Verification
 
-The accepted v245 release passes 368 automated tests, 20 hostile Spotlight
-kernel transactions, TypeScript, production browser and Worker builds, client
-chunk limits and the submission consistency gate.
+The current source gate passes 373 automated tests, 20 hostile Spotlight kernel
+transactions, TypeScript, production browser and Worker builds, client chunk
+limits and the submission consistency gate. The acceptance record distinguishes
+the hosted v245 snapshot from later local remediation candidates.
 
 See the [v245 product acceptance record](./acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md)
 and [reproducible release guide](../REPRODUCIBLE_RELEASE.md).

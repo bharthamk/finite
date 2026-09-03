@@ -247,6 +247,7 @@ test("spotlight demo proves the native change-to-authority-to-receipt loop", () 
   assert.match(handoff.prompt, /start=spotlight-active&tour=spotlight&plan=1&fresh=1/);
   assert.match(handoff.prompt, /real already-active 18-day Europe plan/i);
   assert.match(handoff.prompt, /finite_record_change_event/i);
+  assert.ok(handoff.prompt.indexOf("First open the planning toolset") < handoff.prompt.indexOf("Then call finite_guide_view"));
   assert.match(handoff.prompt, /Add three nights in Paris/i);
   assert.match(handoff.prompt, /costDeltaMinor = 66000/i);
   assert.match(handoff.prompt, /evidenceRefs = \[evidence_current\]/i);
@@ -264,6 +265,7 @@ test("spotlight demo proves the native change-to-authority-to-receipt loop", () 
   assert.equal(handoff.copiedPayload.journeyIntent, "spotlight");
   assert.equal(handoff.copiedPayload.expectedPlanId, "plan_travel_europe");
   assert.match(handoff.prompt, /"journeyIntent":"spotlight"/);
+  assert.ok(handoff.prompt.length < 4_500, `Spotlight handoff was ${handoff.prompt.length} characters`);
   assert.doesNotMatch(handoff.prompt, /Run six prepared chapters/i);
   assert.doesNotMatch(handoff.prompt, /synthetic rainy-day change/i);
 });

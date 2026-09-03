@@ -75,6 +75,8 @@ test("judge-facing entry and Spotlight states are explicit about prerequisites a
   assert.match(publicGate, /ChatGPT sign-in required · Start with my plan/);
   assert.match(source, /Ready for WebMCP/);
   assert.match(source, /The live plan is ready for Codex to work through this change/);
+  assert.match(source, /WebMCP browser required/);
+  assert.match(source, /Open this route in ChatGPT or Chrome with WebMCP enabled/);
   assert.doesNotMatch(source, /Codex is reading the same active plan you can see/);
   assert.match(source, /Sharing unavailable · local demo/);
   assert.match(styles, /\.header-action--share:disabled/);
@@ -857,6 +859,8 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(styles, /\.starter-plan__customise \{/);
   assert.match(styles, /\.starter-plan__notice \{[^}]*padding:11px[^}]*font-size:\.82rem/);
   assert.match(source, /arrivalProgressionFromStarter\(opened\.order, starter\)/);
+  assert.match(source, /arrivalBudgetOverageMinor\(starter\) > 0/);
+  assert.match(source, /The category budgets exceed the total\. Reduce one or more categories before starting Managing\./);
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);
   assert.match(source, /runtime\.compileIntakeToDraft\(\{ preparedIntake: progression\.intake \}\)/);
   assert.match(source, /prepareArrivalPlanDraft\(latest\)/);
@@ -925,7 +929,9 @@ test("a reality change reads as one human decision and leaves a visible outcome"
   assert.match(source, />Use this option<\/button>/);
   assert.match(source, />Confirm and update plan<\/button>/);
   assert.match(source, /The change is now part of your plan\./);
-  assert.match(source, /This updates the plan\. Booking, buying, cancelling, and contacting people remain separate real-world actions\./);
+  assert.match(source, /changes\.join\("\. "\)/);
+  assert.match(source, /This updates the plan\.<\/p>/);
+  assert.doesNotMatch(source, /Booking, buying, cancelling, and contacting people remain separate real-world actions\./);
   assert.match(source, /Choose an option to review its exact effect on the plan\./);
   assert.match(source, /item\.receiptType === "plan_option" && item\.toRevision === kernel\.revision/);
   assert.match(styles, /\.change-context \{/);

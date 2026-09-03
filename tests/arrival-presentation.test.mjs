@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, isValidPlanDateRange, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
+import { allocateWholePlanUnits, arrivalInputIsWorkflowOnly, arrivalUsesCodexWaitingWorkspace, arrivalUsesManualWorkspace, hasInterpretationDetail, humanLabel, inputKindLabel, inputSurfaceLabel, interpretationNeedsForDisplay, interpretationSourcesForDisplay, isValidPlanDateRange, renderHumanValue, renderTextList, starterPlanForArrival } from "../dist-test/src/arrival-presentation.js";
 import { resolvePlanTitle } from "../dist-test/src/plan-title.js";
 
 test("legacy generic accepted names project as useful plan names", () => {
@@ -12,6 +12,16 @@ test("legacy generic accepted names project as useful plan names", () => {
   assert.equal(resolvePlanTitle({ proposed: "General rough plan", brief: "Plan a two-day strategy retreat for six people in Sydney next month, with no overnight stay." }), "Sydney strategy retreat");
   assert.equal(resolvePlanTitle({ proposed: "General rough plan", brief: "Plan the quarterly priorities, with the leadership team." }), "Quarterly priorities");
   assert.equal(resolvePlanTitle({ proposed: "Quarterly launch", brief: "Ignored" }), "Quarterly launch");
+  assert.equal(resolvePlanTitle({ proposed: "Event rough plan", brief: "QC dinner for twelve friends QC dinner for twelve friends", start: "2026-09-12" }), "QC dinner for twelve friends · 12 Sept 2026");
+});
+
+test("weighted starter allocations conserve every whole-unit total", () => {
+  const split = [["venue", "Venue", 25], ["food", "Food", 35], ["production", "Production", 25], ["contingency", "Contingency", 15]];
+  for (const total of [1, 2, 3, 10, 99, 650, 999]) {
+    const allocated = allocateWholePlanUnits(total, split);
+    assert.equal(allocated.reduce((sum, entry) => sum + entry[3], 0), total);
+    assert(allocated.every((entry) => Number.isSafeInteger(entry[3]) && entry[3] >= 0));
+  }
 });
 
 test("arrival interpretation renders consumer language without raw JSON or internal paths", () => {
@@ -402,6 +412,23 @@ test("a stated event headcount replaces the dinner template default", () => {
   const drinks = starter.sections.find((section) => section.sectionId === "resources").items.find((item) => item.itemId === "starter_drinks");
   assert.equal(drinks.fields.cost, "");
   assert.doesNotMatch(String(drinks.fields.notes), /AUD 0/);
+});
+
+test("a manual dinner brief conserves its supplied budget and does not repeat the generic money question", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_qc_dinner", version: 1, status: "waiting_for_codex",
+    rawOutcome: "QC dinner for twelve friends", structured: { planningMode: "manual", deadline: "12 September 2026 at 7 pm", finiteLimit: "AUD 650", hardConstraint: "Vegetarian main and two gluten-free guests" },
+    attachments: [], inputs: [], pendingClarification: null, interpretation: null, lastOperatorCheckpoint: 0,
+    createdAt: "2026-09-03T00:00:00.000Z", updatedAt: "2026-09-03T00:00:00.000Z", checksum: "9".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.equal(starter.family, "event");
+  assert.equal(starter.title, "QC dinner for twelve friends · 12 Sept 2026");
+  assert.equal(starter.overview.totalBudget, "650");
+  assert.equal(starter.overview.categoryAllocated, 650);
+  const moneyQuestions = starter.sections.find((section) => section.sectionId === "money").openQuestions.map((question) => question.prompt);
+  assert.equal(moneyQuestions.some((question) => /is money relevant/i.test(question)), false);
+  assert.deepEqual(moneyQuestions, ["Should the AUD 650 budget include alcohol, or only food and non-alcoholic drinks?"]);
 });
 
 test("a general workshop keeps stated participants as editable plan data", () => {

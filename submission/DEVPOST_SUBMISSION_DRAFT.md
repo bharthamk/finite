@@ -93,5 +93,5 @@ WebMCP operation; ChatGPT's in-app browser for live WebMCP testing; and Qwen3-TT
 ## Release proof
 
 - Live product: Finite v245
-- Automated suite: 368 passing tests
+- Automated suite: 373 passing tests
 - Repeated Spotlight transaction runs: 20/20

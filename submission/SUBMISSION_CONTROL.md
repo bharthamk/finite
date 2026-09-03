@@ -15,9 +15,9 @@ submission.
 - [x] Single Devpost field map and final project story.
 - [x] Exact judge testing instructions.
 - [x] Criterion-by-criterion evidence map.
-- [x] 368 passing tests and 20/20 repeated Spotlight transaction runs.
-- [x] Final 1:56.5 full-HD film v10 with 1.5x narration, original score, burned
-  captions and selectable English subtitles.
+- [x] 373 passing tests and 20/20 repeated Spotlight transaction runs.
+- [x] Final 2:12.4 full-HD film v14 with one continuous narration take,
+  original score, burned captions and selectable English subtitles.
 - [x] Final film decode, black-frame scan, loudness measurement, contact-sheet
   review and encoded-master Whisper transcription.
 - [x] Five gallery images, 3:2 Devpost thumbnail and 16:9 video thumbnail.
@@ -29,7 +29,7 @@ submission.
 - Repository: https://github.com/bharthamk/finite
 - Tagline: **Change your plans without rebuilding them.**
 - Story source: `DEVPOST_PROJECT_STORY_FINAL.md`.
-- Product film: no on-camera footage; use the accepted product-led v10 master.
+- Product film: no on-camera footage; use the accepted product-led v14 master.
 - Gallery: five images in the order recorded in
   `SCREENSHOT_AND_CAPTURE_PLAN.md`.
 - Contributor and entrant fields: use the details already entered by Benji in

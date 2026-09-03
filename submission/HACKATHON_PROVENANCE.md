@@ -27,7 +27,7 @@ began. The repository includes the imperative registrations in
 and executable WebMCP quality, cancellation, authority, endurance, and hostile
 transaction tests under `tests/`.
 
-The final source gate is 368/368 tests plus TypeScript, production client and
+The final source gate is 373/373 tests plus TypeScript, production client and
 Worker builds, client chunk budget, and diff integrity. The accepted public
 transaction and deployment facts are recorded in
 `docs/acceptance/FINITE_V245_PRODUCT_ACCEPTANCE_2026-09-03.md`.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arrivalContinuityTasks, arrivalProgressionFromStarter } from "../dist-test/src/arrival-progression.js";
+import { arrivalBudgetOverageMinor, arrivalContinuityTasks, arrivalProgressionFromStarter } from "../dist-test/src/arrival-progression.js";
 import { starterPlanForArrival, workspaceInterpretationForConstruction } from "../dist-test/src/arrival-presentation.js";
 import { compileBuiltInProfiles } from "../dist-test/src/profiles.js";
 import { MemoryStorage, PlanCatalogStore, PlanSnapshotStore } from "../dist-test/src/persistence.js";
@@ -95,6 +95,27 @@ test("an unknown total carries category forecast into a finite valid allocation"
   assert.deepEqual(progression.intake.entityValues.trip_days, { days: 3 });
   assert.deepEqual(progression.intake.entityValues.booked_segment_days, { days: 3 });
   assert.equal(progression.intake.dependencies.some((dependency) => dependency.dependencyId === "budget_overallocated"), false);
+});
+
+test("an over-allocated draft remains a blocking intake conflict instead of entering Managing", async () => {
+  const candidate = structuredClone(starter);
+  candidate.overview.totalBudget = "650";
+  candidate.overview.moneyState = "positive";
+  candidate.overview.categories = [
+    item("venue", "Venue", { title: "Venue", amount: "163", moneyRole: "cost" }),
+    item("food", "Food", { title: "Food", amount: "228", moneyRole: "cost" }),
+    item("production", "Production", { title: "Production", amount: "163", moneyRole: "cost" }),
+    item("contingency", "Contingency", { title: "Contingency", amount: "98", moneyRole: "cost" }),
+  ];
+  assert.equal(arrivalBudgetOverageMinor(candidate), 200);
+  const progression = arrivalProgressionFromStarter({ ...order, orderId: "arrival_overallocated_01" }, candidate);
+  assert.equal(progression.intake.dependencies.find((dependency) => dependency.dependencyId === "budget_overallocated")?.blocking, true);
+  const profiles = await compileBuiltInProfiles();
+  const storage = new MemoryStorage();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(storage), "travel", new PlanCatalogStore(storage));
+  const assessed = await runtime.assessPlanIntake(progression.intake);
+  assert.equal(assessed.code, "INTAKE_FACTS_CONFLICT");
+  assert(assessed.conflicts.some((conflict) => conflict.code === "FINITE_TOTAL_CONFLICT"));
 });
 
 test("manual progression compiles every built-in planning family", async () => {

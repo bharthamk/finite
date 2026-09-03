@@ -22,7 +22,7 @@
 <p align="center">
   <a href="https://github.com/bharthamk/finite/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/bharthamk/finite/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Release v245" src="https://img.shields.io/badge/live_release-v245-d9f45f?labelColor=123d34">
-  <img alt="368 tests passing" src="https://img.shields.io/badge/tests-368%20passing-d9f45f?labelColor=123d34">
+  <img alt="373 tests passing" src="https://img.shields.io/badge/tests-373%20passing-d9f45f?labelColor=123d34">
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f3eee5?labelColor=123d34"></a>
 </p>
 
@@ -190,7 +190,7 @@ surfaces are:
 | [`src/`](./src) | Visible product, adaptive workspaces, shared planning engine and WebMCP actions |
 | [`worker/`](./worker) | Cloudflare APIs for plan history, collaboration, publishing and D1/R2 persistence |
 | [`db/`](./db) and [`drizzle/`](./drizzle) | Durable data model and ordered migrations |
-| [`tests/`](./tests) | 368 tests covering calculations, plan changes, persistence, collaboration, WebMCP and complete journeys |
+| [`tests/`](./tests) | 373 tests covering calculations, plan changes, persistence, collaboration, WebMCP and complete journeys |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | End-to-end design, state transitions and data flow |
 | [`docs/acceptance/`](./docs/acceptance) | Dated product and engineering acceptance records |
 | [`docs/engineering/`](./docs/engineering) | Deeper technical and endurance reports |
@@ -246,7 +246,7 @@ deployed application build.
 | Evidence | Result |
 |---|---|
 | **Clean checkout** | All 22 local migrations, TypeScript checks, the production client build and the Worker build pass. |
-| **Automated coverage** | **368/368 tests** pass across planning, change handling, persistence, collaboration, WebMCP and complete user journeys. |
+| **Automated coverage** | **373/373 tests** pass across planning, change handling, persistence, collaboration, WebMCP and complete user journeys. |
 | **Repeated change stress** | **20/20** separate Spotlight transaction runs preserve the plan, survive reload and return the same result when safely retried. |
 | **Live WebMCP route** | The public Spotlight advertised all seven stable tools, opened the current plan and tested the Paris change across 26 connected combinations. |
 | **Production experience** | The public root returns the v245 marker; the browser-local demo survives reload; the 390-pixel layout has no horizontal overflow or console errors. |

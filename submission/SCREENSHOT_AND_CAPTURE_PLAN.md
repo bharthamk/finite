@@ -1,16 +1,16 @@
 # Finite gallery and thumbnail plan
 
-Five 16:9 images are prepared from the public v245 product and Spotlight. In
-order, they explain the promise, breadth, WebMCP connection, concrete comparison
-and durable result.
+Five images are prepared from the v245 product and Spotlight. In order, they
+explain the promise, breadth, WebMCP connection, concrete comparison and durable
+result. The first and final images use Devpost's recommended 3:2 ratio.
 
 ## 1. Product promise
 
 - File: `images/01_product_thesis.png`
 - Caption: **Change your plans without rebuilding them. Finite keeps you and
   Codex working from the same live plan.**
-- Alt text: **Finite product overview showing different ways to begin planning
-  and the shared live-plan connection between Codex and the product.**
+- Alt text: **A restaurant model showing the person shaping the outcome, Codex
+  working through it and Finite keeping the live plan together through WebMCP.**
 
 ## 2. One system shaped around the work
 
@@ -41,20 +41,22 @@ and durable result.
 - File: `images/05_accepted_receipt.png`
 - Caption: **The chosen direction becomes revision 2 with the complete before
   and after result saved for the next planning conversation.**
-- Alt text: **Finite revision 2 showing Paris extended from four nights to
-  seven, the trip extended from 18 days to 21 and A$910 remaining spare.**
+- Alt text: **Finite revision 2 receipt showing Paris extended from four nights
+  to seven, the trip extended from 18 days to 21, A$910 remaining free, the
+  protected boundaries and the user's approval authority.**
 
 ## Thumbnail
 
 - Devpost 3:2 thumbnail: `images/finite_devpost_thumbnail_3x2.png`
-- 16:9 video thumbnail: `images/finite_v245_submission_thumbnail.png`
+- 16:9 video thumbnail: `video/finite_v245_youtube_thumbnail.png`
 - Thumbnail promise: **Change your plans without rebuilding.**
 - Supporting line: **WebMCP connects Codex to the live plan.**
 
 ## Capture acceptance
 
 - [x] v245 product and evidence used.
-- [x] Five 1920x1080 gallery images.
+- [x] Five gallery images within Devpost's 5 MB limit, including 3:2 product
+  thesis and receipt images.
 - [x] Purpose-built 1800x1200 Devpost thumbnail.
 - [x] No personal account information or browser notifications.
 - [x] Text remains readable at Devpost gallery width.

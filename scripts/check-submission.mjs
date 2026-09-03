@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const releaseSource = "b196755208028262ebbcbb17d6eca8467477d596";
 const releaseLabel = "v245";
-const testBaseline = "368";
+const testBaseline = "373";
 const finalMode = process.argv.includes("--final");
 const liveUrl = "https://finite.bharthamk.chatgpt.site/";
 

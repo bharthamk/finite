@@ -16,7 +16,7 @@ npm test
 npm run build
 ```
 
-The current local gate is 368/368 tests, a successful TypeScript check, a
+The current local gate is 373/373 tests, a successful TypeScript check, a
 successful Vite client/Worker build, a clean-copy `drizzle-kit generate` no-op,
 and successful migration rehearsals both from an empty database and from a
 database stopped at `0008`. The gate also verifies that the production lab is

@@ -23,8 +23,8 @@ import { BrowserPlanInputRepository, HttpPlanInputRepository, type PlanInputKind
 import { BrowserPlanWorkRepository, HttpPlanWorkRepository, type ChecklistItem, type PlanAttachment, type PlanWorkResult } from "./plan-work.js";
 import { BrowserPlanLearningRepository, emptyRetrospective, HttpPlanLearningRepository, type PlanLearningResult, type PlanRetrospective, type ProfileMemory, type ProfileMemoryAction, type ProfileMemoryKind } from "./plan-learning.js";
 import { editablePlanFacts, type EditablePlanFact, type PlanFactChange } from "./plan-facts.js";
-import { arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
-import { candidateTradeoffLines } from "./option-presentation.js";
+import { arrivalBudgetOverageMinor, arrivalContinuityTasks, arrivalProgressionFromStarter, type ArrivalProgression } from "./arrival-progression.js";
+import { candidateTradeoffLines, floorRelationship, objectiveLabelForProfile } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
 import { installLocalDemoWriteGuard, localDemoInstallationKey, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
@@ -1301,15 +1301,7 @@ const revealChangeSummary = (): void => {
   window.requestAnimationFrame(() => root.querySelector<HTMLElement>(".change-summary")?.scrollIntoView({ behavior: "smooth", block: "center" }));
 };
 
-const objectiveLabel = (objective: string): string => ({
-  preserve_comfort: "Protect comfort",
-  preserve_experience: "Protect the guest experience",
-  preserve_buffer: "Protect breathing room",
-  preserve_contingency: "Protect contingency",
-  preserve_schedule: "Protect the handover",
-  balanced: "Smallest balanced change",
-  custom: "Custom route",
-}[objective] ?? objective.replaceAll("_", " "));
+const objectiveLabel = (objective: string): string => objectiveLabelForProfile(objective, runtime.kernel.profile.profileId);
 
 const currentArrival = (): ArrivalOrder | null => !newPlanDraftMode && arrivalResult.ok && arrivalResult.order ? arrivalResult.order : null;
 const currentMessageScope = (): string => {
@@ -1397,7 +1389,9 @@ const renderSpotlightActivity = (): string => {
             ? { step: "Blocked", title: "No workable direction yet.", detail: "Every version tested conflicts with a current boundary. Codex can explore another trade-off or work with you on what should change." }
           : kernel.activeEventId
             ? { step: "Checking", title: "Finite is testing the change against the whole plan.", detail: "The existing plan remains accepted while boundary-respecting combinations are compared." }
-            : { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "The live plan is ready for Codex to work through this change." };
+            : modelContext
+              ? { step: "Ready for WebMCP", title: "Open this route with Codex to run the live decision.", detail: "The live plan is ready for Codex to work through this change." }
+              : { step: "WebMCP browser required", title: "Open this route in ChatGPT or Chrome with WebMCP enabled.", detail: "Once WebMCP is available, Codex can enter this live plan and work through the change with you." };
   return `<section class="spotlight-activity" role="status" aria-live="polite" aria-atomic="true" aria-label="Finite and Codex activity">
     <span>${escapeHtml(state.step)}</span><div><strong>${escapeHtml(state.title)}</strong><p>${escapeHtml(state.detail)}</p></div>
   </section>`;
@@ -3967,7 +3961,7 @@ const renderOptions = (): string => {
         <dl class="option-card__why">
           <div><dt>Protects</dt><dd>${escapeHtml(objectiveLabel(candidate.objective))}</dd></div>
           <div><dt>Trades</dt><dd>${escapeHtml(candidateTradeoffLines(candidate).join(" · "))}</dd></div>
-          <div><dt>Why it works</dt><dd>${candidate.valid ? `${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)} stays at ${money(candidate.resultingBufferMinor)}${event ? `, above the ${money(event.minimumBufferMinor)} floor` : ""}; fixed items remain untouched${candidate.evidenceAssessments.length ? "; current evidence is bound" : ""}.` : escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</dd></div>
+          <div><dt>Why it works</dt><dd>${candidate.valid ? `${escapeHtml(runtime.kernel.profile.surface.nouns.buffer)} stays at ${money(candidate.resultingBufferMinor)}${event ? `, ${floorRelationship(candidate.resultingBufferMinor, event.minimumBufferMinor)} the ${money(event.minimumBufferMinor)} floor` : ""}; fixed items remain untouched${candidate.evidenceAssessments.length ? "; current evidence is bound" : ""}.` : escapeHtml(candidate.violations.map((violation) => violationMessage(violation.code)).join(" "))}</dd></div>
         </dl>
         <div class="option-card__delta"><span>Forecast change</span><strong>${candidate.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(candidate.netForecastDeltaMinor))}</strong></div>
         ${candidate.valid
@@ -4244,7 +4238,7 @@ const renderZone = (manifest: SurfaceManifest, zone: SurfaceZone): string => {
     const staged = kernel.stagedCandidate;
     const approved = staged && kernel.approval?.candidateId === staged.candidateId;
     const changes = staged ? candidateTradeoffLines(staged) : [];
-    body = staged ? `<div class="approval-copy"><p id="exact_approval_description">You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(" "))} This updates the plan. Booking, buying, cancelling, and contacting people remain separate real-world actions.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet" tabindex="-1" data-approval-confirmed>Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve" aria-describedby="exact_approval_description">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to review its exact effect on the plan.</p>`;
+    body = staged ? `<div class="approval-copy"><p id="exact_approval_description">You’re choosing <strong>${escapeHtml(objectiveLabel(staged.objective))}</strong>. ${escapeHtml(changes.join(". "))}${changes.length ? "." : ""} This updates the plan.</p><div><span>Forecast change</span><strong>${staged.netForecastDeltaMinor >= 0 ? "+" : "−"}${money(Math.abs(staged.netForecastDeltaMinor))}</strong></div><div><span>${escapeHtml(kernel.profile.surface.nouns.buffer)} left</span><strong>${money(staged.resultingBufferMinor)}</strong></div>${approved ? `<p class="quiet" tabindex="-1" data-approval-confirmed>Confirmed. ${escapeHtml(agenticName())} can now apply this exact update and bring back the result.</p>` : `<button class="button button--approve" data-action="approve" aria-describedby="exact_approval_description">Confirm and update plan</button><button class="text-button" data-action="return">Choose a different option</button>`}</div>` : `<p class="quiet">Choose an option to review its exact effect on the plan.</p>`;
   }
   const inputSection: PlanInputSection | null = zone.component === "finite_summary" ? "money" : zone.component === "constraint_panel" ? "boundaries" : null;
   const timelineSection = stageComponents.has(zone.component);
@@ -4889,6 +4883,7 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
     arrivalResult = opened;
     const starter = starterPlanForArrival(opened.order);
     if (!starter) throw new Error("ARRIVAL_WORKSPACE_NOT_READY");
+    if (arrivalBudgetOverageMinor(starter) > 0) throw new Error("PLAN_BUDGET_OVERALLOCATED");
     const progression = arrivalProgressionFromStarter(opened.order, starter);
     const currentDraft = runtime.pendingPlanDraft;
     let draftId = currentDraft && currentDraft.sourceArrival?.orderId === opened.order.orderId
@@ -4930,6 +4925,8 @@ const progressArrivalPlan = async (): Promise<void> => {
       ? "This rough plan still needs its current interpretation completed before it can start."
       : code === "PLAN_DRAFT_INVALID"
         ? "One saved detail does not yet fit the managed plan. Review the highlighted section or ask Codex to repair it, then try again."
+        : code === "PLAN_BUDGET_OVERALLOCATED"
+          ? "The category budgets exceed the total. Reduce one or more categories before starting Managing."
         : "Finite could not start this plan. Your draft remains available; please try again.");
     await render();
     publishClickActivationTiming(activationTimer, "failed");
