@@ -14,8 +14,7 @@ and improve the saved draft, but must not select the final submission control.
   `DEVPOST_PROJECT_STORY_FINAL.md`.
 - **Try it out / live app:** `https://finite.bharthamk.chatgpt.site/`
 - **Source code:** `https://github.com/bharthamk/finite`
-- **Video:** keep the temporary required placeholder until the final film is
-  accepted, uploaded and checked through public playback.
+- **Video:** https://youtu.be/Kr0X0l2P9Zc
 - **Built with:** add the tags under `Built with` below in that order. Do not
   pad the field to 25.
 - **Testing instructions:** paste the recommended route from
@@ -50,7 +49,7 @@ a second copy here.
 - Live app: https://finite.bharthamk.chatgpt.site/
 - Judge Spotlight: https://finite.bharthamk.chatgpt.site/?start=spotlight-active&tour=spotlight&plan=1&fresh=1
 - Public source repository: https://github.com/bharthamk/finite
-- Public YouTube demo: `[OWNER: paste public YouTube URL]`
+- Public YouTube demo: https://youtu.be/Kr0X0l2P9Zc
 
 ## Judge-only testing instructions
 

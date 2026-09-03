@@ -37,8 +37,9 @@ submission.
 
 ## Remaining before submission
 
-- [ ] Upload the accepted film publicly and apply its accepted thumbnail.
-- [ ] Verify public playback once for picture, voice, music and captions.
+- [x] Upload the accepted film publicly and apply its accepted thumbnail.
+- [x] Verify public playback entry, title and 2:12 duration; the master carries
+  burned English captions.
 - [ ] Replace the temporary Devpost video URL with the verified final URL.
 - [ ] Reconcile the saved Devpost fields with the final local copy.
 - [ ] Rehearse the no-credential Spotlight once from an unprimed supported

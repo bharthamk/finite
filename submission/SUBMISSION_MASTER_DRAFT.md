@@ -19,7 +19,7 @@ not authorize submission.
 - Entrant details: already supplied in the saved Devpost draft
 - Public repository: https://github.com/bharthamk/finite
 - Detected open-source license: MIT
-- Public YouTube demo: `[OWNER: URL]`
+- Public YouTube demo: https://youtu.be/Kr0X0l2P9Zc
 
 ## Primary copy
 
