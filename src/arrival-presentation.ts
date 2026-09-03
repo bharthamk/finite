@@ -139,7 +139,7 @@ export interface StarterPlanSection {
   openQuestions: Array<{ questionId: string; prompt: string }>;
   answers: Array<{ questionId: string; prompt: string; answer: string }>;
   custom?: boolean;
-  customSource?: "human" | "working";
+  customSource?: "human" | "working" | "starter";
 }
 
 export interface StarterPlanOverview {
@@ -532,7 +532,18 @@ const dateRangeIso = (value: string, fallbackYear: number): { start: string; end
   const weekday = "(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)";
   const dateToken = `(?:(?:${weekday})\\s+)?(?:\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${month})(?:\\s+20\\d{2})?|(?:${month})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+20\\d{2})?)`;
   const range = value.match(new RegExp(`\\b(${dateToken})\\s+(?:to|until|through|thru|–|—|-)\\s+(${dateToken})\\b`, "i"));
-  if (!range) return { start: "", end: "" };
+  if (!range) {
+    // Natural briefs commonly share the month and year across both days:
+    // "20 to 22 November 2026". Preserve both boundaries instead of treating
+    // the last date as the start and deriving a different duration.
+    const sharedMonth = value.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:to|until|through|thru|–|—|-)\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+(${month})(?:\\s+(20\\d{2}))?\\b`, "i"));
+    if (!sharedMonth) return { start: "", end: "" };
+    const year = Number(sharedMonth[4] ?? fallbackYear);
+    return {
+      start: dateIso(`${sharedMonth[1]} ${sharedMonth[3]}`, year),
+      end: dateIso(`${sharedMonth[2]} ${sharedMonth[3]}`, year),
+    };
+  }
   const explicitYear = Number(`${range[1]} ${range[2]}`.match(/\b(20\d{2})\b/)?.[1] ?? fallbackYear);
   return { start: dateIso(range[1]!, explicitYear), end: dateIso(range[2]!, explicitYear) };
 };
@@ -992,7 +1003,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       fields: dinnerMenuFields.map((entry) => ({ ...entry })),
       keywords: ["menu", "dish", "course", "vegetarian", "allergy", "nut", "food", "prep"],
       custom: true,
-      customSource: "working",
+      customSource: "starter",
     });
   }
   if (family === "general" && isInterviewPlan(requestSource)) {
@@ -1005,7 +1016,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       fields: interviewEvidenceFields.map((entry) => ({ ...entry })),
       keywords: ["interview", "competency", "story", "stories", "achievement", "evidence", "result", "proof"],
       custom: true,
-      customSource: "working",
+      customSource: "starter",
     });
   }
   if (family === "general" && isRecurringPracticePlan(requestSource) && !isInterviewPlan(requestSource)) {
@@ -1018,7 +1029,7 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
       fields: practiceLogFields.map((entry) => ({ ...entry })),
       keywords: ["practice", "study", "session", "lesson", "progress", "confidence", "evidence", "reflection"],
       custom: true,
-      customSource: "working",
+      customSource: "starter",
     });
   }
   order.inputs.forEach((input) => {

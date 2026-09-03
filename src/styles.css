@@ -922,7 +922,7 @@ button.entry-route[data-loading="true"]>em::before { content:"Opening · "; }
 .starter-plan__preview-footer p { margin:0; color:var(--muted); }
 .starter-plan__customise { display:flex; justify-content:flex-start; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--paper); }
 .starter-plan__customise .button { min-width:230px; color:var(--deep); background:transparent; border-color:var(--deep); }
-.starter-plan__completion { display:flex; justify-content:flex-end; align-items:center; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--panel); }
+.starter-plan__completion { display:flex; justify-content:flex-end; align-items:center; gap:12px; padding:20px clamp(24px,4vw,54px); border-top:1px solid var(--line); background:var(--panel); }
 .starter-plan__completion .button { min-width:190px; color:var(--deep); background:var(--signal); border-color:var(--deep); }
 
 .settings-header { grid-template-columns:auto minmax(0,1fr) auto; }

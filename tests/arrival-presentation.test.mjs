@@ -221,6 +221,16 @@ test("a natural travel brief turns stated nights and base currency into real pla
   assert.ok(currencyRecords.every((item) => item.fields.currency === "NZD"));
 });
 
+test("a shared-month date range keeps both dates from a natural travel brief", () => {
+  const order = {
+    orderVersion: "finite-arrival-order.v1", orderId: "arrival_hobart_shared_month", version: 1, status: "waiting_for_codex",
+    rawOutcome: "Plan a weekend trip to Hobart for two people from 20 to 22 November 2026 with an AUD 2,800 total.", structured: { planningMode: "codex" }, attachments: [], inputs: [], pendingClarification: null, interpretation: null,
+    lastOperatorCheckpoint: null, createdAt: "2026-09-03T00:00:00.000Z", updatedAt: "2026-09-03T00:00:00.000Z", checksum: "c".repeat(64),
+  };
+  const starter = starterPlanForArrival(order);
+  assert.deepEqual([starter.overview.start, starter.overview.end], ["2026-11-20", "2026-11-22"]);
+});
+
 test("a domestic Hobart weekend respects place, duration, party size, and local trip semantics", () => {
   const order = {
     orderVersion: "finite-arrival-order.v1", orderId: "arrival_hobart_weekend", version: 1, status: "waiting_for_codex",

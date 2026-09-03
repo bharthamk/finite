@@ -59,6 +59,7 @@ test("Codex handoff remains useful before an arrival exists and adapts inside th
   assert.equal(handoff.copiedPayload.expectedProfileHash, null);
   assert.equal(handoff.copiedPayload.expectedSnapshotHash, null);
   assert.match(handoff.prompt, /"entryIntent":"start_new"/);
+  assert.match(handoff.prompt, /https:\/\/finite\.example\/\?start=guided-active/);
   assert.equal(handoff.prompt.includes("expectedPlanId"), false);
   assert.equal(handoff.prompt.includes("orderId"), false);
   assert.match(handoff.detail, /this Codex task/i);

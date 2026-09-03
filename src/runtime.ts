@@ -661,10 +661,29 @@ export class FinitePlanRuntime {
     if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "OBJECT_REQUIRED", prompt: "Provide a typed intake object." }], acceptedStateChanged: false };
     if (JSON.stringify(input).length > 30_000) return { ok: false, code: "INVALID_PLAN_INTAKE", conflicts: [{ path: "$", code: "INTAKE_TOO_LARGE", prompt: "Keep the human-fact packet under 30,000 serialized characters." }], acceptedStateChanged: false };
     const facts = clone(input as PlanIntakeInput);
-    constructionAssumptions.push(...clone(facts.assumptions ?? []));
     const ask = (path: string, code: string, prompt: string): void => { missing.push({ path, code, prompt }); };
     const conflict = (path: string, code: string, prompt: string): void => { conflicts.push({ path, code, prompt }); };
     const boundedText = (value: unknown, max: number): boolean => typeof value === "string" && Boolean(value.trim()) && value.length <= max;
+    if (facts.assumptions !== undefined && !Array.isArray(facts.assumptions)) {
+      conflict("assumptions", "ASSUMPTIONS_INVALID", "Provide assumptions as a bounded list of path, integer value, basis, source paths, and status records.");
+    } else {
+      for (let index = 0; index < (facts.assumptions ?? []).length; index += 1) {
+        const assumption = facts.assumptions![index]!;
+        const path = `assumptions.${index}`;
+        if (!assumption || typeof assumption !== "object"
+          || !boundedText(assumption.path, 200)
+          || !Number.isSafeInteger(assumption.value)
+          || !boundedText(assumption.basis, 500)
+          || !Array.isArray(assumption.sourcePaths)
+          || assumption.sourcePaths.length > 20
+          || assumption.sourcePaths.some((sourcePath) => !boundedText(sourcePath, 200))
+          || !(assumption.status === "working" || assumption.status === "human_confirmed")) {
+          conflict(path, "ASSUMPTION_INVALID", "Give each assumption a bounded path, safe integer value, basis, source paths, and working or human-confirmed status.");
+          continue;
+        }
+        constructionAssumptions.push(clone(assumption));
+      }
+    }
     const adaptiveShell = facts.constructionMode === "adaptive_shell";
     if (facts.sourceArrival) {
       if (!boundedText(facts.sourceArrival.orderId, 200)

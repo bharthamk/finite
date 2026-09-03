@@ -70,6 +70,21 @@ test("the page-start entry proxy stays registered while the adapter supplies its
   assert.equal(entered.operationProof.toolName, "finite_enter_kitchen");
 });
 
+test("start-new entry ignores an unrelated arrival still present in the browser", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const host = new MemoryModelContext();
+  const arrivals = new MemoryArrivalRepository();
+  await arrivals.create({ idempotencyKey: "older-draft-0001", rawOutcome: "An unrelated draft", sourceSurface: "site" });
+  const adapter = new FinitePlanWebMCPAdapter(host, runtime, undefined, arrivals);
+  await adapter.register();
+
+  const entered = await host.execute("finite_enter_kitchen", { entryIntent: "start_new" });
+  assert.equal(entered.code, "KITCHEN_ENTERED");
+  assert.equal(entered.arrival.status, "none");
+  assert.equal(entered.operatorPacket.nextAction.stage, "outcome_required");
+});
+
 test("a Site-selected Spotlight enters its bounded operator route without inventing a second human menu choice", async () => {
   const profiles = await compileBuiltInProfiles();
   const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");

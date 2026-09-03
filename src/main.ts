@@ -590,7 +590,7 @@ const syncAdaptiveChecklist = async (): Promise<void> => {
 };
 const startupEntryMode = startupParams.get("start");
 let forceArrivalSurface = startupEntryMode === "fresh";
-let newPlanDraftMode = startupEntryMode === "fresh";
+let newPlanDraftMode = startupEntryMode === "fresh" || startupEntryMode === "codex-live" || startupEntryMode === "live-demo";
 let entryGatewayOpen = false;
 let entryPrefill = finiteEntryExample(startupParams.get("example"))?.outcome ?? "";
 type CodexLaunchMode = "live" | "demo";
@@ -683,8 +683,9 @@ const adapter = modelContext ? new FinitePlanWebMCPAdapter(modelContext, runtime
   if (toolName.includes("arrival") || result.code.startsWith("ARRIVAL_") || result.code === "ORDER_VERSION_CONFLICT" || ["PLAN_ACTIVATED", "PLAN_AMENDMENT_ACTIVATED", "IDEMPOTENT_PLAN_ACTIVATION_REPLAY"].includes(result.code)) arrivalResult = await arrivalRepository.open();
   const guideRequest = result.code === "VIEW_GUIDED" ? result.guide as FiniteGuideViewRequest : null;
   const preservePausedDemoView = (demoPlaybackMode || guideCurrentPlanMode) && demoPaused;
-  const preserveUnsavedCurrentSurface = guideRequest?.surface === "current" && guideRequest.refresh !== true;
-  const manifest = preservePausedDemoView || preserveUnsavedCurrentSurface || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
+  const preserveUnsavedGuidedView = guideRequest?.refresh !== true && (guideRequest?.surface === "current"
+    || (guideRequest?.surface === "arrival" && Boolean(root.querySelector(".arrival-main"))));
+  const manifest = preservePausedDemoView || preserveUnsavedGuidedView || ["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"].includes(result.code) ? await compileSurfaceManifest(runtime.kernel.profile, runtime.kernel) : await render();
   const guidedView = guideRequest ? applyCodexSpotlight(guideRequest) : null;
   return {
     toolName,
@@ -977,7 +978,9 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   const disclosure = element instanceof HTMLDetailsElement
     ? element
     : element.closest<HTMLDetailsElement>("details") ?? element.querySelector<HTMLDetailsElement>("details");
-  if (disclosure) disclosure.open = true;
+  // Highlight the collection of section headers without opening its first
+  // section. Individual section targets still open their own disclosure.
+  if (disclosure && request.target !== "section_headers") disclosure.open = true;
   if (request.target === "priority") {
     element.dataset.codexPriority = "true";
     element.classList.add("is-codex-priority");
@@ -1340,7 +1343,9 @@ const pendingDraftMatchesArrival = (): boolean => {
     && source.orderChecksum === orientation.exactOrderChecksum;
 };
 
-const currentCodexHandoff = () => createCodexHandoff({
+const currentCodexHandoff = () => {
+  const handoffOrder = newPlanDraftMode && !(demoPlaybackMode && demoDepth === "spotlight") ? null : currentArrival();
+  return createCodexHandoff({
   siteOrigin: location.origin,
   inline: Boolean(modelContext),
   agenticName: agenticName(),
@@ -1349,10 +1354,10 @@ const currentCodexHandoff = () => createCodexHandoff({
   guidePlanSurface: guideCurrentPlanMode && (new URLSearchParams(location.search).get("plan") === "1" || (!forceArrivalSurface && runtime.hasActivationReceipt() && !isWaitingArrivalStatus(currentArrival()?.status))),
   demoPlayback: demoPlaybackMode,
   demoDepth,
-  order: currentArrival(),
+  order: handoffOrder,
   entryIntent: demoPlaybackMode && demoDepth === "spotlight"
     ? "continue_current"
-    : currentArrival()
+    : handoffOrder
     ? "resume_handoff"
     : new URLSearchParams(location.search).has("plan") || new URLSearchParams(location.search).has("kitchen") || new URLSearchParams(location.search).has("lab")
       ? "continue_current"
@@ -1364,7 +1369,8 @@ const currentCodexHandoff = () => createCodexHandoff({
     revision: runtime.kernel.revision,
     snapshotHash: runtime.kernel.acceptedTruth.snapshotHash,
   },
-});
+  });
+};
 
 const renderCodexHandoffButton = (): string => {
   const handoff = currentCodexHandoff();
@@ -1490,6 +1496,33 @@ const continueArrivalWhileCodexStarts = async (): Promise<void> => {
   announce(arrivalResult.ok ? `Your rough plan is open. Keep editing while ${agenticName()} joins from the latest saved state.` : `The rough plan could not be opened: ${arrivalResult.code}`);
   await render();
   root.querySelector<HTMLElement>("[data-starter-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+const reviewArrivalForCodexDevelopment = async (): Promise<void> => {
+  const order = currentArrival();
+  if (busy || !order || order.status !== "proposed_plan_ready") return;
+  busy = true;
+  announce(`Reviewing this exact rough plan before ${agenticName()} develops it further…`);
+  await render();
+  const reviewed = await arrivalRepository.reviewWorkspace({
+    orderId: order.orderId,
+    expectedVersion: order.version,
+    expectedChecksum: order.checksum,
+    sourceSurface: modelContext ? "inline" : "site",
+  });
+  busy = false;
+  if (!reviewed.ok) {
+    announce(reviewed.code === "ORDER_VERSION_CONFLICT"
+      ? "Something changed while you were reviewing. Check the latest rough plan, then try again."
+      : "Finite could not save this review. Your rough plan is unchanged; please try again.");
+    await render();
+    return;
+  }
+  arrivalResult = reviewed;
+  await adapter?.refreshContextualTools();
+  announce(`This exact rough plan is reviewed. ${agenticName()} can now build the next version from it.`);
+  await render();
+  root.querySelector<HTMLDialogElement>("[data-codex-handoff-dialog]")?.showModal();
 };
 
 const bindCodexHandoffInteractions = (): void => {
@@ -2174,9 +2207,9 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     <details class="starter-overview__add"><summary>＋ Add budget category</summary><form data-arrival-form="workspace-category-add" data-module-id="money"><label><span>Category</span><input name="field_title" required maxlength="120" placeholder="e.g. Accommodation"></label><label><span>Budget (${escapeHtml(currency)})</span><input name="field_amount" type="number" min="0" step="1" value="0"></label><input name="field_currency" type="hidden" value="${escapeHtml(currency)}"><input name="field_moneyRole" type="hidden" value="cost">${renderStarterCertaintyToggle(false)}<button class="button" type="submit" ${busy ? "disabled" : ""}>Add category</button></form></details></div>
   </dialog>`;
   const modules = starter.sections.map((section) => {
-    const isCodexPriority = followCodexEnabled && section.sectionId === prioritySectionId;
+    const isCodexPriority = !manual && followCodexEnabled && section.sectionId === prioritySectionId;
     const workspaceLabel = section.custom
-      ? `Custom section · ${section.customSource === "working" ? `${agenticName()} built` : "Added by you"}`
+      ? `Custom section · ${section.customSource === "working" ? `${agenticName()} built` : section.customSource === "human" ? "Added by you" : "Included for this plan"}`
       : `${starter.familyLabel} workspace`;
     const optionParentId = (option: import("./arrival-presentation.js").StarterPlanItem): string => option.parentRecordId || section.items[0]?.itemId || "";
     const optionsForRecord = (item: import("./arrival-presentation.js").StarterPlanItem): import("./arrival-presentation.js").StarterPlanItem[] => section.options.filter((option) => optionParentId(option) === item.itemId);
@@ -2377,13 +2410,17 @@ const renderStarterPlan = (order: ArrivalOrder): string => {
     ${overviewMarkup}
     <div class="starter-workspace">${modules}</div>
     <div class="starter-plan__customise"><button class="button button--secondary" type="button" data-action="open-custom-workspace" aria-haspopup="dialog">Customise workspace</button></div>
-    <div class="starter-plan__completion"><button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button></div>
+    <div class="starter-plan__completion">
+      ${!manual && order.status === "proposed_plan_ready" ? `<button class="text-button" type="button" data-action="review-for-codex" ${busy ? "disabled" : ""}>Review, then keep building with ${escapeHtml(agenticName())}</button>` : ""}
+      <button class="button button--progress" type="button" data-action="progress-arrival-plan" ${busy ? "disabled" : ""}>${busy ? "Starting…" : "Start managing"}</button>
+    </div>
     ${customWorkspaceMarkup}
     ${starter.interpretationIsCurrent ? "" : `<div class="starter-plan__preview-footer"><p>Your changes are saved. Keep editing manually or ask ${escapeHtml(agenticName())} to work from the latest version.</p></div>`}
   </section>`;
 };
 
-const arrivalStatus = (order: ArrivalOrder): { label: string; title: string; detail: string } => {
+const arrivalStatus = (order: ArrivalOrder, hasPendingPlanDraft = false): { label: string; title: string; detail: string } => {
+  if (hasPendingPlanDraft) return { label: "Ready for your decision", title: "A proposed plan is ready.", detail: "Review it below, keep shaping it with Codex, or save it as your working plan." };
   if (order.status === "waiting_for_codex" && arrivalUsesCodexWaitingWorkspace(order) && !order.interpretation) return { label: `${agenticName()} handoff ready`, title: `Your rough plan is open while ${agenticName()} starts.`, detail: `Keep editing here. ${agenticName()} will enter from the latest saved version when you paste the copied prompt.` };
   if (order.status === "waiting_for_codex" && arrivalUsesManualWorkspace(order) && !order.interpretation) return { label: "Manual plan", title: "Your planning workspace is ready.", detail: `Build the whole plan yourself, or bring in ${agenticName()} whenever useful.` };
   if (order.status === "waiting_for_codex" && order.interpretation?.complete) return { label: "Draft updated", title: "Your starter plan includes your latest change.", detail: `Keep shaping it here or ask ${agenticName()} to develop the updated draft when you are ready.` };
@@ -2566,13 +2603,14 @@ const renderEntryGateway = (): void => {
 const renderArrival = (manifest: SurfaceManifest): void => {
   const order = currentArrival();
   const freshArrivalEntry = !order && newPlanDraftMode;
-  const status = order ? arrivalStatus(order) : null;
   const interpretation = order?.interpretation;
   const question = order?.pendingClarification;
   const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
   const interpretationNeeds = interpretation ? interpretationNeedsForDisplay(interpretation.missing, question ?? null) : [];
   const inputTrail = order?.inputs.filter((input) => !arrivalInputIsWorkflowOnly(input)).slice(-5).reverse() ?? [];
-  const planDraftMarkup = order?.status === "awaiting_human_authority" && pendingDraftMatchesArrival() ? renderPlanDraft() : "";
+  const hasPendingPlanDraft = Boolean(order && runtime.pendingPlanDraft && pendingDraftMatchesArrival());
+  const planDraftMarkup = hasPendingPlanDraft ? renderPlanDraft() : "";
+  const status = order ? arrivalStatus(order, hasPendingPlanDraft) : null;
   const starterPlanMarkup = order ? renderStarterPlan(order) : "";
   const showStarterPlan = Boolean(starterPlanMarkup && !planDraftMarkup);
   surfaceRoot.dataset.profile = freshArrivalEntry ? "entry" : "arrival";
@@ -3545,6 +3583,7 @@ function bindArrivalInteractions(): void {
     if (textarea) { textarea.value = button.dataset.arrivalExample ?? ""; textarea.focus(); }
   }));
   root?.querySelector<HTMLButtonElement>("[data-action='confirm-plan']")?.addEventListener("click", (event) => { void confirmPlanDraft((event.currentTarget as HTMLButtonElement).dataset.draft ?? ""); });
+  root?.querySelector<HTMLButtonElement>("[data-action='review-for-codex']")?.addEventListener("click", () => { void reviewArrivalForCodexDevelopment(); });
   root?.querySelector<HTMLButtonElement>("[data-action='progress-arrival-plan']")?.addEventListener("click", () => { void progressArrivalPlan(); });
   root?.querySelector<HTMLButtonElement>("[data-action='open-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = true; announce(""); await render(); root.querySelector<HTMLTextAreaElement>("[data-plan-return] textarea")?.focus(); });
   root?.querySelector<HTMLButtonElement>("[data-action='cancel-plan-return']")?.addEventListener("click", async () => { draftReturnFormOpen = false; await render(); });
@@ -3949,7 +3988,7 @@ const renderOptions = (): string => {
     <div><span>What stays true</span><strong>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</strong></div>
     <div><span>What you’re choosing</span><strong>Which direction fits best</strong><small>Compare the trade-offs or ask Codex to keep working.</small></div>
   </div>` : ""}${search && Number.isFinite(exploredCombinations) ? `<section class="option-search-proof" aria-label="How Finite found these options">
-    <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} meaningfully different routes are surfaced so the trade-offs stay understandable.</p></div>
+    <div><p class="eyebrow">Why these options</p><h3>Finite tested ${exploredCombinations} bounded combinations.</h3><p>${legalCombinations} respected every hard boundary. ${surfacedOptions} meaningfully different workable directions are shown so the trade-offs stay understandable.</p></div>
     <dl><div><dt>Legal combinations</dt><dd>${legalCombinations}</dd></div><div><dt>Rejected combinations</dt><dd>${rejectedCombinations}</dd></div><div><dt>Refused before choice</dt><dd>${escapeHtml(lockedMoves.length ? lockedMoves.join(" · ") : "No fixed item was offered as a trade")}</dd></div></dl>
   </section>` : ""}<div class="option-grid">
     ${candidates.map((candidate, index) => `
@@ -4017,7 +4056,7 @@ const renderLatestPlanUpdate = (): string => {
     <dl class="latest-plan-update__proof">
       <div><dt>Why this route</dt><dd>${escapeHtml(objective)}${changes.length ? ` · ${escapeHtml(changes.join(" · "))}` : ""}</dd></div>
       <div><dt>Still protected</dt><dd>${escapeHtml(protections.length ? protections.slice(0, 3).join(" · ") : "Your finite limit")}</dd></div>
-      <div><dt>Search proof</dt><dd>${Number.isFinite(explored) ? `${explored} combinations checked · ${surfaced} viable routes surfaced` : "Bounded constraint search completed"}</dd></div>
+      <div><dt>Search proof</dt><dd>${Number.isFinite(explored) ? `${explored} combinations checked · ${surfaced} workable directions shown` : "Bounded constraint search completed"}</dd></div>
       <div><dt>Authority</dt><dd>You confirmed this exact route for revision ${receipt.fromRevision}. Codex applied only that approval.</dd></div>
     </dl>
     <p class="latest-plan-update__receipt">Receipt ${escapeHtml(receipt.receiptId)} · replay-safe · accepted once</p>
@@ -4892,7 +4931,16 @@ const prepareArrivalPlanDraft = (candidate?: ArrivalResult): Promise<PreparedArr
       ? currentDraft.draftId
       : "";
     if (!draftId) {
-      const compiled = await runtime.compileIntakeToDraft({ preparedIntake: progression.intake });
+      const compiled = await runtime.compileIntakeToDraft({
+        preparedIntake: {
+          ...progression.intake,
+          sourceArrival: {
+            orderId: opened.order.orderId,
+            orderVersion: opened.order.version,
+            orderChecksum: opened.order.checksum,
+          },
+        },
+      });
       if (!compiled.ok || !runtime.pendingPlanDraft) throw new Error(String(compiled.code || "PLAN_DRAFT_NOT_STAGED"));
       draftId = runtime.pendingPlanDraft.draftId;
     }

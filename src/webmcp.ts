@@ -799,7 +799,12 @@ const enterKitchen = async (runtime: FinitePlanRuntime, arrival: ArrivalReposito
     };
   }
 
-  const orientation: ArrivalOrientation | null = opened.ok && opened.orientation ? opened.orientation : null;
+  // A deliberate start-new handoff must not inherit an unrelated draft merely
+  // because one is still present in this browser. An explicit orderId remains
+  // the only way to resume a named arrival through this intent.
+  const orientation: ArrivalOrientation | null = entryIntent === "start_new" && !requestedOrderId
+    ? null
+    : opened.ok && opened.orientation ? opened.orientation : null;
   const active = (kitchen.brief as Record<string, unknown> | undefined)?.active as Record<string, unknown> | undefined;
   const differences: Array<Record<string, unknown>> = [];
   if (orientation && input.expectedOrderVersion !== undefined && Number(input.expectedOrderVersion) !== orientation.exactOrderVersion) {

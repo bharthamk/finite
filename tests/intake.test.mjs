@@ -250,6 +250,35 @@ test("adaptive construction compiles a reviewed open brief without inventing exa
   assert.equal(runtime.kernel.revision, 1);
 });
 
+test("intake rejects malformed explicit assumptions before offering compilation", async () => {
+  const profiles = await compileBuiltInProfiles();
+  const runtime = new FinitePlanRuntime(profiles, new PlanSnapshotStore(new MemoryStorage()), "travel");
+  const base = {
+    constructionMode: "adaptive_shell",
+    profileId: "general",
+    planId: "plan_interview_assumption_guard",
+    name: "Interview preparation",
+    brief: "Prepare truthful evidence and rehearse it across six evenings.",
+    planningDimensions: { money: "zero", location: "not_applicable", capacity: "not_applicable" },
+    allocation: { totalBudgetMinor: 0 },
+    actuals: [],
+    locks: ["truthfulness"],
+    preferenceLabels: ["evidence_over_polish"],
+    stages: [{ stageId: "evidence", label: "Build the evidence bank", marker: "Evening 1", status: "current" }],
+  };
+  const malformed = await runtime.assessPlanIntake({
+    ...base,
+    assumptions: [{ schedule: { session_length: "90 minutes" } }],
+  });
+  assert.equal(malformed.code, "INTAKE_FACTS_CONFLICT");
+  assert(malformed.conflicts.some((issue) => issue.path === "assumptions.0" && issue.code === "ASSUMPTION_INVALID"));
+  assert.equal(malformed.nextAction, undefined);
+
+  const wrongContainer = await runtime.assessPlanIntake({ ...base, planId: "plan_interview_assumption_container_guard", assumptions: { path: "schedule.session_length" } });
+  assert.equal(wrongContainer.code, "INTAKE_FACTS_CONFLICT");
+  assert(wrongContainer.conflicts.some((issue) => issue.path === "assumptions" && issue.code === "ASSUMPTIONS_INVALID"));
+});
+
 test("WebMCP exposes plan operations but never human plan authority and refreshes contextual tools after activation", async () => {
   const profiles = await compileBuiltInProfiles();
   const storage = new MemoryStorage();

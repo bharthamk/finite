@@ -608,7 +608,8 @@ test("workspace saves keep the edited form visible until the durable write retur
 
 test("fresh-draft edits keep the current workspace visible and local reset mints a clean scope", () => {
   const arrival = source.slice(source.indexOf("const renderArrival"), source.indexOf("const submitArrivalOrder"));
-  assert.match(arrival, /order\?\.status === "awaiting_human_authority" && pendingDraftMatchesArrival\(\) \? renderPlanDraft\(\) : ""/);
+  assert.match(arrival, /const hasPendingPlanDraft = Boolean\(order && runtime\.pendingPlanDraft && pendingDraftMatchesArrival\(\)\)/);
+  assert.match(arrival, /const planDraftMarkup = hasPendingPlanDraft \? renderPlanDraft\(\) : ""/);
   assert.match(source, /localStorage\.removeItem\(localDemoInstallationKey\)/);
   assert.match(source, /location\.replace\("\/\?start=fresh&reset=complete"\)/);
   assert.match(source, /try \{\s*recordChangeSummary\(workspaceChangeSummary/);
@@ -634,6 +635,8 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(source, /if \(!demoPlaybackMode && planningMode === "codex"\) void prepareArrivalPlanDraft\(arrivalResult\)/);
   assert.match(source, /draft\.sourceArrival && activeArrival && draft\.sourceArrival\.orderId !== activeArrival\.orderId\) return ""/);
   assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
+  assert.match(source, /startupEntryMode === "codex-live" \|\| startupEntryMode === "live-demo"/);
+  assert.match(source, /const handoffOrder = newPlanDraftMode && !\(demoPlaybackMode && demoDepth === "spotlight"\) \? null : currentArrival\(\)/);
   assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
   assert.match(source, /No plan exists yet\./);
   assert.match(source, /The planning workspace opens only after this starting point is submitted\./);
@@ -644,9 +647,10 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(styles, /\.codex-guide-overlay footer \.codex-guide-next \{[^}]*min-height:42px;[^}]*color:var\(--on-deep\);[^}]*background:var\(--deep\);/);
 });
 
-test("guiding the current surface preserves unsaved browser input", () => {
-  assert.match(source, /const preserveUnsavedCurrentSurface = guideRequest\?\.surface === "current" && guideRequest\.refresh !== true;/);
-  assert.match(source, /preservePausedDemoView \|\| preserveUnsavedCurrentSurface \|\| \["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"\]/);
+test("guiding the current or arrival surface preserves unsaved browser input", () => {
+  assert.match(source, /const preserveUnsavedGuidedView = guideRequest\?\.refresh !== true/);
+  assert.match(source, /guideRequest\?\.surface === "arrival" && Boolean\(root\.querySelector\("\.arrival-main"\)\)/);
+  assert.match(source, /preservePausedDemoView \|\| preserveUnsavedGuidedView \|\| \["GUIDE_WAITING_FOR_PERSON", "GUIDE_PAUSED_FOR_QUESTION"\]/);
   assert.match(source, /const guidedView = guideRequest \? applyCodexSpotlight\(guideRequest\) : null;/);
 });
 
@@ -777,6 +781,10 @@ test("guided highlighting is a human-controlled option inside the single Codex h
   assert.match(source, /planning_window: \{ label: "the planning window", selectors: \["\.arrival-order__outcome"\] \}/);
   assert.match(source, /build_method: \{ label: "the two ways to begin", selectors: \["\.arrival-start-tabs"\] \}/);
   assert.match(source, /manual_details: \{ label: "the structured plan details", selectors: \["\.arrival-start-panel--manual"\] \}/);
+  assert.match(source, /request\.target !== "section_headers"/);
+  assert.match(source, /guideRequest\?\.surface === "arrival" && Boolean\(root\.querySelector\("\.arrival-main"\)\)/);
+  assert.match(source, /!manual && followCodexEnabled/);
+  assert.match(source, /section\.customSource === "human" \? "Added by you" : "Included for this plan"/);
   assert.match(source, /plan_summary: \{ label: "the plan summary", selectors: \["\.starter-plan__overview", "\.arrival-starter-plan", "\.draft-review__summary", "\.hero", "\.plan-orbit"\] \}/);
   assert.match(source, /budget_editor: \{ label: "the budget editor", selectors: \["\[data-overview-dialog='budget'\]\[open\]", "\[data-overview-dialog='budget'\]"\] \}/);
   assert.match(source, /workspace_customisation: \{ label: "workspace customisation", selectors: \["\[data-custom-workspace-dialog\]\[open\]", "\[data-action='open-custom-workspace'\]"\] \}/);
@@ -834,6 +842,7 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.match(source, /draft\.sourceArrival && !latestArrival\.ok/);
   assert.match(source, /idempotencyKey: `human-plan-activation:\$\{draftId\}:\$\{confirmation\.confirmationId\}`/);
   assert.match(source, /arrivalRepository\.acceptPlan\(\{/);
+  assert.match(source, /preparedIntake: \{[^]*\.\.\.progression\.intake,[^]*sourceArrival: \{[^]*orderId: opened\.order\.orderId,[^]*orderVersion: opened\.order\.version,[^]*orderChecksum: opened\.order\.checksum/);
   assert.match(source, /target\.searchParams\.set\("plan", "1"\)/);
   assert.ok((source.match(/target\.searchParams\.delete\("start"\);\s*target\.searchParams\.set\("plan", "1"\);/g) ?? []).length >= 2);
   assert.match(source, /announcer\.textContent = "Plan approved\. Managing is ready\."/);
@@ -848,8 +857,12 @@ test("approving a pending plan activates it and enters Managing in the same huma
   assert.doesNotMatch(source, /Exact plan draft confirmed\. Codex may now activate it/);
 });
 
-test("the editable rough plan exposes one top-level human progression action", () => {
+test("the editable rough plan exposes human progression and a reviewed Codex-development route", () => {
   assert.match(source, /data-action="progress-arrival-plan"/);
+  assert.match(source, /order\.status === "proposed_plan_ready" \? `<button class="text-button" type="button" data-action="review-for-codex"/);
+  assert.match(source, /const reviewArrivalForCodexDevelopment = async/);
+  assert.match(source, /arrivalRepository\.reviewWorkspace\(\{[^]*sourceSurface: modelContext \? "inline" : "site"/);
+  assert.match(source, /This exact rough plan is reviewed/);
   assert.match(source, /busy \? "Starting…" : "Start managing"/);
   assert.match(source, /class="starter-plan__completion"/);
   assert.doesNotMatch(source, /class="starter-plan__header-actions"/);
@@ -862,7 +875,7 @@ test("the editable rough plan exposes one top-level human progression action", (
   assert.match(source, /arrivalBudgetOverageMinor\(starter\) > 0/);
   assert.match(source, /The category budgets exceed the total\. Reduce one or more categories before starting Managing\./);
   assert.match(source, /arrivalRepository\.reviewWorkspace\(\{/);
-  assert.match(source, /runtime\.compileIntakeToDraft\(\{ preparedIntake: progression\.intake \}\)/);
+  assert.match(source, /runtime\.compileIntakeToDraft\(\{[^]*preparedIntake: \{[^]*\.\.\.progression\.intake,[^]*sourceArrival:/);
   assert.match(source, /prepareArrivalPlanDraft\(latest\)/);
   assert.match(source, /confirmPlanDraft\(prepared\.draftId, prepared\.progression, prepared\.opened, activationTimer\)/);
   assert.match(source, /beginClickActivationTimingReceipt\(document\.documentElement\.dataset\)/);

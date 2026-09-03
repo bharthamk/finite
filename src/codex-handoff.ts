@@ -50,14 +50,14 @@ export const createCodexHandoff = (context: CodexHandoffContext): CodexHandoff =
   const guideCurrentPlan = context.guideCurrentPlan === true;
   const demoPlayback = context.demoPlayback === true;
   const demoDepth: DemoDepth = context.demoDepth ?? "standard";
+  const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
   const siteEntryUrl = guideCurrentPlan
     ? `${siteOrigin}/?start=plan-guide-active${context.guidePlanSurface === true ? "&plan=1" : ""}`
     : demoPlayback
       ? demoDepth === "spotlight"
         ? `${siteOrigin}/?start=spotlight-active&tour=spotlight&plan=1&fresh=1`
         : `${siteOrigin}/?start=demo-active&tour=${demoDepth}`
-      : siteOrigin;
-  const entryIntent = context.entryIntent ?? (order ? "resume_handoff" : "start_new");
+      : entryIntent === "start_new" ? `${siteOrigin}/?start=guided-active` : siteOrigin;
   const journeyIntent = demoPlayback && demoDepth === "spotlight" ? "spotlight" as const : undefined;
   const toolInput = {
     entryIntent,
