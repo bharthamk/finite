@@ -59,13 +59,13 @@ The accepted product and deployed source is
 `db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68`, with release marker
 `hosted-release-marker-v245`, at `https://finite.bharthamk.chatgpt.site`.
 The matching public source snapshot is
-[`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c).
+[`db8a59b`](https://github.com/bharthamk/finite/commit/db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68).
 The application, Worker, schema, migrations, tests, static assets, lockfile and
 build configuration have identical Git object IDs in both commits.
-Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_4fbc588556f88191a28c0aa61f6a9a57`
-was promoted by deployment `appgdep_6a987bd798988191809ea739020a56ab`.
+Saved version `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_bb11b815427c81918c4debc2e17b1ee8`
+was promoted by deployment `appgdep_6a9951af964081919ed29086f12ac81b`.
 The local release archive SHA-256 is
-`fab2279be05ca5b76a02725adf64e487c144434e65877e312f4dad18f40f2374`.
+`b118682bcec07da22c3d4e2afbabdd51e6d050b3d1ac1c440854d851023e3c83`.
 Production acceptance covered the public marker, signed-out prerequisite copy,
 canonical Spotlight WebMCP entry, browser-local reload continuity, honest
 pre-connection activity, disabled-share explanation, and a 390-pixel-wide

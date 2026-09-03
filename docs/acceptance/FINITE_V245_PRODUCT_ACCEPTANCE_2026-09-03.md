@@ -5,20 +5,20 @@ Accepted: 2026-09-03
 ## Release identity
 
 - Live product: https://finite.bharthamk.chatgpt.site/
-- Sites version: v245
+- Sites version: 246
 - Product and deployed source: `db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68`
 - Matching public source snapshot:
-  [`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c)
+  [`db8a59b`](https://github.com/bharthamk/finite/commit/db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68)
 - Marker: `hosted-release-marker-v245`
 - Sites version ID:
-  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_4fbc588556f88191a28c0aa61f6a9a57`
-- Deployment ID: `appgdep_6a987bd798988191809ea739020a56ab`
+  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_bb11b815427c81918c4debc2e17b1ee8`
+- Deployment ID: `appgdep_6a9951af964081919ed29086f12ac81b`
 - Local packaged archive SHA-256:
-  `fab2279be05ca5b76a02725adf64e487c144434e65877e312f4dad18f40f2374`
+  `b118682bcec07da22c3d4e2afbabdd51e6d050b3d1ac1c440854d851023e3c83`
 - Stored archive content hash:
-  `a1a490a0bc60837c42e27ed607a33445212236172f3a44b472b75f68b267d155`
-- Rollback: Sites v244, version ID
-  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_cebbbff9f43081919bfe3574d8e1696b`.
+  `62a08618e169c1612ad6431b8b44c5b822bc5fef999594d1e0f253993d1d1673`
+- Rollback: Sites version 245, version ID
+  `appgprj_6a8e253e5c888191bd46de9e62734133~appgver_4fbc588556f88191a28c0aa61f6a9a57`.
 
 ## Product acceptance
 
