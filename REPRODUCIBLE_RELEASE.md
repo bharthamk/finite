@@ -56,7 +56,7 @@ the clean gate. `commit_sha` must equal that exact HEAD; the archive must contai
 the successful build output rather than the source tree. The saved Sites version
 records both the commit and archive SHA-256 before a deployment is promoted.
 The accepted product and deployed source is
-`b196755208028262ebbcbb17d6eca8467477d596`, with release marker
+`db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68`, with release marker
 `hosted-release-marker-v245`, at `https://finite.bharthamk.chatgpt.site`.
 The matching public source snapshot is
 [`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c).

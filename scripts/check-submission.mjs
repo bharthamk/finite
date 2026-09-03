@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseSource = "b196755208028262ebbcbb17d6eca8467477d596";
+const releaseSource = "db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68";
 const releaseLabel = "v245";
 const testBaseline = "373";
 const finalMode = process.argv.includes("--final");

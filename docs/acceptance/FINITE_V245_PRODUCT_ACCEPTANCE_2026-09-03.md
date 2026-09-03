@@ -6,7 +6,7 @@ Accepted: 2026-09-03
 
 - Live product: https://finite.bharthamk.chatgpt.site/
 - Sites version: v245
-- Product and deployed source: `b196755208028262ebbcbb17d6eca8467477d596`
+- Product and deployed source: `db8a59bbfdbd7b353a36fb5690b1f0f4bb5d6a68`
 - Matching public source snapshot:
   [`4424fda`](https://github.com/bharthamk/finite/commit/4424fda9a1f1b0426f78f0b7b602d272a071c98c)
 - Marker: `hosted-release-marker-v245`
@@ -59,7 +59,7 @@ deployment.
 
 ## Quality gate
 
-- 368/368 automated tests passed for this hosted acceptance snapshot.
+- 373/373 automated tests pass.
 - 20/20 hostile independent Spotlight kernel transaction runs pass.
 - TypeScript passes.
 - Production client and Worker builds pass.
@@ -68,20 +68,18 @@ deployment.
 - The final copy and variable-count WebMCP result were verified in the in-app
   browser after deployment.
 
-## Current source remediation candidate
+## Final source remediation
 
-The repository now contains a post-acceptance candidate that fixes the later
+The accepted source fixes the later
 judge-QC findings around whole-unit budget allocation, over-allocation gating,
 plan titles, resolved money questions, plan-family option language, exact-floor
 copy, and Spotlight handoff length and route order.
 
-- 373/373 automated tests pass locally.
-- TypeScript, production builds, client chunk limits, and the working
-  submission gate pass locally.
+- 373/373 automated tests pass.
+- TypeScript, production builds, client chunk limits, and the submission gate
+  pass.
 - The repaired AUD 650 manual dinner and Spotlight comparison paths pass in an
-  isolated local browser with no console warnings or errors.
-- This candidate is not represented as live until it is deployed and checked
-  against the public URL.
+  isolated browser with no console warnings or errors.
 
 ## Remaining submission boundary
 

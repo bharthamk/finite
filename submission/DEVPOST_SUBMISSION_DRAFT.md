@@ -72,8 +72,9 @@ testing enabled.
 ## AI tools used
 
 OpenAI Codex for product design, implementation, testing, documentation and
-WebMCP operation; ChatGPT's in-app browser for live WebMCP testing; and Qwen3-TTS
-1.7B CustomVoice running locally through MLX Audio for the video narration.
+WebMCP operation; ChatGPT's in-app browser for live WebMCP testing; and
+VibeVoice Realtime 0.5B running locally through MLX Audio for the video's
+single-take narration.
 
 ## Built with
 
