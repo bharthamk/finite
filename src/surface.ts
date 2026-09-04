@@ -64,6 +64,31 @@ export const projectAcceptedPlanCopyFromReceipts = (text: string, receipts: Acce
 
 export const projectAcceptedPlanCopy = (text: string, kernel: FinitePlanKernel): string => projectAcceptedPlanCopyFromReceipts(text, kernel.receipts);
 
+// Quantities can be projected from the accepted receipts. Exact dates cannot:
+// the legacy example stores display ranges, not a schedulable transport model.
+export const projectAcceptedPlanStages = (profile: CompiledProfile, kernel: FinitePlanKernel): SurfaceManifest["stages"] => {
+  const stages = profile.surface.stages.map((stage) => ({ ...clone(stage), label: projectAcceptedPlanCopy(stage.label, kernel), detail: projectAcceptedPlanCopy(stage.detail, kernel), marker: projectAcceptedPlanCopy(stage.marker, kernel) }));
+  let timingChanged = false;
+  for (const receipt of kernel.receipts.filter((item) => item.receiptType === "plan_option")) {
+    const event = receipt.payload.changeEvent as { title?: string; daysDelta?: number } | undefined;
+    const moveIds = Array.isArray(receipt.payload.moveIds) ? receipt.payload.moveIds.map(String) : [];
+    timingChanged ||= Boolean(event?.daysDelta) || moveIds.some((id) => Boolean(profile.moves[id]?.daysDelta));
+    for (const stage of stages) {
+      const before = stage.detail.match(/^(\d+)\s+nights?\b/i);
+      if (!before) continue;
+      const eventDelta = event?.title?.toLocaleLowerCase().includes(stage.label.toLocaleLowerCase()) ? Number(event.daysDelta ?? 0) : 0;
+      const moveDelta = moveIds.reduce((sum, id) => sum + (profile.moves[id]?.dimension === `${stage.stageId}_nights` ? profile.moves[id]!.daysDelta : 0), 0);
+      const delta = eventDelta + moveDelta;
+      if (!Number.isFinite(delta) || !delta) continue;
+      const nights = Number(before[1]) + delta;
+      stage.detail = nights >= 0 ? stage.detail.replace(/^\d+\s+nights?\b/i, `${nights} ${nights === 1 ? "night" : "nights"}`) : "Stay length needs reconciliation";
+      if (moveDelta) stage.detail = stage.detail.replace(/\s*·\s*two nights remain movable/i, " · accepted stay reduction");
+    }
+  }
+  if (timingChanged) stages.forEach((stage) => { stage.marker = "Timing to reconcile"; });
+  return stages;
+};
+
 const supportedComponents = new Set<SurfaceComponentType>([
   "finite_summary", "pressure_meter", "timeline_lane", "phase_lane", "run_of_show", "entity_table",
   "commitment_stack", "actual_forecast", "constraint_panel", "change_tray", "option_compare", "approval_panel",
@@ -168,12 +193,7 @@ export const compileSurfaceManifest = async (
     brief: projectAcceptedPlanCopy(profile.surface.hero.brief, kernel),
     nouns: clone(profile.surface.nouns),
     summaryFields: clone(profile.surface.primaryMeasures),
-    stages: profile.surface.stages.map((stage) => ({
-      ...clone(stage),
-      label: projectAcceptedPlanCopy(stage.label, kernel),
-      detail: projectAcceptedPlanCopy(stage.detail, kernel),
-      marker: projectAcceptedPlanCopy(stage.marker, kernel),
-    })),
+    stages: projectAcceptedPlanStages(profile, kernel),
     ...(profile.surface.dependencies?.length ? { dependencies: clone(profile.surface.dependencies) } : {}),
     ...(profile.surface.assumptions?.length ? { assumptions: clone(profile.surface.assumptions) } : {}),
     zones,

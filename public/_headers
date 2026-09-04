@@ -1,0 +1,6 @@
+# Static assets can be served without entering worker/index.ts.
+# WebMCP requires an origin-keyed document, including the root/demo HTML.
+/*
+  Origin-Agent-Cluster: ?1
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: tools=(self), camera=(), microphone=(), geolocation=()

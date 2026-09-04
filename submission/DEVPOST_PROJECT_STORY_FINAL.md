@@ -36,6 +36,8 @@ Codex handles language, research and orchestration. Finite handles the calculati
 
 The person makes the final choice on the visible planning surface. WebMCP lets Codex prepare the alternatives and carry the selected direction into the same live plan.
 
+Codex does not just send advice back to chat. With your permission, it can guide you through the real Finite interface: move to the relevant section, highlight the actual controls, explain them in an on-page popup, and pause for questions or Next. These are built-in, page-scoped WebMCP capabilities, not a prerecorded tour. You can work manually, let Codex develop the plan, or switch between both in the same workspace. Guidance never grants permission to choose or approve a plan change for you.
+
 ## How it improves the human and agent experience
 
 Without this connection, the person has to carry information between the app and the agent. They explain the plan in chat, receive a recommendation, then update every affected field themselves.

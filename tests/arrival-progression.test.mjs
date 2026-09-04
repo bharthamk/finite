@@ -318,7 +318,7 @@ test("a recurring learning request becomes a useful zero-cost general plan", asy
   assert.equal(progression.intake.profileId, "general");
   assert.equal(progression.intake.planningDimensions.money, "zero");
   assert.equal(progression.intake.stages.length, 7);
-  assert.match(progression.intake.stages[0].label, /^Choose the three repeatable weekly study evenings/);
+  assert.match(progression.intake.stages[0].label, /^Choose 3 repeatable weekly study slots/);
   assert.equal(arrivalContinuityTasks(progression, progression.intake.stages.map((stage) => stage.label)).length, 0);
   assert(progression.inputs.some((entry) => entry.message.includes("Practice log")));
 });

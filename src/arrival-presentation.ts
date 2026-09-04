@@ -1,5 +1,5 @@
 import type { ArrivalClarification, ArrivalInput, ArrivalInterpretation, ArrivalOrder } from "./arrival.js";
-import { resolvePlanTitle } from "./plan-title.js";
+import { resolvePlanTitle, statedInterviewPartner } from "./plan-title.js";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -294,10 +294,11 @@ const practiceLogFields = [
 
 const statedEventHeadcount = (value: string): number | null => {
   const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
-  const match = value.match(/\b(?:for|with|hosting)\s+(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:people|friends|guests|attendees)\b/i)
-    ?? value.match(/\b(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:people|friends|guests|attendees)\b/i);
+  const countPattern = `(?:\\d{1,4}|${Object.keys(words).join("|")})`;
+  const partyPattern = `${countPattern}\\s+(?:people|friends|guests|attendees|adults?|children|kids?|travell?ers?|passengers?)\\b`;
+  const match = value.match(new RegExp(`\\b${partyPattern}(?:\\s*(?:and|\\+|,)\\s*${partyPattern})*`, "i"));
   if (!match) return null;
-  const count = Number(match[1]) || words[match[1]!.toLowerCase()] || 0;
+  const count = [...match[0].matchAll(new RegExp(`\\b(${countPattern})\\s+`, "gi"))].reduce((sum, item) => sum + (Number(item[1]) || words[item[1]!.toLowerCase()] || 0), 0);
   return count > 0 ? count : null;
 };
 
@@ -340,8 +341,8 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
     tasks: ["Which work will you do yourself?"],
   };
   if (family === "general" && /\binterview\b/i.test(order.rawOutcome)) return {
-    schedule: ["What time and time zone is the interview, and which three preparation evenings are actually available?"],
-    scope: ["Do you have the role description or any guidance about what the COO wants to assess?"],
+    schedule: ["What time and time zone is the interview, and which preparation sessions are actually available?"],
+    scope: ["Do you have the role description or any guidance about what the interviewer wants to assess?"],
     custom_interview_evidence: ["Which two or three achievements are strongest enough to anchor your interview stories?"],
     resources: ["Which company, interviewer, product, or market sources should the preparation rely on?"],
     money: [],
@@ -350,7 +351,7 @@ const sectionQuestionTemplates = (family: StarterPlanPresentation["family"], ord
   };
   const practiceSource = `${order.rawOutcome} ${JSON.stringify(order.structured)} ${order.interpretation?.summary ?? ""}`;
   if (family === "general" && isRecurringPracticePlan(practiceSource)) return {
-    schedule: ["Which three weekly study times are most realistic, and may they move from week to week?"],
+    schedule: ["Which study times fit your requested rhythm, and may they move from week to week?"],
     scope: ["What can you already do, and what would count as useful conversational progress after six weeks?"],
     custom_practice_log: ["How would you like to notice progress: a short recording, self-rating, phrase check, or real conversation?"],
     resources: ["Which free learning resources or formats do you already enjoy using?"],
@@ -695,44 +696,49 @@ const seedRoughPlan = (
     const role = sourceText.match(/\b(?:for|as)\s+(?:a|an|the|fictional)\s+(.+?)\s+(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:it|on|with|for)\b|[,.;]|$)/i);
     const employer = role?.[2]?.trim() || sourceText.match(/\b(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:it|on|with|for)\b|[,.;]|$)/i)?.[1]?.trim() || "the organisation";
     const roleName = role?.[1]?.trim() || "Target role";
-    const interviewer = sourceText.match(/\bwith\s+(?:the\s+)?([^,.;]+?)(?=\s+(?:on|for|about)\b|[,.;]|$)/i)?.[1]?.trim() || "Interviewer to confirm";
+    const interviewer = statedInterviewPartner(sourceText) || "Interviewer to confirm";
+    const interviewerResearch = interviewer === "Interviewer to confirm" ? "the interviewer when known" : `the ${interviewer}`;
+    const interviewFormat = /\b(video|zoom|teams|online)\b/i.test(sourceText) ? "video" : /\bin[- ]person\b/i.test(sourceText) ? "in-person" : "format to confirm";
+    const interviewLabel = interviewer === "Interviewer to confirm" ? "Interview · interviewer to confirm" : `Interview with ${interviewer}`;
     const durationMinutes = Number(sourceText.match(/\b(\d{1,3})\s*[- ]minute\b/i)?.[1] ?? 0);
-    const prepWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
-    const prepMatch = sourceText.match(/\b(\d+|one|two|three|four|five)\s+evenings?\b/i);
-    const prepEvenings = Math.max(1, Math.min(5, Number(prepMatch?.[1]) || prepWords[String(prepMatch?.[1] ?? "").toLowerCase()] || 3));
+    const prepWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fourteen: 14 };
+    const prepMatch = sourceText.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fourteen)\s+(?:evenings?\b|days?\s+(?:of\s+)?(?:preparation|prep)\b)/i);
+    const prepEvenings = Math.max(1, Math.min(31, Number(prepMatch?.[1]) || prepWords[String(prepMatch?.[1] ?? "").toLowerCase()] || 3));
+    const prepMinutes = sourceText.match(/\b(\d{1,3})\s+minutes?\s+(?:per|a)\s+day\b/i)?.[1];
+    const prepLabel = prepMatch && /days?/i.test(prepMatch[0]) ? "day" : "evening";
 
     const retainedSchedule = (sectionItems.get("schedule") ?? []).filter((item) => item.source === "human" || item.source === "request");
     sectionItems.set("schedule", retainedSchedule);
     Array.from({ length: prepEvenings }, (_, index) => {
       const date = interviewDate ? addDays(interviewDate, index - prepEvenings) : "";
       const prep = [
-        ["Company and role research", `Research ${employer}, the role, the market and the COO; record the strongest role-relevant signals.`],
+        ["Company and role research", `Research ${employer}, the role, the market and ${interviewerResearch}; record the strongest role-relevant signals.`],
         ["Evidence stories and likely questions", "Map the role to concise examples, draft likely answers and identify evidence gaps."],
-        ["Rehearsal and technology check", "Rehearse aloud, tighten the questions to ask and test the full video setup."],
+        ["Rehearsal and logistics check", "Rehearse aloud, tighten the questions to ask and check the confirmed interview arrangements."],
       ][Math.min(index, 2)]!;
-      seed("schedule", `interview_prep_${index + 1}`, `Preparation evening ${index + 1} · ${prep[0]}`, { title: `Preparation evening ${index + 1} · ${prep[0]}`, kind: "activity", start: date, notes: `${prep[1]} Rough allocation across the available evenings; move or combine it freely.` });
+      seed("schedule", `interview_prep_${index + 1}`, `Preparation ${prepLabel} ${index + 1} · ${prep[0]}`, { title: `Preparation ${prepLabel} ${index + 1} · ${prep[0]}`, kind: "activity", start: date, notes: `${prepMinutes ? `${prepMinutes} minutes per day as requested. ` : ""}${prep[1]} Rough allocation across the available preparation sessions; move or combine it freely.` });
     });
     addItem("schedule", {
       itemId: "request_interview",
-      label: `Interview with ${interviewer}`,
-      fields: { title: `Interview with ${interviewer}`, kind: "event", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}video interview for ${roleName} at ${employer}. Time and platform remain open unless added.` },
+      label: interviewLabel,
+      fields: { title: interviewLabel, kind: "event", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}interview for ${roleName} at ${employer} · ${interviewFormat}. Time and location or platform remain open unless added.` },
       source: "request",
     });
     seed("schedule", "interview_follow_up", "Send follow-up note", { title: "Send follow-up note", kind: "milestone", start: interviewDate, notes: "Draft and send a concise thank-you while the conversation is fresh." });
 
     addItem("scope", { itemId: "request_target_role", label: `${roleName} at ${employer}`, fields: { title: `${roleName} at ${employer}`, status: "in_progress", notes: "Target role and organisation from the starting brief." }, source: "request" });
-    addItem("scope", { itemId: "request_interview_format", label: "Interview format", fields: { title: "Interview format", status: "in_progress", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}video interview with ${interviewer}.` }, source: "request" });
+    addItem("scope", { itemId: "request_interview_format", label: "Interview format", fields: { title: "Interview format", status: "in_progress", start: interviewDate, notes: `${durationMinutes ? `${durationMinutes}-minute ` : ""}interview · ${interviewFormat} · ${interviewer}.` }, source: interviewFormat === "format to confirm" ? "open" : "request" });
     seed("resources", "company_sources", `${employer} research sources`, { title: `${employer} research sources`, provider: employer, status: "open", start: interviewDate ? addDays(interviewDate, -prepEvenings) : "", notes: "Company site, product material, leadership profile, credible market context and the supplied role description." });
-    seed("resources", "video_setup", "Video interview setup", { title: "Video interview setup", provider: "Platform to confirm", status: "open", start: interviewDate ? addDays(interviewDate, -1) : "", notes: "Computer, camera, microphone, connection, lighting, quiet room, joining link and backup contact." });
-    addItem("requirements", { itemId: "request_interview_commitment", label: "Interview date and format", fields: { title: "Interview date and format", status: "ready", due: interviewDate, notes: `${interviewDate || "Date supplied"}${durationMinutes ? ` · ${durationMinutes} minutes` : ""} · video · ${interviewer}. Confirm the exact time, time zone and platform.` }, source: "request" });
+    seed("resources", "video_setup", "Interview arrangements", { title: "Interview arrangements", provider: "Location or platform to confirm", status: "open", start: interviewDate ? addDays(interviewDate, -1) : "", notes: interviewFormat === "video" ? "Computer, camera, microphone, connection, lighting, quiet room, joining link and backup contact." : "Confirm the location or joining details, required equipment, arrival time and backup contact." });
+    addItem("requirements", { itemId: "request_interview_commitment", label: "Interview date and format", fields: { title: "Interview date and format", status: interviewFormat === "format to confirm" ? "open" : "ready", due: interviewDate, notes: `${interviewDate || "Date to confirm"}${durationMinutes ? ` · ${durationMinutes} minutes` : ""} · ${interviewFormat} · ${interviewer}. Confirm the exact time, time zone and location or platform.` }, source: "request" });
 
     [
-      ["research", `Research ${employer}, the COO, product and market context`, interviewDate ? addDays(interviewDate, -prepEvenings) : "", "Capture only the signals most likely to affect this role and conversation."],
+      ["research", `Research ${employer}, ${interviewerResearch}, product and market context`, interviewDate ? addDays(interviewDate, -prepEvenings) : "", "Capture only the signals most likely to affect this role and conversation."],
       ["role_map", "Map the role requirements to your evidence", interviewDate ? addDays(interviewDate, -Math.max(2, prepEvenings - 1)) : "", "Turn the role description into a short competency and proof checklist."],
       ["stories", "Draft and tighten four to five evidence stories", interviewDate ? addDays(interviewDate, -2) : "", "Use situation, action, result and proof; keep each story adaptable to several questions."],
       ["likely_questions", "Rehearse likely questions and concise answers", interviewDate ? addDays(interviewDate, -1) : "", "Practise aloud and improve weak or overlong answers."],
       ["questions_to_ask", `Prepare useful questions for ${interviewer}`, interviewDate ? addDays(interviewDate, -1) : "", "Prioritise questions about outcomes, operating constraints, team interfaces and success measures."],
-      ["technology", "Test the video setup and backup path", interviewDate ? addDays(interviewDate, -1) : "", "Run the real device, browser, audio, camera, link, room and fallback contact."],
+      ["technology", interviewFormat === "video" ? "Test the video setup and backup path" : "Confirm interview arrangements and backup contact", interviewDate ? addDays(interviewDate, -1) : "", "Check the location or platform, required equipment, timing and fallback contact."],
       ["follow_up", "Send a tailored follow-up note", interviewDate, "Thank the interviewer, reference one useful discussion point and confirm continued interest."],
     ].forEach(([id, title, due, notes]) => seed("tasks", String(id), String(title), { title: String(title), due: String(due), done: false, notes: String(notes) }));
 
@@ -751,7 +757,8 @@ const seedRoughPlan = (
     const weeks = Math.max(1, Math.min(12, Number(weekMatch?.[1]) || weekWords[String(weekMatch?.[1] ?? "").toLowerCase()] || 6));
     const sessionWords: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
     const sessionMatch = sourceText.match(/\b(\d+|one|two|three|four|five|six|seven)\s+(?:evenings?|sessions?|times?)\s+(?:a|per)\s+week\b/i);
-    const sessionsPerWeek = Math.max(1, Math.min(7, Number(sessionMatch?.[1]) || sessionWords[String(sessionMatch?.[1] ?? "").toLowerCase()] || 3));
+    const daily = /\b(?:every day|each day|daily)\b/i.test(sourceText);
+    const sessionsPerWeek = daily ? 7 : Math.max(1, Math.min(7, Number(sessionMatch?.[1]) || sessionWords[String(sessionMatch?.[1] ?? "").toLowerCase()] || 3));
     const durationMinutes = Math.max(5, Math.min(180, Number(sourceText.match(/\b(\d{1,3})\s*[- ]?minutes?\b/i)?.[1] ?? 30)));
     const languagePractice = /\b(?:italian|language|conversational|vocabulary|greetings?|ordering food|directions?|listening)\b/i.test(sourceText);
     const weeklyFocus = languagePractice
@@ -793,7 +800,7 @@ const seedRoughPlan = (
     if (!requirements.some((item) => /sessions? per week|weekly practice|minutes? per week/i.test(`${item.label} ${String(item.fields.notes ?? "")}`))) seed("requirements", "practice_time", `${sessionsPerWeek} × ${durationMinutes}-minute sessions per week`, { title: `${sessionsPerWeek} × ${durationMinutes}-minute sessions per week`, status: "in_progress", due: startDate, notes: `${sessionsPerWeek * durationMinutes} minutes per week across ${weeks} weeks. The exact evenings remain editable.` });
     if (hasExplicitZeroSpendIntent(sourceText) && !requirements.some((item) => /paid budget/i.test(item.label))) seed("requirements", "practice_budget", "Use a zero paid budget", { title: "Use a zero paid budget", status: "ready", due: startDate, notes: "Use existing tools and free resources unless the person changes this limit." });
     [
-      ["slots", "Choose the three repeatable weekly study evenings", startDate, "Place the real sessions on the calendar; keep them movable when a week changes."],
+      ["slots", `Choose ${sessionsPerWeek} repeatable weekly study slots`, startDate, "Place the real sessions on the calendar; keep them movable when a week changes."],
       ["resources", "Choose one free reference and one free listening source", startDate, "Avoid collecting more material than the weekly rhythm can use."],
       ["baseline", "Record a short baseline introduction", startDate, "Keep it as the comparison point for the final week."],
       ["greetings", "Practise greetings and introductions in complete exchanges", startDate ? addDays(startDate, 6) : "", "Move beyond isolated words into short usable turns."],
@@ -813,6 +820,31 @@ const seedRoughPlan = (
     const budget = Number(moneyAmount(sourceText)) || 0;
     const scope = sectionItems.get("scope") ?? [];
     const resources = sectionItems.get("resources") ?? [];
+
+    // A renovation family is not necessarily the home-office example.
+    if (!homeOffice) {
+      const projectArea = /\bkitchen\b/i.test(sourceText) ? "Kitchen" : area;
+      const steps = [
+        ["measure", "Measure and confirm the renovation scope", "Record dimensions, existing services and the fixtures or finishes included in this project."],
+        ["quotes", "Compare supplier and contractor quotes", "Confirm scope, qualifications, availability, lead times and exclusions; no provider is booked."],
+        ["dependencies", "Agree the work sequence and dependencies", "Confirm which approvals, deliveries and preceding work each installation depends on."],
+        ["source", "Select materials and fixtures", "Compare fit and lead times against the budget before committing."],
+        ["install", "Coordinate installation", "Protect retained services and arrange the agreed work in dependency order."],
+        ["handover", "Inspect the result and retain receipts", "Check completed work against scope; retain warranties and record outstanding items."],
+      ];
+      if (!scope.length) seed("scope", "scope", `${projectArea} renovation scope`, { title: `${projectArea} renovation scope`, location: projectArea, notes: "Confirm the supplied scope and retain all stated constraints." });
+      if (!(sectionItems.get("schedule") ?? []).length) steps.forEach(([id, title, notes], index) => seed("schedule", String(id), String(title), { title: String(title), kind: "milestone", location: projectArea, start: index === 0 ? startDate : index === steps.length - 1 ? endDate : "", notes: `${notes} Exact sequencing and intermediate dates remain open.` }));
+      if (!tasks.length) steps.forEach(([id, title, notes]) => seed("tasks", String(id), String(title), { title: String(title), done: false, notes: String(notes) }));
+      if (/\bkeep\s+(?:the\s+)?existing\s+plumbing\b/i.test(sourceText)) addItem("requirements", { itemId: "request_retain_plumbing", label: "Keep existing plumbing", fields: { title: "Keep existing plumbing", status: "open", notes: "Explicit constraint from the starting brief; check supplier scope against it." }, source: "request" });
+      const reserveMatch = sourceText.match(/\b(?:protect|reserve|keep)\s+(?:AUD|NZD|USD|GBP|EUR|A\$|\$)?\s*([\d,]+(?:\.\d+)?)\s+(?:of\s+)?(?:contingency|buffer)\b/i);
+      const reserve = reserveMatch ? Number(reserveMatch[1]!.replaceAll(",", "")) : Math.round(budget * 0.15);
+      if (!(sectionItems.get("money") ?? []).some((item) => item.fields.moneyRole === "cost")) {
+        allocateWholePlanUnits(Math.max(0, budget - reserve), [["trades", "Trades & installation", 40], ["materials", "Materials & fixtures", 45], ["preparation", "Preparation & finishing", 15]])
+          .forEach(([id, title, , amount]) => seed("money", `category_${id}`, title, { title, amount: String(amount), currency: seedCurrency, moneyRole: "cost", notes: "Provisional allocation after protecting contingency; replace with checked quotes." }));
+        addItem("money", { itemId: "starter_category_contingency", label: "Contingency", fields: { title: "Contingency", amount: String(reserve), currency: seedCurrency, moneyRole: "cost", notes: reserveMatch ? "Protected contingency supplied in the starting brief." : "Provisional contingency; adjust to the project's uncertainty." }, source: reserveMatch ? "request" : "starter" });
+      }
+      return;
+    }
 
     const scopeSeeds: Array<[string, string, string]> = [];
     if (/\bpaint(?:ing|ed)?\b/i.test(sourceText)) scopeSeeds.push(["painting", "Prepare and paint the room", "Wall preparation, primer and finish coats; colour and exact paint system remain editable."]);
@@ -1289,7 +1321,8 @@ export const starterPlanForArrival = (order: ArrivalOrder): StarterPlanPresentat
   const explicitRequestRange = dateRangeIso(requestDateText, requestYear);
   const anchoredRequestStart = explicitRequestRange.start || dateIso(requestDateText, requestYear);
   const singleDay = typeof overviewOverrides.singleDay === "boolean" ? overviewOverrides.singleDay : Boolean(anchoredEventDate);
-  const start = String(overviewOverrides.start || anchoredEventDate || anchoredRequestStart || dateEntries[0]?.value || "");
+  const preparationStart = isInterviewPlan(requestDateText) ? dateEntries[0]?.value : "";
+  const start = String(overviewOverrides.start || anchoredEventDate || preparationStart || anchoredRequestStart || dateEntries[0]?.value || "");
   const requestedDuration = requestedDurationEnd(order, start);
   const explicitEnd = dateEntries.filter((entry) => entry.value !== start && ["request", "known", "human"].includes(entry.item.source)).at(-1)?.value ?? "";
   const candidateEnd = singleDay ? start : String(overviewOverrides.end || explicitRequestRange.end || explicitEnd || requestedDuration.end || dateEntries.at(-1)?.value || start);

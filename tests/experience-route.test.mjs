@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isWaitingArrivalStatus, selectExperienceSurface, shouldBootstrapLocalDemo, shouldLoadDurablePlanData, shouldOpenEntryGateway } from "../dist-test/src/experience-route.js";
 
 test("explicit guided-demo routes always enter the browser-local product", () => {
-  for (const startMode of ["live-demo", "demo-active", "spotlight-active"]) {
+  for (const startMode of ["live-demo", "demo-active", "spotlight-active", "explore-demo"]) {
     assert.equal(shouldBootstrapLocalDemo({ pathname: "/", startMode, collaborationToken: null, localDemoResume: false }), true);
   }
 });

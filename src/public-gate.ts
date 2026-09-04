@@ -1,4 +1,5 @@
 import { finiteEntryExamples } from "./entry-options.js";
+import { bindDemoEntry, renderDemoEntryCard, renderDemoEntryPicker } from "./demo-entry.js";
 
 const escapeHtml = (value: unknown): string => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -32,12 +33,11 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
         <button type="button" class="entry-route entry-route--codex-live" data-public-entry="codex-live">
           <span>03 / Use Codex live</span><strong>Build with Codex beside you.</strong><p>Codex runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use Codex live →</em>
         </button>
-        <button type="button" class="entry-route entry-route--live-demo" data-public-entry="live-demo">
-          <span>04 / Recommended · under 3 minutes</span><strong>See Finite adapt.</strong><p>Watch WebMCP model one real plan change, then choose what the plan becomes before Codex can apply it.</p><em>Run the live decision →</em>
-        </button>
+        ${renderDemoEntryCard("public")}
       </div>
+      ${renderDemoEntryPicker()}
       <p class="entry-route-status" data-public-entry-status role="status" hidden></p>
-      <footer class="entry-boundary"><div><span>Same real product in every route.</span><p>Spotlight and guided tours stay in this browser. Fresh plans use your ChatGPT identity; templates open in an isolated 24-hour workspace.</p></div><button type="button" class="text-button" data-public-entry="full-demo">Explore the longer guided tour</button></footer>
+      <footer class="entry-boundary"><div><span>Same real product in every route.</span><p>Demo mode stays in this browser. Fresh plans use your ChatGPT identity; templates open in an isolated 24-hour workspace.</p></div></footer>
     </section>
   </main>`;
 
@@ -68,7 +68,6 @@ export const renderPublicGate = (signInPath = "/signin-with-chatgpt"): void => {
   };
 
   root.querySelector<HTMLButtonElement>("[data-public-entry='codex-live']")?.addEventListener("click", (event) => { void openDemoRoute(event.currentTarget as HTMLButtonElement, "/?start=codex-live"); });
-  root.querySelector<HTMLButtonElement>("[data-public-entry='live-demo']")?.addEventListener("click", () => { location.assign("/?start=live-demo&tour=spotlight&plan=1"); });
-  root.querySelector<HTMLButtonElement>("[data-public-entry='full-demo']")?.addEventListener("click", () => { location.assign("/?start=live-demo&tour=standard"); });
+  bindDemoEntry(root);
   root.querySelectorAll<HTMLButtonElement>("[data-public-example]").forEach((button) => button.addEventListener("click", () => { void openDemoRoute(button, `/?start=example&example=${encodeURIComponent(button.dataset.publicExample ?? "")}`); }));
 };

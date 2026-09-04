@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { finiteRelease, serveFiniteReleaseShell, withSecurityHeaders } from "../dist-test/worker/index.js";
 
 const oldHtml = `<!doctype html><html><head><meta name="description" content="Kitchen"><meta property="og:title" content="Kitchen"><meta property="og:description" content="Kitchen"><meta property="og:url" content="https://finite.example/"><meta property="og:image" content="https://finite.example/og.png"><meta property="og:image:width" content="1200"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Kitchen"><meta name="twitter:description" content="Kitchen"><meta name="twitter:image" content="https://finite.example/og.png"><meta name="finite-build" content="old" /><link rel="stylesheet" href="/assets/index-old.css"><title>Finite</title></head><body><script type="module" src="/assets/index-old.js"></script></body></html>`;
@@ -11,6 +12,22 @@ class ReleaseAssets {
     return new Response("missing", { status: 404 });
   }
 }
+
+test("static delivery requests the same WebMCP origin isolation as the Worker", () => {
+  const lines = readFileSync(new URL("../public/_headers", import.meta.url), "utf8")
+    .split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"));
+  assert.equal(lines.shift(), "/*", "cover root, demo queries and SPA routes");
+  const staticHeaders = new Headers(lines.map((line) => {
+    const colon = line.indexOf(":");
+    assert(colon > 0 && /^\s+/.test(line), "valid indented static header rule");
+    return [line.slice(0, colon).trim(), line.slice(colon + 1).trim()];
+  }));
+  const workerHeaders = withSecurityHeaders(new Response("ok")).headers;
+  for (const header of ["origin-agent-cluster", "cross-origin-opener-policy", "permissions-policy"]) {
+    assert.equal(staticHeaders.get(header), workerHeaders.get(header));
+  }
+  assert.equal(staticHeaders.get("origin-agent-cluster"), "?1");
+});
 
 test("the Worker serves one no-store release shell from the single release source", async () => {
   const response = await serveFiniteReleaseShell(new Request("https://finite.example/?fresh=1"), new ReleaseAssets());
@@ -24,6 +41,22 @@ test("the Worker serves one no-store release shell from the single release sourc
 
 test("release-shell selection ignores non-page routes", async () => {
   assert.equal(await serveFiniteReleaseShell(new Request("https://finite.example/api/anything"), new ReleaseAssets()), null);
+});
+
+test("hosted pages use the relocated compiled shell without a static root index", async () => {
+  const requests = [];
+  const assets = { async fetch(request) {
+    requests.push(new URL(request.url).pathname);
+    if (requests.at(-1) === "/finite-shell.html") return Response.redirect("https://finite.example/finite-shell", 307);
+    return requests.at(-1) === "/finite-shell"
+      ? new Response(oldHtml, { headers: { "content-type": "text/html" } })
+      : new Response(null, { status: 404 });
+  } };
+  const response = withSecurityHeaders(await serveFiniteReleaseShell(new Request("https://finite.example/?start=demo-active&tour=complete"), assets));
+  assert.deepEqual(requests, ["/finite-shell"]);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("origin-agent-cluster"), "?1");
+  assert.match(await response.text(), /<title>Finite<\/title>/);
 });
 
 test("a standalone share route receives the release shell without entering an API route", async () => {

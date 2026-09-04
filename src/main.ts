@@ -27,6 +27,7 @@ import { arrivalBudgetOverageMinor, arrivalContinuityTasks, arrivalProgressionFr
 import { candidateTradeoffLines, floorRelationship, objectiveLabelForProfile } from "./option-presentation.js";
 import { beginClickActivationTimingReceipt, ClickActivationTimer, publishClickActivationTimingReceipt, type GuardedActivationTiming } from "./activation-sequence-timing.js";
 import { finiteEntryExample, finiteEntryExamples } from "./entry-options.js";
+import { bindDemoEntry, renderDemoEntryCard, renderDemoEntryPicker } from "./demo-entry.js";
 import { installLocalDemoWriteGuard, localDemoInstallationKey, localDemoModeEnabled, localDemoRecordCount, localDemoStorageScope, setLocalDemoMode } from "./local-demo.js";
 import { workspaceSectionTemplate, workspaceSectionTemplates } from "./workspace-templates.js";
 import { planFactChangeSummary, planInputChangeSummary, workspaceChangeSummary, type FiniteChangeSummary } from "./change-summary.js";
@@ -404,18 +405,18 @@ const profiles = await compileBuiltInProfiles();
 const startupQuery = new URLSearchParams(location.search);
 const startupStartMode = startupQuery.get("start");
 const freshGuidedDemoLaunch = startupStartMode === "live-demo"
-  || (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1");
+  || ((startupStartMode === "spotlight-active" || startupStartMode === "explore-demo") && startupQuery.get("fresh") === "1");
 if (freshGuidedDemoLaunch) {
   localStorage.removeItem(localDemoInstallationKey);
   setLocalDemoMode(localStorage, true);
 }
-if (startupStartMode === "spotlight-active" && startupQuery.get("fresh") === "1") {
+if ((startupStartMode === "spotlight-active" || startupStartMode === "explore-demo") && startupQuery.get("fresh") === "1") {
   const stableSpotlightUrl = new URL(location.href);
   stableSpotlightUrl.searchParams.delete("fresh");
   history.replaceState(null, "", `${stableSpotlightUrl.pathname}${stableSpotlightUrl.search}${stableSpotlightUrl.hash}`);
 }
 const guidedDemoLocalMode = startupStartMode === "live-demo" || startupStartMode === "demo-active" || startupStartMode === "spotlight-active";
-const localDemoMode = guidedDemoLocalMode || localDemoModeEnabled(localStorage);
+const localDemoMode = guidedDemoLocalMode || startupStartMode === "explore-demo" || localDemoModeEnabled(localStorage);
 const localDemoScope = localDemoStorageScope(localStorage);
 const activeStorageScope = localDemoMode ? localDemoScope : authSession.storageScope;
 installLocalDemoWriteGuard(window, localDemoMode);
@@ -600,7 +601,6 @@ let guidedWalkthroughMode = guideCurrentPlanMode || codexLaunchMode !== null || 
 let demoPlaybackMode = codexLaunchMode === "demo" || startupEntryMode === "demo-active" || startupEntryMode === "spotlight-active";
 const startupDemoDepth = startupParams.get("tour");
 let demoDepth: DemoDepth = startupDemoDepth === "spotlight" || startupDemoDepth === "basics" || startupDemoDepth === "complete" ? startupDemoDepth : "standard";
-let demoDepthPickerOpen = false;
 let guidedWalkthroughAutoOpened = codexLaunchMode !== null || startupEntryMode === "guided-active" || startupEntryMode === "demo-active" || startupEntryMode === "spotlight-active";
 const storedFollowCodex = scopedStorage.getItem("finite-plan.follow-codex");
 let followCodexEnabled = storedFollowCodex === "true" || (guidedWalkthroughMode && storedFollowCodex !== "false");
@@ -977,7 +977,9 @@ const applyCodexSpotlight = (request: FiniteGuideViewRequest): { target: FiniteG
   }
   const disclosure = element instanceof HTMLDetailsElement
     ? element
-    : element.closest<HTMLDetailsElement>("details") ?? element.querySelector<HTMLDetailsElement>("details");
+    : element.closest<HTMLDetailsElement>("details")
+      ?? (request.target === "priority" ? element.querySelector<HTMLDetailsElement>("details") : null);
+  // A broad highlight (especially the top bar) must not operate a nested menu.
   // Highlight the collection of section headers without opening its first
   // section. Individual section targets still open their own disclosure.
   if (disclosure && request.target !== "section_headers") disclosure.open = true;
@@ -1037,15 +1039,17 @@ const bindFollowCodexInteractions = (): void => {
 
 type HeaderPlanChoice = { planId: string; profileId: string; profileHash: string; name: string; title: string; active: boolean; supersededBy: string | null };
 const newPlanChoice = "__new_plan__";
+const draftPlanChoice = "__current_draft__";
 
 const renderPlanSwitcher = (surface: "arrival" | "plan", activeTitle?: string): string => {
   const plans = (runtime.listPlans().plans as HeaderPlanChoice[]).filter((plan) => persistedPlanIds.has(plan.planId) || (surface === "plan" && plan.active));
   const current = plans.filter((plan) => !plan.supersededBy);
   const earlier = plans.filter((plan) => Boolean(plan.supersededBy));
-  const arrivalDraftTitle = surface === "arrival" && currentArrival() ? starterPlanForArrival(currentArrival()!)?.title ?? "Current draft" : null;
+  const draft = arrivalResult.ok && isWaitingArrivalStatus(arrivalResult.order?.status) ? arrivalResult.order : null;
+  const arrivalDraftTitle = draft ? starterPlanForArrival(draft)?.title ?? "Current draft" : null;
   const options = (items: HeaderPlanChoice[], historical = false): string => items.map((plan) => `<option value="${escapeHtml(plan.planId)}" ${surface === "plan" && plan.active ? "selected" : ""}>${escapeHtml(surface === "plan" && plan.active && activeTitle ? activeTitle : planDisplayNames.get(plan.planId) ?? plan.name)}${historical ? " · earlier version" : ""}</option>`).join("");
   return `<label class="plan-switcher"><span>Plans</span><select data-action="plan-switch" aria-label="Open a Finite plan" ${busy ? "disabled" : ""}>
-    ${arrivalDraftTitle ? `<optgroup label="Drafts"><option value="" selected>${escapeHtml(arrivalDraftTitle)} · draft</option></optgroup>` : ""}
+    ${arrivalDraftTitle ? `<optgroup label="Drafts"><option value="${draftPlanChoice}" ${surface === "arrival" && currentArrival() ? "selected" : ""}>${escapeHtml(arrivalDraftTitle)} · draft</option></optgroup>` : ""}
     <optgroup label="Plan actions"><option value="${newPlanChoice}">＋ Create a new plan…</option></optgroup>
     ${current.length ? `<optgroup label="Current plans">${options(current)}</optgroup>` : ""}
     ${earlier.length ? `<optgroup label="Earlier versions">${options(earlier, true)}</optgroup>` : ""}
@@ -1664,7 +1668,6 @@ const startNewPlan = async (): Promise<void> => {
   guidedWalkthroughMode = false;
   guideCurrentPlanMode = false;
   demoPlaybackMode = false;
-  demoDepthPickerOpen = false;
   demoNextRequired = false;
   demoNextAdvanced = false;
   demoPaused = false;
@@ -1701,6 +1704,7 @@ const bindPlanSwitcherInteractions = (): void => {
   root?.querySelector<HTMLSelectElement>("[data-action='plan-switch']")?.addEventListener("change", (event) => {
     const planId = (event.currentTarget as HTMLSelectElement).value;
     if (planId === newPlanChoice) { void startNewPlan(); return; }
+    if (planId === draftPlanChoice) { void resumeCurrentWork(); return; }
     if (planId) void openPlan(planId);
   });
 };
@@ -1828,6 +1832,10 @@ const resolvePlanContribution = async (updateId: string, status: "incorporated" 
 };
 
 const bindPlanShareInteractions = (): void => {
+  if (localDemoMode) root.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-share']").forEach((button) => {
+    button.disabled = true;
+    button.title = "Sharing is unavailable while Demo mode is local only";
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-action='open-plan-share']").forEach((button) => button.addEventListener("click", () => { void openPlanShareFlow(button.dataset.shareContext === "plan" ? "plan" : "arrival"); }));
   const dialog = root.querySelector<HTMLDialogElement>("[data-plan-share-dialog]");
   root.querySelectorAll<HTMLElement>("[data-action='close-plan-share']").forEach((button) => button.addEventListener("click", () => { shareDialogMode = "closed"; dialog?.close(); }));
@@ -2454,7 +2462,6 @@ const renderArrivalProfileContext = (mode: "codex" | "manual"): string => {
 const openEntryRoute = async ({ prefill = "", codexMode = null, continueDemo = false, selectedDemoDepth }: { prefill?: string; codexMode?: CodexLaunchMode | null; continueDemo?: boolean; selectedDemoDepth?: DemoDepth } = {}): Promise<void> => {
   const preservingDemo = continueDemo && demoPlaybackMode;
   if (selectedDemoDepth) demoDepth = selectedDemoDepth;
-  demoDepthPickerOpen = false;
   entryGatewayOpen = false;
   entryPrefill = prefill;
   codexLaunchMode = codexMode;
@@ -2543,7 +2550,6 @@ const renderCodexLaunch = (): void => {
     demoPlaybackMode = false;
     demoPaused = false;
     lastDemoGuide = null;
-    demoDepthPickerOpen = false;
     entryGatewayOpen = true;
     const target = new URL(location.href);
     target.searchParams.delete("start");
@@ -2560,7 +2566,7 @@ const renderEntryGateway = (): void => {
   surfaceRoot.innerHTML = `<main class="entry-shell" id="main">
     <section class="entry-card entry-card--product" aria-labelledby="entry_title">
       <header class="entry-card__top">${renderBrand()}${hasCurrentWork ? `<button type="button" class="entry-return" data-entry-action="current">Return to current plan</button>` : ""}</header>
-      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with ${escapeHtml(agenticName())}, or watch the product run itself.</p></div>
+      <div class="entry-intro"><p class="eyebrow">One plan at a time</p><h1 id="entry_title">How do you want to begin?</h1><p class="entry-lede">Start fresh, use a template, work live with ${escapeHtml(agenticName())}, or try demo mode.</p></div>
       <div class="entry-route-grid">
         <button type="button" class="entry-route entry-route--fresh" data-entry-action="fresh">
           <span>01 / Start fresh</span><strong>Tell Finite what needs to happen.</strong><p>Start with one sentence. Finite will shape it into a rough plan you can edit before anything becomes final.</p><em>Start with my plan →</em>
@@ -2572,27 +2578,15 @@ const renderEntryGateway = (): void => {
         <button type="button" class="entry-route entry-route--codex-live" data-entry-action="codex-live">
           <span>03 / Use ${escapeHtml(agenticName())} live</span><strong>Build with ${escapeHtml(agenticName())} beside you.</strong><p>${escapeHtml(agenticName())} runs Finite, explains what it is doing and pauses whenever it needs your input.</p><em>Use ${escapeHtml(agenticName())} live →</em>
         </button>
-        <button type="button" class="entry-route entry-route--live-demo" data-entry-action="live-demo" aria-expanded="${demoDepthPickerOpen}" aria-controls="entry_demo_picker">
-          <span>04 / Watch live demo</span><strong>Let ${escapeHtml(agenticName())} run Finite for you.</strong><p>Watch a real template become a working plan. Press Next to continue, or pause anywhere and ask ${escapeHtml(agenticName())} about what you see.</p><em>Watch the live demo →</em>
-        </button>
+        ${renderDemoEntryCard("workspace")}
       </div>
-      ${demoDepthPickerOpen ? `<section class="entry-demo-picker" id="entry_demo_picker" aria-labelledby="entry_demo_picker_title">
-        <header><div><p class="eyebrow">Choose your depth</p><h2 id="entry_demo_picker_title">How much Finite do you want to see?</h2><p>Every option uses the real product. Spotlight begins with an active Europe plan; the longer tours build and manage a Hobart plan from scratch.</p></div><button type="button" data-action="close-demo-picker" aria-label="Close demo choices">×</button></header>
-        <div class="entry-demo-picker__options">
-          <button type="button" class="is-recommended" data-demo-depth="spotlight"><span>One decision · under 3 min</span><strong>See Finite adapt</strong><p>Watch WebMCP model a real change, then choose what the plan becomes.</p><em>Best proof →</em></button>
-          <button type="button" data-demo-depth="basics"><span>2 chapters · about 3 min</span><strong>Just the basics</strong><p>Watch a template become a tailored, editable plan.</p><em>Choose this tour →</em></button>
-          <button type="button" data-demo-depth="standard"><span>6 chapters · about 8 min</span><strong>Standard</strong><p>Build the plan, start managing it, then adapt cleanly when rain changes the trip.</p><em>Explore the product →</em></button>
-          <button type="button" data-demo-depth="complete"><span>8 chapters · about 12 min</span><strong>All the bells &amp; whistles</strong><p>Add a custom tracker, compare ideas, then see the plan handle real change.</p><em>Show me everything →</em></button>
-        </div>
-      </section>` : ""}
+      ${renderDemoEntryPicker()}
       <footer class="entry-boundary"><span>Same real product in every route.</span><p>Everything remains editable. Guided view can be stopped at any time.</p></footer>
     </section>
   </main>`;
   root.querySelector<HTMLButtonElement>("[data-entry-action='fresh']")?.addEventListener("click", () => { void openEntryRoute({ continueDemo: demoPlaybackMode }); });
   root.querySelector<HTMLButtonElement>("[data-entry-action='codex-live']")?.addEventListener("click", () => { void openEntryRoute({ codexMode: "live" }); });
-  root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.addEventListener("click", async () => { demoDepthPickerOpen = true; await render(); root.querySelector<HTMLButtonElement>("[data-demo-depth='spotlight']")?.focus(); });
-  root.querySelector<HTMLButtonElement>("[data-action='close-demo-picker']")?.addEventListener("click", async () => { demoDepthPickerOpen = false; await render(); root.querySelector<HTMLButtonElement>("[data-entry-action='live-demo']")?.focus(); });
-  root.querySelectorAll<HTMLButtonElement>("[data-demo-depth]").forEach((button) => button.addEventListener("click", () => { const selected = button.dataset.demoDepth as DemoDepth; void openEntryRoute({ codexMode: "demo", selectedDemoDepth: selected }); }));
+  bindDemoEntry(root);
   root.querySelector<HTMLButtonElement>("[data-entry-action='current']")?.addEventListener("click", () => { void resumeCurrentWork(); });
   root.querySelectorAll<HTMLButtonElement>("[data-entry-example]").forEach((button) => button.addEventListener("click", () => {
     const example = finiteEntryExample(button.dataset.entryExample);
@@ -2602,7 +2596,7 @@ const renderEntryGateway = (): void => {
 
 const renderArrival = (manifest: SurfaceManifest): void => {
   const order = currentArrival();
-  const freshArrivalEntry = !order && newPlanDraftMode;
+  const freshArrivalEntry = !order && newPlanDraftMode && !localDemoMode;
   const interpretation = order?.interpretation;
   const question = order?.pendingClarification;
   const interpretationSources = order && interpretation ? interpretationSourcesForDisplay(order, interpretation.known) : {};
@@ -2643,7 +2637,7 @@ const renderArrival = (manifest: SurfaceManifest): void => {
             </div>
             <section id="arrival_panel_codex" class="arrival-start-panel arrival-start-panel--codex" role="tabpanel" aria-labelledby="arrival_start_codex" data-arrival-start-panel="codex">
               <div class="arrival-order__head"><div><p class="eyebrow">Describe the plan</p><strong>Write naturally. One sentence is enough.</strong></div><span>Only this is required</span></div>
-              <label class="arrival-order__outcome"><span>What do you want to plan?</span><textarea name="codexOutcome" required maxlength="4000" placeholder="I’m trying to…" data-arrival-mode-control>${escapeHtml(entryPrefill)}</textarea><small>${escapeHtml(agenticName())} will turn this into a populated, editable rough plan. Any assumptions remain visibly provisional.</small></label>
+              <label class="arrival-order__outcome"><span>What do you want to plan?</span><textarea name="codexOutcome" required maxlength="4000" placeholder="I’m trying to…" data-arrival-mode-control>${escapeHtml(entryPrefill)}</textarea><small>Finite creates an editable first pass. ${escapeHtml(agenticName())} can then research and develop it with you. Assumptions stay visibly provisional.</small></label>
               <div class="arrival-examples" aria-label="Plan ideas">
                 <span>Try an idea</span>
                 <button type="button" data-arrival-example="Plan a weekend trip to Hobart for two people, including a sensible budget and a few things we could do.">Weekend trip</button>
@@ -3829,7 +3823,7 @@ const renderAttachmentDialog = (manifest: SurfaceManifest): string => `<dialog c
         <option value="boundaries" ${attachmentContext.section === "boundaries" ? "selected" : ""}>Boundaries</option>
         ${manifest.stages.map((stage) => `<option value="timeline:${escapeHtml(stage.stageId)}" ${attachmentContext.section === "timeline" && attachmentContext.contextId === stage.stageId ? "selected" : ""}>${escapeHtml(stage.label)}</option>`).join("")}
       </select></label>
-      <label class="attachment-upload"><span>Upload files or pictures</span><input name="files" type="file" multiple><small>Up to 10 MB each</small></label>
+      <label class="attachment-upload"><span>Upload files or pictures</span><input name="files" type="file" multiple ${localDemoMode ? "disabled" : ""}><small>${localDemoMode ? "File uploads are unavailable in local Demo mode. Add a note or link below." : "Up to 10 MB each"}</small></label>
       <div class="attachment-dialog__or"><span>or add information</span></div>
       <label><span>Link</span><input name="link" type="url" maxlength="2000" placeholder="https://…"></label>
       <label><span>Name for the link</span><input name="linkLabel" type="text" maxlength="160" placeholder="Optional"></label>
@@ -3840,19 +3834,11 @@ const renderAttachmentDialog = (manifest: SurfaceManifest): string => `<dialog c
   </form>
 </dialog>`;
 
-const acceptedStageDetail = (stage: SurfaceManifest["stages"][number]): string => {
-  const receipt = [...runtime.kernel.receipts].reverse().find((item) => item.receiptType === "plan_option" && item.toRevision === runtime.kernel.revision);
-  const changeEvent = receipt?.payload.changeEvent as { title?: unknown; daysDelta?: unknown } | undefined;
-  const daysDelta = Number(changeEvent?.daysDelta);
-  if (typeof changeEvent?.title !== "string" || !changeEvent.title.toLocaleLowerCase().includes(stage.label.toLocaleLowerCase()) || !Number.isFinite(daysDelta)) return stage.detail;
-  const priorNights = Number(stage.detail.match(/^(\d+)\s+nights?/i)?.[1]);
-  return Number.isFinite(priorNights)
-    ? stage.detail.replace(/^\d+\s+nights?/i, `${priorNights + daysDelta} nights`)
-    : stage.detail;
-};
+const acceptedStageDetail = (stage: SurfaceManifest["stages"][number]): string => stage.detail;
 
 const renderStages = (manifest: SurfaceManifest, component: SurfaceZone["component"]): string => `
   ${renderPlanInputItems("timeline")}
+  ${manifest.stages.some((stage) => stage.marker === "Timing to reconcile") ? '<p class="surface-hint" role="status">The accepted stay lengths are updated. Exact day ranges still need reconciliation with transport and fixed bookings; the old ranges are no longer shown as current.</p>' : ""}
   <ol class="stage-list stage-list--${escapeHtml(manifest.timeModel)}" aria-label="${escapeHtml(component.replaceAll("_", " "))}">
     ${manifest.stages.map((stage) => {
       const direct = [...planInputsFor("timeline", stage.stageId)].reverse().find((item) => item.mode === "direct") ?? null;

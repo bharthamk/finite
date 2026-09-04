@@ -13,6 +13,7 @@ const shell = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../src/webmcp-bootstrap.ts", import.meta.url), "utf8");
 const entry = readFileSync(new URL("../src/entry.ts", import.meta.url), "utf8");
 const publicGate = readFileSync(new URL("../src/public-gate.ts", import.meta.url), "utf8");
+const demoEntry = readFileSync(new URL("../src/demo-entry.ts", import.meta.url), "utf8");
 const shareEntry = readFileSync(new URL("../src/share-entry.ts", import.meta.url), "utf8");
 const viteConfig = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
 const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
@@ -50,11 +51,11 @@ test("structured rough plans collect changes in their natural sections instead o
 
 test("guided demos always use the isolated browser-local workspace", () => {
   assert.match(source, /const freshGuidedDemoLaunch = startupStartMode === "live-demo"/);
-  assert.match(source, /startupStartMode === "spotlight-active" && startupQuery\.get\("fresh"\) === "1"/);
+  assert.match(source, /startupStartMode === "spotlight-active" \|\| startupStartMode === "explore-demo"\) && startupQuery\.get\("fresh"\) === "1"/);
   assert.match(source, /if \(freshGuidedDemoLaunch\) \{\s*localStorage\.removeItem\(localDemoInstallationKey\);\s*setLocalDemoMode\(localStorage, true\);\s*\}/);
   assert.match(source, /stableSpotlightUrl\.searchParams\.delete\("fresh"\)/);
   assert.match(source, /const guidedDemoLocalMode = startupStartMode === "live-demo" \|\| startupStartMode === "demo-active" \|\| startupStartMode === "spotlight-active"/);
-  assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| localDemoModeEnabled\(localStorage\)/);
+  assert.match(source, /const localDemoMode = guidedDemoLocalMode \|\| startupStartMode === "explore-demo" \|\| localDemoModeEnabled\(localStorage\)/);
   assert.match(source, /if \(\(codexMode === "demo" \|\| preservingDemo\) && !localDemoMode\) \{\s*location\.assign/);
   assert.match(source, /Demo mode · Local only/);
   assert.match(entry, /const localSpotlight = \(startMode === "live-demo" \|\| startMode === "spotlight-active"\)/);
@@ -118,19 +119,19 @@ test("the signed-out first page is the four-route Finite gateway", () => {
   assert.match(publicGate, /data-public-entry="fresh"/);
   assert.match(publicGate, /data-public-example=/);
   assert.match(publicGate, /data-public-entry="codex-live"/);
-  assert.match(publicGate, /data-public-entry="live-demo"/);
-  assert.match(publicGate, /data-public-entry="full-demo"/);
+  assert.match(publicGate, /renderDemoEntryCard\("public"\)/);
+  assert.match(demoEntry, /data-public-entry="live-demo"/);
   assert.match(publicGate, /data-public-entry-status/);
   assert.match(publicGate, /return_to/);
   assert.match(publicGate, /\/?start=codex-live/);
-  assert.match(publicGate, /\/?start=live-demo&tour=spotlight&plan=1/);
-  assert.match(publicGate, /\/?start=live-demo&tour=standard/);
+  assert.match(demoEntry, /\/?start=live-demo&tour=spotlight&plan=1/);
+  assert.match(demoEntry, /\/?start=live-demo&tour=standard/);
   assert.match(publicGate, /\/?start=example&example=/);
   assert.match(publicGate, /isolated 24-hour workspace/);
   assert.match(publicGate, /Choose a template\./);
   assert.match(publicGate, /Use Codex live/);
-  assert.match(publicGate, /See Finite adapt\./);
-  assert.match(publicGate, /Spotlight and guided tours stay in this browser/);
+  assert.match(demoEntry, /See Finite adapt/);
+  assert.match(publicGate, /Demo mode stays in this browser/);
   assert.match(publicGate, /try \{[\s\S]{0,200}fetch\("\/api\/auth\/demo"/);
   assert.match(publicGate, /That isolated workspace could not be opened\. Nothing was saved\. Please try again\./);
   assert.doesNotMatch(publicGate, /Borrow a useful beginning/);
@@ -219,23 +220,23 @@ test("first-use entry offers fresh, template, Codex live, and live-demo routes",
   assert.match(source, /data-entry-action="fresh"/);
   assert.match(source, /data-entry-example=/);
   assert.match(source, /data-entry-action="codex-live"/);
-  assert.match(source, /data-entry-action="live-demo"/);
-  assert.match(source, /How much Finite do you want to see\?/);
-  assert.match(source, /data-demo-depth="spotlight"/);
-  assert.match(source, /data-demo-depth="basics"/);
-  assert.match(source, /data-demo-depth="standard"/);
-  assert.match(source, /data-demo-depth="complete"/);
+  assert.match(source, /renderDemoEntryCard\("workspace"\)/);
+  assert.match(demoEntry, /How would you like to try Finite\?/);
+  assert.match(demoEntry, /data-demo-depth="spotlight"/);
+  assert.match(demoEntry, /data-demo-depth="basics"/);
+  assert.match(demoEntry, /data-demo-depth="standard"/);
+  assert.match(demoEntry, /data-demo-depth="complete"/);
   assert.match(source, /Just the basics/);
-  assert.match(source, /All the bells &amp; whistles/);
+  assert.match(demoEntry, /All the bells &amp; whistles/);
   assert.match(source, /See Finite adapt/);
   assert.match(source, /See Finite adapt with Codex\./);
   assert.match(source, /No workable direction yet\./);
   assert.match(source, /workable \$\{validCandidates\.length === 1 \? "direction is" : "directions are"\} ready/);
   assert.match(source, /Compare the trade-offs or ask Codex to keep working through them with you\./);
-  assert.match(source, /element\.closest<HTMLDetailsElement>\("details"\) \?\? element\.querySelector<HTMLDetailsElement>\("details"\)/);
+  assert.match(source, /request\.target === "priority" \? element\.querySelector<HTMLDetailsElement>\("details"\) : null/);
   assert.match(source, /zone\.component === "approval_panel" && Boolean\(kernel\.stagedCandidate\)/);
   assert.match(source, /receipt: \{ label: "the latest plan update", selectors: \["\.latest-plan-update", "\.receipt"\] \}/);
-  assert.match(source, /selectedDemoDepth: selected/);
+  assert.match(demoEntry, /href="\/\?start=live-demo&tour=complete"/);
   assert.match(source, /Choose a template\./);
   assert.match(source, /Same real product in every route\./);
   assert.match(source, /codexLaunchMode = codexMode/);
@@ -634,7 +635,7 @@ test("the live demo starts on the ordinary blank first form even when saved work
   assert.match(source, /planningMode === "codex" && !demoPlaybackMode/);
   assert.match(source, /if \(!demoPlaybackMode && planningMode === "codex"\) void prepareArrivalPlanDraft\(arrivalResult\)/);
   assert.match(source, /draft\.sourceArrival && activeArrival && draft\.sourceArrival\.orderId !== activeArrival\.orderId\) return ""/);
-  assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode;/);
+  assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode && !localDemoMode;/);
   assert.match(source, /startupEntryMode === "codex-live" \|\| startupEntryMode === "live-demo"/);
   assert.match(source, /const handoffOrder = newPlanDraftMode && !\(demoPlaybackMode && demoDepth === "spotlight"\) \? null : currentArrival\(\)/);
   assert.match(source, /freshArrivalEntry \? `<div class="arrival-entry-shell"/);
@@ -671,6 +672,13 @@ test("guided highlights point at one exact surface at a time", () => {
   assert.match(source, /top: \{ label: "the top of this page", selectors: \["\.site-header"/);
   assert.match(source, /root\.querySelectorAll<HTMLElement>\("\[data-codex-priority\]"\)\.forEach/);
   assert.match(source, /if \(request\.target === "priority"\) \{[^]*element\.dataset\.codexPriority = "true"/);
+});
+
+test("broad guided highlights cannot open descendant account menus", () => {
+  const highlight = source.slice(source.indexOf("const applyCodexSpotlight"), source.indexOf("const bindFollowCodexInteractions"));
+  assert.match(highlight, /request\.target === "priority" \? element\.querySelector<HTMLDetailsElement>\("details"\) : null/);
+  assert.doesNotMatch(highlight, /element\.closest<HTMLDetailsElement>\("details"\) \?\? element\.querySelector/);
+  assert.match(source, /const freshArrivalEntry = !order && newPlanDraftMode && !localDemoMode;/);
 });
 
 test("starting or restarting a demo cannot inherit a hidden prior Next gate", () => {

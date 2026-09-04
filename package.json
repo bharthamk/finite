@@ -9,10 +9,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build:lib": "tsc -p tsconfig.lib.json",
-    "build": "npm run typecheck && vite build && node scripts/check-client-chunks.mjs",
+    "build": "npm run typecheck && vite build && node scripts/prepare-document-shell.mjs && node scripts/check-client-chunks.mjs && node scripts/check-built-document.mjs",
     "test": "npm run build:lib && node --test tests/*.test.mjs",
     "check:submission": "node scripts/check-submission.mjs",
     "check:submission:final": "node scripts/check-submission.mjs --final",
+    "check:hosted:webmcp": "node scripts/check-hosted-webmcp.mjs",
     "db:local:migrate": "WRANGLER_WRITE_LOGS=0 wrangler d1 migrations apply finite-local --local --config wrangler.local.jsonc",
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1"

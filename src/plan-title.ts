@@ -1,5 +1,11 @@
 const genericRoughPlan = /^(?:travel|renovation|event|adaptive|general)\s+rough plan$/i;
 
+export const statedInterviewPartner = (source: string): string | null => {
+  const candidate = source.match(/\binterview\b[^.!?\n]{0,100}?\bwith\s+(?:the\s+)?([^,.;]+?)(?=\s+(?:for|on|at|about)\b|[,.;]|$)/i)?.[1]?.trim();
+  if (!candidate || /\b(?:preparation|prep|days?|weeks?|evenings?|minutes?|hours?|budget|spending|examples?|questions?)\b/i.test(candidate) || /^\d/.test(candidate)) return null;
+  return candidate;
+};
+
 const collapseRepeatedBrief = (value: string): string => {
   const words = value.trim().split(/\s+/);
   if (words.length < 4 || words.length % 2 !== 0) return value.trim();
@@ -25,7 +31,7 @@ const coreTitle = (text: string): string => {
   if (/\b(?:dinner party|dinner plan|dinner at home|host(?:ing)? (?:a )?dinner)\b/i.test(source)) return "Dinner party";
   const interviewEmployer = source.match(/\b(?:role|position)\s+at\s+([^,.;]+?)(?=\s+(?:for|on|at|about|with)\b|[,.;]|$)/i)?.[1]?.trim();
   if (interviewEmployer) return `${interviewEmployer} interview preparation`;
-  const interviewCompany = source.match(/\binterview\b[^.!?\n]{0,80}?\bwith\s+([^,.;]+?)(?=\s+(?:for|on|at|about)\b|[,.;]|$)/i)?.[1]?.trim();
+  const interviewCompany = statedInterviewPartner(source);
   if (interviewCompany) return `${interviewCompany} interview preparation`;
   const interviewRole = source.match(/(?:job )?interview (?:for|as) (?:an? |the )?([^.,;]+?)(?:\s+(?:role|position))?(?:[.,;]|$)/i)?.[1]?.trim();
   if (interviewRole) return `${interviewRole.replace(/\s+(?:role|position)$/i, "")} interview`;

@@ -149,6 +149,10 @@ this change. If only one direction works, Finite returns one.
 
 ## One live plan, two ways to work with it
 
+Codex can also guide the real interface. With permission, its page-scoped WebMCP controls move to the relevant section, highlight actual controls and explain them in an on-page popup. Next, Pause, Resume and End keep the walkthrough in the person's hands. This is built into Finite, not a prerecorded tour or chat-only advice; view guidance cannot choose or approve a plan change.
+
+Try **Demo mode → Guide me with Codex → All the bells & whistles**, or [open the complete guided tour](https://finite.bharthamk.chatgpt.site/?start=live-demo&tour=complete). A WebMCP-capable agent client is required to run the guide; browser registration alone does not establish the agent connection.
+
 Finite keeps one live plan shared by the visible product and Codex. You work
 with it through the interface. Codex works with it through WebMCP. Both reach
 the same planning engine, so dates, costs, constraints, choices and revisions

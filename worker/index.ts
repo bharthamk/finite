@@ -43,7 +43,13 @@ export const serveFiniteReleaseShell = async (request: Request, assets: AssetsBi
   const isSharePage = url.pathname.startsWith("/share/");
   const isCollaborationPage = url.pathname.startsWith("/collaborate/");
   if (request.method !== "GET" || (url.pathname !== "/" && url.pathname !== "/index.html" && !isSharePage && !isCollaborationPage)) return null;
-  const current = await assets.fetch(isSharePage || isCollaborationPage ? new Request(new URL("/", request.url), request) : request);
+  // Hosted static routing can bypass the Worker when /index.html exists.
+  // The production build relocates that file so document requests reach us.
+  // Use the asset's canonical URL: hosted assets redirect *.html to extensionless
+  // URLs, and forwarding that redirect would lose the original demo query.
+  let current = await assets.fetch(new Request(new URL("/finite-shell", request.url), request));
+  // Vite serves the ordinary index during development, before relocation.
+  if (current.status === 404) current = await assets.fetch(new Request(new URL("/", request.url), request));
   if (!current.ok || !current.headers.get("content-type")?.includes("text/html")) return current;
   let html = await current.text();
   html = html.replace(/<meta name="finite-build" content="[^"]*"\s*\/>/, `<meta name="finite-build" content="${finiteRelease.build}" />`);

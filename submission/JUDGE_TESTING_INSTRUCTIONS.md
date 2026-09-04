@@ -27,6 +27,9 @@ to you and review its exact effect before continuing.
 
 ## What you can inspect
 
+- **Built-in interactive guidance.** Codex can move to a real section, highlight its controls and explain them in an on-page popup. Try Pause, ask a question, and continue with Next. These are bounded WebMCP capabilities with visible permission, not a recorded tour. Guidance cannot choose or approve a change.
+- **The full build walkthrough.** From Demo mode choose Guide me with Codex → All the bells & whistles, or [open the complete tour](https://finite.bharthamk.chatgpt.site/?start=live-demo&tour=complete). It covers starting, building and using a plan in the actual product.
+
 - **The same plan in both places.** The dates, costs, conditions and current
   revision shown by Codex match the visible Finite plan.
 - **A connected change check.** For this prepared change, Finite currently
@@ -54,8 +57,9 @@ available there. Keep the Finite tab open while working with Codex.
 
 For Chrome, use version 149 or later, enable
 `chrome://flags/#enable-webmcp-testing`, restart Chrome and reopen the Spotlight
-link. If the tools do not appear immediately, refresh the current Finite tab
-once.
+link in a fresh tab. Chrome's WebMCP flag makes page tools available to a compatible agent client; it does not by itself connect every Codex setup. Keep the chosen tab open. If Chrome reports the document.domain SecurityError after a previously loaded session, close that Finite tab and reopen the URL in a fresh browsing context rather than repeatedly refreshing it.
+
+The prepared example updates accepted totals and stay lengths. Exact day ranges that cannot be derived from its bounded planning data are labelled **Timing to reconcile**, not presented as verified transport dates.
 
 The visible plan remains available for inspection without WebMCP. The submitted
 video also shows the complete live change, comparison, choice, update and reload

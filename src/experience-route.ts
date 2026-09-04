@@ -1,6 +1,6 @@
 export type FiniteExperienceSurface = "arrival" | "plan";
 
-const localDemoStartModes = new Set(["live-demo", "demo-active", "spotlight-active"]);
+const localDemoStartModes = new Set(["live-demo", "demo-active", "spotlight-active", "explore-demo"]);
 
 export const shouldBootstrapLocalDemo = ({
   pathname,
@@ -14,7 +14,7 @@ export const shouldBootstrapLocalDemo = ({
   localDemoResume: boolean;
 }): boolean => {
   if (localDemoStartModes.has(startMode ?? "")) return true;
-  return localDemoResume && pathname === "/" && startMode === null && !collaborationToken;
+  return localDemoResume && pathname === "/" && (startMode === null || startMode === "resume" || startMode === "arrival-active") && !collaborationToken;
 };
 
 export const shouldLoadDurablePlanData = ({
